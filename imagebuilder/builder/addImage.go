@@ -54,7 +54,11 @@ func addImage(client *srpc.Client, request proto.BuildImageRequest,
 	if request.ExpiresIn > 0 {
 		img.ExpiresAt = time.Now().Add(request.ExpiresIn)
 	}
-	name := path.Join(request.StreamName, time.Now().Format(timeFormat))
+	gitBranch := request.GitBranch
+	if gitBranch == "master" {
+		gitBranch = ""
+	}
+	name := path.Join(request.StreamName, gitBranch, time.Now().Format(timeFormat))
 	if err := imageclient.AddImage(client, name, img); err != nil {
 		return "", errors.New("remote error: " + err.Error())
 	}
