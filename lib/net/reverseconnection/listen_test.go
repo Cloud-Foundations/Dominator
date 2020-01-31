@@ -182,7 +182,7 @@ func TestListen(t *testing.T) {
 	} else if rString := string(readBuffer[0:nRead]); rString != testString {
 		t.Fatalf("Wrote: \"%s\", read: \"%s\"", testString, rString)
 	}
-  // TODO(michaeljs1990): figure out why this is causing a hang
+	// TODO(michaeljs1990): figure out why this is causing a hang
 	// if err := dialConn.Close(); err != nil {
 	// 	t.Fatal(err)
 	// }
