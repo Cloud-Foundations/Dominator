@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-  "github.com/fsnotify/fsnotify"
+	"github.com/fsnotify/fsnotify"
 )
 
 var (
