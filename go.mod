@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.28.9
 	github.com/d2g/dhcp4 v0.0.0-20170904100407-a1d1b6c41b1c
 	github.com/d2g/dhcp4client v1.0.0
-	github.com/fsnotify/fsnotify v1.4.7
+	github.com/howeyc/fsnotify v0.9.0
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
 	github.com/pin/tftp v2.1.0+incompatible
 	github.com/stretchr/testify v1.4.0 // indirect
