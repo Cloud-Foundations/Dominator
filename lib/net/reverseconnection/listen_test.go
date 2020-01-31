@@ -1,4 +1,4 @@
-// package reverseconnection
+package reverseconnection
 // 
 // import (
 // 	"bufio"
