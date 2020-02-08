@@ -189,9 +189,6 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err := cleanPackages(rootDir, buildLog); err != nil {
 		return err
 	}
-	if err := clearResolvConf(buildLog, rootDir); err != nil {
-		return err
-	}
 	return deleteDirectories(directoriesToDelete)
 }
 
