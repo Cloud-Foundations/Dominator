@@ -139,6 +139,7 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
+	fmt.Fprintf(buildLog, "Copied in hosts /etc/resolv.conf\n")
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
