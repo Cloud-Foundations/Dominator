@@ -143,11 +143,11 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
+	defer resolvStart.Close()
 	resolvStatStart, err := resolvStart.Stat()
 	if err != nil {
 		return err
 	}
-
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
@@ -202,11 +202,13 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	// the image for any reason don't blow up the build just eat the error
 	// and continue with the old logic of clearing resolv.conf.
 	var resolvStatEnd os.FileInfo
-	if resolvEnd, err := os.Open(filepath.Join(rootDir, "/etc/resolv.conf")); err != nil {
+	resolvEnd, err := os.Open(filepath.Join(rootDir, "/etc/resolv.conf"))
+	if err != nil {
 		resolvStatEnd = resolvStatStart
 	} else if resolvStatEnd, err = resolvEnd.Stat(); err != nil {
 		resolvStatEnd = resolvStatStart
 	}
+	defer resolvEnd.Close()
 	if resolvStatEnd.ModTime().Equal(resolvStatStart.ModTime()) {
 		fmt.Fprintf(buildLog, "Clearing resolv.conf file since no change was found\n")
 		if err := clearResolvConf(buildLog, rootDir); err != nil {
