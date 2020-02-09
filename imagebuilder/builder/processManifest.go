@@ -133,17 +133,21 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
-	fileStatStart, err := file.Stat()
-	if err != nil {
-		return err
-	}
 	defer file.Close()
 	err = runInTarget(file, buildLog, rootDir, envGetter, packagerPathname,
 		"copy-in", "/etc/resolv.conf")
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
-	fmt.Fprintf(buildLog, "Copied in hosts /etc/resolv.conf\n")
+	resolvStart, err := os.Open(filepath.Join(rootDir, "/etc/resolv.conf"))
+	if err != nil {
+		return err
+	}
+	resolvStatStart, err := resolvStart.Stat()
+	if err != nil {
+		return err
+	}
+
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
@@ -194,16 +198,17 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	// Check if resolv.conf has been modified by the image. If it has
-	// don't clear the file.
-	resolvConfFile, err := os.Open("/etc/resolv.conf")
-	if err != nil {
-		return err
+	// don't clear the file. If users have removed /etc/resolv.conf in
+	// the image for any reason don't blow up the build just eat the error
+	// and continue with the old logic of clearing resolv.conf.
+	var resolvStatEnd os.FileInfo
+	if resolvEnd, err := os.Open(filepath.Join(rootDir, "/etc/resolv.conf")); err != nil {
+		resolvStatEnd = resolvStatStart
+	} else if resolvStatEnd, err = resolvEnd.Stat(); err != nil {
+		resolvStatEnd = resolvStatStart
 	}
-	fileStatEnd, err := resolvConfFile.Stat()
-	if err != nil {
-		return err
-	}
-	if fileStatEnd.ModTime().Equal(fileStatStart.ModTime()) {
+	if resolvStatEnd.ModTime().Equal(resolvStatStart.ModTime()) {
+		fmt.Fprintf(buildLog, "Clearing resolv.conf file since no change was found\n")
 		if err := clearResolvConf(buildLog, rootDir); err != nil {
 			return err
 		}
