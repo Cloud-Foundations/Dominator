@@ -133,6 +133,10 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
+	fileStatStart, err := file.Stat()
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 	err = runInTarget(file, buildLog, rootDir, envGetter, packagerPathname,
 		"copy-in", "/etc/resolv.conf")
@@ -188,6 +192,21 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	}
 	if err := cleanPackages(rootDir, buildLog); err != nil {
 		return err
+	}
+	// Check if resolv.conf has been modified by the image. If it has
+	// don't clear the file.
+	resolvConfFile, err := os.Open("/etc/resolv.conf")
+	if err != nil {
+		return err
+	}
+	fileStatEnd, err := resolvConfFile.Stat()
+	if err != nil {
+		return err
+	}
+	if fileStatEnd.ModTime().Equal(fileStatStart.ModTime()) {
+		if err := clearResolvConf(buildLog, rootDir); err != nil {
+			return err
+		}
 	}
 	return deleteDirectories(directoriesToDelete)
 }
