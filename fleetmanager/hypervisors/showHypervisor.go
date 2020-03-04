@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
@@ -71,12 +72,9 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		sort.Strings(keys)
 		fmt.Fprintln(writer, "Local tags:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
-		fmt.Fprintln(writer, "  <tr>")
-		fmt.Fprintln(writer, "    <th>Name</th>")
-		fmt.Fprintln(writer, "    <th>Value</th>")
-		fmt.Fprintln(writer, "  </tr>")
+		tw, _ := html.NewTableWriter(writer, true, "Name", "Value")
 		for _, key := range keys {
-			writeString(writer, key, h.localTags[key])
+			tw.WriteRow("", "", key, h.localTags[key])
 		}
 		fmt.Fprintln(writer, "</table>")
 	}
@@ -120,14 +118,4 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 		fmt.Fprintln(writer, err)
 		return
 	}
-}
-
-func writeCountLinks(writer io.Writer, text, path string, count uint) {
-	fmt.Fprintf(writer,
-		"%s: <a href=\"%s\">%d</a> (<a href=\"%s&output=text\">text</a>)<br>\n",
-		text, path, count, path)
-}
-
-func writeString(writer io.Writer, name, value string) {
-	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%s</td></tr>\n", name, value)
 }

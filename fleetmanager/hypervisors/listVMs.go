@@ -3,14 +3,13 @@ package hypervisors
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
@@ -23,33 +22,6 @@ border-collapse: collapse;
 }
 </style>
 `
-
-const (
-	rowStyleProbeBad = iota
-	rowStyleOff
-	rowStyleHealthMarginal
-	rowStyleHealthAtRisk
-	rowStyleHighlight
-	rowStyleReservedIP
-	rowStyleUncommittedIP
-)
-
-type rowStyleType struct {
-	html        string
-	highlighted bool
-}
-
-var (
-	rowStyles = map[uint]rowStyleType{
-		rowStyleProbeBad:       {"color:red", false},
-		rowStyleOff:            {"color:#ff8080", false},
-		rowStyleHealthMarginal: {"color:#800000", false},
-		rowStyleHealthAtRisk:   {"color:#c00000", false},
-		rowStyleHighlight:      {"background-color:#fafafa", true},
-		rowStyleReservedIP:     {"background-color:orange", true},
-		rowStyleUncommittedIP:  {"background-color:yellow", true},
-	}
-)
 
 func getVmListFromMap(vmMap map[string]*vmInfoType, doSort bool) []*vmInfoType {
 	vms := make([]*vmInfoType, 0, len(vmMap))
@@ -76,24 +48,15 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	if err != nil {
 		return nil, err
 	}
+	var tw *html.TableWriter
 	if outputType == url.OutputTypeHtml {
 		fmt.Fprintf(writer, "<title>List of VMs</title>\n")
 		writer.WriteString(commonStyleSheet)
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
-		fmt.Fprintln(writer, "  <tr>")
-		fmt.Fprintln(writer, "    <th>IP Addr</th>")
-		fmt.Fprintln(writer, "    <th>Name(tag)</th>")
-		fmt.Fprintln(writer, "    <th>State</th>")
-		fmt.Fprintln(writer, "    <th>RAM</th>")
-		fmt.Fprintln(writer, "    <th>CPU</th>")
-		fmt.Fprintln(writer, "    <th>Num Volumes</th>")
-		fmt.Fprintln(writer, "    <th>Storage</th>")
-		fmt.Fprintln(writer, "    <th>Primary Owner</th>")
-		fmt.Fprintln(writer, "    <th>Hypervisor</th>")
-		fmt.Fprintln(writer, "    <th>Location</th>")
-		fmt.Fprintln(writer, "  </tr>")
+		tw, _ = html.NewTableWriter(writer, true, "IP Addr", "Name(tag)",
+			"State", "RAM", "CPU", "Num Volumes", "Storage", "Primary Owner",
+			"Hypervisor", "Location")
 	}
-	lastRowHighlighted := true
 	primaryOwnersMap := make(map[string]struct{})
 	for _, vm := range vms {
 		if primaryOwnerFilter != "" {
@@ -108,59 +71,38 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 		case url.OutputTypeText:
 			fmt.Fprintln(writer, vm.ipAddr)
 		case url.OutputTypeHtml:
-			var rowStyle []rowStyleType
+			var background, foreground string
 			if vm.hypervisor.probeStatus == probeStatusOff {
-				rowStyle = append(rowStyle, rowStyles[rowStyleOff])
+				foreground = "#ff8080"
 			} else if vm.hypervisor.probeStatus != probeStatusConnected {
-				rowStyle = append(rowStyle, rowStyles[rowStyleProbeBad])
+				foreground = "red"
 			} else if vm.hypervisor.healthStatus == "at risk" {
-				rowStyle = append(rowStyle, rowStyles[rowStyleHealthAtRisk])
+				foreground = "#c00000"
 			} else if vm.hypervisor.healthStatus == "marginal" {
-				rowStyle = append(rowStyle, rowStyles[rowStyleHealthMarginal])
+				foreground = "#800000"
 			}
 			if vm.Uncommitted {
-				rowStyle = append(rowStyle, rowStyles[rowStyleUncommittedIP])
+				background = "yellow"
 			} else if topology.CheckIfIpIsReserved(vm.ipAddr) {
-				rowStyle = append(rowStyle, rowStyles[rowStyleReservedIP])
+				background = "orange"
 			}
-			styles := make([]string, 0, len(rowStyle))
-			highlighted := false
-			for _, style := range rowStyle {
-				styles = append(styles, style.html)
-				if style.highlighted {
-					highlighted = true
-				}
-			}
-			if !highlighted && !lastRowHighlighted {
-				styles = append(styles, rowStyles[rowStyleHighlight].html)
-				highlighted = true
-			}
-			lastRowHighlighted = highlighted
-			if len(styles) < 1 {
-				fmt.Fprintln(writer, "  <tr>")
-			} else {
-				fmt.Fprintf(writer, "  <tr style=\"%s\">\n",
-					strings.Join(styles, ";"))
-			}
-			fmt.Fprintf(writer,
-				"    <td><a href=\"http://%s:%d/showVM?%s\">%s</a></td>\n",
-				vm.hypervisor.machine.Hostname, constants.HypervisorPortNumber,
-				vm.ipAddr, vm.ipAddr)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.Tags["Name"])
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.State)
-			fmt.Fprintf(writer, "    <td>%s</td>\n",
-				format.FormatBytes(vm.MemoryInMiB<<20))
-			fmt.Fprintf(writer, "    <td>%g</td>\n",
-				float64(vm.MilliCPUs)*1e-3)
-			vm.writeNumVolumesTableEntry(writer)
-			vm.writeStorageTotalTableEntry(writer)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.OwnerUsers[0])
-			fmt.Fprintf(writer,
-				"    <td><a href=\"http://%s:%d/\">%s</a></td>\n",
-				vm.hypervisor.machine.Hostname, constants.HypervisorPortNumber,
-				vm.hypervisor.machine.Hostname)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.hypervisor.location)
-			fmt.Fprintf(writer, "  </tr>\n")
+			tw.WriteRow(foreground, background,
+				fmt.Sprintf("<a href=\"http://%s:%d/showVM?%s\">%s</a>",
+					vm.hypervisor.machine.Hostname,
+					constants.HypervisorPortNumber, vm.ipAddr, vm.ipAddr),
+				vm.Tags["Name"],
+				vm.State.String(),
+				format.FormatBytes(vm.MemoryInMiB<<20),
+				fmt.Sprintf("%g", float64(vm.MilliCPUs)*1e-3),
+				vm.numVolumesTableEntry(),
+				vm.storageTotalTableEntry(),
+				vm.OwnerUsers[0],
+				fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+					vm.hypervisor.machine.Hostname,
+					constants.HypervisorPortNumber,
+					vm.hypervisor.machine.Hostname),
+				vm.hypervisor.location,
+			)
 		}
 	}
 	switch outputType {
@@ -225,20 +167,20 @@ func (m *Manager) listVMsInLocation(dirname string) ([]net.IP, error) {
 	return addresses, nil
 }
 
-func (vm *vmInfoType) writeNumVolumesTableEntry(writer io.Writer) {
+func (vm *vmInfoType) numVolumesTableEntry() string {
 	var comment string
 	for _, volume := range vm.Volumes {
 		if comment == "" && volume.Format != proto.VolumeFormatRaw {
 			comment = `<font style="color:grey;font-size:12px"> (!RAW)</font>`
 		}
 	}
-	fmt.Fprintf(writer, "    <td>%d%s</td>\n", len(vm.Volumes), comment)
+	return fmt.Sprintf("%d%s", len(vm.Volumes), comment)
 }
 
-func (vm *vmInfoType) writeStorageTotalTableEntry(writer io.Writer) {
+func (vm *vmInfoType) storageTotalTableEntry() string {
 	var storage uint64
 	for _, volume := range vm.Volumes {
 		storage += volume.Size
 	}
-	fmt.Fprintf(writer, "    <td>%s</td>\n", format.FormatBytes(storage))
+	return format.FormatBytes(storage)
 }
