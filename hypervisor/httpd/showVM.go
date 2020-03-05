@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
@@ -94,12 +95,9 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, "</table>")
 		fmt.Fprintln(writer, "Tags:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
-		fmt.Fprintln(writer, "  <tr>")
-		fmt.Fprintln(writer, "    <th>Name</th>")
-		fmt.Fprintln(writer, "    <th>Value</th>")
-		fmt.Fprintln(writer, "  </tr>")
+		tw, _ := html.NewTableWriter(writer, true, "Name", "Value")
 		for _, name := range tagNames {
-			writeString(writer, name, vm.Tags[name])
+			tw.WriteRow("", "", name, vm.Tags[name])
 		}
 		fmt.Fprintln(writer, "</table><br>")
 		fmt.Fprintf(writer,

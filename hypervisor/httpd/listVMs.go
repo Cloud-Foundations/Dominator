@@ -3,11 +3,11 @@ package httpd
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -24,6 +24,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
+	var tw *html.TableWriter
 	if parsedQuery.OutputType() == url.OutputTypeHtml {
 		fmt.Fprintf(writer, "<title>List of VMs</title>\n")
 		fmt.Fprintln(writer, `<style>
@@ -33,17 +34,9 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
                           </style>`)
 		fmt.Fprintln(writer, "<body>")
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
-		fmt.Fprintln(writer, "  <tr>")
-		fmt.Fprintln(writer, "    <th>IP Addr</th>")
-		fmt.Fprintln(writer, "    <th>MAC Addr</th>")
-		fmt.Fprintln(writer, "    <th>Name(tag)</th>")
-		fmt.Fprintln(writer, "    <th>State</th>")
-		fmt.Fprintln(writer, "    <th>RAM</th>")
-		fmt.Fprintln(writer, "    <th>CPU</th>")
-		fmt.Fprintln(writer, "    <th>Num Volumes</th>")
-		fmt.Fprintln(writer, "    <th>Storage</th>")
-		fmt.Fprintln(writer, "    <th>Primary Owner</th>")
-		fmt.Fprintln(writer, "  </tr>")
+		tw, _ = html.NewTableWriter(writer, true, "IP Addr", "MAC Addr",
+			"Name(tag)", "State", "RAM", "CPU", "Num Volumes", "Storage",
+			"Primary Owner")
 	}
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
@@ -57,24 +50,21 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		case url.OutputTypeText:
 			fmt.Fprintln(writer, ipAddr)
 		case url.OutputTypeHtml:
+			var background string
 			if vm.Uncommitted {
-				fmt.Fprintln(writer, "  <tr style=\"background-color:yellow\">")
-			} else {
-				fmt.Fprintln(writer, "  <tr>")
+				background = "yellow"
 			}
-			fmt.Fprintf(writer, "    <td><a href=\"showVM?%s\">%s</a></td>\n",
-				ipAddr, ipAddr)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.Address.MacAddress)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.Tags["Name"])
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.State)
-			fmt.Fprintf(writer, "    <td>%s</td>\n",
-				format.FormatBytes(vm.MemoryInMiB<<20))
-			fmt.Fprintf(writer, "    <td>%g</td>\n",
-				float64(vm.MilliCPUs)*1e-3)
-			writeNumVolumesTableEntry(writer, vm)
-			writeStorageTotalTableEntry(writer, vm)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", vm.OwnerUsers[0])
-			fmt.Fprintf(writer, "  </tr>\n")
+			tw.WriteRow("", background,
+				fmt.Sprintf("<a href=\"showVM?%s\">%s</a>", ipAddr, ipAddr),
+				vm.Address.MacAddress,
+				vm.Tags["Name"],
+				vm.State.String(),
+				format.FormatBytes(vm.MemoryInMiB<<20),
+				fmt.Sprintf("%g", float64(vm.MilliCPUs)*1e-3),
+				numVolumesTableEntry(vm),
+				storageTotalTableEntry(vm),
+				vm.OwnerUsers[0],
+			)
 		}
 	}
 	switch parsedQuery.OutputType() {
@@ -84,20 +74,20 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func writeNumVolumesTableEntry(writer io.Writer, vm proto.VmInfo) {
+func numVolumesTableEntry(vm proto.VmInfo) string {
 	var comment string
 	for _, volume := range vm.Volumes {
 		if comment == "" && volume.Format != proto.VolumeFormatRaw {
 			comment = `<font style="color:grey;font-size:12px"> (!RAW)</font>`
 		}
 	}
-	fmt.Fprintf(writer, "    <td>%d%s</td>\n", len(vm.Volumes), comment)
+	return fmt.Sprintf("%d%s", len(vm.Volumes), comment)
 }
 
-func writeStorageTotalTableEntry(writer io.Writer, vm proto.VmInfo) {
+func storageTotalTableEntry(vm proto.VmInfo) string {
 	var storage uint64
 	for _, volume := range vm.Volumes {
 		storage += volume.Size
 	}
-	fmt.Fprintf(writer, "    <td>%s</td>\n", format.FormatBytes(storage))
+	return format.FormatBytes(storage)
 }
