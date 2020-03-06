@@ -44,13 +44,8 @@ func (s state) writeDashboard(writer io.Writer) {
 	status := s.unpacker.GetStatus()
 	fmt.Fprintln(writer, "Image streams:<br>")
 	fmt.Fprintln(writer, `<table border="1">`)
-	fmt.Fprintln(writer, "  <tr>")
-	fmt.Fprintln(writer, "    <th>Image Stream</th>")
-	fmt.Fprintln(writer, "    <th>Device Id</th>")
-	fmt.Fprintln(writer, "    <th>Device Name</th>")
-	fmt.Fprintln(writer, "    <th>Size</th>")
-	fmt.Fprintln(writer, "    <th>Status</th>")
-	fmt.Fprintln(writer, "  </tr>")
+	tw, _ := html.NewTableWriter(writer, true,
+		"Image Stream", "Device Id", "Device Name", "Size", "Status")
 	streamNames := make([]string, 0, len(status.ImageStreams))
 	for streamName := range status.ImageStreams {
 		streamNames = append(streamNames, streamName)
@@ -58,32 +53,26 @@ func (s state) writeDashboard(writer io.Writer) {
 	sort.Strings(streamNames)
 	for _, streamName := range streamNames {
 		stream := status.ImageStreams[streamName]
-		fmt.Fprintf(writer, "  <tr>\n")
-		fmt.Fprintf(writer,
-			"    <td><a href=\"showFileSystem?%s\">%s</a></td>\n",
-			streamName, streamName)
-		fmt.Fprintf(writer, "    <td>%s</td>\n", stream.DeviceId)
-		fmt.Fprintf(writer, "    <td>%s</td>\n",
-			status.Devices[stream.DeviceId].DeviceName)
-		size := status.Devices[stream.DeviceId].Size
-		sizeString := format.FormatBytes(size)
-		if size < 1 {
-			sizeString = ""
-		}
-		fmt.Fprintf(writer, "    <td>%s</td>\n", sizeString)
-		fmt.Fprintf(writer, "    <td>%s</td>\n", stream.Status)
-		fmt.Fprintf(writer, "  </tr>\n")
+		tw.WriteRow("", "",
+			fmt.Sprintf("<a href=\"showFileSystem?%s\">%s</a>",
+				streamName, streamName),
+			stream.DeviceId,
+			status.Devices[stream.DeviceId].DeviceName,
+			func() string {
+				size := status.Devices[stream.DeviceId].Size
+				if size < 1 {
+					return ""
+				}
+				return format.FormatBytes(size)
+			}(),
+			stream.Status.String(),
+		)
 	}
 	fmt.Fprintln(writer, "</table><br>")
 	fmt.Fprintln(writer, "Devices:<br>")
 	fmt.Fprintln(writer, `<table border="1">`)
-	fmt.Fprintln(writer, "  <tr>")
-	fmt.Fprintln(writer, "    <th>Device Id</th>")
-	fmt.Fprintln(writer, "    <th>Device Name</th>")
-	fmt.Fprintln(writer, "    <th>Size</th>")
-	fmt.Fprintln(writer, "    <th>Image Stream</th>")
-	fmt.Fprintln(writer, "    <th>Status</th>")
-	fmt.Fprintln(writer, "  </tr>")
+	tw, _ = html.NewTableWriter(writer, true, "Device Id", "Device Name",
+		"Size", "Image Stream", "Status")
 	deviceIds := make([]string, 0, len(status.Devices))
 	for deviceId := range status.Devices {
 		deviceIds = append(deviceIds, deviceId)
@@ -91,22 +80,25 @@ func (s state) writeDashboard(writer io.Writer) {
 	sort.Strings(deviceIds)
 	for _, deviceId := range deviceIds {
 		deviceInfo := status.Devices[deviceId]
-		fmt.Fprintf(writer, "  <tr>\n")
-		fmt.Fprintf(writer, "    <td>%s</td>\n", deviceId)
-		fmt.Fprintf(writer, "    <td>%s</td>\n", deviceInfo.DeviceName)
-		fmt.Fprintf(writer, "    <td>%s</td>\n",
-			format.FormatBytes(deviceInfo.Size))
-		streamName := deviceInfo.StreamName
-		if stream, ok := status.ImageStreams[streamName]; ok {
-			fmt.Fprintf(writer,
-				"    <td><a href=\"showFileSystem?%s\">%s</a></td>\n",
-				streamName, streamName)
-			fmt.Fprintf(writer, "    <td>%s</td>\n", stream.Status)
-		} else {
-			fmt.Fprintln(writer, "    <td></td>")
-			fmt.Fprintln(writer, "    <td></td>")
-		}
-		fmt.Fprintf(writer, "  </tr>\n")
+		stream, ok := status.ImageStreams[deviceInfo.StreamName]
+		tw.WriteRow("", "",
+			deviceId,
+			deviceInfo.DeviceName,
+			format.FormatBytes(deviceInfo.Size),
+			func() string {
+				if ok {
+					return fmt.Sprintf("<a href=\"showFileSystem?%s\">%s</a>",
+						deviceInfo.StreamName, deviceInfo.StreamName)
+				}
+				return ""
+			}(),
+			func() string {
+				if ok {
+					return stream.Status.String()
+				}
+				return ""
+			}(),
+		)
 	}
 	fmt.Fprintln(writer, "</table><br>")
 }

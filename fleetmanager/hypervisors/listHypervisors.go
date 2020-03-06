@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -116,39 +117,23 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	writer.WriteString(commonStyleSheet)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
-	fmt.Fprintln(writer, "  <tr>")
-	fmt.Fprintln(writer, "    <th>Name</th>")
-	fmt.Fprintln(writer, "    <th>Status</th>")
-	fmt.Fprintln(writer, "    <th>IP Addr</th>")
-	fmt.Fprintln(writer, "    <th>Serial Number</th>")
-	fmt.Fprintln(writer, "    <th>Location</th>")
-	fmt.Fprintln(writer, "    <th>NumVMs</th>")
-	fmt.Fprintln(writer, "  </tr>")
-	lastRowHighlighted := true
+	tw, _ := html.NewTableWriter(writer, true,
+		"Name", "Status", "IP Addr", "Serial Number", "Location", "NumVMs")
 	for _, hypervisor := range hypervisors {
 		machine := hypervisor.machine
-		if lastRowHighlighted {
-			lastRowHighlighted = false
-			fmt.Fprintf(writer, "  <tr>\n")
-		} else {
-			lastRowHighlighted = true
-			fmt.Fprintf(writer, "  <tr style=\"%s\">\n",
-				rowStyles[rowStyleHighlight].html)
-		}
-		fmt.Fprintf(writer,
-			"    <td><a href=\"showHypervisor?%s\">%s</a></td>\n",
-			machine.Hostname, machine.Hostname)
-		fmt.Fprintf(writer, "    <td><a href=\"http://%s:%d/\">%s</a></td>\n",
-			machine.Hostname, constants.HypervisorPortNumber,
-			hypervisor.getHealthStatus())
-		fmt.Fprintf(writer, "    <td>%s</td>\n", machine.HostIpAddress)
-		fmt.Fprintf(writer, "    <td>%s</td>\n", hypervisor.serialNumber)
-		fmt.Fprintf(writer, "    <td>%s</td>\n", hypervisor.location)
-		fmt.Fprintf(writer,
-			"    <td><a href=\"http://%s:%d/listVMs\">%d</a></td>\n",
-			machine.Hostname, constants.HypervisorPortNumber,
-			hypervisor.getNumVMs())
-		fmt.Fprintf(writer, "  </tr>\n")
+		tw.WriteRow("", "",
+			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
+				machine.Hostname, machine.Hostname),
+			fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+				machine.Hostname, constants.HypervisorPortNumber,
+				hypervisor.getHealthStatus()),
+			machine.HostIpAddress.String(),
+			hypervisor.serialNumber,
+			hypervisor.location,
+			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
+				machine.Hostname, constants.HypervisorPortNumber,
+				hypervisor.getNumVMs()),
+		)
 	}
 	fmt.Fprintln(writer, "</table>")
 	fmt.Fprintln(writer, "</body>")
