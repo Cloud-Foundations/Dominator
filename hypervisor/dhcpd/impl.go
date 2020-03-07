@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -40,7 +41,10 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 	if len(interfaceNames) < 1 {
 		logger.Debugln(0, "Starting DHCP server on all broadcast interfaces")
 		interfaces, _, err := libnet.ListBroadcastInterfaces(
-			libnet.InterfaceTypeEtherNet|libnet.InterfaceTypeBridge, logger)
+			libnet.InterfaceTypeEtherNet|
+				libnet.InterfaceTypeBridge|
+				libnet.InterfaceTypeVlan,
+			prefixlogger.New("dhcpd: ", logger))
 		if err != nil {
 			return nil, err
 		} else {
