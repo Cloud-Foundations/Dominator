@@ -12,6 +12,7 @@ type DhcpServer struct {
 	logger           log.DebugLogger
 	myIP             net.IP
 	networkBootImage []byte
+	requestInterface string
 	mutex            sync.RWMutex             // Protect everything below.
 	ackChannels      map[string]chan struct{} // Key: IPaddr.
 	ipAddrToMacAddr  map[string]string        // Key: IPaddr, V: MACaddr.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -18,9 +19,10 @@ const sysClassNet = "/sys/class/net"
 const leaseTime = time.Hour * 48
 
 type serveIfConn struct {
-	ifIndices map[int]struct{}
-	conn      *ipv4.PacketConn
-	cm        *ipv4.ControlMessage
+	ifIndices        map[int]string
+	conn             *ipv4.PacketConn
+	cm               *ipv4.ControlMessage
+	requestInterface *string
 }
 
 func newServer(interfaceNames []string, logger log.DebugLogger) (
@@ -40,7 +42,10 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 	if len(interfaceNames) < 1 {
 		logger.Debugln(0, "Starting DHCP server on all broadcast interfaces")
 		interfaces, _, err := libnet.ListBroadcastInterfaces(
-			libnet.InterfaceTypeEtherNet|libnet.InterfaceTypeBridge, logger)
+			libnet.InterfaceTypeEtherNet|
+				libnet.InterfaceTypeBridge|
+				libnet.InterfaceTypeVlan,
+			prefixlogger.New("dhcpd: ", logger))
 		if err != nil {
 			return nil, err
 		} else {
@@ -53,13 +58,14 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 			strings.Join(interfaceNames, ","))
 	}
 	serveConn := &serveIfConn{
-		ifIndices: make(map[int]struct{}, len(interfaceNames)),
+		ifIndices:        make(map[int]string, len(interfaceNames)),
+		requestInterface: &dhcpServer.requestInterface,
 	}
 	for _, interfaceName := range interfaceNames {
 		if iface, err := net.InterfaceByName(interfaceName); err != nil {
 			return nil, err
 		} else {
-			serveConn.ifIndices[iface.Index] = struct{}{}
+			serveConn.ifIndices[iface.Index] = iface.Name
 		}
 	}
 	listener, err := net.ListenPacket("udp4", ":67")
@@ -242,7 +248,8 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 	switch msgType {
 	case dhcp.Discover:
 		macAddr := req.CHAddr().String()
-		s.logger.Debugf(1, "DHCP Discover from: %s\n", macAddr)
+		s.logger.Debugf(1, "DHCP Discover from: %s on: %s\n",
+			macAddr, s.requestInterface)
 		lease, subnet := s.findLease(macAddr)
 		if lease == nil {
 			return nil
@@ -279,7 +286,8 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 				return nil // Message not for this DHCP server.
 			}
 		}
-		s.logger.Debugf(0, "DHCP Request for: %s from: %s\n", reqIP, macAddr)
+		s.logger.Debugf(0, "DHCP Request for: %s from: %s on: %s\n",
+			reqIP, macAddr, s.requestInterface)
 		lease, subnet := s.findLease(macAddr)
 		if lease == nil {
 			s.logger.Printf("No lease found for %s\n", macAddr)
@@ -303,7 +311,8 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			return dhcp.ReplyPacket(req, dhcp.NAK, s.myIP, nil, 0, nil)
 		}
 	default:
-		s.logger.Debugf(0, "Unsupported message type: %s\n", msgType)
+		s.logger.Debugf(0, "Unsupported message type: %s on: %s\n",
+			msgType, s.requestInterface)
 	}
 	return nil
 }
@@ -312,9 +321,11 @@ func (s *serveIfConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	for {
 		n, s.cm, addr, err = s.conn.ReadFrom(b)
 		if err != nil || s.cm == nil {
+			*s.requestInterface = "UNKNOWN"
 			break
 		}
-		if _, ok := s.ifIndices[s.cm.IfIndex]; ok {
+		if name, ok := s.ifIndices[s.cm.IfIndex]; ok {
+			*s.requestInterface = name
 			break
 		}
 	}
