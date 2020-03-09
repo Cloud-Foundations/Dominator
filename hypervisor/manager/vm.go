@@ -2046,15 +2046,35 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	}
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true, authInfo, nil)
 	if err != nil {
-		return err
-	}
-	defer vm.mutex.Unlock()
-	if vm.State != proto.StateStopped {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
-		return sendError(conn, errors.New("VM is not stopped"))
+		return sendError(conn, err)
 	}
+	restart := vm.State == proto.StateRunning
+	defer func() {
+		vm.updating = false
+		vm.mutex.Unlock()
+	}()
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
+		if len(vm.Address.IpAddress) < 1 {
+			if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+				return err
+			}
+			return errors.New("cannot stop VM with externally managed lease")
+		}
+	default:
+		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+			return err
+		}
+		return sendError(conn, errors.New("VM is not running or stopped"))
+	}
+	if vm.updating {
+		return errors.New("cannot update already updating VM")
+	}
+	vm.updating = true
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
 	defer os.Remove(tmpInitrdFilename)
@@ -2137,6 +2157,24 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
+	if vm.State == proto.StateRunning {
+		if err := sendUpdate(conn, "stopping VM"); err != nil {
+			return err
+		}
+		stoppedNotifier := make(chan struct{}, 1)
+		vm.stoppedNotifier = stoppedNotifier
+		vm.setState(proto.StateStopping)
+		vm.commandChannel <- "system_powerdown"
+		time.AfterFunc(time.Second*15, vm.kill)
+		vm.mutex.Unlock()
+		<-stoppedNotifier
+		vm.mutex.Lock()
+		if vm.State != proto.StateStopped {
+			restart = false
+			return sendError(conn,
+				errors.New("VM is not stopped after stop attempt"))
+		}
+	}
 	rootFilename := vm.VolumeLocations[0].Filename
 	oldRootFilename := vm.VolumeLocations[0].Filename + ".old"
 	if err := os.Rename(rootFilename, oldRootFilename); err != nil {
@@ -2155,6 +2193,16 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	}
 	vm.Volumes[0].Size = newSize
 	vm.writeAndSendInfo()
+	if restart && vm.State == proto.StateStopped {
+		vm.setState(proto.StateStarting)
+		sendUpdate(conn, "starting VM")
+		vm.mutex.Unlock()
+		_, err := vm.startManaging(-1, false, false)
+		vm.mutex.Lock()
+		if err != nil {
+			sendError(conn, err)
+		}
+	}
 	response := proto.ReplaceVmImageResponse{
 		Final: true,
 	}
