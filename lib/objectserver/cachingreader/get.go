@@ -2,6 +2,7 @@ package cachingreader
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,6 +60,30 @@ func saveObject(filename string,
 		}
 		return fsutil.CopyToFile(filename, privateFilePerms, reader, size)
 	}
+}
+
+func (objSrv *ObjectServer) fetchObjects(hashes []hash.Hash) error {
+	or, err := objSrv.getObjects(hashes)
+	if err != nil {
+		return err
+	}
+	for range hashes {
+		length, reader, err := or.NextObject()
+		if err != nil {
+			return err
+		}
+		if _, ok := reader.(*os.File); !ok {
+			_, err := io.CopyN(ioutil.Discard, reader, int64(length))
+			if err != nil {
+				reader.Close()
+				return err
+			}
+		}
+		if err := reader.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (

@@ -44,6 +44,10 @@ func NewObjectServer(baseDir string, maxCachedBytes uint64,
 	return newObjectServer(baseDir, maxCachedBytes, objectServerAddress, logger)
 }
 
+func (objSrv *ObjectServer) FetchObjects(hashes []hash.Hash) error {
+	return objSrv.fetchObjects(hashes)
+}
+
 func (objSrv *ObjectServer) GetObjects(hashes []hash.Hash) (
 	objectserver.ObjectsReader, error) {
 	return objSrv.getObjects(hashes)
