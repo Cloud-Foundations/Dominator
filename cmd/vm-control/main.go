@@ -76,6 +76,8 @@ var (
 	requestIPs   flagutil.StringList
 	roundupPower = flag.Uint64("roundupPower", 28,
 		"power of 2 to round up root volume size")
+	scanFilename = flag.String("scanFilename", "",
+		"Name of file to write scanned VM root to")
 	snapshotRootOnly = flag.Bool("snapshotRootOnly", false,
 		"If true, snapshot only the root volume")
 	traceMetadata = flag.Bool("traceMetadata", false,
@@ -164,6 +166,7 @@ var subcommands = []commands.Command{
 	{"set-vm-migrating", "IPaddr", 1, 1, setVmMigratingSubcommand},
 	{"snapshot-vm", "IPaddr", 1, 1, snapshotVmSubcommand},
 	{"save-vm", "IPaddr destination", 2, 2, saveVmSubcommand},
+	{"scan-vm-root", "IPaddr", 1, 1, scanVmRootSubcommand},
 	{"start-vm", "IPaddr", 1, 1, startVmSubcommand},
 	{"stop-vm", "IPaddr", 1, 1, stopVmSubcommand},
 	{"trace-vm-metadata", "IPaddr", 1, 1, traceVmMetadataSubcommand},
