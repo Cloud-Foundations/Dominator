@@ -146,6 +146,7 @@ var subcommands = []commands.Command{
 	{"merge-triggers", "     triggers-file...", 1, -1, mergeTriggersSubcommand},
 	{"mkdir", "              name", 1, 1, makeDirectorySubcommand},
 	{"show", "               name", 1, 1, showImageSubcommand},
+	{"show-filter", "               name", 1, 1, showImageFilterSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "                name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", "name", 1, 1, testDownloadSpeedSubcommand},

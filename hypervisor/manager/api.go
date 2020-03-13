@@ -80,6 +80,7 @@ type vmInfoType struct {
 	serialInput                io.Writer
 	serialOutput               chan<- byte
 	stoppedNotifier            chan<- struct{}
+	updating                   bool
 	proto.LocalVmInfo
 }
 
