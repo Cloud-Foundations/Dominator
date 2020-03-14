@@ -110,6 +110,7 @@ type NetworkEntry struct {
 	HostIpAddress  net.IP       `json:",omitempty"`
 	HostMacAddress HardwareAddr `json:",omitempty"`
 	SubnetId       string       `json:",omitempty"`
+	VlanTrunk      bool         `json:",omitempty"`
 }
 
 type PowerOnMachineRequest struct {
