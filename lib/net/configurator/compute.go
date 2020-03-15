@@ -79,6 +79,7 @@ func compute(machineInfo fm_proto.GetMachineInfoResponse,
 	netconf := &NetworkConfig{}
 	networkEntries := getNetworkEntries(machineInfo)
 	interfaces := make(map[string]net.Interface, len(_interfaces))
+	var vlanInterfaceNames []string
 	for name, iface := range _interfaces {
 		interfaces[name] = iface
 	}
@@ -155,6 +156,10 @@ func compute(machineInfo fm_proto.GetMachineInfoResponse,
 		} else if netconf.DefaultSubnet == nil {
 			netconf.DefaultSubnet = subnet
 		}
+		if networkEntry.VlanTrunk {
+			vlanInterfaceNames = append(vlanInterfaceNames, iface.Name)
+			netconf.vlanRawDevice = iface.Name
+		}
 	}
 	// All remaining interfaces which are marked as up will be used for VLAN
 	// trunk. If there multiple interfaces, they will be bonded.
@@ -164,13 +169,14 @@ func compute(machineInfo fm_proto.GetMachineInfoResponse,
 		} else {
 			netconf.bondSlaves = append(netconf.bondSlaves, name)
 			netconf.vlanRawDevice = name
+			vlanInterfaceNames = append(vlanInterfaceNames, name)
 		}
 	}
-	if len(interfaces) > 1 {
+	if len(vlanInterfaceNames) > 1 {
 		netconf.vlanRawDevice = "bond0"
 	}
 	sort.Strings(netconf.bondSlaves)
-	if len(interfaces) > 0 {
+	if len(vlanInterfaceNames) > 0 {
 		for _, networkEntry := range bondedNetworkEntries {
 			subnet := findMatchingSubnet(machineInfo.Subnets,
 				networkEntry.HostIpAddress)
