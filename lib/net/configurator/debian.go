@@ -19,6 +19,7 @@ func (netconf *NetworkConfig) printDebian(writer io.Writer) error {
 	fmt.Fprintln(writer)
 	fmt.Fprintln(writer, "auto lo")
 	fmt.Fprintln(writer, "iface lo inet loopback")
+	configuredInterfaces := make(map[string]struct{})
 	for _, iface := range netconf.normalInterfaces {
 		fmt.Fprintln(writer)
 		name := iface.netInterface.Name
@@ -37,6 +38,7 @@ func (netconf *NetworkConfig) printDebian(writer io.Writer) error {
 				iface.netInterface.HardwareAddr)
 			fmt.Fprintf(writer, "\tbridge_ports %s\n", iface.netInterface.Name)
 		}
+		configuredInterfaces[name] = struct{}{}
 	}
 	for _, iface := range netconf.bridgeOnlyInterfaces {
 		fmt.Fprintln(writer)
@@ -48,19 +50,21 @@ func (netconf *NetworkConfig) printDebian(writer io.Writer) error {
 		fmt.Fprintf(writer, "\tbridge_ports %s\n", iface.netInterface.Name)
 	}
 	if netconf.vlanRawDevice != "" {
-		fmt.Fprintln(writer)
-		fmt.Fprintf(writer, "auto %s\n", netconf.vlanRawDevice)
-		fmt.Fprintf(writer, "iface %s inet manual\n", netconf.vlanRawDevice)
-		if len(netconf.bondSlaves) > 1 {
-			fmt.Fprintf(writer, "\tup ip link set %s mtu 9000\n",
-				netconf.vlanRawDevice)
-			fmt.Fprintln(writer, "\tbond-mode 802.3ad")
-			fmt.Fprintln(writer, "\tbond-xmit_hash_policy 1")
-			fmt.Fprint(writer, "\tslaves")
-			for _, name := range netconf.bondSlaves {
-				fmt.Fprint(writer, " ", name)
-			}
+		if _, ok := configuredInterfaces[netconf.vlanRawDevice]; !ok {
 			fmt.Fprintln(writer)
+			fmt.Fprintf(writer, "auto %s\n", netconf.vlanRawDevice)
+			fmt.Fprintf(writer, "iface %s inet manual\n", netconf.vlanRawDevice)
+			if len(netconf.bondSlaves) > 1 {
+				fmt.Fprintf(writer, "\tup ip link set %s mtu 9000\n",
+					netconf.vlanRawDevice)
+				fmt.Fprintln(writer, "\tbond-mode 802.3ad")
+				fmt.Fprintln(writer, "\tbond-xmit_hash_policy 1")
+				fmt.Fprint(writer, "\tslaves")
+				for _, name := range netconf.bondSlaves {
+					fmt.Fprint(writer, " ", name)
+				}
+				fmt.Fprintln(writer)
+			}
 		}
 		for _, iface := range netconf.bondedInterfaces {
 			fmt.Fprintln(writer)
