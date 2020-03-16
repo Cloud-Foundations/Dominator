@@ -150,6 +150,11 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	defer deleteDirectories(directoriesToDelete)
+	err = runScripts(manifestDir, "pre-install-scripts", rootDir, bindMounts,
+		envGetter, buildLog)
+	if err != nil {
+		return err
+	}
 	packageList, err := fsutil.LoadLines(filepath.Join(manifestDir,
 		"package-list"))
 	if err != nil {
@@ -162,11 +167,6 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		if err != nil {
 			return err
 		}
-	}
-	err = runScripts(manifestDir, "pre-install-scripts", rootDir, bindMounts,
-		envGetter, buildLog)
-	if err != nil {
-		return err
 	}
 	err = installPackages(packageList, rootDir, bindMounts, envGetter, buildLog)
 	if err != nil {
