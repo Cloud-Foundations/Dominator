@@ -145,6 +145,7 @@ var subcommands = []commands.Command{
 	{"merge-filters", "      filter-file...", 1, -1, mergeFiltersSubcommand},
 	{"merge-triggers", "     triggers-file...", 1, -1, mergeTriggersSubcommand},
 	{"mkdir", "              name", 1, 1, makeDirectorySubcommand},
+	{"patch-directory", "    name directory", 2, 2, patchDirectorySubcommand},
 	{"show", "               name", 1, 1, showImageSubcommand},
 	{"show-filter", "               name", 1, 1, showImageFilterSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
