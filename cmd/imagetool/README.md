@@ -54,7 +54,9 @@ Some of the sub-commands available are:
 - **merge-filters**: merge filter files
 - **merge-triggers**: merge trigger files
 - **mkdir**: make a directory
+- **patch-directory**: patch (update) a local directory with an image
 - **show**: show (list) an image
+- **show-filter**: show the filter for an image
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
