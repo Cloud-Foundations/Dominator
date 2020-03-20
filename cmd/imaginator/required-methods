@@ -1,4 +1,5 @@
 ImageServer.AddImage
+ImageServer.ChangeImageExpiration
 ImageServer.GetImage
 ImageServer.ListDirectories
 ImageServer.ListImages
