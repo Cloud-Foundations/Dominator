@@ -9,6 +9,7 @@ import (
 	"time"
 
 	buildclient "github.com/Cloud-Foundations/Dominator/imagebuilder/client"
+	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -60,6 +61,33 @@ func (bl *dualBuildLogger) Write(p []byte) (int, error) {
 	return bl.writer.Write(p)
 }
 
+func (b *Builder) rebuildImage(client *srpc.Client, streamName string,
+	expiresIn time.Duration) {
+	_, _, err := b.build(client, proto.BuildImageRequest{
+		StreamName: streamName,
+		ExpiresIn:  expiresIn,
+	},
+		nil, nil)
+	if err == nil {
+		return
+	}
+	imageName, _ := imgclient.FindLatestImage(client, streamName, false)
+	if imageName != "" {
+		e := imgclient.ChangeImageExpiration(client, imageName,
+			time.Now().Add(expiresIn))
+		if e == nil {
+			b.logger.Printf("Error building image: %s: %s, extended: %s\n",
+				streamName, err, imageName)
+			return
+		}
+		b.logger.Printf(
+			"Error building image: %s: %s, failed to extend: %s: %s\n",
+			streamName, err, imageName, e)
+		return
+	}
+	b.logger.Printf("Error building image: %s: %s\n", streamName, err)
+}
+
 func (b *Builder) rebuildImages(minInterval time.Duration) {
 	if minInterval < 1 {
 		return
@@ -73,15 +101,7 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 			continue
 		}
 		for _, streamName := range b.listStreamsToAutoRebuild() {
-			_, _, err := b.build(client, proto.BuildImageRequest{
-				StreamName: streamName,
-				ExpiresIn:  minInterval * 2,
-			},
-				nil, nil)
-			if err != nil {
-				b.logger.Printf("Error building image: %s: %s\n",
-					streamName, err)
-			}
+			b.rebuildImage(client, streamName, minInterval*2)
 		}
 		client.Close()
 	}
