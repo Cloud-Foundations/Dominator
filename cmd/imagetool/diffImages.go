@@ -103,7 +103,9 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 	if img == nil {
 		return nil, errors.New(name + ": not found")
 	}
-	img.FileSystem.RebuildInodePointers()
+	if err := img.FileSystem.RebuildInodePointers(); err != nil {
+		return nil, err
+	}
 	return img, nil
 }
 

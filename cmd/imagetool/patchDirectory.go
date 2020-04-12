@@ -12,7 +12,6 @@ import (
 	"time"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
-	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -37,7 +36,7 @@ func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
 	logger.Debugf(0, "getting image: %s\n", imageName)
-	img, err := imgclient.GetImage(imageSClient, imageName)
+	img, err := getImage(imageSClient, imageName)
 	if err != nil {
 		return err
 	}
