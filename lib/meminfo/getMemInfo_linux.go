@@ -38,6 +38,7 @@ func (m *MemInfo) processMeminfoLine(line string) error {
 	var ptr *uint64
 	switch meminfoName {
 	case "MemAvailable":
+		m.HaveAvailable = true
 		ptr = &m.Available
 	case "MemFree":
 		ptr = &m.Free
