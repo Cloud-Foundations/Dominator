@@ -108,6 +108,10 @@ func WriteFstabEntry(writer io.Writer,
 		dumpFrequency, checkOrder)
 }
 
+func WriteImageName(mountPoint, imageName string) error {
+	return writeImageName(mountPoint, imageName)
+}
+
 type WriteRawOptions struct {
 	AllocateBlocks    bool
 	DoChroot          bool
