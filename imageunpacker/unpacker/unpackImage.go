@@ -1,7 +1,6 @@
 package unpacker
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -142,7 +140,7 @@ func (stream *streamManagerState) unpack(imageName string,
 	_, _, err = sublib.Update(request, mountPoint, objectsDir, nil, nil, nil,
 		stream.unpacker.logger)
 	if err == nil {
-		err = writeImageName(mountPoint, imageName)
+		err = util.WriteImageName(mountPoint, imageName)
 	}
 	streamInfo.status = unpackproto.StatusStreamMounted
 	stream.unpacker.logger.Printf("Update(%s) completed in %s\n",
@@ -291,14 +289,4 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 		return err
 	}
 	return fsutil.CopyToFile(filename, filePerms, reader, length)
-}
-
-func writeImageName(mountPoint, imageName string) error {
-	pathname := filepath.Join(mountPoint, constants.InitialImageNameFile)
-	if err := os.MkdirAll(filepath.Dir(pathname), fsutil.DirPerms); err != nil {
-		return err
-	}
-	buffer := &bytes.Buffer{}
-	fmt.Fprintln(buffer, imageName)
-	return fsutil.CopyToFile(pathname, fsutil.PublicFilePerms, buffer, 0)
 }
