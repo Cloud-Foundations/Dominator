@@ -28,7 +28,7 @@ import (
 
 func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 	if err := patchDirectory(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error getting image: %s", err)
+		return fmt.Errorf("Error patching directory: %s", err)
 	}
 	return nil
 }
