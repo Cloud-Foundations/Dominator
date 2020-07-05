@@ -55,6 +55,7 @@ Some of the sub-commands available are:
 - **merge-triggers**: merge trigger files
 - **mkdir**: make a directory
 - **patch-directory**: patch (update) a local directory with an image
+- **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
 - **show-filter**: show the filter for an image
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
