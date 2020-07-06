@@ -127,6 +127,8 @@ var subcommands = []commands.Command{
 	{"check-directory", "dirname", 1, 1, checkDirectorySubcommand},
 	{"chown", " dirname ownerGroup", 2, 2, chownDirectorySubcommand},
 	{"copy", "  name oldimagename", 2, 2, copyImageSubcommand},
+	{"copy-filtered-files", "name srcdir destdir", 3, 3,
+		copyFilteredFilesSubcommand},
 	{"delete", "name", 1, 1, deleteImageSubcommand},
 	{"delunrefobj", "percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},

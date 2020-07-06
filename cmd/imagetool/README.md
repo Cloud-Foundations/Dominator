@@ -37,6 +37,7 @@ Some of the sub-commands available are:
 - **check-directory**: check if a directory exists
 - **chown**: change the owner group of an image directory
 - **copy**: copy an image
+- **copy-filtered-files**: copy files from a directory tree which match the image filter
 - **delete**: delete an image
 - **delunrefobj**: delete (garbage collect) unreferenced objects
 - **diff**: compare two images
