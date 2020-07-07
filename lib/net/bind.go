@@ -2,6 +2,7 @@ package net
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -30,7 +31,7 @@ func bindAndDial(network, localAddr, remoteAddr string, timeout time.Duration) (
 	}
 	sockFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
-		return nil, errors.New("error creating socket: " + err.Error())
+		return nil, fmt.Errorf("error creating socket: %s", err)
 	}
 	defer func() {
 		if sockFd >= 0 {
@@ -51,16 +52,14 @@ func bindAndDial(network, localAddr, remoteAddr string, timeout time.Duration) (
 		return nil, err
 	}
 	if err := syscall.Bind(sockFd, localSockAddr); err != nil {
-		return nil, errors.New("error binding to: " + localAddr + " : " +
-			err.Error())
+		return nil, fmt.Errorf("error binding to: %s : %s", localAddr, err)
 	}
 	remTCPAddr, remSockAddr, err := resolveAddr(remoteAddr)
 	if err != nil {
 		return nil, err
 	}
 	if err := syscall.Connect(sockFd, remSockAddr); err != nil {
-		return nil, errors.New("error connecting to: " + remoteAddr + " : " +
-			err.Error())
+		return nil, fmt.Errorf("error binding to: %s : %s", remoteAddr, err)
 	}
 	if err := setReadTimeout(sockFd, 0); err != nil {
 		return nil, err
@@ -80,8 +79,15 @@ func bindAndDial(network, localAddr, remoteAddr string, timeout time.Duration) (
 func listenWithReuse(network, address string) (net.Listener, error) {
 	listener, err := net.Listen(network, address)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating %s listener for %s : %s",
+			network, address, err.Error)
 	}
+	doClose := true
+	defer func() {
+		if doClose {
+			listener.Close()
+		}
+	}()
 	if tcpListener, ok := listener.(*net.TCPListener); ok {
 		file, err := tcpListener.File()
 		if err != nil {
@@ -94,6 +100,7 @@ func listenWithReuse(network, address string) (net.Listener, error) {
 	} else {
 		return nil, errors.New("not a TCPlistener")
 	}
+	doClose = false
 	return listener, nil
 }
 
@@ -136,9 +143,13 @@ func setReuse(fd int) error {
 	err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR,
 		1)
 	if err != nil {
-		return err
+		return fmt.Errorf("error setting SO_REUSEADDR: %s", err)
 	}
-	return syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, SO_REUSEPORT, 1)
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, SO_REUSEPORT, 1)
+	if err != nil {
+		return fmt.Errorf("error setting SO_REUSEPORT: %s", err)
+	}
+	return nil
 }
 
 func setWriteTimeout(fd int, timeout time.Duration) error {
