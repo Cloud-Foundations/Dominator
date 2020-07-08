@@ -87,7 +87,7 @@ func (s *server) showVM(writer io.Writer, vmInfo proto.VmInfo) error {
 	return json.WriteWithIndent(writer, "    ", vmInfo)
 }
 
-func (s *server) showSmallStack(w http.ResponseWriter, ipAddr net.IP) {
+func (s *server) showTrue(w http.ResponseWriter, ipAddr net.IP) {
 	w.Write([]byte("true\n"))
 }
 
