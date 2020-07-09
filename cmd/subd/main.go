@@ -60,6 +60,8 @@ var (
 		"If true, show statistics after each cycle")
 	subdDir = flag.String("subdDir", ".subd",
 		"Name of subd private directory, relative to rootDir. This must be on the same file-system as rootDir")
+	testExternallyPatchable = flag.Bool("testExternallyPatchable", false,
+		"If true, test if externally patchable and exit=0 if so or exit=1 if not")
 	unshare = flag.Bool("unshare", true, "Internal use only.")
 )
 
@@ -264,6 +266,9 @@ func main() {
 		os.Exit(1)
 	}
 	flag.Parse()
+	if *testExternallyPatchable {
+		runTestAndExit(checkExternallyPatchable)
+	}
 	tricorder.RegisterFlags()
 	subdDirPathname := path.Join(*rootDir, *subdDir)
 	workingRootDir := path.Join(subdDirPathname, "root")
