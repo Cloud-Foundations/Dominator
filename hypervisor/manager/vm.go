@@ -27,6 +27,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
@@ -103,6 +104,42 @@ func createTapDevice(bridge string) (*os.File, error) {
 	}
 	doAutoClose = false
 	return tapFile, nil
+}
+
+func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
+	rootDir string, logger log.DebugLogger) error {
+	var totalBytes uint64
+	imgHashToInodesTable := imgFS.HashToInodesTable()
+	imgComputedFiles := make(map[string]struct{})
+	imgFS.ForEachFile(func(name string, inodeNumber uint64,
+		inode filesystem.GenericInode) error {
+		if _, ok := inode.(*filesystem.ComputedRegularInode); ok {
+			imgComputedFiles[name] = struct{}{}
+		}
+		return nil
+	})
+	for filename, inum := range vmFS.FilenameToInodeTable() {
+		if inode, ok := vmFS.InodeTable[inum].(*filesystem.RegularInode); ok {
+			if inode.Size < 1 {
+				continue
+			}
+			if _, isComputed := imgComputedFiles[filename]; isComputed {
+				continue
+			}
+			if _, inImage := imgHashToInodesTable[inode.Hash]; inImage {
+				continue
+			}
+			pathname := filepath.Join(rootDir, filename)
+			if err := os.Remove(pathname); err != nil {
+				return err
+			}
+			logger.Debugf(1, "pre-delete: %s\n", pathname)
+			totalBytes += inode.Size
+		}
+	}
+	logger.Debugf(0, "pre-delete: totalBytes: %s\n",
+		format.FormatBytes(totalBytes))
+	return nil
 }
 
 func extractKernel(volume proto.LocalVolume, extension string,
@@ -1932,6 +1969,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer objectsReader.Close()
+	err = sendVmPatchImageMessage(conn, "pre-deleting unneeded files")
+	if err != nil {
+		return err
+	}
+	err = deleteFilesNotInImage(img.FileSystem, &fs.FileSystem, rootDir,
+		vm.logger)
+	if err != nil {
+		return err
+	}
 	msg := fmt.Sprintf("fetching(%s) %d objects",
 		imageName, len(objectsToFetch))
 	if err := sendVmPatchImageMessage(conn, msg); err != nil {
