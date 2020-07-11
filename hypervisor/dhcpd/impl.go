@@ -33,11 +33,22 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 		ipAddrToMacAddr: make(map[string]string),
 		leases:          make(map[string]leaseType),
 		requestChannels: make(map[string]chan net.IP),
+		routeTable:      make(map[string]*util.RouteEntry),
 	}
 	if myIP, err := util.GetMyIP(); err != nil {
 		return nil, err
 	} else {
 		dhcpServer.myIP = myIP
+	}
+	routeTable, err := util.GetRouteTable()
+	if err != nil {
+		return nil, err
+	}
+	for _, routeEntry := range routeTable.RouteEntries {
+		if len(routeEntry.GatewayAddr) < 1 ||
+			routeEntry.GatewayAddr.Equal(net.IPv4zero) {
+			dhcpServer.routeTable[routeEntry.InterfaceName] = routeEntry
+		}
 	}
 	if len(interfaceNames) < 1 {
 		logger.Debugln(0, "Starting DHCP server on all broadcast interfaces")
@@ -130,6 +141,18 @@ func (s *DhcpServer) addSubnet(subnet proto.Subnet) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.subnets = append(s.subnets, subnet)
+}
+
+func (s *DhcpServer) checkRouteOnInterface(addr net.IP,
+	interfaceName string) bool {
+	if route, ok := s.routeTable[interfaceName]; !ok {
+		return true
+	} else if route.Flags&util.RouteFlagUp == 0 {
+		return true
+	} else if addr.Mask(route.Mask).Equal(route.BaseAddr) {
+		return true
+	}
+	return false
 }
 
 func (s *DhcpServer) findLease(macAddr string) (*leaseType, *proto.Subnet) {
@@ -258,6 +281,12 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			s.logger.Printf("No subnet found for %s\n", lease.IpAddress)
 			return nil
 		}
+		if !s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
+			s.logger.Printf(
+				"DHCP suppressing offer: %s for: %s, wrong interface: %s\n",
+				lease.IpAddress, macAddr, s.requestInterface)
+			return nil
+		}
 		s.logger.Debugf(0, "DHCP Offer: %s for: %s, server: %s\n",
 			lease.IpAddress, macAddr, s.myIP)
 		leaseOptions := s.makeOptions(subnet, lease)
@@ -297,7 +326,8 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			s.logger.Printf("No subnet found for %s\n", lease.IpAddress)
 			return nil
 		}
-		if reqIP.Equal(lease.IpAddress) {
+		if reqIP.Equal(lease.IpAddress) &&
+			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			leaseOptions := s.makeOptions(subnet, lease)
 			s.logger.Debugf(0, "DHCP ACK for: %s to: %s\n", reqIP, macAddr)
 			s.acknowledgeLease(lease.IpAddress)

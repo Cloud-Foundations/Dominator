@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -13,11 +14,12 @@ type DhcpServer struct {
 	myIP             net.IP
 	networkBootImage []byte
 	requestInterface string
-	mutex            sync.RWMutex             // Protect everything below.
-	ackChannels      map[string]chan struct{} // Key: IPaddr.
-	ipAddrToMacAddr  map[string]string        // Key: IPaddr, V: MACaddr.
-	leases           map[string]leaseType     // Key: MACaddr.
-	requestChannels  map[string]chan net.IP   // Key: MACaddr.
+	routeTable       map[string]*util.RouteEntry // Key: interface name.
+	mutex            sync.RWMutex                // Protect everything below.
+	ackChannels      map[string]chan struct{}    // Key: IPaddr.
+	ipAddrToMacAddr  map[string]string           // Key: IPaddr, V: MACaddr.
+	leases           map[string]leaseType        // Key: MACaddr.
+	requestChannels  map[string]chan net.IP      // Key: MACaddr.
 	subnets          []proto.Subnet
 }
 
