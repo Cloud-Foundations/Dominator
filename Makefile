@@ -47,7 +47,7 @@ imaginator.tarball:
 	@./scripts/make-tarball imaginator -C $(ETCDIR) ssl
 
 mdbd.tarball:
-	@./scripts/make-tarball mdbd
+	@./scripts/make-tarball mdbd -C $(ETCDIR) ssl
 
 subd.tarball:
 	@cd c; make
