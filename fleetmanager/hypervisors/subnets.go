@@ -123,7 +123,7 @@ func (m *Manager) makeSubnet(tSubnet *topology.Subnet) *subnetType {
 		incrementIp(startIp)
 	}
 	if len(tSubnet.LastAutoIP) > 0 {
-		stopIp = tSubnet.LastAutoIP
+		stopIp = copyIp(tSubnet.LastAutoIP)
 		incrementIp(stopIp)
 	} else {
 		stopIp = make(net.IP, len(networkIp))
