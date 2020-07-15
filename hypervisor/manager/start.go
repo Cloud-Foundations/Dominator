@@ -40,18 +40,20 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		return nil, err
 	}
 	manager := &Manager{
-		StartOptions:      startOptions,
-		rootCookie:        rootCookie,
-		memTotalInMiB:     memInfo.Total >> 20,
-		notifiers:         make(map[<-chan proto.Update]chan<- proto.Update),
-		numCPU:            runtime.NumCPU(),
-		serialNumber:      readProductSerial(),
-		vms:               make(map[string]*vmInfoType),
-		volumeDirectories: startOptions.VolumeDirectories,
+		StartOptions:  startOptions,
+		rootCookie:    rootCookie,
+		memTotalInMiB: memInfo.Total >> 20,
+		notifiers:     make(map[<-chan proto.Update]chan<- proto.Update),
+		numCPU:        runtime.NumCPU(),
+		serialNumber:  readProductSerial(),
+		vms:           make(map[string]*vmInfoType),
 	}
 	err = fsutil.CopyToFile(manager.GetRootCookiePath(), privateFilePerms,
 		bytes.NewReader(rootCookie), 0)
 	if err != nil {
+		return nil, err
+	}
+	if err := manager.setupVolumes(startOptions); err != nil {
 		return nil, err
 	}
 	if err := manager.loadSubnets(); err != nil {
@@ -130,20 +132,6 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		}
 		manager.Logger.Printf("%s shown as used but no corresponding VM\n",
 			ipAddr)
-	}
-	if len(manager.volumeDirectories) < 1 {
-		manager.volumeDirectories, err = getVolumeDirectories()
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(manager.volumeDirectories) < 1 {
-		return nil, errors.New("no volume directories available")
-	}
-	for _, volumeDirectory := range manager.volumeDirectories {
-		if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
-			return nil, err
-		}
 	}
 	if startOptions.ObjectCacheBytes >= 1<<20 {
 		dirname := filepath.Join(filepath.Dir(manager.volumeDirectories[0]),

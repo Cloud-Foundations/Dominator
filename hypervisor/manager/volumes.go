@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -11,17 +10,27 @@ import (
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const (
-	procMounts    = "/proc/mounts"
 	sysClassBlock = "/sys/class/block"
 )
 
 type mountInfo struct {
-	mountPoint string
+	mountEntry *mounts.MountEntry
 	size       uint64
+}
+
+func checkTrim(mountEntry *mounts.MountEntry) bool {
+	for _, option := range strings.Split(mountEntry.Options, ",") {
+		if option == "discard" {
+			return true
+		}
+	}
+	return false
 }
 
 func demapDevice(device string) (string, error) {
@@ -55,29 +64,14 @@ func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	return freeSpace, nil
 }
 
-func getMounts() (map[string]string, error) {
-	file, err := os.Open(procMounts)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	mounts := make(map[string]string)
-	for scanner.Scan() {
-		line := scanner.Text()
-		var device, mountPoint, fsType, fsOptions, junk string
-		nScanned, err := fmt.Sscanf(line, "%s %s %s %s %s",
-			&device, &mountPoint, &fsType, &fsOptions, &junk)
-		if err != nil {
-			return nil, err
-		}
-		if nScanned < 4 {
-			return nil, errors.New(fmt.Sprintf("only read %d values from %s",
-				nScanned, line))
-		}
-		if mountPoint == "/boot" {
+func getMounts(mountTable *mounts.MountTable) (
+	map[string]*mounts.MountEntry, error) {
+	mountMap := make(map[string]*mounts.MountEntry)
+	for _, entry := range mountTable.Entries {
+		if entry.MountPoint == "/boot" {
 			continue
 		}
+		device := entry.Device
 		if !strings.HasPrefix(device, "/dev/") {
 			continue
 		}
@@ -89,67 +83,70 @@ func getMounts() (map[string]string, error) {
 		} else {
 			device = target
 		}
+		var err error
 		device, err = demapDevice(device)
 		if err != nil {
 			return nil, err
 		}
 		device = device[5:]
-		if _, ok := mounts[device]; !ok { // Pick the first mount point.
-			mounts[device] = mountPoint
+		if _, ok := mountMap[device]; !ok { // Pick the first mount point.
+			mountMap[device] = entry
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return mounts, nil
+	return mountMap, nil
 }
 
-func getVolumeDirectories() ([]string, error) {
-	mounts, err := getMounts()
+func (m *Manager) checkTrim(filename string) bool {
+	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].canTrim
+}
+
+func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
+	mountMap, err := getMounts(mountTable)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var mountPointsToUse []string
+	var mountEntriesToUse []*mounts.MountEntry
 	biggestMounts := make(map[string]mountInfo)
-	for device, mountPoint := range mounts {
+	for device, mountEntry := range mountMap {
 		sysDir := filepath.Join(sysClassBlock, device)
 		linkTarget, err := os.Readlink(sysDir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, err
+			return err
 		}
 		_, err = os.Stat(filepath.Join(sysDir, "partition"))
 		if err != nil {
 			if os.IsNotExist(err) { // Not a partition: easy!
-				mountPointsToUse = append(mountPointsToUse, mountPoint)
+				mountEntriesToUse = append(mountEntriesToUse, mountEntry)
 				continue
 			}
-			return nil, err
+			return err
 		}
 		var statbuf syscall.Statfs_t
-		if err := syscall.Statfs(mountPoint, &statbuf); err != nil {
-			return nil, fmt.Errorf("error statfsing: %s: %s", mountPoint, err)
+		if err := syscall.Statfs(mountEntry.MountPoint, &statbuf); err != nil {
+			return fmt.Errorf("error statfsing: %s: %s",
+				mountEntry.MountPoint, err)
 		}
 		size := uint64(statbuf.Blocks * uint64(statbuf.Bsize))
 		parentDevice := filepath.Base(filepath.Dir(linkTarget))
 		if biggestMount, ok := biggestMounts[parentDevice]; !ok {
-			biggestMounts[parentDevice] = mountInfo{mountPoint, size}
+			biggestMounts[parentDevice] = mountInfo{mountEntry, size}
 		} else if size > biggestMount.size {
-			biggestMounts[parentDevice] = mountInfo{mountPoint, size}
+			biggestMounts[parentDevice] = mountInfo{mountEntry, size}
 		}
 	}
 	for _, biggestMount := range biggestMounts {
-		mountPointsToUse = append(mountPointsToUse, biggestMount.mountPoint)
+		mountEntriesToUse = append(mountEntriesToUse, biggestMount.mountEntry)
 	}
-	var volumeDirectories []string
-	for _, mountPoint := range mountPointsToUse {
-		volumeDirectories = append(volumeDirectories,
-			filepath.Join(mountPoint, "hyper-volumes"))
+	for _, entry := range mountEntriesToUse {
+		volumeDirectory := filepath.Join(entry.MountPoint, "hyper-volumes")
+		m.volumeDirectories = append(m.volumeDirectories, volumeDirectory)
+		m.volumeInfos[volumeDirectory] = volumeInfo{canTrim: checkTrim(entry)}
 	}
-	sort.Strings(volumeDirectories)
-	return volumeDirectories, nil
+	sort.Strings(m.volumeDirectories)
+	return nil
 }
 
 func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
@@ -208,4 +205,33 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 		}
 	}
 	return directoriesToUse, nil
+}
+
+func (m *Manager) setupVolumes(startOptions StartOptions) error {
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
+	m.volumeInfos = make(map[string]volumeInfo)
+	if len(startOptions.VolumeDirectories) < 1 {
+		if err := m.detectVolumeDirectories(mountTable); err != nil {
+			return err
+		}
+	} else {
+		m.volumeDirectories = startOptions.VolumeDirectories
+		for _, dirname := range m.volumeDirectories {
+			if entry := mountTable.FindEntry(dirname); entry != nil {
+				m.volumeInfos[dirname] = volumeInfo{canTrim: checkTrim(entry)}
+			}
+		}
+	}
+	if len(m.volumeDirectories) < 1 {
+		return errors.New("no volume directories available")
+	}
+	for _, volumeDirectory := range m.volumeDirectories {
+		if err := os.MkdirAll(volumeDirectory, fsutil.DirPerms); err != nil {
+			return err
+		}
+	}
+	return nil
 }

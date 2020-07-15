@@ -3195,9 +3195,13 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
 		}
+		options := interfaceDriver
+		if vm.manager.checkTrim(volume.Filename) {
+			options += ",discard=on"
+		}
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
-				interfaceDriver)
+				options)
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
