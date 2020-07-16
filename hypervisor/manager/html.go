@@ -63,8 +63,14 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	}
 	fmt.Fprintf(writer,
 		"Number of subnets: <a href=\"listSubnets\">%d</a><br>\n", numSubnets)
-	fmt.Fprintf(writer, "Volume directories: %s<br>\n",
-		strings.Join(m.volumeDirectories, " "))
+	fmt.Fprint(writer, "Volume directories:")
+	for _, dirname := range m.volumeDirectories {
+		fmt.Fprint(writer, " ", dirname)
+		if m.volumeInfos[dirname].canTrim {
+			fmt.Fprint(writer, "(TRIM)")
+		}
+	}
+	fmt.Fprintln(writer, "<br>")
 	if m.objectCache == nil {
 		fmt.Fprintln(writer, "No object cache<br>")
 	} else {
