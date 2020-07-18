@@ -352,8 +352,9 @@ type ImportLocalVmResponse struct {
 }
 
 type ListVMsRequest struct {
-	OwnerUsers []string
-	Sort       bool
+	IgnoreStateMask uint64
+	OwnerUsers      []string
+	Sort            bool
 }
 
 type ListVMsResponse struct {
