@@ -275,8 +275,8 @@ func (m *Manager) ListSubnets(doSort bool) []proto.Subnet {
 	return m.listSubnets(doSort)
 }
 
-func (m *Manager) ListVMs(ownerUsers []string, doSort bool) []string {
-	return m.listVMs(ownerUsers, doSort)
+func (m *Manager) ListVMs(request proto.ListVMsRequest) []string {
+	return m.listVMs(request)
 }
 
 func (m *Manager) ListVolumeDirectories() []string {

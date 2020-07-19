@@ -1421,14 +1421,17 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	return nil
 }
 
-func (m *Manager) listVMs(ownerUsers []string, doSort bool) []string {
+func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 	m.mutex.RLock()
 	ipAddrs := make([]string, 0, len(m.vms))
 	for ipAddr, vm := range m.vms {
+		if request.IgnoreStateMask&(1<<vm.State) != 0 {
+			continue
+		}
 		include := true
-		if len(ownerUsers) > 0 {
+		if len(request.OwnerUsers) > 0 {
 			include = false
-			for _, ownerUser := range ownerUsers {
+			for _, ownerUser := range request.OwnerUsers {
 				if _, ok := vm.ownerUsers[ownerUser]; ok {
 					include = true
 					break
@@ -1440,7 +1443,7 @@ func (m *Manager) listVMs(ownerUsers []string, doSort bool) []string {
 		}
 	}
 	m.mutex.RUnlock()
-	if doSort {
+	if request.Sort {
 		verstr.Sort(ipAddrs)
 	}
 	return ipAddrs
