@@ -562,6 +562,7 @@ type Subnet struct {
 	IpMask            net.IP // net.IPMask can't be JSON {en,de}coded.
 	DomainName        string `json:",omitempty"`
 	DomainNameServers []net.IP
+	DisableMetadata   bool     `json:",omitempty"`
 	Manage            bool     `json:",omitempty"`
 	VlanId            uint     `json:",omitempty"`
 	AllowedGroups     []string `json:",omitempty"`
