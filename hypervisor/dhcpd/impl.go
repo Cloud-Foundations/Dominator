@@ -329,7 +329,8 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		if reqIP.Equal(lease.IpAddress) &&
 			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			leaseOptions := s.makeOptions(subnet, lease)
-			s.logger.Debugf(0, "DHCP ACK for: %s to: %s\n", reqIP, macAddr)
+			s.logger.Debugf(0, "DHCP ACK for: %s to: %s, server: %s\n",
+				reqIP, macAddr, s.myIP)
 			s.acknowledgeLease(lease.IpAddress)
 			packet := dhcp.ReplyPacket(req, dhcp.ACK, s.myIP, reqIP, leaseTime,
 				leaseOptions.SelectOrderOrAll(
