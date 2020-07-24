@@ -225,6 +225,9 @@ func (left *Subnet) Equal(right *Subnet) bool {
 	if !IpListsEqual(left.DomainNameServers, right.DomainNameServers) {
 		return false
 	}
+	if left.DisableMetadata != right.DisableMetadata {
+		return false
+	}
 	if left.Manage != right.Manage {
 		return false
 	}
