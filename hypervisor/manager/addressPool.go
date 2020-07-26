@@ -53,6 +53,9 @@ func removeAddresses(addresses []proto.Address,
 func (m *Manager) addAddressesToPool(addresses []proto.Address) error {
 	for index := range addresses {
 		addresses[index].Shrink()
+		if _, err := net.ParseMAC(addresses[index].MacAddress); err != nil {
+			return err
+		}
 	}
 	existingIpAddresses := make(map[string]struct{})
 	existingMacAddresses := make(map[string]struct{})
