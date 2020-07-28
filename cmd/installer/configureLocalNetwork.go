@@ -267,6 +267,9 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 			return errors.New("truncated DNS server address")
 		}
 	}
+	if domainName := options[dhcp4.OptionDomainName]; len(domainName) > 0 {
+		subnet.DomainName = string(domainName)
+	}
 	if err := setupNetwork(ifName, ipAddr, &subnet, logger); err != nil {
 		return err
 	}
