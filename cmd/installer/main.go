@@ -81,7 +81,8 @@ func ifUnprivileged() bool {
 	return false
 }
 
-func install(logFlusher flusher, logger log.DebugLogger) (Rebooter, error) {
+func install(updateHwClock bool, logFlusher flusher,
+	logger log.DebugLogger) (Rebooter, error) {
 	var rebooter Rebooter
 	machineInfo, interfaces, err := configureLocalNetwork(logger)
 	if err != nil {
@@ -92,6 +93,13 @@ func install(logFlusher flusher, logger log.DebugLogger) (Rebooter, error) {
 		rebooter, err = configureStorage(*machineInfo, logger)
 		if err != nil {
 			return nil, err
+		}
+		if !*dryRun && updateHwClock {
+			if err := run("hwclock", *tmpRoot, logger, "-w"); err != nil {
+				logger.Printf("Error updating hardware clock: %s\n", err)
+			} else {
+				logger.Println("Updated hardware clock from system clock")
+			}
 		}
 	}
 	if !*skipNetwork {
@@ -141,15 +149,31 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 	}
 }
 
-func main() {
+func doMain() error {
+	var timeLogMessage string
+	if fi, err := os.Stat("/build-timestamp"); err != nil {
+		return err
+	} else {
+		now := time.Now()
+		if fi.ModTime().After(now) {
+			timeval := syscall.Timeval{Sec: fi.ModTime().Unix()}
+			if err := syscall.Settimeofday(&timeval); err != nil {
+				return err
+			}
+			timeLogMessage = fmt.Sprintf("System time: %s is earlier than build time: %s.\nAdvancing to build time",
+				now, fi.ModTime())
+		}
+	}
 	if err := loadflags.LoadForDaemon("installer"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logBuffer, logger := createLogger()
 	defer logBuffer.Flush()
+	if timeLogMessage != "" {
+		logger.Println(timeLogMessage)
+	}
 	go runShellOnConsole(logger)
 	AddHtmlWriter(logBuffer)
 	if err := setupserver.SetupTls(); err != nil {
@@ -161,7 +185,7 @@ func main() {
 	} else {
 		logger = newLogger
 	}
-	rebooter, err := install(logBuffer, logger)
+	rebooter, err := install(timeLogMessage != "", logBuffer, logger)
 	rebooterName := "default"
 	if rebooter != nil {
 		rebooterName = rebooter.String()
@@ -182,5 +206,13 @@ func main() {
 	}
 	if err := syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART); err != nil {
 		logger.Fatalf("error rebooting: %s\n", err)
+	}
+	return nil
+}
+
+func main() {
+	if err := doMain(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
