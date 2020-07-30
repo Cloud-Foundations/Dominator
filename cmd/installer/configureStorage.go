@@ -242,10 +242,6 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err := installTmpRoot(img.FileSystem, objGetter, logger); err != nil {
 		return nil, err
 	}
-	err = run("modprobe", *tmpRoot, logger, "-a", "algif_skcipher", "dm_crypt")
-	if err != nil {
-		return nil, err
-	}
 	err = ioutil.WriteFile(filepath.Join(*tmpRoot, keyFile), randomKey,
 		fsutil.PrivateFilePerms)
 	if err != nil {
