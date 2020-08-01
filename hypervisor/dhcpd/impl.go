@@ -25,8 +25,44 @@ type serveIfConn struct {
 	requestInterface *string
 }
 
+func listMyIPs() ([]net.IP, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	ipMap := make(map[string]net.IP)
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if iface.Flags&net.FlagBroadcast == 0 {
+			continue
+		}
+		interfaceAddrs, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range interfaceAddrs {
+			IP, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				return nil, err
+			}
+			if IP = IP.To4(); IP == nil {
+				continue
+			}
+			ipMap[IP.String()] = IP
+		}
+	}
+	var IPs []net.IP
+	for _, IP := range ipMap {
+		IPs = append(IPs, IP)
+	}
+	return IPs, nil
+}
+
 func newServer(interfaceNames []string, logger log.DebugLogger) (
 	*DhcpServer, error) {
+	logger = prefixlogger.New("dhcpd: ", logger)
 	dhcpServer := &DhcpServer{
 		logger:          logger,
 		ackChannels:     make(map[string]chan struct{}),
@@ -35,10 +71,13 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 		requestChannels: make(map[string]chan net.IP),
 		routeTable:      make(map[string]*util.RouteEntry),
 	}
-	if myIP, err := util.GetMyIP(); err != nil {
+	if myIPs, err := listMyIPs(); err != nil {
 		return nil, err
 	} else {
-		dhcpServer.myIP = myIP
+		if len(myIPs) < 1 {
+			return nil, errors.New("no IP addresses found")
+		}
+		dhcpServer.myIPs = myIPs
 	}
 	routeTable, err := util.GetRouteTable()
 	if err != nil {
@@ -51,12 +90,12 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 		}
 	}
 	if len(interfaceNames) < 1 {
-		logger.Debugln(0, "Starting DHCP server on all broadcast interfaces")
+		logger.Debugln(0, "Starting server on all broadcast interfaces")
 		interfaces, _, err := libnet.ListBroadcastInterfaces(
 			libnet.InterfaceTypeEtherNet|
 				libnet.InterfaceTypeBridge|
 				libnet.InterfaceTypeVlan,
-			prefixlogger.New("dhcpd: ", logger))
+			logger)
 		if err != nil {
 			return nil, err
 		} else {
@@ -65,7 +104,7 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 			}
 		}
 	} else {
-		logger.Debugln(0, "Starting DHCP server on interfaces: "+
+		logger.Debugln(0, "Starting server on interfaces: "+
 			strings.Join(interfaceNames, ","))
 	}
 	serveConn := &serveIfConn{
@@ -110,18 +149,21 @@ func (s *DhcpServer) acknowledgeLease(ipAddr net.IP) {
 }
 
 func (s *DhcpServer) addLease(address proto.Address, doNetboot bool,
-	hostname string, subnet *proto.Subnet) error {
+	hostname string, protoSubnet *proto.Subnet) error {
 	address.Shrink()
 	if len(address.IpAddress) < 1 {
 		return errors.New("no IP address")
 	}
 	ipAddr := address.IpAddress.String()
+	var subnet *subnetType
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if subnet == nil {
+	if protoSubnet == nil {
 		if subnet = s.findMatchingSubnet(address.IpAddress); subnet == nil {
 			return errors.New("no subnet found for " + ipAddr)
 		}
+	} else {
+		subnet = s.makeSubnet(protoSubnet)
 	}
 	if doNetboot {
 		if len(s.networkBootImage) < 1 {
@@ -137,7 +179,8 @@ func (s *DhcpServer) addLease(address proto.Address, doNetboot bool,
 	return nil
 }
 
-func (s *DhcpServer) addSubnet(subnet proto.Subnet) {
+func (s *DhcpServer) addSubnet(protoSubnet proto.Subnet) {
+	subnet := s.makeSubnet(&protoSubnet)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.subnets = append(s.subnets, subnet)
@@ -155,7 +198,7 @@ func (s *DhcpServer) checkRouteOnInterface(addr net.IP,
 	return false
 }
 
-func (s *DhcpServer) findLease(macAddr string) (*leaseType, *proto.Subnet) {
+func (s *DhcpServer) findLease(macAddr string) (*leaseType, *subnetType) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	if lease, ok := s.leases[macAddr]; !ok {
@@ -168,12 +211,12 @@ func (s *DhcpServer) findLease(macAddr string) (*leaseType, *proto.Subnet) {
 }
 
 // This must be called with the lock held.
-func (s *DhcpServer) findMatchingSubnet(ipAddr net.IP) *proto.Subnet {
+func (s *DhcpServer) findMatchingSubnet(ipAddr net.IP) *subnetType {
 	for _, subnet := range s.subnets {
 		subnetMask := net.IPMask(subnet.IpMask)
 		subnetAddr := subnet.IpGateway.Mask(subnetMask)
 		if ipAddr.Mask(subnetMask).Equal(subnetAddr) {
-			return &subnet
+			return subnet
 		}
 	}
 	return nil
@@ -192,7 +235,7 @@ func (s *DhcpServer) makeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{} {
 	return newChan
 }
 
-func (s *DhcpServer) makeOptions(subnet *proto.Subnet,
+func (s *DhcpServer) makeOptions(subnet *subnetType,
 	lease *leaseType) dhcp.Options {
 	dnsServers := make([]byte, 0)
 	for _, dnsServer := range subnet.DomainNameServers {
@@ -226,6 +269,19 @@ func (s *DhcpServer) makeRequestChannel(macAddr string) <-chan net.IP {
 	return newChan
 }
 
+func (s *DhcpServer) makeSubnet(protoSubnet *proto.Subnet) *subnetType {
+	subnet := &subnetType{Subnet: *protoSubnet, myIP: s.myIPs[0]}
+	for _, ip := range s.myIPs {
+		subnetMask := net.IPMask(subnet.IpMask)
+		subnetAddr := subnet.IpGateway.Mask(subnetMask)
+		if ip.Mask(subnetMask).Equal(subnetAddr) {
+			subnet.myIP = ip
+			break
+		}
+	}
+	return subnet
+}
+
 func (s *DhcpServer) notifyRequest(address proto.Address) {
 	s.mutex.RLock()
 	requestChan, ok := s.requestChannels[address.MacAddress]
@@ -257,7 +313,7 @@ func (s *DhcpServer) removeLease(ipAddr net.IP) {
 func (s *DhcpServer) removeSubnet(subnetId string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	subnets := make([]proto.Subnet, 0, len(s.subnets)-1)
+	subnets := make([]*subnetType, 0, len(s.subnets)-1)
 	for _, subnet := range s.subnets {
 		if subnet.Id != subnetId {
 			subnets = append(subnets, subnet)
@@ -271,7 +327,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 	switch msgType {
 	case dhcp.Discover:
 		macAddr := req.CHAddr().String()
-		s.logger.Debugf(1, "DHCP Discover from: %s on: %s\n",
+		s.logger.Debugf(1, "Discover from: %s on: %s\n",
 			macAddr, s.requestInterface)
 		lease, subnet := s.findLease(macAddr)
 		if lease == nil {
@@ -283,23 +339,23 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		}
 		if !s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			s.logger.Printf(
-				"DHCP suppressing offer: %s for: %s, wrong interface: %s\n",
+				"suppressing offer: %s for: %s, wrong interface: %s\n",
 				lease.IpAddress, macAddr, s.requestInterface)
 			return nil
 		}
-		s.logger.Debugf(0, "DHCP Offer: %s for: %s, server: %s\n",
-			lease.IpAddress, macAddr, s.myIP)
+		s.logger.Debugf(0, "Offer: %s for: %s, server: %s\n",
+			lease.IpAddress, macAddr, subnet.myIP)
 		leaseOptions := s.makeOptions(subnet, lease)
-		packet := dhcp.ReplyPacket(req, dhcp.Offer, s.myIP, lease.IpAddress,
-			leaseTime,
+		packet := dhcp.ReplyPacket(req, dhcp.Offer, subnet.myIP,
+			lease.IpAddress, leaseTime,
 			leaseOptions.SelectOrderOrAll(
 				options[dhcp.OptionParameterRequestList]))
-		packet.SetSIAddr(s.myIP)
+		packet.SetSIAddr(subnet.myIP)
 		return packet
 	case dhcp.Request:
 		reqIP := net.IP(options[dhcp.OptionRequestedIPAddress])
 		if reqIP == nil {
-			s.logger.Debugln(0, "DHCP Request did not request an IP")
+			s.logger.Debugln(0, "Request did not request an IP")
 			reqIP = net.IP(req.CIAddr())
 		}
 		reqIP = util.ShrinkIP(reqIP)
@@ -308,14 +364,23 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		server, ok := options[dhcp.OptionServerIdentifier]
 		if ok {
 			serverIP := net.IP(server)
-			if !serverIP.IsUnspecified() && !serverIP.Equal(s.myIP) {
-				s.logger.Debugf(0,
-					"DHCP Request for: %s from: %s to: %s is not me: %s\n",
-					reqIP, macAddr, serverIP, s.myIP)
-				return nil // Message not for this DHCP server.
+			if !serverIP.IsUnspecified() {
+				isMe := false
+				for _, ip := range s.myIPs {
+					if serverIP.Equal(ip) {
+						isMe = true
+						break
+					}
+				}
+				if !isMe {
+					s.logger.Debugf(0,
+						"Request for: %s from: %s to: %s is not me\n",
+						reqIP, macAddr, serverIP)
+					return nil // Message not for this DHCP server.
+				}
 			}
 		}
-		s.logger.Debugf(0, "DHCP Request for: %s from: %s on: %s\n",
+		s.logger.Debugf(0, "Request for: %s from: %s on: %s\n",
 			reqIP, macAddr, s.requestInterface)
 		lease, subnet := s.findLease(macAddr)
 		if lease == nil {
@@ -329,17 +394,17 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		if reqIP.Equal(lease.IpAddress) &&
 			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			leaseOptions := s.makeOptions(subnet, lease)
-			s.logger.Debugf(0, "DHCP ACK for: %s to: %s, server: %s\n",
-				reqIP, macAddr, s.myIP)
+			s.logger.Debugf(0, "ACK for: %s to: %s, server: %s\n",
+				reqIP, macAddr, subnet.myIP)
 			s.acknowledgeLease(lease.IpAddress)
-			packet := dhcp.ReplyPacket(req, dhcp.ACK, s.myIP, reqIP, leaseTime,
-				leaseOptions.SelectOrderOrAll(
+			packet := dhcp.ReplyPacket(req, dhcp.ACK, subnet.myIP, reqIP,
+				leaseTime, leaseOptions.SelectOrderOrAll(
 					options[dhcp.OptionParameterRequestList]))
-			packet.SetSIAddr(s.myIP)
+			packet.SetSIAddr(subnet.myIP)
 			return packet
 		} else {
-			s.logger.Debugf(0, "DHCP NAK for: %s to: %s\n", reqIP, macAddr)
-			return dhcp.ReplyPacket(req, dhcp.NAK, s.myIP, nil, 0, nil)
+			s.logger.Debugf(0, "NAK for: %s to: %s\n", reqIP, macAddr)
+			return dhcp.ReplyPacket(req, dhcp.NAK, subnet.myIP, nil, 0, nil)
 		}
 	default:
 		s.logger.Debugf(0, "Unsupported message type: %s on: %s\n",

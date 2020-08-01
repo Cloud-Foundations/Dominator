@@ -11,7 +11,7 @@ import (
 
 type DhcpServer struct {
 	logger           log.DebugLogger
-	myIP             net.IP
+	myIPs            []net.IP
 	networkBootImage []byte
 	requestInterface string
 	routeTable       map[string]*util.RouteEntry // Key: interface name.
@@ -20,14 +20,19 @@ type DhcpServer struct {
 	ipAddrToMacAddr  map[string]string           // Key: IPaddr, V: MACaddr.
 	leases           map[string]leaseType        // Key: MACaddr.
 	requestChannels  map[string]chan net.IP      // Key: MACaddr.
-	subnets          []proto.Subnet
+	subnets          []*subnetType
 }
 
 type leaseType struct {
 	proto.Address
 	Hostname  string
 	doNetboot bool
-	subnet    *proto.Subnet
+	subnet    *subnetType
+}
+
+type subnetType struct {
+	myIP net.IP
+	proto.Subnet
 }
 
 func New(interfaceNames []string, logger log.DebugLogger) (*DhcpServer, error) {
