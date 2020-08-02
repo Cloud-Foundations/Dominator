@@ -36,6 +36,13 @@ type ResolverConfiguration struct {
 	SearchDomains []string
 }
 
+func CopyIP(ip net.IP) net.IP {
+	return copyIP(ip)
+}
+
+func DecrementIP(ip net.IP) {
+	decrementIP(ip)
+}
 func GetDefaultRoute() (*DefaultRouteInfo, error) {
 	return getDefaultRoute()
 }
@@ -50,6 +57,14 @@ func GetResolverConfiguration() (*ResolverConfiguration, error) {
 
 func GetRouteTable() (*RouteTable, error) {
 	return getRouteTable()
+}
+
+func IncrementIP(ip net.IP) {
+	incrementIP(ip)
+}
+
+func InvertIP(input net.IP) {
+	invertIP(input)
 }
 
 func ShrinkIP(netIP net.IP) net.IP {
