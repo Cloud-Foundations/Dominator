@@ -59,7 +59,6 @@ type locationType struct {
 }
 
 type Manager struct {
-	invertTable      [256]byte
 	ipmiPasswordFile string
 	ipmiUsername     string
 	logger           log.DebugLogger
