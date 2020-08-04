@@ -53,6 +53,19 @@ func init() {
 	}
 }
 
+// CompareIP returns true if the two IPs are equivalent, else false.
+func CompareIPs(left, right net.IP) bool {
+	if len(left) < 1 {
+		if len(right) > 0 {
+			return false
+		}
+		return true
+	} else if len(right) < 1 {
+		return false
+	}
+	return left.Equal(right)
+}
+
 func ShrinkIP(netIP net.IP) net.IP {
 	switch len(netIP) {
 	case 4:
@@ -69,7 +82,7 @@ func ShrinkIP(netIP net.IP) net.IP {
 }
 
 func (left *Address) Equal(right *Address) bool {
-	if !left.IpAddress.Equal(right.IpAddress) {
+	if !CompareIPs(left.IpAddress, right.IpAddress) {
 		return false
 	}
 	if left.MacAddress != right.MacAddress {
@@ -213,10 +226,10 @@ func (left *Subnet) Equal(right *Subnet) bool {
 	if left.Id != right.Id {
 		return false
 	}
-	if !left.IpGateway.Equal(right.IpGateway) {
+	if !CompareIPs(left.IpGateway, right.IpGateway) {
 		return false
 	}
-	if !left.IpMask.Equal(right.IpMask) {
+	if !CompareIPs(left.IpMask, right.IpMask) {
 		return false
 	}
 	if left.DomainName != right.DomainName {
@@ -240,6 +253,9 @@ func (left *Subnet) Equal(right *Subnet) bool {
 	if !stringSlicesEqual(left.AllowedUsers, right.AllowedUsers) {
 		return false
 	}
+	if !CompareIPs(left.FirstDynamicIP, right.FirstDynamicIP) {
+		return false
+	}
 	return true
 }
 
@@ -248,7 +264,7 @@ func IpListsEqual(left, right []net.IP) bool {
 		return false
 	}
 	for index, leftIP := range left {
-		if !leftIP.Equal(right[index]) {
+		if !CompareIPs(leftIP, right[index]) {
 			return false
 		}
 	}

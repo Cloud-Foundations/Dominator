@@ -567,6 +567,8 @@ type Subnet struct {
 	VlanId            uint     `json:",omitempty"`
 	AllowedGroups     []string `json:",omitempty"`
 	AllowedUsers      []string `json:",omitempty"`
+	FirstDynamicIP    net.IP   `json:",omitempty"`
+	LastDynamicIP     net.IP   `json:",omitempty"`
 }
 
 type TraceVmMetadataRequest struct {
