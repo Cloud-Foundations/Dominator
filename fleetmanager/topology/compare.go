@@ -52,22 +52,10 @@ func (left *Subnet) equal(right *Subnet) bool {
 	if !left.Subnet.Equal(&right.Subnet) {
 		return false
 	}
-	if len(left.FirstAutoIP) < 1 {
-		if len(right.FirstAutoIP) > 0 {
-			return false
-		}
-	} else if len(right.FirstAutoIP) < 1 {
-		return false
-	} else if !left.FirstAutoIP.Equal(right.FirstAutoIP) {
+	if !hypervisor.CompareIPs(left.FirstAutoIP, right.FirstAutoIP) {
 		return false
 	}
-	if len(left.LastAutoIP) < 1 {
-		if len(right.LastAutoIP) > 0 {
-			return false
-		}
-	} else if len(right.LastAutoIP) < 1 {
-		return false
-	} else if !left.LastAutoIP.Equal(right.LastAutoIP) {
+	if !hypervisor.CompareIPs(left.LastAutoIP, right.LastAutoIP) {
 		return false
 	}
 	return hypervisor.IpListsEqual(left.ReservedIPs, right.ReservedIPs)
