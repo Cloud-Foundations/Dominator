@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -22,7 +23,27 @@ func listBroadcastInterfaces(interfaceType uint, logger log.DebugLogger) (
 				logger.Debugf(2, "skipping non-broadcast interface: %s\n",
 					iface.Name)
 			} else if includeType(iface, interfaceType, logger) {
-				logger.Debugf(1, "found broadcast interface: %s\n", iface.Name)
+				addrs, err := iface.Addrs()
+				if err != nil {
+					return nil, nil, err
+				}
+				var addrStrings []string
+				for _, addr := range addrs {
+					addrString := addr.String()
+					if ip, _, err := net.ParseCIDR(addrString); err != nil {
+						return nil, nil, err
+					} else if ip.To4() != nil {
+						addrStrings = append(addrStrings, addrString)
+					}
+				}
+				if len(addrStrings) < 1 {
+					logger.Debugf(1, "found broadcast interface: %s\n",
+						iface.Name)
+				} else {
+					logger.Debugf(1,
+						"found broadcast interface: %s, addrs: %s\n",
+						iface.Name, strings.Join(addrStrings, " "))
+				}
 				interfaceList = append(interfaceList, iface)
 				interfaceMap[iface.Name] = iface
 			}
