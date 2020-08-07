@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -138,7 +139,8 @@ func main() {
 			}
 		}
 	}
-	dhcpServer, err := dhcpd.New(dhcpInterfaces, logger)
+	dhcpServer, err := dhcpd.New(dhcpInterfaces,
+		filepath.Join(*stateDir, "dynamic-leases.json"), logger)
 	if err != nil {
 		logger.Fatalf("Cannot start DHCP server: %s\n", err)
 	}

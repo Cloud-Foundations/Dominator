@@ -3,9 +3,13 @@ package dhcpd
 import (
 	"errors"
 	"net"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
@@ -15,8 +19,13 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-const sysClassNet = "/sys/class/net"
-const leaseTime = time.Hour * 48
+const dynamicLeaseTime = time.Hour * 4
+const staticLeaseTime = time.Hour * 48
+
+type dynamicLeaseType struct {
+	Expires time.Time
+	proto.Address
+}
 
 type serveIfConn struct {
 	ifIndices        map[int]string
@@ -25,11 +34,12 @@ type serveIfConn struct {
 	requestInterface *string
 }
 
-func listMyIPs() ([]net.IP, error) {
+func listMyIPs() (map[string][]net.IP, []net.IP, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	ifMap := make(map[string][]net.IP)
 	ipMap := make(map[string]net.IP)
 	for _, iface := range interfaces {
 		if iface.Flags&net.FlagUp == 0 {
@@ -40,16 +50,17 @@ func listMyIPs() ([]net.IP, error) {
 		}
 		interfaceAddrs, err := iface.Addrs()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, addr := range interfaceAddrs {
 			IP, _, err := net.ParseCIDR(addr.String())
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if IP = IP.To4(); IP == nil {
 				continue
 			}
+			ifMap[iface.Name] = append(ifMap[iface.Name], IP)
 			ipMap[IP.String()] = IP
 		}
 	}
@@ -57,26 +68,33 @@ func listMyIPs() ([]net.IP, error) {
 	for _, IP := range ipMap {
 		IPs = append(IPs, IP)
 	}
-	return IPs, nil
+	return ifMap, IPs, nil
 }
 
-func newServer(interfaceNames []string, logger log.DebugLogger) (
+func newServer(interfaceNames []string, dynamicLeasesFile string,
+	logger log.DebugLogger) (
 	*DhcpServer, error) {
 	logger = prefixlogger.New("dhcpd: ", logger)
+	cleanupTriggerChannel := make(chan struct{}, 1)
 	dhcpServer := &DhcpServer{
-		logger:          logger,
-		ackChannels:     make(map[string]chan struct{}),
-		ipAddrToMacAddr: make(map[string]string),
-		leases:          make(map[string]leaseType),
-		requestChannels: make(map[string]chan net.IP),
-		routeTable:      make(map[string]*util.RouteEntry),
+		dynamicLeasesFile: dynamicLeasesFile,
+		logger:            logger,
+		cleanupTrigger:    cleanupTriggerChannel,
+		ackChannels:       make(map[string]chan struct{}),
+		interfaceSubnets:  make(map[string][]*subnetType),
+		ipAddrToMacAddr:   make(map[string]string),
+		staticLeases:      make(map[string]leaseType),
+		requestChannels:   make(map[string]chan net.IP),
+		routeTable:        make(map[string]*util.RouteEntry),
+		dynamicLeases:     make(map[string]*leaseType),
 	}
-	if myIPs, err := listMyIPs(); err != nil {
+	if interfaceIPs, myIPs, err := listMyIPs(); err != nil {
 		return nil, err
 	} else {
 		if len(myIPs) < 1 {
 			return nil, errors.New("no IP addresses found")
 		}
+		dhcpServer.interfaceIPs = interfaceIPs
 		dhcpServer.myIPs = myIPs
 	}
 	routeTable, err := util.GetRouteTable()
@@ -118,6 +136,9 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 			serveConn.ifIndices[iface.Index] = iface.Name
 		}
 	}
+	if err := dhcpServer.readDynamicLeases(); err != nil {
+		return nil, err
+	}
 	listener, err := net.ListenPacket("udp4", ":67")
 	if err != nil {
 		return nil, err
@@ -133,6 +154,7 @@ func newServer(interfaceNames []string, logger log.DebugLogger) (
 			logger.Println(err)
 		}
 	}()
+	go dhcpServer.cleanupDynamicLeasesLoop(cleanupTriggerChannel)
 	return dhcpServer, nil
 }
 
@@ -169,20 +191,64 @@ func (s *DhcpServer) addLease(address proto.Address, doNetboot bool,
 		if len(s.networkBootImage) < 1 {
 			return errors.New("no Network Boot Image name configured")
 		}
-		if _, ok := s.leases[address.MacAddress]; ok {
+		if _, ok := s.staticLeases[address.MacAddress]; ok {
 			return errors.New("already have lease for: " + address.MacAddress)
 		}
 	}
+	if lease, ok := s.dynamicLeases[address.MacAddress]; ok {
+		leaseIpAddr := lease.IpAddress.String()
+		s.logger.Printf("discarding {%s %s}: static lease\n",
+			leaseIpAddr, address.MacAddress)
+		delete(s.ipAddrToMacAddr, leaseIpAddr)
+		delete(s.dynamicLeases, address.MacAddress)
+		if err := s.writeDynamicLeases(); err != nil {
+			s.logger.Println(err)
+		}
+	}
+	if lease, ok := s.staticLeases[address.MacAddress]; ok {
+		leaseIpAddr := lease.IpAddress.String()
+		s.logger.Printf("replacing {%s %s}\n", leaseIpAddr, address.MacAddress)
+		delete(s.ipAddrToMacAddr, leaseIpAddr)
+		delete(s.staticLeases, address.MacAddress)
+	}
+	if macAddr, ok := s.ipAddrToMacAddr[ipAddr]; ok {
+		s.logger.Printf("replacing {%s %s}\n", ipAddr, macAddr)
+		delete(s.ipAddrToMacAddr, ipAddr)
+		delete(s.dynamicLeases, macAddr)
+		delete(s.staticLeases, macAddr)
+	}
 	s.ipAddrToMacAddr[ipAddr] = address.MacAddress
-	s.leases[address.MacAddress] = leaseType{
-		address, hostname, doNetboot, subnet}
+	s.staticLeases[address.MacAddress] = leaseType{
+		Address:   address,
+		hostname:  hostname,
+		doNetboot: doNetboot,
+		subnet:    subnet,
+	}
 	return nil
 }
 
 func (s *DhcpServer) addSubnet(protoSubnet proto.Subnet) {
 	subnet := s.makeSubnet(&protoSubnet)
+	var ifaceName string
+	for name, ips := range s.interfaceIPs {
+		for _, ip := range ips {
+			if protoSubnet.IpGateway.Equal(ip) {
+				ifaceName = name
+				s.logger.Printf("attaching subnet GW: %s to interface: %s\n",
+					ip, name)
+				break
+			}
+		}
+		if ifaceName != "" {
+			break
+		}
+	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if ifaceName != "" {
+		s.interfaceSubnets[ifaceName] = append(s.interfaceSubnets[ifaceName],
+			subnet)
+	}
 	s.subnets = append(s.subnets, subnet)
 }
 
@@ -198,16 +264,119 @@ func (s *DhcpServer) checkRouteOnInterface(addr net.IP,
 	return false
 }
 
-func (s *DhcpServer) findLease(macAddr string) (*leaseType, *subnetType) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	if lease, ok := s.leases[macAddr]; !ok {
-		return nil, nil
-	} else if lease.subnet != nil {
-		return &lease, lease.subnet
-	} else {
-		return &lease, s.findMatchingSubnet(lease.IpAddress)
+func (s *DhcpServer) cleanupDynamicLeases() time.Duration {
+	numExpired := 0
+	waitTime := time.Hour
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for macAddr, lease := range s.dynamicLeases {
+		expiresIn := time.Until(lease.expires)
+		if expiresIn > 0 {
+			if expiresIn < waitTime {
+				waitTime = expiresIn
+			}
+		} else {
+			delete(s.ipAddrToMacAddr, lease.Address.IpAddress.String())
+			delete(s.dynamicLeases, macAddr)
+			numExpired++
+		}
 	}
+	if numExpired > 0 {
+		s.logger.Debugf(0, "expired %d dynamic leases\n", numExpired)
+		if err := s.writeDynamicLeases(); err != nil {
+			s.logger.Println(err)
+		}
+	}
+	return waitTime
+}
+
+func (s *DhcpServer) cleanupDynamicLeasesLoop(cleanupTrigger <-chan struct{}) {
+	timer := time.NewTimer(time.Second)
+	for {
+		select {
+		case <-cleanupTrigger:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(s.cleanupDynamicLeases())
+		case <-timer.C:
+			timer.Reset(s.cleanupDynamicLeases())
+		}
+	}
+}
+
+// This must be called with the lock held.
+func (s *DhcpServer) computeLeaseTime(lease *leaseType,
+	offer bool) time.Duration {
+	if lease.expires.IsZero() {
+		return staticLeaseTime
+	}
+	if offer {
+		return time.Minute
+	}
+	lease.expires = time.Now().Add(dynamicLeaseTime)
+	select {
+	case s.cleanupTrigger <- struct{}{}:
+	default:
+	}
+	if err := s.writeDynamicLeases(); err != nil {
+		s.logger.Println(err)
+	}
+	return dynamicLeaseTime >> 1
+}
+
+// This must be called with the lock held.
+func (s *DhcpServer) findDynamicLease(macAddr, iface string) (
+	*leaseType, *subnetType) {
+	lease, ok := s.dynamicLeases[macAddr]
+	if !ok {
+		return nil, nil
+	}
+	if lease.subnet == nil {
+		if subnet := s.findMatchingSubnet(lease.IpAddress); subnet == nil {
+			s.logger.Printf("discarding {%s %s}: no subnet\n",
+				lease.IpAddress, lease.MacAddress)
+			delete(s.ipAddrToMacAddr, lease.IpAddress.String())
+			delete(s.dynamicLeases, lease.MacAddress)
+			return nil, nil
+		} else {
+			lease.subnet = subnet
+		}
+	}
+	if !lease.subnet.dynamicOK() {
+		s.logger.Printf("discarding {%s %s}: no dynamic leases\n",
+			lease.IpAddress, lease.MacAddress)
+		delete(s.ipAddrToMacAddr, lease.IpAddress.String())
+		delete(s.dynamicLeases, lease.MacAddress)
+		return nil, nil
+	}
+	for _, subnet := range s.interfaceSubnets[iface] {
+		if lease.subnet == subnet {
+			return lease, subnet
+		}
+	}
+	s.logger.Printf("discarding {%s %s}: no interface\n",
+		lease.IpAddress, lease.MacAddress)
+	delete(s.ipAddrToMacAddr, lease.IpAddress.String())
+	delete(s.dynamicLeases, lease.MacAddress)
+	return nil, nil
+}
+
+// This must be called with the lock held.
+func (s *DhcpServer) findLease(macAddr, iface string) (
+	*leaseType, *subnetType) {
+	if lease, subnet := s.findStaticLease(macAddr); lease != nil {
+		return lease, subnet
+	}
+	if lease, subnet := s.findDynamicLease(macAddr, iface); lease != nil {
+		return lease, subnet
+	}
+	for _, subnet := range s.interfaceSubnets[iface] {
+		if lease := s.makeDynamicLease(macAddr, subnet); lease != nil {
+			return lease, subnet
+		}
+	}
+	return nil, nil
 }
 
 // This must be called with the lock held.
@@ -222,6 +391,18 @@ func (s *DhcpServer) findMatchingSubnet(ipAddr net.IP) *subnetType {
 	return nil
 }
 
+// This must be called with the lock held.
+func (s *DhcpServer) findStaticLease(macAddr string) (*leaseType, *subnetType) {
+	if lease, ok := s.staticLeases[macAddr]; ok {
+		if lease.subnet != nil {
+			return &lease, lease.subnet
+		} else {
+			return &lease, s.findMatchingSubnet(lease.IpAddress)
+		}
+	}
+	return nil, nil
+}
+
 func (s *DhcpServer) makeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{} {
 	ipStr := ipAddr.String()
 	newChan := make(chan struct{}, 1)
@@ -233,6 +414,48 @@ func (s *DhcpServer) makeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{} {
 		close(oldChan)
 	}
 	return newChan
+}
+
+// This must be called with the lock held.
+func (s *DhcpServer) makeDynamicLease(macAddr string,
+	subnet *subnetType) *leaseType {
+	if !subnet.dynamicOK() {
+		return nil
+	}
+	if len(subnet.nextDynamicIP) < 4 {
+		subnet.nextDynamicIP = util.CopyIP(subnet.FirstDynamicIP)
+	}
+	stopIP := util.CopyIP(subnet.LastDynamicIP)
+	util.IncrementIP(stopIP)
+	initialIp := util.CopyIP(subnet.nextDynamicIP)
+	for {
+		testIp := util.CopyIP(subnet.nextDynamicIP)
+		testIpString := testIp.String()
+		util.IncrementIP(subnet.nextDynamicIP)
+		if _, ok := s.ipAddrToMacAddr[testIpString]; !ok {
+			lease := leaseType{Address: proto.Address{
+				IpAddress:  testIp,
+				MacAddress: macAddr,
+			},
+				expires: time.Now().Add(time.Second * 10),
+				subnet:  subnet,
+			}
+			s.dynamicLeases[macAddr] = &lease
+			s.ipAddrToMacAddr[testIpString] = macAddr
+			select {
+			case s.cleanupTrigger <- struct{}{}:
+			default:
+			}
+			return &lease
+		}
+		if subnet.nextDynamicIP.Equal(stopIP) {
+			copy(subnet.nextDynamicIP, subnet.FirstDynamicIP)
+		}
+		if initialIp.Equal(subnet.nextDynamicIP) {
+			break
+		}
+	}
+	return nil
 }
 
 func (s *DhcpServer) makeOptions(subnet *subnetType,
@@ -249,8 +472,8 @@ func (s *DhcpServer) makeOptions(subnet *subnetType,
 	if subnet.DomainName != "" {
 		leaseOptions[dhcp.OptionDomainName] = []byte(subnet.DomainName)
 	}
-	if lease.Hostname != "" {
-		leaseOptions[dhcp.OptionHostName] = []byte(lease.Hostname)
+	if lease.hostname != "" {
+		leaseOptions[dhcp.OptionHostName] = []byte(lease.hostname)
 	}
 	if lease.doNetboot {
 		leaseOptions[dhcp.OptionBootFileName] = s.networkBootImage
@@ -272,6 +495,9 @@ func (s *DhcpServer) makeRequestChannel(macAddr string) <-chan net.IP {
 func (s *DhcpServer) makeSubnet(protoSubnet *proto.Subnet) *subnetType {
 	subnet := &subnetType{Subnet: *protoSubnet, myIP: s.myIPs[0]}
 	for _, ip := range s.myIPs {
+		if ip.Equal(subnet.IpGateway) {
+			subnet.amGateway = true
+		}
 		subnetMask := net.IPMask(subnet.IpMask)
 		subnetAddr := subnet.IpGateway.Mask(subnetMask)
 		if ip.Mask(subnetMask).Equal(subnetAddr) {
@@ -294,13 +520,47 @@ func (s *DhcpServer) notifyRequest(address proto.Address) {
 	}
 }
 
+// This must be called with the lock held.
+func (s *DhcpServer) readDynamicLeases() error {
+	var leases []dynamicLeaseType
+	if err := json.ReadFromFile(s.dynamicLeasesFile, &leases); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	numExpiredLeases := 0
+	numValidLeases := 0
+	for _, lease := range leases {
+		if time.Until(lease.Expires) > 0 {
+			s.dynamicLeases[lease.Address.MacAddress] = &leaseType{
+				Address: lease.Address,
+				expires: lease.Expires,
+			}
+			s.ipAddrToMacAddr[lease.Address.IpAddress.String()] =
+				lease.Address.MacAddress
+			numValidLeases++
+		} else {
+			numExpiredLeases++
+		}
+	}
+	if numExpiredLeases > 0 {
+		return s.writeDynamicLeases()
+	}
+	if numExpiredLeases > 0 || numValidLeases > 0 {
+		s.logger.Printf("read dynamic leases: %d valid and %d expired\n",
+			numValidLeases, numExpiredLeases)
+	}
+	return nil
+}
+
 func (s *DhcpServer) removeLease(ipAddr net.IP) {
 	if len(ipAddr) < 1 {
 		return
 	}
 	ipStr := ipAddr.String()
 	s.mutex.Lock()
-	delete(s.leases, s.ipAddrToMacAddr[ipStr])
+	delete(s.staticLeases, s.ipAddrToMacAddr[ipStr])
 	delete(s.ipAddrToMacAddr, ipStr)
 	ackChan, ok := s.ackChannels[ipStr]
 	delete(s.ackChannels, ipStr)
@@ -314,12 +574,30 @@ func (s *DhcpServer) removeSubnet(subnetId string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	subnets := make([]*subnetType, 0, len(s.subnets)-1)
+	var subnetToDelete *subnetType
 	for _, subnet := range s.subnets {
-		if subnet.Id != subnetId {
+		if subnet.Id == subnetId {
+			subnetToDelete = subnet
+		} else {
 			subnets = append(subnets, subnet)
 		}
 	}
 	s.subnets = subnets
+	if subnetToDelete == nil {
+		return
+	}
+	for name, subnets := range s.interfaceSubnets {
+		subnets := make([]*subnetType, 0, len(subnets)-1)
+		for _, subnet := range subnets {
+			if subnet == subnetToDelete {
+				s.logger.Printf("detaching subnet GW: %s from interface: %s\n",
+					subnet.IpGateway, name)
+			} else {
+				subnets = append(subnets, subnet)
+			}
+		}
+		s.interfaceSubnets[name] = subnets
+	}
 }
 
 func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
@@ -329,7 +607,9 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		macAddr := req.CHAddr().String()
 		s.logger.Debugf(1, "Discover from: %s on: %s\n",
 			macAddr, s.requestInterface)
-		lease, subnet := s.findLease(macAddr)
+		s.mutex.Lock()
+		defer s.mutex.Unlock()
+		lease, subnet := s.findLease(macAddr, s.requestInterface)
 		if lease == nil {
 			return nil
 		}
@@ -347,7 +627,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			lease.IpAddress, macAddr, subnet.myIP)
 		leaseOptions := s.makeOptions(subnet, lease)
 		packet := dhcp.ReplyPacket(req, dhcp.Offer, subnet.myIP,
-			lease.IpAddress, leaseTime,
+			lease.IpAddress, s.computeLeaseTime(lease, true),
 			leaseOptions.SelectOrderOrAll(
 				options[dhcp.OptionParameterRequestList]))
 		packet.SetSIAddr(subnet.myIP)
@@ -382,7 +662,9 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		}
 		s.logger.Debugf(0, "Request for: %s from: %s on: %s\n",
 			reqIP, macAddr, s.requestInterface)
-		lease, subnet := s.findLease(macAddr)
+		s.mutex.Lock()
+		defer s.mutex.Unlock()
+		lease, subnet := s.findLease(macAddr, s.requestInterface)
 		if lease == nil {
 			s.logger.Printf("No lease found for %s\n", macAddr)
 			return nil
@@ -394,11 +676,11 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		if reqIP.Equal(lease.IpAddress) &&
 			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			leaseOptions := s.makeOptions(subnet, lease)
+			go s.acknowledgeLease(lease.IpAddress)
 			s.logger.Debugf(0, "ACK for: %s to: %s, server: %s\n",
 				reqIP, macAddr, subnet.myIP)
-			s.acknowledgeLease(lease.IpAddress)
 			packet := dhcp.ReplyPacket(req, dhcp.ACK, subnet.myIP, reqIP,
-				leaseTime, leaseOptions.SelectOrderOrAll(
+				s.computeLeaseTime(lease, false), leaseOptions.SelectOrderOrAll(
 					options[dhcp.OptionParameterRequestList]))
 			packet.SetSIAddr(subnet.myIP)
 			return packet
@@ -411,6 +693,27 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			msgType, s.requestInterface)
 	}
 	return nil
+}
+
+// This must be called with the lock held.
+func (s *DhcpServer) writeDynamicLeases() error {
+	var leases []dynamicLeaseType
+	for _, lease := range s.dynamicLeases {
+		if time.Until(lease.expires) > 0 {
+			leases = append(leases,
+				dynamicLeaseType{lease.expires, lease.Address})
+		}
+	}
+	if len(leases) < 1 {
+		os.Remove(s.dynamicLeasesFile)
+		return nil
+	}
+	sort.Slice(leases, func(left, right int) bool {
+		return leases[left].Address.IpAddress.String() <
+			leases[right].Address.IpAddress.String()
+	})
+	return json.WriteToFile(s.dynamicLeasesFile, fsutil.PublicFilePerms, "    ",
+		leases)
 }
 
 func (s *serveIfConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
@@ -431,4 +734,15 @@ func (s *serveIfConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 func (s *serveIfConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	s.cm.Src = nil
 	return s.conn.WriteTo(b, s.cm, addr)
+}
+
+// This must be called with the lock held.
+func (subnet *subnetType) dynamicOK() bool {
+	if !subnet.amGateway {
+		return false
+	}
+	if len(subnet.FirstDynamicIP) < 4 || len(subnet.LastDynamicIP) < 4 {
+		return false
+	}
+	return true
 }
