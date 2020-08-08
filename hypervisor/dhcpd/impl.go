@@ -23,7 +23,8 @@ const dynamicLeaseTime = time.Hour * 4
 const staticLeaseTime = time.Hour * 48
 
 type dynamicLeaseType struct {
-	Expires time.Time
+	ClientHostName string `json:",omitempty"`
+	Expires        time.Time
 	proto.Address
 }
 
@@ -660,8 +661,14 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 				}
 			}
 		}
-		s.logger.Debugf(0, "Request for: %s from: %s on: %s\n",
-			reqIP, macAddr, s.requestInterface)
+		hostname := string(options[dhcp.OptionHostName])
+		if hostname != "" {
+			s.logger.Debugf(0, "Request for: %s from: %s on: %s HostName=%s\n",
+				reqIP, macAddr, s.requestInterface, hostname)
+		} else {
+			s.logger.Debugf(0, "Request for: %s from: %s on: %s\n",
+				reqIP, macAddr, s.requestInterface)
+		}
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 		lease, subnet := s.findLease(macAddr, s.requestInterface)
@@ -677,6 +684,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
 			leaseOptions := s.makeOptions(subnet, lease)
 			go s.acknowledgeLease(lease.IpAddress)
+			lease.clientHostname = hostname
 			s.logger.Debugf(0, "ACK for: %s to: %s, server: %s\n",
 				reqIP, macAddr, subnet.myIP)
 			packet := dhcp.ReplyPacket(req, dhcp.ACK, subnet.myIP, reqIP,
@@ -701,7 +709,11 @@ func (s *DhcpServer) writeDynamicLeases() error {
 	for _, lease := range s.dynamicLeases {
 		if time.Until(lease.expires) > 0 {
 			leases = append(leases,
-				dynamicLeaseType{lease.expires, lease.Address})
+				dynamicLeaseType{
+					ClientHostName: lease.clientHostname,
+					Expires:        lease.expires,
+					Address:        lease.Address,
+				})
 		}
 	}
 	if len(leases) < 1 {

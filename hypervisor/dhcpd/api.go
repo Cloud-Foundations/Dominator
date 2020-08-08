@@ -31,10 +31,11 @@ type DhcpServer struct {
 
 type leaseType struct {
 	proto.Address
-	expires   time.Time
-	hostname  string
-	doNetboot bool
-	subnet    *subnetType
+	clientHostname string
+	expires        time.Time
+	hostname       string
+	doNetboot      bool
+	subnet         *subnetType
 }
 
 type subnetType struct {
