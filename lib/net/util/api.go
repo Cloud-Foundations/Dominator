@@ -36,6 +36,11 @@ type ResolverConfiguration struct {
 	SearchDomains []string
 }
 
+// CompareIPs returns true if the left IP is less than the right IP, else false.
+func CompareIPs(left, right net.IP) bool {
+	return compareIPs(left, right)
+}
+
 func CopyIP(ip net.IP) net.IP {
 	return copyIP(ip)
 }

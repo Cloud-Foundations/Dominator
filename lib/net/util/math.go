@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"net"
 )
 
@@ -10,6 +11,18 @@ func init() {
 	for value := 0; value < 256; value++ {
 		invertTable[value] = invertByte(byte(value))
 	}
+}
+
+func compareIPs(left, right net.IP) bool {
+	leftVal, err := ipToValue(left)
+	if err != nil {
+		return false
+	}
+	rightVal, err := ipToValue(right)
+	if err != nil {
+		return false
+	}
+	return leftVal < rightVal
 }
 
 func copyIP(ip net.IP) net.IP {
@@ -54,4 +67,15 @@ func invertIP(ip net.IP) {
 	for index, value := range ip {
 		ip[index] = invertTable[value]
 	}
+}
+
+func ipToValue(ip net.IP) (uint32, error) {
+	ip = ip.To4()
+	if ip == nil {
+		return 0, errors.New("not an IPv4 address")
+	}
+	return uint32(ip[0])<<24 |
+		uint32(ip[1])<<16 |
+		uint32(ip[2])<<8 |
+		uint32(ip[3]), nil
 }
