@@ -364,7 +364,7 @@ func (s *DhcpServer) findDynamicLease(macAddr, iface string) (
 }
 
 // This must be called with the lock held.
-func (s *DhcpServer) findLease(macAddr, iface string) (
+func (s *DhcpServer) findLease(macAddr, iface string, reqIP net.IP) (
 	*leaseType, *subnetType) {
 	if lease, subnet := s.findStaticLease(macAddr); lease != nil {
 		return lease, subnet
@@ -373,7 +373,7 @@ func (s *DhcpServer) findLease(macAddr, iface string) (
 		return lease, subnet
 	}
 	for _, subnet := range s.interfaceSubnets[iface] {
-		if lease := s.makeDynamicLease(macAddr, subnet); lease != nil {
+		if lease := s.makeDynamicLease(macAddr, subnet, reqIP); lease != nil {
 			return lease, subnet
 		}
 	}
@@ -418,16 +418,39 @@ func (s *DhcpServer) makeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{} {
 }
 
 // This must be called with the lock held.
-func (s *DhcpServer) makeDynamicLease(macAddr string,
-	subnet *subnetType) *leaseType {
+func (s *DhcpServer) makeDynamicLease(macAddr string, subnet *subnetType,
+	reqIP net.IP) *leaseType {
 	if !subnet.dynamicOK() {
 		return nil
+	}
+	stopIP := util.CopyIP(subnet.LastDynamicIP)
+	util.IncrementIP(stopIP)
+	if len(reqIP) == 4 {
+		reqIpString := reqIP.String()
+		if _, ok := s.ipAddrToMacAddr[reqIpString]; !ok {
+			lowIP := util.CopyIP(subnet.FirstDynamicIP)
+			util.DecrementIP(lowIP)
+			if util.CompareIPs(lowIP, reqIP) && util.CompareIPs(reqIP, stopIP) {
+				lease := leaseType{Address: proto.Address{
+					IpAddress:  reqIP,
+					MacAddress: macAddr,
+				},
+					expires: time.Now().Add(time.Second * 10),
+					subnet:  subnet,
+				}
+				s.dynamicLeases[macAddr] = &lease
+				s.ipAddrToMacAddr[reqIpString] = macAddr
+				select {
+				case s.cleanupTrigger <- struct{}{}:
+				default:
+				}
+				return &lease
+			}
+		}
 	}
 	if len(subnet.nextDynamicIP) < 4 {
 		subnet.nextDynamicIP = util.CopyIP(subnet.FirstDynamicIP)
 	}
-	stopIP := util.CopyIP(subnet.LastDynamicIP)
-	util.IncrementIP(stopIP)
 	initialIp := util.CopyIP(subnet.nextDynamicIP)
 	for {
 		testIp := util.CopyIP(subnet.nextDynamicIP)
@@ -610,7 +633,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			macAddr, s.requestInterface)
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
-		lease, subnet := s.findLease(macAddr, s.requestInterface)
+		lease, subnet := s.findLease(macAddr, s.requestInterface, nil)
 		if lease == nil {
 			return nil
 		}
@@ -671,7 +694,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		}
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
-		lease, subnet := s.findLease(macAddr, s.requestInterface)
+		lease, subnet := s.findLease(macAddr, s.requestInterface, reqIP)
 		if lease == nil {
 			s.logger.Printf("No lease found for %s\n", macAddr)
 			return nil
