@@ -657,13 +657,15 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		packet.SetSIAddr(subnet.myIP)
 		return packet
 	case dhcp.Request:
+		macAddr := req.CHAddr().String()
 		reqIP := net.IP(options[dhcp.OptionRequestedIPAddress])
 		if reqIP == nil {
-			s.logger.Debugln(0, "Request did not request an IP")
 			reqIP = net.IP(req.CIAddr())
+			s.logger.Debugf(0,
+				"Request from: %s on: %s did not request an IP, using: %s\n",
+				macAddr, s.requestInterface, reqIP)
 		}
 		reqIP = util.ShrinkIP(reqIP)
-		macAddr := req.CHAddr().String()
 		s.notifyRequest(proto.Address{reqIP, macAddr})
 		server, ok := options[dhcp.OptionServerIdentifier]
 		if ok {
