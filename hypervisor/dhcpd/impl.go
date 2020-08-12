@@ -710,15 +710,16 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 			leaseOptions := s.makeOptions(subnet, lease)
 			go s.acknowledgeLease(lease.IpAddress)
 			lease.clientHostname = hostname
-			s.logger.Debugf(0, "ACK for: %s to: %s, server: %s\n",
-				reqIP, macAddr, subnet.myIP)
+			s.logger.Debugf(0, "ACK for: %s to: %s on: %s, server: %s\n",
+				reqIP, macAddr, s.requestInterface, subnet.myIP)
 			packet := dhcp.ReplyPacket(req, dhcp.ACK, subnet.myIP, reqIP,
 				s.computeLeaseTime(lease, false), leaseOptions.SelectOrderOrAll(
 					options[dhcp.OptionParameterRequestList]))
 			packet.SetSIAddr(subnet.myIP)
 			return packet
 		} else {
-			s.logger.Debugf(0, "NAK for: %s to: %s\n", reqIP, macAddr)
+			s.logger.Debugf(0, "NAK for: %s to: %s on: %s\n",
+				reqIP, macAddr, s.requestInterface)
 			return dhcp.ReplyPacket(req, dhcp.NAK, subnet.myIP, nil, 0, nil)
 		}
 	default:
