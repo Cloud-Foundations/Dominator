@@ -3186,7 +3186,9 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		case proto.ConsoleVNC:
 			cmd.Args = append(cmd.Args,
 				"-display", "vnc=unix:"+filepath.Join(vm.dirname, "vnc"),
-				"-vga", "std")
+				"-vga", "std",
+				"-usb", "-device", "usb-tablet",
+			)
 		}
 	}
 	var interfaceDriver string
