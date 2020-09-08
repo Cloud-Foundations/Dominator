@@ -1869,7 +1869,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	client, img, imageName, err := m.getImage(request.ImageName,
 		request.ImageTimeout)
 	if err != nil {
-		return nil
+		return err
 	}
 	if img.Filter == nil {
 		return fmt.Errorf("%s contains no filter", imageName)
