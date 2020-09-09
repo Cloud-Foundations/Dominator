@@ -3045,6 +3045,9 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 			go vm.monitor(monitorSock, commandChannel)
 			commandChannel <- "qmp_capabilities"
 			vm.kill()
+		} else {
+			vm.setState(proto.StateStopped)
+			vm.logger.Println(err)
 		}
 		return false, nil
 	case proto.StateStopped:
