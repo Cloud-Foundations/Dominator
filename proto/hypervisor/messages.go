@@ -22,6 +22,7 @@ const (
 	StateDestroying    = 5
 	StateMigrating     = 6
 	StateExporting     = 7
+	StateCrashed       = 8
 
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
