@@ -1038,7 +1038,7 @@ func (m *Manager) destroyVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	case proto.StateStopping:
 		return errors.New("VM is stopping")
 	case proto.StateStopped, proto.StateFailedToStart, proto.StateMigrating,
-		proto.StateExporting:
+		proto.StateExporting, proto.StateCrashed:
 		vm.delete()
 	case proto.StateDestroying:
 		return errors.New("VM is already destroying")
@@ -2547,7 +2547,8 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return false, errors.New("VM is running")
 	case proto.StateStopping:
 		return false, errors.New("VM is stopping")
-	case proto.StateStopped, proto.StateFailedToStart, proto.StateExporting:
+	case proto.StateStopped, proto.StateFailedToStart, proto.StateExporting,
+		proto.StateCrashed:
 		vm.setState(proto.StateStarting)
 		vm.mutex.Unlock()
 		doUnlock = false
@@ -2600,6 +2601,8 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return errors.New("VM is migrating")
 	case proto.StateExporting:
 		return errors.New("VM is exporting")
+	case proto.StateCrashed:
+		vm.setState(proto.StateStopped)
 	default:
 		return errors.New("unknown state: " + vm.State.String())
 	}
@@ -2909,6 +2912,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 		}
 		return
 	case proto.StateRunning:
+		vm.setState(proto.StateCrashed)
 		select {
 		case vm.stoppedNotifier <- struct{}{}:
 		default:
@@ -2930,6 +2934,9 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 	case proto.StateMigrating:
 		return
 	case proto.StateExporting:
+		return
+	case proto.StateCrashed:
+		vm.logger.Println("monitor socket closed on already crashed VM")
 		return
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
@@ -3057,6 +3064,7 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		return false, nil
 	case proto.StateMigrating:
 		return false, nil
+	case proto.StateCrashed:
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
 		return false, nil
