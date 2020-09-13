@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -115,10 +116,11 @@ func listPackages(rootDir string) ([]image.Package, error) {
 		return nil, err
 	}
 	packageMap := make(map[string]image.Package)
-	for {
+	scanner := bufio.NewScanner(output)
+	for scanner.Scan() {
 		var name, version string
 		var size uint64
-		nScanned, err := fmt.Fscanf(output, "%s %s %d\n",
+		nScanned, err := fmt.Sscanf(scanner.Text(), "%s %s %d",
 			&name, &version, &size)
 		if err != nil {
 			if err == io.EOF {
@@ -126,13 +128,18 @@ func listPackages(rootDir string) ([]image.Package, error) {
 			}
 			return nil, err
 		}
-		if nScanned != 3 {
+		if nScanned < 2 {
 			return nil, errors.New("malformed line")
 		}
 		packageMap[name] = image.Package{
 			Name:    name,
 			Size:    size * sizeMultiplier,
 			Version: version,
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if err != io.EOF {
+			fmt.Fprintln(os.Stderr, "reading standard input:", err)
 		}
 	}
 	packageNames := make([]string, 0, len(packageMap))
