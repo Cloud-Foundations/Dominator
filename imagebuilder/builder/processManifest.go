@@ -134,8 +134,8 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	defer file.Close()
-	err = runInTarget(file, buildLog, rootDir, envGetter, packagerPathname,
-		"copy-in", "/etc/resolv.conf")
+	err = runInTarget(file, buildLog, rootDir, nil, envGetter,
+		packagerPathname, "copy-in", "/etc/resolv.conf")
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
@@ -231,8 +231,8 @@ func installPackages(packageList []string, rootDir string, bindMounts []string,
 	}
 	fmt.Fprintln(buildLog, "\nUpgrading packages:")
 	startTime := time.Now()
-	err := runInTargetWithBindMounts(nil, buildLog, rootDir, bindMounts,
-		envGetter, packagerPathname, "upgrade")
+	err := runInTarget(nil, buildLog, rootDir, bindMounts, envGetter,
+		packagerPathname, "upgrade")
 	if err != nil {
 		return errors.New("error upgrading: " + err.Error())
 	}
@@ -244,8 +244,8 @@ func installPackages(packageList []string, rootDir string, bindMounts []string,
 	startTime = time.Now()
 	args := []string{"install"}
 	args = append(args, packageList...)
-	err = runInTargetWithBindMounts(nil, buildLog, rootDir, bindMounts,
-		envGetter, packagerPathname, args...)
+	err = runInTarget(nil, buildLog, rootDir, bindMounts, envGetter,
+		packagerPathname, args...)
 	if err != nil {
 		return errors.New("error installing: " + err.Error())
 	}
@@ -296,9 +296,8 @@ func runScripts(manifestDir, dirname, rootDir string, bindMounts []string,
 	for _, name := range names {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
-		err := runInTargetWithBindMounts(nil, buildLog, rootDir, bindMounts,
-			envGetter, packagerPathname, "run",
-			filepath.Join("/.scripts", name))
+		err := runInTarget(nil, buildLog, rootDir, bindMounts, envGetter,
+			packagerPathname, "run", filepath.Join("/.scripts", name))
 		if err != nil {
 			return errors.New("error running script: " + name + ": " +
 				err.Error())
@@ -318,8 +317,8 @@ func updatePackageDatabase(rootDir string, bindMounts []string,
 	envGetter environmentGetter, buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nUpdating package database:")
 	startTime := time.Now()
-	err := runInTargetWithBindMounts(nil, buildLog, rootDir, bindMounts,
-		envGetter, packagerPathname, "update")
+	err := runInTarget(nil, buildLog, rootDir, bindMounts, envGetter,
+		packagerPathname, "update")
 	if err != nil {
 		return errors.New("error updating: " + err.Error())
 	}

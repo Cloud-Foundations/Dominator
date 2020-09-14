@@ -95,7 +95,7 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 
 func listPackages(rootDir string) ([]image.Package, error) {
 	output := new(bytes.Buffer)
-	err := runInTarget(nil, output, rootDir, nil, packagerPathname,
+	err := runInTarget(nil, output, rootDir, nil, nil, packagerPathname,
 		"show-size-multiplier")
 	if err != nil {
 		return nil, fmt.Errorf("error getting size multiplier: %s", err)
@@ -111,9 +111,9 @@ func listPackages(rootDir string) ([]image.Package, error) {
 		return nil, errors.New("malformed size multiplier")
 	}
 	output.Reset()
-	err = runInTarget(nil, output, rootDir, nil, packagerPathname, "list")
+	err = runInTarget(nil, output, rootDir, nil, nil, packagerPathname, "list")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error running package lister: %s", err)
 	}
 	packageMap := make(map[string]image.Package)
 	scanner := bufio.NewScanner(output)
@@ -265,8 +265,8 @@ func runTest(rootDir, prog string) testResultType {
 	errChannel := make(chan error, 1)
 	timer := time.NewTimer(time.Second * 10)
 	go func() {
-		errChannel <- runInTarget(nil, &result, rootDir, nil, packagerPathname,
-			"run", prog)
+		errChannel <- runInTarget(nil, &result, rootDir, nil, nil,
+			packagerPathname, "run", prog)
 	}()
 	select {
 	case result.err = <-errChannel:

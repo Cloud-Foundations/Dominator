@@ -46,7 +46,8 @@ var environmentToSet = map[string]string{
 func cleanPackages(rootDir string, buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nCleaning packages:")
 	startTime := time.Now()
-	err := runInTarget(nil, buildLog, rootDir, nil, packagerPathname, "clean")
+	err := runInTarget(nil, buildLog, rootDir, nil, nil, packagerPathname,
+		"clean")
 	if err != nil {
 		return errors.New("error cleaning: " + err.Error())
 	}
@@ -126,8 +127,6 @@ func (packager *packagerType) writePackageInstaller(rootDir string) error {
 func (packager *packagerType) writePackageInstallerContents(writer io.Writer) {
 	fmt.Fprintln(writer, "#! /bin/sh")
 	fmt.Fprintln(writer, "# Created by imaginator.")
-	fmt.Fprintln(writer, "mount -n none -t proc /proc")
-	fmt.Fprintln(writer, "mount -n none -t sysfs /sys")
 	for _, line := range packager.Verbatim {
 		fmt.Fprintln(writer, line)
 	}
@@ -175,12 +174,43 @@ func writeArgument(writer io.Writer, arg string) {
 }
 
 func clearResolvConf(writer io.Writer, rootDir string) error {
-	return runInTarget(nil, writer, rootDir, nil,
+	return runInTarget(nil, writer, rootDir, nil, nil,
 		"cp", "/dev/null", "/etc/resolv.conf")
 }
 
+// Run a command in the target root directory in a new mount and PID namespace.
 func runInTarget(input io.Reader, output io.Writer, rootDir string,
-	envGetter environmentGetter, prog string, args ...string) error {
+	bindMounts []string, envGetter environmentGetter, prog string,
+	args ...string) error {
+	errChannel := make(chan error, 1)
+	go func() {
+		err := func() error {
+			if err := wsyscall.UnshareMountNamespace(); err != nil {
+				return fmt.Errorf("error unsharing mount namespace: %s", err)
+			}
+			return runInTargetMutateNamespace(input, output, rootDir,
+				bindMounts, envGetter, prog, args...)
+		}()
+		errChannel <- err
+	}()
+	return <-errChannel
+}
+
+// Run a command in the target root directory. This mutates the mount namespace.
+func runInTargetMutateNamespace(input io.Reader, output io.Writer,
+	rootDir string, bindMounts []string, envGetter environmentGetter,
+	prog string, args ...string) error {
+	wsyscall.Mount("none", filepath.Join(rootDir, "proc"), "proc", 0, "")
+	wsyscall.Mount("none", filepath.Join(rootDir, "sys"), "sysfs", 0, "")
+	for _, bindMount := range bindMounts {
+		err := wsyscall.Mount(bindMount,
+			filepath.Join(rootDir, bindMount), "",
+			wsyscall.MS_BIND|wsyscall.MS_RDONLY, "")
+		if err != nil {
+			return fmt.Errorf("error bind mounting: %s: %s",
+				bindMount, err)
+		}
+	}
 	var environmentToInject map[string]string
 	if envGetter != nil {
 		environmentToInject = envGetter.getenv()
@@ -195,37 +225,9 @@ func runInTarget(input io.Reader, output io.Writer, rootDir string,
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:     rootDir,
 		Setsid:     true,
-		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
+		Cloneflags: syscall.CLONE_NEWPID,
 	}
 	return cmd.Run()
-}
-
-func runInTargetWithBindMounts(input io.Reader, output io.Writer,
-	rootDir string, bindMounts []string, envGetter environmentGetter,
-	prog string, args ...string) error {
-	if len(bindMounts) < 1 {
-		return runInTarget(input, output, rootDir, envGetter, prog, args...)
-	}
-	errChannel := make(chan error)
-	go func() {
-		err := func() error {
-			if err := wsyscall.UnshareMountNamespace(); err != nil {
-				return err
-			}
-			for _, bindMount := range bindMounts {
-				err := wsyscall.Mount(bindMount,
-					filepath.Join(rootDir, bindMount), "",
-					wsyscall.MS_BIND|wsyscall.MS_RDONLY, "")
-				if err != nil {
-					return fmt.Errorf("error bind mounting: %s: %s",
-						bindMount, err)
-				}
-			}
-			return runInTarget(input, output, rootDir, envGetter, prog, args...)
-		}()
-		errChannel <- err
-	}()
-	return <-errChannel
 }
 
 func stripVariables(input []string, varsToCopy map[string]struct{},
