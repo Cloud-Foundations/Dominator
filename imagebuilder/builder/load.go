@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -35,7 +36,12 @@ func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
 func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
-	err := syscall.Mount("none", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
+	initialNamespace, err := os.Readlink("/proc/self/ns/mnt")
+	if err != nil {
+		return nil, fmt.Errorf("error discovering namespace: %s", err)
+	}
+	logger.Printf("Initial namespace: %s\n", initialNamespace)
+	err = syscall.Mount("none", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
 	if err != nil {
 		return nil, fmt.Errorf("error making mounts private: %s", err)
 	}
@@ -66,6 +72,7 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 		imageServerAddress:        imageServerAddress,
 		logger:                    logger,
 		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
+		initialNamespace:          initialNamespace,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
 		slaveDriver:               slaveDriver,

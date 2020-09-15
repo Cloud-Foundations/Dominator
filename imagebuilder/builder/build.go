@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -168,18 +169,7 @@ func (b *Builder) buildSomewhere(builder imageBuilder, client *srpc.Client,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
 	buildLog buildLogger) (*image.Image, error) {
 	if b.slaveDriver == nil {
-		if authInfo == nil {
-			b.logger.Printf("Auto building image for stream: %s\n",
-				request.StreamName)
-		} else {
-			b.logger.Printf("%s requested building image for stream: %s\n",
-				authInfo.Username, request.StreamName)
-		}
-		img, err := builder.build(b, client, request, buildLog)
-		if err != nil {
-			fmt.Fprintf(buildLog, "Error building image: %s\n", err)
-		}
-		return img, err
+		return b.buildLocal(builder, client, request, authInfo, buildLog)
 	} else {
 		return b.buildOnSlave(client, request, authInfo, buildLog)
 	}
@@ -230,6 +220,38 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 			format.Duration(finishTime.Sub(startTime)))
 		return img, name, nil
 	}
+}
+
+func (b *Builder) buildLocal(builder imageBuilder, client *srpc.Client,
+	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
+	buildLog buildLogger) (*image.Image, error) {
+	// Check the namespace to make sure it hasn't changed. This is to catch
+	// golang bugs.
+	currentNamespace, err := os.Readlink("/proc/self/ns/mnt")
+	if err != nil {
+		err = fmt.Errorf("error discovering namespace: %s", err)
+		fmt.Fprintln(buildLog, err)
+		return nil, err
+	}
+	if currentNamespace != b.initialNamespace {
+		err := fmt.Errorf("namespace changed from: %s to: %s",
+			b.initialNamespace, currentNamespace)
+		fmt.Fprintln(buildLog, err)
+		return nil, err
+	}
+	if authInfo == nil {
+		b.logger.Printf("Auto building image for stream: %s\n",
+			request.StreamName)
+	} else {
+		b.logger.Printf("%s requested building image for stream: %s\n",
+			authInfo.Username, request.StreamName)
+	}
+	img, err := builder.build(b, client, request, buildLog)
+	if err != nil {
+		fmt.Fprintf(buildLog, "Error building image: %s\n", err)
+		return nil, err
+	}
+	return img, nil
 }
 
 func (b *Builder) buildOnSlave(client *srpc.Client,
