@@ -86,10 +86,8 @@ func (stream *bootstrapStream) build(b *Builder, client *srpc.Client,
 		}
 		args = append(args, arg)
 	}
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = buildLog
-	cmd.Stderr = buildLog
-	if err := cmd.Run(); err != nil {
+	err = runInTarget(nil, buildLog, "", nil, nil, args[0], args[1:]...)
+	if err != nil {
 		return nil, err
 	} else {
 		packager := b.packagerTypes[stream.PackagerType]
