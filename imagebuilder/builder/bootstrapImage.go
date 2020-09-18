@@ -86,6 +86,10 @@ func (stream *bootstrapStream) build(b *Builder, client *srpc.Client,
 		}
 		args = append(args, arg)
 	}
+	fmt.Fprintf(buildLog, "Running command: %s with args:\n", args[0])
+	for _, arg := range args[1:] {
+		fmt.Fprintf(buildLog, "    %s\n", arg)
+	}
 	err = runInTarget(nil, buildLog, "", nil, nil, args[0], args[1:]...)
 	if err != nil {
 		return nil, err
