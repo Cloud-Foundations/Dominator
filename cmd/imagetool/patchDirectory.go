@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -59,7 +58,6 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 
 func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	imageName, dirName, rootDir string, logger log.DebugLogger) error {
-	runtime.LockOSThread()
 	if err := wsyscall.UnshareMountNamespace(); err != nil {
 		return fmt.Errorf("unable to unshare mount namesace: %s", err)
 	}
