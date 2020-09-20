@@ -132,7 +132,6 @@ func unshareAndBind(workingRootDir string) bool {
 		// thread in the process, and Go switches execution between threads
 		// randomly. Thus, the namespace can be suddenly switched for running
 		// code. This is an aspect of Go that was not well thought out.
-		runtime.LockOSThread()
 		if err := wsyscall.UnshareMountNamespace(); err != nil {
 			fmt.Fprintf(os.Stderr, "Unable to unshare mount namesace: %s\n",
 				err)
