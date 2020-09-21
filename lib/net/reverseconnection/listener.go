@@ -121,6 +121,11 @@ func (l *Listener) listen(acceptChannel chan<- acceptEvent) {
 			break
 		}
 		conn, err := l.listener.Accept()
+		if err != nil {
+			l.logger.Printf(
+				"error accepting connection on reverse listener: %s\n", err)
+			continue
+		}
 		tcpConn, ok := conn.(libnet.TCPConn)
 		if !ok {
 			conn.Close()
