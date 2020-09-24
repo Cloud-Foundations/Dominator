@@ -36,6 +36,7 @@ type Listener struct {
 	portNumber        uint
 	logger            log.DebugLogger
 	acceptChannel     chan acceptEvent
+	closedLock        sync.Mutex
 	closed            bool
 	connectionMapLock sync.Mutex
 	connectionMap     map[ip4Address]uint
