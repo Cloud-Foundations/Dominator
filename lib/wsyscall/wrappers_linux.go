@@ -1,3 +1,5 @@
+// +build go1.11.6 go1.12
+
 package wsyscall
 
 import (
