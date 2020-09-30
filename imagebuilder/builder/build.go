@@ -333,7 +333,9 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 	}
 	var sleepUntil time.Time
 	for ; ; time.Sleep(time.Until(sleepUntil)) {
-		sleepUntil = time.Now().Add(minInterval)
+		b.logger.Println("Starting automatic image build cycle")
+		startTime := time.Now()
+		sleepUntil = startTime.Add(minInterval)
 		client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
 		if err != nil {
 			b.logger.Printf("%s: %s\n", b.imageServerAddress, err)
@@ -343,6 +345,8 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 			b.rebuildImage(client, streamName, minInterval*2)
 		}
 		client.Close()
+		b.logger.Printf("Completed automatic image build cycle in %s\n",
+			format.Duration(time.Since(startTime)))
 	}
 }
 
