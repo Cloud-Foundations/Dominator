@@ -80,6 +80,10 @@ func SetAllUid(uid int) error {
 	return setAllUid(uid)
 }
 
+// SetNetNamespace is a safe wrapper for the Linux setns(fd, CLONE_NEWNET)
+// system call. On Linux it will lock the current goroutine to an OS thread and
+// set the network namespace to the specified file descriptor. On failure or on
+// other platforms an error is returned.
 func SetNetNamespace(fd int) error {
 	return setNetNamespace(fd)
 }
@@ -88,10 +92,21 @@ func Stat(path string, statbuf *Stat_t) error {
 	return stat(path, statbuf)
 }
 
+// UnshareMountNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNS)
+// system call. On Linux it will lock the current goroutine to an OS thread and
+// unshare the mount namespace (the thread will have a private copy of the
+// previous mount namespace). On failure or on other platforms an error is
+// returned.
 func UnshareMountNamespace() error {
 	return unshareMountNamespace()
 }
 
-func UnshareNetNamespace() (int, int, error) {
+// UnshareNetNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNET)
+// system call. On Linux it will lock the current goroutine to an OS thread and
+// unshare the network namespace (the thread will have a fresh network
+// namespace). The file descriptor for the new network namespace and the Linux
+// thread ID are returned.
+// On failure or on other platforms an error is returned.
+func UnshareNetNamespace() (fd int, tid int, err error) {
 	return unshareNetNamespace()
 }
