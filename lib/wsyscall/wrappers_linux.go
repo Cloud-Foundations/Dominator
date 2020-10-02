@@ -1,5 +1,10 @@
 // +build go1.11.6 go1.12
 
+// Go versions prior to 1.10 would re-use a thread that was locked to a
+// goroutine that exited. While go1.10 prevented thread re-use, it wasn't until
+// go1.11.6/go1.12 that this was reliable:
+// https://github.com/golang/go/issues/28979
+
 package wsyscall
 
 import (
