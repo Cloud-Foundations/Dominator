@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -116,9 +115,8 @@ func (b *Builder) buildLocal(builder imageBuilder, client *srpc.Client,
 	buildLog buildLogger) (*image.Image, error) {
 	// Check the namespace to make sure it hasn't changed. This is to catch
 	// golang bugs.
-	currentNamespace, err := os.Readlink("/proc/self/ns/mnt")
+	currentNamespace, err := getNamespace()
 	if err != nil {
-		err = fmt.Errorf("error discovering namespace: %s", err)
 		fmt.Fprintln(buildLog, err)
 		return nil, err
 	}

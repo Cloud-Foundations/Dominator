@@ -24,6 +24,15 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 )
 
+func getNamespace() (string, error) {
+	pathname := fmt.Sprintf("/proc/%d/ns/mnt", syscall.Gettid())
+	namespace, err := os.Readlink(pathname)
+	if err != nil {
+		return "", fmt.Errorf("error discovering namespace: %s", err)
+	}
+	return namespace, nil
+}
+
 func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
 	var config imageStreamsConfigurationType
 	decoder := json.NewDecoder(bufio.NewReader(reader))
@@ -36,9 +45,9 @@ func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
 func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
-	initialNamespace, err := os.Readlink("/proc/self/ns/mnt")
+	initialNamespace, err := getNamespace()
 	if err != nil {
-		return nil, fmt.Errorf("error discovering namespace: %s", err)
+		return nil, err
 	}
 	logger.Printf("Initial namespace: %s\n", initialNamespace)
 	err = syscall.Mount("none", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
