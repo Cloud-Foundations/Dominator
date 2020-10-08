@@ -80,6 +80,13 @@ func SetAllUid(uid int) error {
 	return setAllUid(uid)
 }
 
+// SetMyPriority sets the priority of the current process, for all OS threads.
+// On platforms which do not support changing the process priority, an error is
+// always returned.
+func SetMyPriority(priority int) error {
+	return setMyPriority(priority)
+}
+
 // SetNetNamespace is a safe wrapper for the Linux setns(fd, CLONE_NEWNET)
 // system call. On Linux it will lock the current goroutine to an OS thread and
 // set the network namespace to the specified file descriptor. On failure or on

@@ -110,6 +110,33 @@ func setAllUid(uid int) error {
 	return syscall.Setresuid(uid, uid, uid)
 }
 
+// setMyPriority sets the priority of the current process, for all OS threads.
+// It will iterate over all the threads and set the priority on each, since the
+// Linux implementation of setpriority(2) only applies to a thread, not the
+// whole process (contrary to the POSIX specification).
+func setMyPriority(priority int) error {
+	file, err := os.Open("/proc/self/task")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	taskNames, err := file.Readdirnames(0)
+	if err != nil {
+		return err
+	}
+	for _, taskName := range taskNames {
+		taskId, err := strconv.Atoi(taskName)
+		if err != nil {
+			return err
+		}
+		err = syscall.Setpriority(syscall.PRIO_PROCESS, taskId, priority)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func setNetNamespace(namespaceFd int) error {
 	runtime.LockOSThread()
 	_, _, errno := syscall.Syscall(sys_SETNS, uintptr(namespaceFd),
