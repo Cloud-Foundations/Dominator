@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -98,9 +97,15 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 			file.Close()
 		}
 	}
-	hadTriggerFailures, fsChangeDuration, lastUpdateError := lib.Update(
-		request, rootDirectoryName, t.objectsDir, oldTriggers.ExportTriggers(),
-		t.scannerConfiguration.ScanFilter, runTriggers, t.logger)
+	var hadTriggerFailures bool
+	var fsChangeDuration time.Duration
+	var lastUpdateError error
+	t.workdirGoroutine.Run(func() {
+		hadTriggerFailures, fsChangeDuration, lastUpdateError = lib.Update(
+			request, rootDirectoryName, t.objectsDir,
+			oldTriggers.ExportTriggers(),
+			t.scannerConfiguration.ScanFilter, t.runTriggers, t.logger)
+	})
 	t.lastUpdateHadTriggerFailures = hadTriggerFailures
 	t.lastUpdateError = lastUpdateError
 	timeTaken := time.Since(startTime)
@@ -123,6 +128,16 @@ func (t *rpcType) clearUpdateInProgress() {
 }
 
 // Returns true if there were failures.
+func (t *rpcType) runTriggers(triggers []*triggers.Trigger, action string,
+	logger log.Logger) bool {
+	var retval bool
+	t.systemGoroutine.Run(func() {
+		retval = runTriggers(triggers, action, logger)
+	})
+	return retval
+}
+
+// Returns true if there were failures.
 func runTriggers(triggers []*triggers.Trigger, action string,
 	logger log.Logger) bool {
 	doReboot := false
@@ -132,7 +147,6 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 	if *disableTriggers {
 		logPrefix = "Disabled: "
 	}
-	ppid := fmt.Sprint(os.Getppid())
 	for _, trigger := range triggers {
 		if trigger.DoReboot && action == "start" {
 			doReboot = true
@@ -152,8 +166,7 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 		if *disableTriggers {
 			continue
 		}
-		if !runCommand(logger,
-			"run-in-mntns", ppid, "service", trigger.Service, action) {
+		if !runCommand(logger, "service", trigger.Service, action) {
 			hadFailures = true
 			if trigger.DoReboot && action == "start" {
 				doReboot = false
@@ -171,8 +184,7 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 		return hadFailures
 	} else if needRestart {
 		logger.Printf("%sAction: service subd restart\n", logPrefix)
-		if !runCommand(logger,
-			"run-in-mntns", ppid, "service", "subd", "restart") {
+		if !runCommand(logger, "service", "subd", "restart") {
 			hadFailures = true
 		}
 	}

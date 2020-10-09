@@ -28,7 +28,8 @@ func (t *rpcType) Cleanup(conn *srpc.Conn, request sub.CleanupRequest,
 	}
 	for _, hash := range request.Hashes {
 		pathname := path.Join(t.objectsDir, objectcache.HashToFilename(hash))
-		err := fsutil.ForceRemove(pathname)
+		var err error
+		t.workdirGoroutine.Run(func() { err = fsutil.ForceRemove(pathname) })
 		if err == nil {
 			t.logger.Printf("Deleted: %s\n", pathname)
 		} else {

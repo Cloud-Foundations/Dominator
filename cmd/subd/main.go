@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsbench"
 	"github.com/Cloud-Foundations/Dominator/lib/fsrateio"
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/memstats"
@@ -62,10 +63,10 @@ var (
 		"Name of subd private directory, relative to rootDir. This must be on the same file-system as rootDir")
 	testExternallyPatchable = flag.Bool("testExternallyPatchable", false,
 		"If true, test if externally patchable and exit=0 if so or exit=1 if not")
-	unshare = flag.Bool("unshare", true, "Internal use only.")
 )
 
 func init() {
+	// Ensure the main goroutine runs on the startup thread.
 	runtime.LockOSThread()
 	flag.Var(&rootDeviceBytesPerSecond, "rootDeviceBytesPerSecond",
 		"Fallback root device speed (default 0)")
@@ -125,45 +126,17 @@ func mountTmpfs(dirname string) bool {
 	return true
 }
 
-func unshareAndBind(workingRootDir string) bool {
-	if *unshare {
-		// Re-exec myself using the unshare syscall while on a locked thread.
-		// This hack is required because syscall.Unshare() operates on only one
-		// thread in the process, and Go switches execution between threads
-		// randomly. Thus, the namespace can be suddenly switched for running
-		// code. This is an aspect of Go that was not well thought out.
-		if err := wsyscall.UnshareMountNamespace(); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to unshare mount namesace: %s\n",
-				err)
-			return false
-		}
-		// Ensure the process is slightly niced. Since the Linux implementation
-		// of setpriority(2) only applies to a thread, not the whole process
-		// (contrary to the POSIX specification), do this in the pinned OS
-		// thread so that the whole process (after exec) will be niced.
-		syscall.Setpriority(syscall.PRIO_PROCESS, 0, 1)
-		args := append(os.Args, "-unshare=false")
-		if err := syscall.Exec(args[0], args, os.Environ()); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to Exec:%s: %s\n", args[0], err)
-			return false
-		}
+func unshareAndBind(workingRootDir string) error {
+	if err := wsyscall.UnshareMountNamespace(); err != nil {
+		return fmt.Errorf("unable to unshare mount namesace: %s\n", err)
 	}
 	syscall.Unmount(workingRootDir, 0)
 	err := wsyscall.Mount(*rootDir, workingRootDir, "", wsyscall.MS_BIND, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to bind mount %s to %s: %s\n",
+		return fmt.Errorf("unable to bind mount %s to %s: %s\n",
 			*rootDir, workingRootDir, err)
-		return false
 	}
-	// Clean up -unshare=false so that a subsequent re-exec starts from scratch.
-	args := make([]string, 0, len(os.Args)-1)
-	for _, arg := range os.Args {
-		if arg != "-unshare=false" {
-			args = append(args, arg)
-		}
-	}
-	os.Args = args
-	return true
+	return nil
 }
 
 func getCachedFsSpeed(workingRootDir string,
@@ -260,6 +233,8 @@ func writePidfile() {
 }
 
 func main() {
+	// Ensure the startup thread is reserved for the main function.
+	runtime.LockOSThread()
 	if err := loadflags.LoadForDaemon("subd"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -267,6 +242,10 @@ func main() {
 	flag.Parse()
 	if *testExternallyPatchable {
 		runTestAndExit(checkExternallyPatchable)
+	}
+	if err := wsyscall.SetMyPriority(1); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	tricorder.RegisterFlags()
 	subdDirPathname := path.Join(*rootDir, *subdDir)
@@ -287,10 +266,12 @@ func main() {
 	if !mountTmpfs(tmpDir) {
 		os.Exit(1)
 	}
-	if !unshareAndBind(workingRootDir) {
-		os.Exit(1)
-	}
-	if !createDirectory(objectsDir) {
+	// Create a goroutine for performing updates.
+	workdirGoroutine := goroutine.New()
+	var err error
+	workdirGoroutine.Run(func() { err = unshareAndBind(workingRootDir) })
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	runtime.GOMAXPROCS(int(*maxThreads))
@@ -347,7 +328,6 @@ func main() {
 	if len(filterLines) < 1 {
 		filterLines = constants.ScanExcludeList
 	}
-	var err error
 	configuration.ScanFilter, err = filter.New(filterLines)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to set initial scan exclusions: %s\n",
@@ -379,7 +359,7 @@ func main() {
 					invalidateNextScanObjectCache = true
 					fsh.UpdateObjectCacheOnly()
 				},
-				logger)
+				workdirGoroutine, logger)
 		configMetricsDir, err := tricorder.RegisterDirectory("/config")
 		if err != nil {
 			fmt.Fprintf(os.Stderr,
@@ -450,6 +430,19 @@ func main() {
 			}
 		}
 	}
+	// Create a goroutine prior to mutating the startup thread to ensure that
+	// new goroutines are started from a "clean" thread.
+	mainGoroutine := goroutine.New()
+	// Setup environment for scanning.
+	if err := unshareAndBind(workingRootDir); err != nil {
+		logger.Fatalln(err)
+	}
+	if !createDirectory(objectsDir) { // Must be done after unshareAndBind().
+		os.Exit(1)
+	}
 	scanner.StartScanning(workingRootDir, objectsDir, &configuration, logger,
-		mainFunc)
+		func(fsChannel <-chan *scanner.FileSystem,
+			disableScanner func(disableScanner bool)) {
+			mainGoroutine.Start(func() { mainFunc(fsChannel, disableScanner) })
+		})
 }

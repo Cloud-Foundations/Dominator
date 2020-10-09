@@ -4,6 +4,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -23,6 +24,8 @@ type rpcType struct {
 	oldTriggersFilename       string
 	rescanObjectCacheFunction func()
 	disableScannerFunc        func(disableScanner bool)
+	systemGoroutine           *goroutine.Goroutine
+	workdirGoroutine          *goroutine.Goroutine
 	logger                    log.Logger
 	*serverutil.PerUserMethodLimiter
 	rwLock                       sync.RWMutex
@@ -41,6 +44,7 @@ type addObjectsHandlerType struct {
 	objectsDir           string
 	scannerConfiguration *scanner.Configuration
 	logger               log.Logger
+	rpcObj               *rpcType
 }
 
 type HtmlWriter struct {
@@ -52,7 +56,8 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 	netReaderContext *rateio.ReaderContext,
 	netbenchFname string, oldTriggersFname string,
 	disableScannerFunction func(disableScanner bool),
-	rescanObjectCacheFunction func(), logger log.Logger) *HtmlWriter {
+	rescanObjectCacheFunction func(), workdirGoroutine *goroutine.Goroutine,
+	logger log.Logger) *HtmlWriter {
 	rpcObj := &rpcType{
 		scannerConfiguration:      configuration,
 		fileSystemHistory:         fsh,
@@ -63,6 +68,8 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 		oldTriggersFilename:       oldTriggersFname,
 		rescanObjectCacheFunction: rescanObjectCacheFunction,
 		disableScannerFunc:        disableScannerFunction,
+		systemGoroutine:           goroutine.New(),
+		workdirGoroutine:          workdirGoroutine,
 		logger:                    logger,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
@@ -77,7 +84,9 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 	addObjectsHandler := &addObjectsHandlerType{
 		objectsDir:           objectsDirname,
 		scannerConfiguration: configuration,
-		logger:               logger}
+		logger:               logger,
+		rpcObj:               rpcObj,
+	}
 	srpc.RegisterName("ObjectServer", addObjectsHandler)
 	tricorder.RegisterMetric("/image-name", &rpcObj.lastSuccessfulImageName,
 		units.None, "name of the image for the last successful update")

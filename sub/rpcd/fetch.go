@@ -120,7 +120,9 @@ func (t *rpcType) doFetch(request sub.FetchRequest) error {
 		} else if !benchmark {
 			r = t.networkReaderContext.NewReader(reader)
 		}
-		err = readOne(t.objectsDir, hash, length, r)
+		t.workdirGoroutine.Run(func() {
+			err = readOne(t.objectsDir, hash, length, r)
+		})
 		reader.Close()
 		if err != nil {
 			t.logger.Println(err)
