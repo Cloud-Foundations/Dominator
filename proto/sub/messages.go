@@ -39,7 +39,7 @@ type GetConfigurationResponse Configuration
 // is sent for the end-of-stream signal.
 
 type GetFileResponse struct {
-	Error error
+	Error string
 	Size  uint64
 } // File data are streamed afterwards.
 

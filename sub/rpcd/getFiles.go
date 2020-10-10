@@ -43,11 +43,11 @@ func (t *rpcType) getFile(conn *srpc.Conn, filename string) error {
 	t.workdirGoroutine.Run(func() { file, err = os.Open(filename) })
 	var response sub.GetFileResponse
 	if err != nil {
-		response.Error = err
+		response.Error = err.Error()
 	} else {
 		defer file.Close()
 		if fi, err := file.Stat(); err != nil {
-			response.Error = err
+			response.Error = err.Error()
 		} else {
 			response.Size = uint64(fi.Size())
 		}
@@ -55,7 +55,7 @@ func (t *rpcType) getFile(conn *srpc.Conn, filename string) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
-	if response.Error != nil {
+	if response.Error != "" {
 		return nil
 	}
 	_, err = io.Copy(conn, bufio.NewReader(file))
