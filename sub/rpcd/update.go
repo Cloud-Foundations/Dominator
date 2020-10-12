@@ -148,14 +148,30 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 		logPrefix = "Disabled: "
 	}
 	for _, trigger := range triggers {
-		if trigger.DoReboot && action == "start" {
+		if trigger.DoReboot {
 			doReboot = true
 			break
 		}
 	}
+	if doReboot {
+		if action == "start" {
+			logger.Printf("%sRebooting\n", logPrefix)
+			if *disableTriggers {
+				return hadFailures
+			}
+			if !runCommand(logger, "reboot") {
+				hadFailures = true
+			}
+		} else {
+			logger.Printf("%sWill reboot on start, skipping %s actions\n",
+				logPrefix, action)
+		}
+		return hadFailures
+	}
 	for _, trigger := range triggers {
 		if trigger.Service == "subd" {
-			// Never kill myself, just restart.
+			// Never kill myself, just restart. Must do it last, so that other
+			// triggers are started.
 			if action == "start" {
 				needRestart = true
 			}
@@ -173,16 +189,7 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 			}
 		}
 	}
-	if doReboot {
-		logger.Print(logPrefix, "Rebooting")
-		if *disableTriggers {
-			return hadFailures
-		}
-		if !runCommand(logger, "reboot") {
-			hadFailures = true
-		}
-		return hadFailures
-	} else if needRestart {
+	if needRestart {
 		logger.Printf("%sAction: service subd restart\n", logPrefix)
 		if !runCommand(logger, "service", "subd", "restart") {
 			hadFailures = true
