@@ -35,6 +35,13 @@ type AssociateStreamWithDeviceRequest struct {
 
 type AssociateStreamWithDeviceResponse struct{}
 
+type ClaimDeviceRequest struct {
+	DeviceId   string
+	DeviceName string // Relative to "/dev" directory.
+}
+
+type ClaimDeviceResponse struct{}
+
 type ExportImageRequest struct {
 	StreamName  string
 	Type        string
