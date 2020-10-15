@@ -82,6 +82,10 @@ func (u *Unpacker) AddDevice(deviceId string) error {
 	return u.addDevice(deviceId)
 }
 
+func (u *Unpacker) ClaimDevice(deviceId, deviceName string) error {
+	return u.claimDevice(deviceId, deviceName)
+}
+
 func (u *Unpacker) AssociateStreamWithDevice(streamName string,
 	deviceId string) error {
 	return u.associateStreamWithDevice(streamName, deviceId)
