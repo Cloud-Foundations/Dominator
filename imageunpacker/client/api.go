@@ -9,6 +9,10 @@ func AddDevice(client *srpc.Client, deviceId string, adder func() error) error {
 	return addDevice(client, deviceId, adder)
 }
 
+func ClaimDevice(client *srpc.Client, deviceId, deviceName string) error {
+	return claimDevice(client, deviceId, deviceName)
+}
+
 func AssociateStreamWithDevice(srpcClient *srpc.Client, streamName string,
 	deviceId string) error {
 	return associateStreamWithDevice(srpcClient, streamName, deviceId)

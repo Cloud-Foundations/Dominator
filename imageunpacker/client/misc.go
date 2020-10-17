@@ -18,6 +18,15 @@ func associateStreamWithDevice(srpcClient *srpc.Client, streamName string,
 		request, &reply)
 }
 
+func claimDevice(srpcClient *srpc.Client, deviceId, deviceName string) error {
+	request := proto.ClaimDeviceRequest{
+		DeviceId:   deviceId,
+		DeviceName: deviceName,
+	}
+	var reply proto.ClaimDeviceResponse
+	return srpcClient.RequestReply("ImageUnpacker.ClaimDevice", request, &reply)
+}
+
 func exportImage(srpcClient *srpc.Client, streamName,
 	exportType, exportDestination string) error {
 	request := proto.ExportImageRequest{
