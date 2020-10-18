@@ -35,6 +35,7 @@ func printUsage() {
 var subcommands = []commands.Command{
 	{"add-device", "DeviceId command ...", 2, -1, addDeviceSubcommand},
 	{"associate", "stream-name DeviceId", 2, 2, associateSubcommand},
+	{"claim-device", "DeviceId DeviceName", 2, 2, claimDeviceSubcommand},
 	{"export-image", "stream-name type destination", 3, 3,
 		exportImageSubcommand},
 	{"get-status", "", 0, 0, getStatusSubcommand},
