@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -19,6 +20,8 @@ import (
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+var sysfsDirectory = "/sys/block"
 
 type wrappedReadCloser struct {
 	real io.Closer
@@ -263,7 +266,20 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 			file.Close()
 			return nil, -1, err
 		}
-		return file, fi.Size(), nil
+		switch fi.Mode() & os.ModeType {
+		case 0:
+			return file, fi.Size(), nil
+		case os.ModeDevice:
+			if size, err := readBlockDeviceSize(filename); err != nil {
+				file.Close()
+				return nil, -1, err
+			} else {
+				return file, size, nil
+			}
+		default:
+			file.Close()
+			return nil, -1, errors.New("unsupported file type")
+		}
 	}
 }
 
@@ -288,6 +304,36 @@ func processCreateVmResponses(conn *srpc.Conn,
 			return response, nil
 		}
 	}
+}
+
+func readBlockDeviceSize(filename string) (int64, error) {
+	if strings.HasPrefix(filename, "/dev/") {
+		filename = filename[5:]
+	}
+	deviceBlocks, err := readSysfsInt64(
+		filepath.Join(sysfsDirectory, filename, "size"))
+	if err != nil {
+		return 0, err
+	}
+	return deviceBlocks * 512, nil
+}
+
+func readSysfsInt64(filename string) (int64, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	var value int64
+	nScanned, err := fmt.Fscanf(file, "%d", &value)
+	if err != nil {
+		return 0, err
+	}
+	if nScanned < 1 {
+		return 0, errors.New(fmt.Sprintf("only read %d values from: %s",
+			nScanned, filename))
+	}
+	return value, nil
 }
 
 func (r *wrappedReadCloser) Close() error {
