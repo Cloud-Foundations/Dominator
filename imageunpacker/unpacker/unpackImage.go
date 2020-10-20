@@ -191,6 +191,7 @@ func (stream *streamManagerState) fetch(imageName string,
 	defer objectsReader.Close()
 	stream.unpacker.logger.Printf("Fetching(%s) %d objects\n",
 		imageName, len(objectsToFetch))
+	var totalBytes uint64
 	for _, hashVal := range objectsToFetch {
 		length, reader, err := objectsReader.NextObject()
 		if err != nil {
@@ -205,9 +206,13 @@ func (stream *streamManagerState) fetch(imageName string,
 			stream.streamInfo.status = unpackproto.StatusStreamMounted
 			return err
 		}
+		totalBytes += length
 	}
-	stream.unpacker.logger.Printf("Fetched(%s) %d objects in %s\n",
-		imageName, len(objectsToFetch), format.Duration(time.Since(startTime)))
+	timeTaken := time.Since(startTime)
+	stream.unpacker.logger.Printf("Fetched(%s) %d objects, %s in %s (%s/s)\n",
+		imageName, len(objectsToFetch), format.FormatBytes(totalBytes),
+		format.Duration(timeTaken),
+		format.FormatBytes(uint64(float64(totalBytes)/timeTaken.Seconds())))
 	return nil
 }
 
