@@ -55,7 +55,7 @@ func (u *Unpacker) streamManager(streamName string,
 	streamInfo *imageStreamInfo, rootLabel string,
 	requestChannel <-chan requestType) {
 	if err := wsyscall.UnshareMountNamespace(); err != nil {
-		panic("Unable to unshare mount namesace: " + err.Error())
+		panic("Unable to unshare mount namespace: " + err.Error())
 	}
 	stream := streamManagerState{
 		unpacker:   u,
@@ -84,6 +84,8 @@ func (u *Unpacker) streamManager(streamName string,
 			case requestExport:
 				err = stream.export(request.exportType,
 					request.exportDestination)
+			case requestGetRaw:
+				err = stream.getRaw(request.readerChannel)
 			default:
 				panic("unknown request: " + strconv.Itoa(request.request))
 			}

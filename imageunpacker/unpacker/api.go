@@ -18,6 +18,7 @@ const (
 	requestPrepareForCapture
 	requestPrepareForCopy
 	requestExport
+	requestGetRaw
 )
 
 var (
@@ -40,6 +41,7 @@ type requestType struct {
 	exportType        string
 	exportDestination string
 	errorChannel      chan<- error
+	readerChannel     chan<- *sizedReader
 }
 
 type imageStreamInfo struct {
@@ -52,6 +54,14 @@ type imageStreamInfo struct {
 type persistentState struct {
 	Devices      map[string]deviceInfo       // Key: DeviceId.
 	ImageStreams map[string]*imageStreamInfo // Key: StreamName.
+}
+
+type sizedReader struct {
+	closeNotifier chan<- struct{}
+	err           error
+	nRead         uint64
+	reader        io.Reader
+	size          uint64
 }
 
 type streamManagerState struct {
@@ -99,6 +109,10 @@ func (u *Unpacker) ExportImage(streamName string, exportType string,
 func (u *Unpacker) GetFileSystem(streamName string) (
 	*filesystem.FileSystem, error) {
 	return u.getFileSystem(streamName)
+}
+
+func (u *Unpacker) GetRaw(streamName string) (io.ReadCloser, uint64, error) {
+	return u.getRaw(streamName)
 }
 
 func (u *Unpacker) GetStatus() proto.GetStatusResponse {
