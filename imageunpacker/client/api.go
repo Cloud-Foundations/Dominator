@@ -1,6 +1,8 @@
 package client
 
 import (
+	"io"
+
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageunpacker"
 )
@@ -21,6 +23,11 @@ func AssociateStreamWithDevice(srpcClient *srpc.Client, streamName string,
 func ExportImage(srpcClient *srpc.Client, streamName,
 	exportType, exportDestination string) error {
 	return exportImage(srpcClient, streamName, exportType, exportDestination)
+}
+
+func GetRaw(srpcClient *srpc.Client, streamName string) (
+	io.ReadCloser, uint64, error) {
+	return getRaw(srpcClient, streamName)
 }
 
 func GetStatus(srpcClient *srpc.Client) (proto.GetStatusResponse, error) {

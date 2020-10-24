@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io"
 	"path"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -36,6 +37,33 @@ func exportImage(srpcClient *srpc.Client, streamName,
 	}
 	var reply proto.ExportImageResponse
 	return srpcClient.RequestReply("ImageUnpacker.ExportImage", request, &reply)
+}
+
+func getRaw(srpcClient *srpc.Client, streamName string) (
+	io.ReadCloser, uint64, error) {
+	conn, err := srpcClient.Call("ImageUnpacker.GetRaw")
+	if err != nil {
+		return nil, 0, err
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
+	request := proto.GetRawRequest{StreamName: path.Clean(streamName)}
+	if err := conn.Encode(request); err != nil {
+		return nil, 0, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, 0, err
+	}
+	var reply proto.GetRawResponse
+	if err := conn.Decode(&reply); err != nil {
+		return nil, 0, err
+	}
+	doClose = false
+	return conn, reply.Size, nil
 }
 
 func getStatus(srpcClient *srpc.Client) (proto.GetStatusResponse, error) {
