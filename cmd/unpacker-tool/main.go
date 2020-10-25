@@ -14,6 +14,8 @@ import (
 )
 
 var (
+	filename = flag.String("filename", "",
+		"Name of file to write raw image data to")
 	imageUnpackerHostname = flag.String("imageUnpackerHostname", "localhost",
 		"Hostname of image-unpacker server")
 	imageUnpackerPortNum = flag.Uint("imageUnpackerPortNum",
@@ -38,6 +40,7 @@ var subcommands = []commands.Command{
 	{"claim-device", "DeviceId DeviceName", 2, 2, claimDeviceSubcommand},
 	{"export-image", "stream-name type destination", 3, 3,
 		exportImageSubcommand},
+	{"get-raw", "stream-name ", 1, 1, getRawSubcommand},
 	{"get-status", "", 0, 0, getStatusSubcommand},
 	{"get-device-for-stream", "stream-name", 1, 1,
 		getDeviceForStreamSubcommand},
