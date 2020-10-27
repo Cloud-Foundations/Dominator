@@ -51,6 +51,12 @@ type ExportImageRequest struct {
 
 type ExportImageResponse struct{}
 
+type ForgetStreamRequest struct {
+	StreamName string
+}
+
+type ForgetStreamResponse struct{}
+
 type GetRawRequest struct {
 	StreamName string
 }
