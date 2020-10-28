@@ -28,6 +28,10 @@ func (stream *streamManagerState) prepareForCopy() error {
 	if err := stream.getDevice(); err != nil {
 		return err
 	}
+	return stream.unmount()
+}
+
+func (stream *streamManagerState) unmount() error {
 	streamInfo := stream.streamInfo
 	switch streamInfo.status {
 	case proto.StatusStreamNoDevice:
