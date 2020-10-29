@@ -63,7 +63,8 @@ func (u *Unpacker) streamManager(streamName string,
 		streamInfo: streamInfo,
 		rootLabel:  rootLabel,
 	}
-	for {
+	keepManaging := true
+	for keepManaging {
 		u.rwMutex.Lock()
 		streamInfo.scannedFS = stream.fileSystem
 		u.rwMutex.Unlock()
@@ -86,6 +87,9 @@ func (u *Unpacker) streamManager(streamName string,
 					request.exportDestination)
 			case requestGetRaw:
 				err = stream.getRaw(request.readerChannel)
+			case requestForget:
+				err = stream.forget()
+				keepManaging = false
 			default:
 				panic("unknown request: " + strconv.Itoa(request.request))
 			}
@@ -95,6 +99,7 @@ func (u *Unpacker) streamManager(streamName string,
 			}
 		}
 	}
+	u.logger.Printf("Unmanaged(%s)\n", streamName)
 }
 
 func (u *Unpacker) getStream(streamName string) *imageStreamInfo {

@@ -19,6 +19,7 @@ const (
 	requestPrepareForCopy
 	requestExport
 	requestGetRaw
+	requestForget
 )
 
 var (
@@ -92,18 +93,22 @@ func (u *Unpacker) AddDevice(deviceId string) error {
 	return u.addDevice(deviceId)
 }
 
-func (u *Unpacker) ClaimDevice(deviceId, deviceName string) error {
-	return u.claimDevice(deviceId, deviceName)
-}
-
 func (u *Unpacker) AssociateStreamWithDevice(streamName string,
 	deviceId string) error {
 	return u.associateStreamWithDevice(streamName, deviceId)
 }
 
+func (u *Unpacker) ClaimDevice(deviceId, deviceName string) error {
+	return u.claimDevice(deviceId, deviceName)
+}
+
 func (u *Unpacker) ExportImage(streamName string, exportType string,
 	exportDestination string) error {
 	return u.exportImage(streamName, exportType, exportDestination)
+}
+
+func (u *Unpacker) ForgetStream(streamName string) error {
+	return u.forgetStream(streamName)
 }
 
 func (u *Unpacker) GetFileSystem(streamName string) (
