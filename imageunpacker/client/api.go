@@ -11,18 +11,22 @@ func AddDevice(client *srpc.Client, deviceId string, adder func() error) error {
 	return addDevice(client, deviceId, adder)
 }
 
-func ClaimDevice(client *srpc.Client, deviceId, deviceName string) error {
-	return claimDevice(client, deviceId, deviceName)
-}
-
 func AssociateStreamWithDevice(srpcClient *srpc.Client, streamName string,
 	deviceId string) error {
 	return associateStreamWithDevice(srpcClient, streamName, deviceId)
 }
 
+func ClaimDevice(client *srpc.Client, deviceId, deviceName string) error {
+	return claimDevice(client, deviceId, deviceName)
+}
+
 func ExportImage(srpcClient *srpc.Client, streamName,
 	exportType, exportDestination string) error {
 	return exportImage(srpcClient, streamName, exportType, exportDestination)
+}
+
+func ForgetStream(client *srpc.Client, streamName string) error {
+	return forgetStream(client, streamName)
 }
 
 func GetRaw(srpcClient *srpc.Client, streamName string) (

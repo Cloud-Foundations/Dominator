@@ -39,6 +39,13 @@ func exportImage(srpcClient *srpc.Client, streamName,
 	return srpcClient.RequestReply("ImageUnpacker.ExportImage", request, &reply)
 }
 
+func forgetStream(srpcClient *srpc.Client, streamName string) error {
+	request := proto.ForgetStreamRequest{StreamName: streamName}
+	var reply proto.ForgetStreamResponse
+	return srpcClient.RequestReply("ImageUnpacker.ForgetStream",
+		request, &reply)
+}
+
 func getRaw(srpcClient *srpc.Client, streamName string) (
 	io.ReadCloser, uint64, error) {
 	conn, err := srpcClient.Call("ImageUnpacker.GetRaw")
