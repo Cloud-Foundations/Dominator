@@ -32,6 +32,7 @@ Some of the sub-commands available are:
 - **associate**: associate an image stream with the specified device
 - **claim-device**: claim (register) an existing device
 - **export-image**: export image to a specified destination (i.e. S3-backed AMI)
+- **forget-stream**: forget the specified image stream
 - **get-raw**: get the raw contents of the device storing the image and write to
                the local file specified by the `-filename` parameter
 - **get-status**: get status information for the *image-unpacker*
