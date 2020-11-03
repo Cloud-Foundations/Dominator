@@ -36,6 +36,15 @@ type streamerType struct {
 	output       chan<- []byte
 }
 
+// GetStandardFlags will return the standard flags.
+func GetStandardFlags() int {
+	flags := log.LstdFlags
+	if *logSubseconds {
+		flags |= log.Lmicroseconds
+	}
+	return flags
+}
+
 // New will create a Logger which has an internal log buffer (see the
 // lib/logbuf package). It implements the log.DebugLogger interface.
 // By default, the max debug level is -1, meaning all debug logs are dropped
@@ -44,11 +53,7 @@ type streamerType struct {
 // identify the logger for SRPC methods such as Logger.SetDebugLevel. The first
 // or primary logger should be created with name "" (the empty string).
 func New(name string) *Logger {
-	flags := log.LstdFlags
-	if *logSubseconds {
-		flags |= log.Lmicroseconds
-	}
-	return newLogger(name, logbuf.GetStandardOptions(), flags)
+	return newLogger(name, logbuf.GetStandardOptions(), GetStandardFlags())
 }
 
 // NewWithFlags will create a Logger which has an internal log buffer (see the
