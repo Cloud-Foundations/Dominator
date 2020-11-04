@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageunpacker"
 )
@@ -47,9 +48,11 @@ type requestType struct {
 
 type imageStreamInfo struct {
 	DeviceId       string
-	status         proto.StreamStatus
+	dualLogger     log.DebugLogger
 	requestChannel chan<- requestType
 	scannedFS      *filesystem.FileSystem
+	status         proto.StreamStatus
+	streamLogger   *serverlogger.Logger
 }
 
 type persistentState struct {
@@ -151,4 +154,8 @@ func (u *Unpacker) UnpackImage(streamName string, imageLeafName string) error {
 
 func (u *Unpacker) WriteHtml(writer io.Writer) {
 	u.writeHtml(writer)
+}
+
+func (u *Unpacker) WriteStreamHtml(writer io.Writer, streamName string) {
+	u.writeStreamHtml(writer, streamName)
 }

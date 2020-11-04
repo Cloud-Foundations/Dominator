@@ -68,7 +68,7 @@ func (stream *streamManagerState) export(exportType string,
 	}()
 	deviceFile, err := os.Open(path.Join("/dev", device.DeviceName))
 	if err != nil {
-		stream.unpacker.logger.Println("Error exporting: %s", err)
+		stream.streamInfo.dualLogger.Println("Error exporting: %s", err)
 		return fmt.Errorf("error exporting: %s", err)
 	}
 	defer deviceFile.Close()
@@ -99,11 +99,12 @@ func (stream *streamManagerState) export(exportType string,
 	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		stream.unpacker.logger.Printf("Error exporting: %s: %s\n",
+		stream.streamInfo.dualLogger.Printf("Error exporting: %s: %s\n",
 			err, string(output))
 		return fmt.Errorf("error exporting: %s: %s", err, output)
 	}
-	stream.unpacker.logger.Printf("Exported(%s) type: %s dest: %s in %s\n",
+	stream.streamInfo.dualLogger.Printf(
+		"Exported(%s) type: %s dest: %s in %s\n",
 		stream.streamName, exportType, exportDestination,
 		format.Duration(time.Since(startTime)))
 	return nil

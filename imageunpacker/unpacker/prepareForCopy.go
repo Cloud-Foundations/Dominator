@@ -60,6 +60,6 @@ func (stream *streamManagerState) unmount() error {
 		return err
 	}
 	stream.streamInfo.status = proto.StatusStreamNotMounted
-	stream.unpacker.logger.Printf("Unmounted(%s)\n", stream.streamName)
+	streamInfo.dualLogger.Printf("Unmounted(%s)\n", stream.streamName)
 	return nil
 }

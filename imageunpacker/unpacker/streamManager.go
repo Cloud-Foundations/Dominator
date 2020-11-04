@@ -2,11 +2,15 @@ package unpacker
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/teelogger"
+	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageunpacker"
 )
@@ -20,6 +24,14 @@ func (u *Unpacker) setupStream(streamName string) (*imageStreamInfo, error) {
 		if err := u.writeStateWithLock(); err != nil {
 			return nil, err
 		}
+	}
+	if streamInfo.streamLogger == nil {
+		options := logbuf.GetStandardOptions()
+		options.Directory = ""
+		options.HttpServeMux = nil
+		streamInfo.streamLogger = serverlogger.NewWithOptions(streamName,
+			options, serverlogger.GetStandardFlags())
+		streamInfo.dualLogger = teelogger.New(u.logger, streamInfo.streamLogger)
 	}
 	if streamInfo.requestChannel == nil {
 		var rootLabel string
@@ -95,11 +107,11 @@ func (u *Unpacker) streamManager(streamName string,
 			}
 			request.errorChannel <- err
 			if err != nil {
-				u.logger.Println(err)
+				streamInfo.dualLogger.Println(err)
 			}
 		}
 	}
-	u.logger.Printf("Unmanaged(%s)\n", streamName)
+	streamInfo.dualLogger.Printf("Unmanaged(%s)\n", streamName)
 }
 
 func (u *Unpacker) getStream(streamName string) *imageStreamInfo {
@@ -114,5 +126,12 @@ func getExt2fsLabel(device string) (string, error) {
 		return "", fmt.Errorf("error getting label: %s: %s", err, output)
 	} else {
 		return strings.TrimSpace(string(output)), nil
+	}
+}
+
+func (u *Unpacker) writeStreamHtml(writer io.Writer, streamName string) {
+	streamInfo := u.getStream(streamName)
+	if streamInfo != nil {
+		streamInfo.streamLogger.WriteHtml(writer)
 	}
 }

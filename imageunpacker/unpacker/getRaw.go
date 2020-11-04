@@ -63,7 +63,7 @@ func (stream *streamManagerState) getRaw(
 	startTime := time.Now()
 	<-closeNotifier
 	timeTaken := time.Since(startTime)
-	stream.unpacker.logger.Printf("Transferred(%s) %s in %s (%s/s)\n",
+	streamInfo.dualLogger.Printf("Transferred(%s) %s in %s (%s/s)\n",
 		stream.streamName, format.FormatBytes(reader.nRead),
 		format.Duration(timeTaken),
 		format.FormatBytes(uint64(float64(reader.nRead)/timeTaken.Seconds())))

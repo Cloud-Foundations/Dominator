@@ -35,7 +35,7 @@ func (u *Unpacker) unpackImage(streamName string, imageLeafName string) error {
 		return errors.New("unknown stream")
 	}
 	imageName := filepath.Join(streamName, imageLeafName)
-	fs := u.getImage(imageName).FileSystem
+	fs := u.getImage(imageName, streamInfo.dualLogger).FileSystem
 	if err := fs.RebuildInodePointers(); err != nil {
 		return err
 	}
@@ -55,27 +55,28 @@ func (u *Unpacker) unpackImage(streamName string, imageLeafName string) error {
 	return <-errorChannel
 }
 
-func (u *Unpacker) getImage(imageName string) *image.Image {
-	u.logger.Printf("Getting image: %s\n", imageName)
+func (u *Unpacker) getImage(imageName string,
+	logger log.DebugLogger) *image.Image {
+	logger.Printf("Getting image: %s\n", imageName)
 	interval := time.Second
 	for ; true; time.Sleep(interval) {
 		srpcClient, err := srpc.DialHTTP("tcp", u.imageServerAddress,
 			time.Second*15)
 		if err != nil {
-			u.logger.Printf("Error connecting to image server: %s\n", err)
+			logger.Printf("Error connecting to image server: %s\n", err)
 			continue
 		}
 		image, err := imageclient.GetImageWithTimeout(srpcClient, imageName,
 			time.Minute)
 		srpcClient.Close()
 		if err != nil {
-			u.logger.Printf("Error getting image: %s\n", err)
+			logger.Printf("Error getting image: %s\n", err)
 			continue
 		}
 		if image != nil {
 			return image
 		}
-		u.logger.Printf("Image: %s not ready yet\n", imageName)
+		logger.Printf("Image: %s not ready yet\n", imageName)
 		if interval < time.Second*10 {
 			interval += time.Second
 		}
@@ -99,7 +100,7 @@ func (stream *streamManagerState) unpack(imageName string,
 	case unpackproto.StatusStreamScanned:
 		// Everything is set up. Ready to unpack.
 	case unpackproto.StatusStreamNoFileSystem:
-		err := stream.mkfs(desiredFS, objectServer, stream.unpacker.logger)
+		err := stream.mkfs(desiredFS, objectServer, streamInfo.dualLogger)
 		if err != nil {
 			return err
 		}
@@ -122,7 +123,7 @@ func (stream *streamManagerState) unpack(imageName string,
 	emptyFilter, _ := filter.New(nil)
 	desiredImage := &image.Image{FileSystem: desiredFS, Filter: emptyFilter}
 	fetchMap, _ := domlib.BuildMissingLists(subObj, desiredImage, false,
-		true, stream.unpacker.logger)
+		true, streamInfo.dualLogger)
 	objectsToFetch := objectcache.ObjectMapToCache(fetchMap)
 	objectsDir := filepath.Join(mountPoint, ".subd", "objects")
 	err = stream.fetch(imageName, objectsToFetch, objectsDir, objectServer)
@@ -132,18 +133,18 @@ func (stream *streamManagerState) unpack(imageName string,
 	}
 	subObj.ObjectCache = append(subObj.ObjectCache, objectsToFetch...)
 	streamInfo.status = unpackproto.StatusStreamUpdating
-	stream.unpacker.logger.Printf("Update(%s) starting\n", imageName)
+	streamInfo.dualLogger.Printf("Update(%s) starting\n", imageName)
 	startTime := time.Now()
 	var request subproto.UpdateRequest
 	domlib.BuildUpdateRequest(subObj, desiredImage, &request, true, false,
-		stream.unpacker.logger)
+		streamInfo.dualLogger)
 	_, _, err = sublib.Update(request, mountPoint, objectsDir, nil, nil, nil,
-		stream.unpacker.logger)
+		streamInfo.streamLogger)
 	if err == nil {
 		err = util.WriteImageName(mountPoint, imageName)
 	}
 	streamInfo.status = unpackproto.StatusStreamMounted
-	stream.unpacker.logger.Printf("Update(%s) completed in %s\n",
+	streamInfo.dualLogger.Printf("Update(%s) completed in %s\n",
 		imageName, format.Duration(time.Since(startTime)))
 	return err
 }
@@ -169,10 +170,11 @@ func (stream *streamManagerState) deleteUnneededFiles(imageName string,
 	if len(pathsToDelete) < 1 {
 		return nil
 	}
-	stream.unpacker.logger.Printf("Deleting(%s): %d unneeded files\n",
+	streamInfo := stream.streamInfo
+	streamInfo.dualLogger.Printf("Deleting(%s): %d unneeded files\n",
 		imageName, len(pathsToDelete))
 	for _, pathname := range pathsToDelete {
-		stream.unpacker.logger.Printf("Delete(%s): %s\n", imageName, pathname)
+		streamInfo.streamLogger.Printf("Delete(%s): %s\n", imageName, pathname)
 		os.Remove(filepath.Join(mountPoint, pathname))
 	}
 	return nil
@@ -189,27 +191,28 @@ func (stream *streamManagerState) fetch(imageName string,
 		return err
 	}
 	defer objectsReader.Close()
-	stream.unpacker.logger.Printf("Fetching(%s) %d objects\n",
+	streamInfo := stream.streamInfo
+	streamInfo.dualLogger.Printf("Fetching(%s) %d objects\n",
 		imageName, len(objectsToFetch))
 	var totalBytes uint64
 	for _, hashVal := range objectsToFetch {
 		length, reader, err := objectsReader.NextObject()
 		if err != nil {
-			stream.unpacker.logger.Println(err)
+			streamInfo.dualLogger.Println(err)
 			stream.streamInfo.status = unpackproto.StatusStreamMounted
 			return err
 		}
 		err = readOne(destDirname, hashVal, length, reader)
 		reader.Close()
 		if err != nil {
-			stream.unpacker.logger.Println(err)
+			streamInfo.dualLogger.Println(err)
 			stream.streamInfo.status = unpackproto.StatusStreamMounted
 			return err
 		}
 		totalBytes += length
 	}
 	timeTaken := time.Since(startTime)
-	stream.unpacker.logger.Printf("Fetched(%s) %d objects, %s in %s (%s/s)\n",
+	streamInfo.dualLogger.Printf("Fetched(%s) %d objects, %s in %s (%s/s)\n",
 		imageName, len(objectsToFetch), format.FormatBytes(totalBytes),
 		format.Duration(timeTaken),
 		format.FormatBytes(uint64(float64(totalBytes)/timeTaken.Seconds())))

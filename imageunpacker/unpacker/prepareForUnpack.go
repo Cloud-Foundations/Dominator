@@ -77,7 +77,7 @@ func (stream *streamManagerState) scan(skipIfPrepared bool) error {
 		panic("invalid status")
 	}
 	streamInfo.status = proto.StatusStreamScanning
-	stream.unpacker.logger.Printf("Initiating scan(%s)\n", stream.streamName)
+	streamInfo.dualLogger.Printf("Initiating scan(%s)\n", stream.streamName)
 	startTime := time.Now()
 	var err error
 	stream.fileSystem, err = stream.scanFS(mountPoint)
@@ -90,7 +90,7 @@ func (stream *streamManagerState) scan(skipIfPrepared bool) error {
 		return err
 	}
 	streamInfo.status = proto.StatusStreamScanned
-	stream.unpacker.logger.Printf("Scanned(%s) in %s\n",
+	streamInfo.dualLogger.Printf("Scanned(%s) in %s\n",
 		stream.streamName, format.Duration(time.Since(startTime)))
 	return nil
 }
@@ -173,7 +173,7 @@ func (stream *streamManagerState) mount(mountPoint string) error {
 		return err
 	}
 	streamInfo.status = proto.StatusStreamMounted
-	stream.unpacker.logger.Printf("Mounted(%s) %s\n",
+	streamInfo.dualLogger.Printf("Mounted(%s) %s\n",
 		stream.streamName, rootDevice)
 	return nil
 }
