@@ -38,6 +38,7 @@ func (s state) showStreamDashboardHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintf(writer, "<b>Status:</b> %s<br>\n",
 		s.getStreamStatusLink(streamName, stream, true))
+	s.unpacker.WriteStreamHtml(writer, streamName)
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
