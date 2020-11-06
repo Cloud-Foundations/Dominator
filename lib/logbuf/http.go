@@ -332,17 +332,21 @@ func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 }
 
 func (lb *LogBuffer) writeHtml(writer io.Writer) {
-	fmt.Fprintln(writer, `<a href="logs">Logs:</a><br>`)
-	panicLogfile := lb.panicLogfile
-	if panicLogfile != nil {
-		fmt.Fprint(writer,
-			"<font color=\"red\">Last invocation paniced</font>, ")
-		if *panicLogfile == "" {
-			fmt.Fprintln(writer, "logfile no longer available<br>")
-		} else {
-			fmt.Fprintln(writer,
-				"<a href=\"logs/showPreviousPanic\">logfile</a><br>")
+	if lb.options.Directory != "" {
+		fmt.Fprintln(writer, `<a href="logs">Logs:</a><br>`)
+		panicLogfile := lb.panicLogfile
+		if panicLogfile != nil {
+			fmt.Fprint(writer,
+				"<font color=\"red\">Last invocation paniced</font>, ")
+			if *panicLogfile == "" {
+				fmt.Fprintln(writer, "logfile no longer available<br>")
+			} else {
+				fmt.Fprintln(writer,
+					"<a href=\"logs/showPreviousPanic\">logfile</a><br>")
+			}
 		}
+	} else {
+		fmt.Fprintln(writer, "Logs:<br>")
 	}
 	fmt.Fprintln(writer, "<pre>")
 	lb.dump(writer, "", "", false, true)
