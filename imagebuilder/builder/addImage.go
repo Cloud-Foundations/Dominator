@@ -10,6 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
@@ -120,24 +122,25 @@ func listPackages(g *goroutine.Goroutine, rootDir string) (
 	packageMap := make(map[string]image.Package)
 	scanner := bufio.NewScanner(output)
 	for scanner.Scan() {
-		var name, version string
-		var size uint64
-		nScanned, err := fmt.Sscanf(scanner.Text(), "%s %s %d",
-			&name, &version, &size)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return nil, fmt.Errorf("malformed line: %s", line)
 		}
-		if nScanned < 2 {
-			return nil, errors.New("malformed line")
-		}
-		packageMap[name] = image.Package{
+		name := fields[0]
+		version := fields[1]
+		pkg := image.Package{
 			Name:    name,
-			Size:    size * sizeMultiplier,
 			Version: version,
 		}
+		if len(fields) > 2 {
+			if size, err := strconv.ParseUint(fields[2], 10, 64); err != nil {
+				return nil, fmt.Errorf("malformed size: %s", fields[2])
+			} else {
+				pkg.Size = size * sizeMultiplier
+			}
+		}
+		packageMap[name] = pkg
 	}
 	if err := scanner.Err(); err != nil {
 		if err != io.EOF {
