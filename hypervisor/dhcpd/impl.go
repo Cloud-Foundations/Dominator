@@ -333,6 +333,14 @@ func (s *DhcpServer) findDynamicLease(macAddr, iface string) (
 	if !ok {
 		return nil, nil
 	}
+	if macAddr != lease.MacAddress {
+		s.logger.Printf("discarding {%s %s}: bad MAC in lease for: %s\n",
+			lease.IpAddress, lease.MacAddress, macAddr)
+		delete(s.ipAddrToMacAddr, lease.IpAddress.String())
+		delete(s.dynamicLeases, lease.MacAddress)
+		delete(s.dynamicLeases, macAddr)
+		return nil, nil
+	}
 	if lease.subnet == nil {
 		if subnet := s.findMatchingSubnet(lease.IpAddress); subnet == nil {
 			s.logger.Printf("discarding {%s %s}: no subnet\n",
