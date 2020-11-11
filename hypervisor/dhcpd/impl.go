@@ -440,7 +440,7 @@ func (s *DhcpServer) makeDynamicLease(macAddr string, subnet *subnetType,
 			util.DecrementIP(lowIP)
 			if util.CompareIPs(lowIP, reqIP) && util.CompareIPs(reqIP, stopIP) {
 				lease := leaseType{Address: proto.Address{
-					IpAddress:  reqIP,
+					IpAddress:  util.CopyIP(reqIP),
 					MacAddress: macAddr,
 				},
 					expires: time.Now().Add(time.Second * 10),
