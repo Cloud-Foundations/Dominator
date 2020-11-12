@@ -566,8 +566,9 @@ func (s *DhcpServer) readDynamicLeases() error {
 	for _, lease := range leases {
 		if time.Until(lease.Expires) > 0 {
 			s.dynamicLeases[lease.Address.MacAddress] = &leaseType{
-				Address: lease.Address,
-				expires: lease.Expires,
+				Address:        lease.Address,
+				clientHostname: lease.ClientHostName,
+				expires:        lease.Expires,
 			}
 			s.ipAddrToMacAddr[lease.Address.IpAddress.String()] =
 				lease.Address.MacAddress
