@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
@@ -156,6 +157,7 @@ func newServer(interfaceNames []string, dynamicLeasesFile string,
 		}
 	}()
 	go dhcpServer.cleanupDynamicLeasesLoop(cleanupTriggerChannel)
+	html.HandleFunc("/showDhcpStatus", dhcpServer.showDhcpStatusHandler)
 	return dhcpServer, nil
 }
 
