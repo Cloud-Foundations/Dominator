@@ -176,6 +176,7 @@ func main() {
 	if len(bridges) < 1 {
 		logger.Println("No bridges found: entering log-only mode")
 	} else {
+		httpd.AddHtmlWriter(dhcpServer)
 		rpcHtmlWriter, err := rpcd.Setup(managerObj, dhcpServer, tftpbootServer,
 			logger)
 		if err != nil {
