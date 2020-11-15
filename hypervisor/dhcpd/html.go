@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 )
 
 func (s *DhcpServer) writeHtml(writer io.Writer) {
@@ -62,9 +64,17 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 	fmt.Fprintln(writer, `<table border="1">`)
 	tw, _ = html.NewTableWriter(writer, true,
 		"MAC", "IP", "Hostname", "SubnetID")
-	for macAddr, lease := range s.staticLeases {
-		tw.WriteRow("", "", macAddr, lease.IpAddress.String(), lease.hostname,
-			lease.subnet.Id)
+	staticLeases := make([]leaseType, 0, len(s.staticLeases))
+	for _, lease := range s.staticLeases {
+		staticLeases = append(staticLeases, lease)
+	}
+	sort.Slice(staticLeases, func(i, j int) bool {
+		return verstr.Less(staticLeases[i].Address.IpAddress.String(),
+			staticLeases[j].Address.IpAddress.String())
+	})
+	for _, lease := range staticLeases {
+		tw.WriteRow("", "", lease.MacAddress, lease.IpAddress.String(),
+			lease.hostname, lease.subnet.Id)
 	}
 	fmt.Fprintln(writer, "</table><br>")
 
@@ -72,12 +82,20 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 	fmt.Fprintln(writer, `<table border="1">`)
 	tw, _ = html.NewTableWriter(writer, true,
 		"MAC", "IP", "Client Hostname", "SubnetID", "Expires")
-	for macAddr, lease := range s.dynamicLeases {
+	dynamicLeases := make([]*leaseType, 0, len(s.dynamicLeases))
+	for _, lease := range s.dynamicLeases {
+		dynamicLeases = append(dynamicLeases, lease)
+	}
+	sort.Slice(dynamicLeases, func(i, j int) bool {
+		return verstr.Less(dynamicLeases[i].Address.IpAddress.String(),
+			dynamicLeases[j].Address.IpAddress.String())
+	})
+	for _, lease := range dynamicLeases {
 		var subnetId string
 		if lease.subnet != nil {
 			subnetId = lease.subnet.Id
 		}
-		tw.WriteRow("", "", macAddr, lease.IpAddress.String(),
+		tw.WriteRow("", "", lease.MacAddress, lease.IpAddress.String(),
 			lease.clientHostname, subnetId,
 			lease.expires.Round(time.Second).String())
 	}
