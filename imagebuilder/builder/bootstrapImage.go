@@ -56,7 +56,7 @@ func cleanPackages(g *goroutine.Goroutine, rootDir string,
 func clearResolvConf(g *goroutine.Goroutine, writer io.Writer,
 	rootDir string) error {
 	return runInTarget(g, nil, writer, rootDir, nil,
-		"cp", "/dev/null", "/etc/resolv.conf")
+		"/bin/cp", "/dev/null", "/etc/resolv.conf")
 }
 
 func makeTempDirectory(dir, prefix string) (string, error) {
