@@ -188,7 +188,7 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 	speed := uint64(float64(fs.TotalDataBytes) / duration.Seconds())
 	fmt.Fprintf(buildLog,
 		"Scanned file-system and uploaded %d objects (%s) in %s (%s/s)\n",
-		len(fs.InodeTable), format.FormatBytes(fs.TotalDataBytes),
+		fs.NumRegularInodes, format.FormatBytes(fs.TotalDataBytes),
 		format.Duration(duration), format.FormatBytes(speed))
 	_, oldImage, err := getLatestImage(client, request.StreamName, buildLog)
 	if err != nil {
