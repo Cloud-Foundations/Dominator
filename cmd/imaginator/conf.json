@@ -30,7 +30,7 @@
 		"--arch=amd64",
 		"stretch",
 		"$dir",
-		"http://mirror.company.com/debian"
+		"http://deb.debian.org/debian"
 	    ],
 	    "FilterLines": [
 		"/etc/hostname",
@@ -45,7 +45,7 @@
 		"--arch=amd64",
 		"buster",
 		"$dir",
-		"http://mirror.company.com/debian"
+		"http://deb.debian.org/debian"
 	    ],
 	    "FilterLines": [
 		"/etc/hostname",
@@ -62,7 +62,7 @@
 		"--arch=i386",
 		"buster",
 		"$dir",
-		"http://mirror.company.com/debian"
+		"http://deb.debian.org/debian"
 	    ],
 	    "FilterLines": [
 		"/etc/hostname",
