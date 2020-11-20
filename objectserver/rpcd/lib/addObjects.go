@@ -2,8 +2,10 @@ package lib
 
 import (
 	"io"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/objectserver"
@@ -15,6 +17,8 @@ func addObjects(conn *srpc.Conn, decoder srpc.Decoder, encoder srpc.Encoder,
 	logger.Printf("AddObjects(%s) starting\n", conn.RemoteAddr())
 	numAdded := 0
 	numObj := 0
+	startTime := time.Now()
+	var bytesAdded, bytesReceived uint64
 	for ; ; numObj++ {
 		var request objectserver.AddObjectRequest
 		var response objectserver.AddObjectResponse
@@ -40,10 +44,18 @@ func addObjects(conn *srpc.Conn, decoder srpc.Decoder, encoder srpc.Encoder,
 				numAdded, numObj+1, response.ErrorString)
 			return nil
 		}
+		bytesReceived += request.Length
 		if response.Added {
+			bytesAdded += request.Length
 			numAdded++
 		}
 	}
-	logger.Printf("AddObjects(): %d of %d are new objects", numAdded, numObj)
+	duration := time.Since(startTime)
+	speed := uint64(float64(bytesReceived) / duration.Seconds())
+	logger.Printf(
+		"AddObjects(): %d (%s) of %d (%s) in %s (%s/s) are new objects",
+		numAdded, format.FormatBytes(bytesAdded),
+		numObj, format.FormatBytes(bytesReceived),
+		format.Duration(duration), format.FormatBytes(speed))
 	return nil
 }
