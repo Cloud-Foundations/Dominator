@@ -14,7 +14,7 @@ import (
 func addImageimageSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
 	err := addImageimage(imageSClient, objectClient, args[0], args[1], args[2],
-		args[3])
+		args[3], logger)
 	if err != nil {
 		return fmt.Errorf("Error adding image: \"%s\"\t%s", args[0], err)
 	}
@@ -23,7 +23,8 @@ func addImageimageSubcommand(args []string, logger log.DebugLogger) error {
 
 func addImageimage(imageSClient *srpc.Client,
 	objectClient *objectclient.ObjectClient,
-	name, oldImageName, filterFilename, triggersFilename string) error {
+	name, oldImageName, filterFilename, triggersFilename string,
+	logger log.DebugLogger) error {
 	imageExists, err := client.CheckImage(imageSClient, name)
 	if err != nil {
 		return errors.New("error checking for image existence: " + err.Error())
@@ -48,5 +49,5 @@ func addImageimage(imageSClient *srpc.Client,
 	}
 	fs = fs.Filter(newImage.Filter)
 	newImage.FileSystem = fs
-	return addImage(imageSClient, name, newImage)
+	return addImage(imageSClient, name, newImage, logger)
 }

@@ -17,7 +17,7 @@ import (
 func addReplaceImageSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
 	err := addReplaceImage(imageSClient, objectClient, args[0], args[1],
-		args[2:])
+		args[2:], logger)
 	if err != nil {
 		return fmt.Errorf("Error adding image: \"%s\": %s", args[0], err)
 	}
@@ -27,7 +27,7 @@ func addReplaceImageSubcommand(args []string, logger log.DebugLogger) error {
 func bulkAddReplaceImagesSubcommand(args []string,
 	logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
-	err := bulkAddReplaceImages(imageSClient, objectClient, args)
+	err := bulkAddReplaceImages(imageSClient, objectClient, args, logger)
 	if err != nil {
 		return fmt.Errorf("Error adding image: \"%s\": %s", args[0], err)
 	}
@@ -36,7 +36,8 @@ func bulkAddReplaceImagesSubcommand(args []string,
 
 func addReplaceImage(imageSClient *srpc.Client,
 	objectClient *objectclient.ObjectClient,
-	name, baseImageName string, layerImageNames []string) error {
+	name, baseImageName string, layerImageNames []string,
+	logger log.DebugLogger) error {
 	imageExists, err := client.CheckImage(imageSClient, name)
 	if err != nil {
 		return errors.New("error checking for image existence: " + err.Error())
@@ -53,7 +54,8 @@ func addReplaceImage(imageSClient *srpc.Client,
 		return nil
 	}
 	for _, layerImageName := range layerImageNames {
-		fs, err := buildImage(imageSClient, newImage.Filter, layerImageName)
+		fs, err := buildImage(imageSClient, newImage.Filter, layerImageName,
+			logger)
 		if err != nil {
 			return err
 		}
@@ -64,27 +66,28 @@ func addReplaceImage(imageSClient *srpc.Client,
 	if err := spliceComputedFiles(newImage.FileSystem); err != nil {
 		return err
 	}
-	return addImage(imageSClient, name, newImage)
+	return addImage(imageSClient, name, newImage, logger)
 }
 
 func bulkAddReplaceImages(imageSClient *srpc.Client,
-	objectClient *objectclient.ObjectClient, layerImageNames []string) error {
+	objectClient *objectclient.ObjectClient, layerImageNames []string,
+	logger log.DebugLogger) error {
 	imageNames, err := client.ListImages(imageSClient)
 	if err != nil {
 		return err
 	}
 	err = bulkAddReplaceImagesSep(imageSClient, objectClient, layerImageNames,
-		imageNames, "/")
+		imageNames, "/", logger)
 	if err != nil {
 		return err
 	}
 	return bulkAddReplaceImagesSep(imageSClient, objectClient, layerImageNames,
-		imageNames, ".")
+		imageNames, ".", logger)
 }
 
 func bulkAddReplaceImagesSep(imageSClient *srpc.Client,
 	objectClient *objectclient.ObjectClient, layerImageNames []string,
-	imageNames []string, separator string) error {
+	imageNames []string, separator string, logger log.DebugLogger) error {
 	baseNames := make(map[string]uint64)
 	for _, name := range imageNames {
 		fields := strings.Split(name, separator)
@@ -105,8 +108,9 @@ func bulkAddReplaceImagesSep(imageSClient *srpc.Client,
 	for baseName, version := range baseNames {
 		oldName := fmt.Sprintf("%s%s%d", baseName, separator, version)
 		newName := fmt.Sprintf("%s%s%d", baseName, separator, version+1)
-		if err := addReplaceImage(imageSClient, objectClient,
-			newName, oldName, layerImageNames); err != nil {
+		err := addReplaceImage(imageSClient, objectClient, newName, oldName,
+			layerImageNames, logger)
+		if err != nil {
 			return err
 		}
 	}

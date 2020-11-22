@@ -11,13 +11,14 @@ import (
 
 func copyImageSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, _ := getClients()
-	if err := copyImage(imageSClient, args[0], args[1]); err != nil {
+	if err := copyImage(imageSClient, args[0], args[1], logger); err != nil {
 		return fmt.Errorf("Error copying image: %s", err)
 	}
 	return nil
 }
 
-func copyImage(imageSClient *srpc.Client, name, oldImageName string) error {
+func copyImage(imageSClient *srpc.Client, name, oldImageName string,
+	logger log.DebugLogger) error {
 	imageExists, err := client.CheckImage(imageSClient, name)
 	if err != nil {
 		return errors.New("error checking for image existence: " + err.Error())
@@ -29,5 +30,5 @@ func copyImage(imageSClient *srpc.Client, name, oldImageName string) error {
 	if err != nil {
 		return err
 	}
-	return addImage(imageSClient, name, image)
+	return addImage(imageSClient, name, image, logger)
 }

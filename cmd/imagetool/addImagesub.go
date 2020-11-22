@@ -21,7 +21,7 @@ import (
 func addImagesubSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
 	err := addImagesub(imageSClient, objectClient, args[0], args[1], args[2],
-		args[3])
+		args[3], logger)
 	if err != nil {
 		return fmt.Errorf("Error adding image: \"%s\"\t%s", args[0], err)
 	}
@@ -30,7 +30,8 @@ func addImagesubSubcommand(args []string, logger log.DebugLogger) error {
 
 func addImagesub(imageSClient *srpc.Client,
 	objectClient *objectclient.ObjectClient,
-	name, subName, filterFilename, triggersFilename string) error {
+	name, subName, filterFilename, triggersFilename string,
+	logger log.DebugLogger) error {
 	imageExists, err := client.CheckImage(imageSClient, name)
 	if err != nil {
 		return errors.New("error checking for image existence: " + err.Error())
@@ -59,7 +60,7 @@ func addImagesub(imageSClient *srpc.Client,
 		return err
 	}
 	newImage.FileSystem = fs
-	return addImage(imageSClient, name, newImage)
+	return addImage(imageSClient, name, newImage, logger)
 }
 
 func applyDeleteFilter(fs *filesystem.FileSystem) (
