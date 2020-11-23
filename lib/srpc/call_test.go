@@ -2,6 +2,7 @@ package srpc
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -60,44 +61,11 @@ func testCallPlain(t *testing.T, makeCoder coderMaker) {
 	client := makeClientServer(makeCoder)
 	defer client.Close()
 	// Call# 0.
-	conn, err := client.Call("Test.Plain")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Encode(test.EchoRequest{Request: "plain0"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Flush(); err != nil {
-		t.Fatal(err)
-	}
-	var response test.EchoResponse
-	if err := conn.Decode(&response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Response != "plain0" {
-		t.Errorf("Response: %s != plain0\n", response.Response)
-	}
-	if err := conn.Close(); err != nil {
+	if err := testDoCallPlain(t, client, "plain0"); err != nil {
 		t.Fatal(err)
 	}
 	// Call# 1.
-	conn, err = client.Call("Test.Plain")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Encode(test.EchoRequest{Request: "plain1"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Flush(); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Decode(&response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Response != "plain1" {
-		t.Errorf("Response: %s != plain1\n", response.Response)
-	}
-	if err := conn.Close(); err != nil {
+	if err := testDoCallPlain(t, client, "plain1"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -185,6 +153,59 @@ func testCallReceiver(t *testing.T, makeCoder coderMaker) {
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func testDoCallPlain(t *testing.T, client *Client, data string) error {
+	conn, err := client.Call("Test.Plain")
+	if err != nil {
+		return err
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
+	if err := conn.Encode(test.EchoRequest{Request: data}); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	var response test.EchoResponse
+	if err := conn.Decode(&response); err != nil {
+		return err
+	}
+	if response.Response != data {
+		return fmt.Errorf("Response: %s != %s\n", response.Response, data)
+	}
+	doClose = false
+	if err := conn.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestDialCallCloseCall(t *testing.T) {
+	client, err := makeListenerAndConnect(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testDoCallPlain(t, client, "dial+plain"); err != nil {
+		t.Fatal(err)
+		client.Close()
+	}
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := recover(); err == nil {
+			t.Fatal("call on closed client did not panic")
+		}
+	}()
+	if err := testDoCallPlain(t, client, "dial+close+plain"); err == nil {
+		t.Fatal("call on close client did not fail")
 	}
 }
 

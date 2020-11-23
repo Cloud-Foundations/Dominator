@@ -242,7 +242,10 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 
 func (client *Client) call(serviceMethod string) (*Conn, error) {
 	if client.conn == nil {
-		panic("cannot call Client after Put()")
+		panic("cannot call Client after Close()")
+	}
+	if client.resource != nil && !client.resource.inUse {
+		panic("cannot call Client after Close() or Put()")
 	}
 	client.callLock.Lock()
 	conn, err := client.callWithLock(serviceMethod)
@@ -287,7 +290,9 @@ func (client *Client) close() error {
 		clientMetricsMutex.Lock()
 		numOpenClientConnections--
 		clientMetricsMutex.Unlock()
-		return client.conn.Close()
+		err := client.conn.Close()
+		client.conn = nil
+		return err
 	}
 	client.resource.resource.Release()
 	clientMetricsMutex.Lock()
