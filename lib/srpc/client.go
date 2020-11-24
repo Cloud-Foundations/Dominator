@@ -23,6 +23,7 @@ type endpointType struct {
 }
 
 var (
+	attemptTransportUpgrade   = true // Changed by tests.
 	clientMetricsDir          *tricorder.DirectorySpec
 	clientMetricsMutex        sync.Mutex
 	numInUseClientConnections uint64
@@ -163,8 +164,7 @@ func dialHTTPEndpoint(network, address string, tlsConfig *tls.Config,
 		dataConn = tlsConn
 	}
 	doClose = false
-	return newClient(unsecuredConn, dataConn, endpoint.tls,
-		endpoint.coderMaker), nil
+	return newClient(unsecuredConn, dataConn, endpoint.tls, endpoint.coderMaker)
 }
 
 func dialHTTPEndpoints(network, address string, tlsConfig *tls.Config,
@@ -223,7 +223,7 @@ func getEarliestClientCertExpiration() time.Time {
 }
 
 func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
-	makeCoder coderMaker) *Client {
+	makeCoder coderMaker) (*Client, error) {
 	clientMetricsMutex.Lock()
 	numOpenClientConnections++
 	clientMetricsMutex.Unlock()
@@ -231,13 +231,25 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 		bufrw: bufio.NewReadWriter(bufio.NewReader(dataConn),
 			bufio.NewWriter(dataConn)),
 		conn:        dataConn,
+		localAddr:   rawConn.LocalAddr().String(),
 		isEncrypted: isEncrypted,
 		makeCoder:   makeCoder,
+		remoteAddr:  rawConn.RemoteAddr().String(),
 	}
 	if tcpConn, ok := rawConn.(libnet.TCPConn); ok {
 		client.tcpConn = tcpConn
 	}
-	return client
+	if attemptTransportUpgrade {
+		if _, err := client.localAttemptUpgradeToUnix(); err != nil {
+			client.Close()
+			return nil, err
+		}
+		if client.conn != dataConn {
+			client.bufrw = bufio.NewReadWriter(bufio.NewReader(client.conn),
+				bufio.NewWriter(client.conn))
+		}
+	}
+	return client, nil
 }
 
 func (client *Client) call(serviceMethod string) (*Conn, error) {
@@ -339,4 +351,18 @@ func (conn *Conn) requestReply(request interface{}, reply interface{}) error {
 		return errors.New(str[:len(str)-1])
 	}
 	return conn.Decode(reply)
+}
+
+func (client *Client) setKeepAlive(keepalive bool) error {
+	if client.tcpConn == nil {
+		return nil
+	}
+	return client.tcpConn.SetKeepAlive(keepalive)
+}
+
+func (client *Client) setKeepAlivePeriod(d time.Duration) error {
+	if client.tcpConn == nil {
+		return nil
+	}
+	return client.tcpConn.SetKeepAlivePeriod(d)
 }

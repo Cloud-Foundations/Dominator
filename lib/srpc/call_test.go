@@ -15,10 +15,11 @@ import (
 type serverType struct{}
 
 func init() {
+	attemptTransportUpgrade = false
 	RegisterName("Test", &serverType{})
 }
 
-func makeClientServer(makeCoder coderMaker) *Client {
+func makeClientServer(makeCoder coderMaker) (*Client, error) {
 	serverPipe, clientPipe := net.Pipe()
 	go handleConnection(&Conn{
 		ReadWriter: bufio.NewReadWriter(bufio.NewReader(serverPipe),
@@ -58,7 +59,10 @@ func makeListenerAndConnect(gob, json bool) (*Client, error) {
 }
 
 func testCallPlain(t *testing.T, makeCoder coderMaker) {
-	client := makeClientServer(makeCoder)
+	client, err := makeClientServer(makeCoder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer client.Close()
 	// Call# 0.
 	if err := testDoCallPlain(t, client, "plain0"); err != nil {
@@ -77,11 +81,14 @@ func testCallRequestReply(t *testing.T, makeCoder coderMaker) {
 			bufio.NewWriter(serverPipe)),
 	},
 		makeCoder)
-	client := newClient(clientPipe, clientPipe, false, makeCoder)
+	client, err := newClient(clientPipe, clientPipe, false, makeCoder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer client.Close()
 	// Call# 0.
 	var response test.EchoResponse
-	err := client.RequestReply("Test.RequestReply",
+	err = client.RequestReply("Test.RequestReply",
 		test.EchoRequest{Request: "test0"}, &response)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +120,10 @@ func testCallRequestReply(t *testing.T, makeCoder coderMaker) {
 }
 
 func testCallReceiver(t *testing.T, makeCoder coderMaker) {
-	client := makeClientServer(makeCoder)
+	client, err := makeClientServer(makeCoder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer client.Close()
 	// Call# 0.
 	conn, err := client.Call("Test.Receiver")
