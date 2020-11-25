@@ -176,7 +176,7 @@ func getClients() (*srpc.Client, *objectclient.ObjectClient) {
 			fmt.Fprintf(os.Stderr, "Error dialing: %s: %s\n", clientName, err)
 			os.Exit(1)
 		}
-		theObjectClient = objectclient.NewObjectClient(clientName)
+		theObjectClient = objectclient.AttachObjectClient(imageSrpcClient)
 	}
 	return imageSrpcClient, theObjectClient
 }
