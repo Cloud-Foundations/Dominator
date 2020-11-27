@@ -61,11 +61,21 @@ func acceptUnix(conn net.Conn,
 		return
 	}
 	unixCookieToConnMapLock.Lock()
-	defer unixCookieToConnMapLock.Unlock()
-	if _, ok := unixCookieToConn[cookie]; !ok {
-		unixCookieToConn[cookie] = conn
-		doClose = false
+	if _, ok := unixCookieToConn[cookie]; ok {
+		unixCookieToConnMapLock.Unlock()
+		return
 	}
+	unixCookieToConn[cookie] = conn
+	unixCookieToConnMapLock.Unlock()
+	var ack [1]byte
+	length, err := conn.Write(ack[:])
+	if err != nil || length != 1 {
+		unixCookieToConnMapLock.Lock()
+		delete(unixCookieToConn, cookie)
+		unixCookieToConnMapLock.Unlock()
+		return
+	}
+	doClose = false
 }
 
 func acceptUnixLoop(l net.Listener,
@@ -153,7 +163,7 @@ func (*builtinReceiver) LocalUpgradeToUnix(conn *Conn) error {
 	unixCookieToConnMapLock.Unlock()
 	doClose := true
 	defer func() {
-		if doClose {
+		if doClose && newConn != nil {
 			newConn.Close()
 		}
 	}()
@@ -196,6 +206,7 @@ func (client *Client) localAttemptUpgradeToUnix() (bool, error) {
 		return false, nil
 	}
 	defer conn.Close()
+	defer conn.Flush()
 	err = conn.Encode(localUpgradeToUnixRequestOne{ClientCookie: cookie[:]})
 	if err != nil {
 		return false, err
@@ -222,10 +233,19 @@ func (client *Client) localAttemptUpgradeToUnix() (bool, error) {
 		}
 	}()
 	if length, err := newConn.Write(replyOne.ServerCookie); err != nil {
+		conn.Encode(localUpgradeToUnixRequestTwo{})
 		return false, err
 	} else if length != len(replyOne.ServerCookie) {
 		conn.Encode(localUpgradeToUnixRequestTwo{})
 		return false, fmt.Errorf("bad cookie length: %d", length)
+	}
+	var ack [1]byte
+	if length, err := newConn.Read(ack[:]); err != nil {
+		conn.Encode(localUpgradeToUnixRequestTwo{})
+		return false, err
+	} else if length != 1 {
+		conn.Encode(localUpgradeToUnixRequestTwo{})
+		return false, fmt.Errorf("bad ack length: %d", length)
 	}
 	err = conn.Encode(localUpgradeToUnixRequestTwo{SentServerCookie: true})
 	if err != nil {
