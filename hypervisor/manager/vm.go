@@ -3256,6 +3256,14 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
 				options)
 	}
+	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
+		return err
+	} else if cid > 2 {
+		cmd.Args = append(cmd.Args,
+			"-device",
+			fmt.Sprintf("vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=%d",
+				cid))
+	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
 	if output, err := cmd.CombinedOutput(); err != nil {

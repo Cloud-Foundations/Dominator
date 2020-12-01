@@ -56,6 +56,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if err := manager.setupVolumes(startOptions); err != nil {
 		return nil, err
 	}
+	if err := manager.checkVsockets(); err != nil {
+		return nil, err
+	}
 	if err := manager.loadSubnets(); err != nil {
 		return nil, err
 	}

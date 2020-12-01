@@ -48,6 +48,7 @@ type Manager struct {
 	subnets           map[string]proto.Subnet // Key: Subnet ID.
 	subnetChannels    []chan<- proto.Subnet
 	vms               map[string]*vmInfoType // Key: IP address.
+	vsocketsEnabled   bool
 }
 
 type StartOptions struct {
@@ -228,13 +229,17 @@ func (m *Manager) GetRootCookiePath() string {
 	return filepath.Join(m.StartOptions.StateDir, "root-cookie")
 }
 
+func (m *Manager) GetVmAccessToken(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, lifetime time.Duration) ([]byte, error) {
+	return m.getVmAccessToken(ipAddr, authInfo, lifetime)
+}
+
 func (m *Manager) GetVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return m.getVmBootLog(ipAddr)
 }
 
-func (m *Manager) GetVmAccessToken(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, lifetime time.Duration) ([]byte, error) {
-	return m.getVmAccessToken(ipAddr, authInfo, lifetime)
+func (m *Manager) GetVmCID(ipAddr net.IP) (uint32, error) {
+	return m.getVmCID(ipAddr)
 }
 
 func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
