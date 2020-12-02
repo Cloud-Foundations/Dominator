@@ -53,12 +53,17 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	paths := make([]string, 0)
 	pathsSet := make(map[string]struct{})
 	for path := range s.paths {
+		result := ""
 		if strings.HasPrefix(path, req.URL.Path) {
 			splitPath := strings.Split(path[len(req.URL.Path):], "/")
-			result := splitPath[0]
+			result = splitPath[0]
 			if result == "" {
 				result = splitPath[1]
 			}
+		} else if req.URL.Path == "/*" {
+			result = path[1:]
+		}
+		if result != "" {
 			if _, ok := pathsSet[result]; !ok {
 				pathsSet[result] = struct{}{}
 				paths = append(paths, result)
