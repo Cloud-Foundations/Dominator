@@ -150,6 +150,10 @@ func (m *Manager) CheckVmHasHealthAgent(ipAddr net.IP) (bool, error) {
 	return m.checkVmHasHealthAgent(ipAddr)
 }
 
+func (m *Manager) CheckVsocketsEnabled() bool {
+	return m.vsocketsEnabled
+}
+
 func (m *Manager) CloseUpdateChannel(channel <-chan proto.Update) {
 	m.closeUpdateChannel(channel)
 }
