@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,7 +29,38 @@ const (
 	privateFilePerms  = syscall.S_IRUSR | syscall.S_IWUSR
 	publicFilePerms   = privateFilePerms | syscall.S_IRGRP | syscall.S_IROTH
 	productSerialFile = "/sys/class/dmi/id/product_serial"
+
+	uuidLength = 16
 )
+
+func getUUID(stateDir string) (string, error) {
+	filename := filepath.Join(stateDir, "uuid")
+	if file, err := os.Open(filename); err == nil {
+		defer file.Close()
+		buffer := make([]byte, uuidLength*2)
+		if length, err := file.Read(buffer); err != nil {
+			return "", err
+		} else if length < len(buffer) {
+			return "", errors.New("unable to read enough UUID data")
+		} else {
+			return string(buffer), nil
+		}
+	}
+	if uuid, err := randString(uuidLength); err != nil {
+		return "", err
+	} else {
+		os.Remove(filename)
+		if file, err := os.Create(filename); err != nil {
+			return "", err
+		} else {
+			defer file.Close()
+			if _, err := fmt.Fprintln(file, uuid); err != nil {
+				return "", err
+			}
+			return uuid, nil
+		}
+	}
+}
 
 func newManager(startOptions StartOptions) (*Manager, error) {
 	memInfo, err := meminfo.GetMemInfo()
@@ -39,6 +71,10 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if _, err := rand.Read(rootCookie); err != nil {
 		return nil, err
 	}
+	uuid, err := getUUID(startOptions.StateDir)
+	if err != nil {
+		return nil, err
+	}
 	manager := &Manager{
 		StartOptions:  startOptions,
 		rootCookie:    rootCookie,
@@ -47,6 +83,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		numCPU:        runtime.NumCPU(),
 		serialNumber:  readProductSerial(),
 		vms:           make(map[string]*vmInfoType),
+		uuid:          uuid,
 	}
 	err = fsutil.CopyToFile(manager.GetRootCookiePath(), privateFilePerms,
 		bytes.NewReader(rootCookie), 0)
@@ -152,6 +189,17 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	}
 	go manager.loopCheckHealthStatus()
 	return manager, nil
+}
+
+func randString(length uint) (string, error) {
+	buffer := make([]byte, length)
+	if length, err := rand.Read(buffer); err != nil {
+		return "", err
+	} else if length < uuidLength {
+		return "", errors.New("unable to read enough random UUID data")
+	} else {
+		return fmt.Sprintf("%x", buffer), nil
+	}
 }
 
 func readProductSerial() string {

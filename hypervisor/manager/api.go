@@ -49,6 +49,7 @@ type Manager struct {
 	subnetChannels    []chan<- proto.Subnet
 	vms               map[string]*vmInfoType // Key: IP address.
 	vsocketsEnabled   bool
+	uuid              string
 }
 
 type StartOptions struct {
@@ -265,6 +266,10 @@ func (m *Manager) GetVmUserDataRPC(ipAddr net.IP,
 
 func (m *Manager) GetVmVolume(conn *srpc.Conn) error {
 	return m.getVmVolume(conn)
+}
+
+func (m *Manager) GetUUID() (string, error) {
+	return m.uuid, nil
 }
 
 func (m *Manager) ImportLocalVm(authInfo *srpc.AuthInformation,
