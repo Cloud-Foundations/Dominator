@@ -26,6 +26,10 @@ var (
 		"If true, do not run any triggers. For debugging only")
 )
 
+type flusher interface {
+	Flush() error
+}
+
 func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 	reply *sub.UpdateResponse) error {
 	if err := t.getUpdateLock(); err != nil {
@@ -159,6 +163,10 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 			if *disableTriggers {
 				return hadFailures
 			}
+			if logger, ok := logger.(flusher); ok {
+				logger.Flush()
+			}
+			time.Sleep(time.Second)
 			if !runCommand(logger, "reboot") {
 				hadFailures = true
 			}
