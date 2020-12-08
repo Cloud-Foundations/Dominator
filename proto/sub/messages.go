@@ -15,6 +15,8 @@ type BoostCpuLimitResponse struct{}
 
 type Configuration struct {
 	CpuPercent          uint
+	OwnerGroups         []string
+	OwnerUsers          []string
 	NetworkSpeedPercent uint
 	ScanSpeedPercent    uint
 	ScanExclusionList   []string
