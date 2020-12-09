@@ -352,7 +352,7 @@ func main() {
 		configuration.NetworkReaderContext = networkReaderContext
 		invalidateNextScanObjectCache := false
 		rpcdHtmlWriter :=
-			rpcd.Setup(&configuration, &fsh, objectsDir,
+			rpcd.Setup(configParams, &configuration, &fsh, objectsDir,
 				workingRootDir, networkReaderContext, netbenchFilename,
 				oldTriggersFilename, disableScanner,
 				func() {
