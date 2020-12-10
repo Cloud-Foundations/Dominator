@@ -16,6 +16,7 @@ import (
 )
 
 type rpcType struct {
+	subConfiguration          proto.Configuration
 	scannerConfiguration      *scanner.Configuration
 	fileSystemHistory         *scanner.FileSystemHistory
 	objectsDir                string
@@ -29,6 +30,7 @@ type rpcType struct {
 	workdirGoroutine          *goroutine.Goroutine
 	logger                    log.Logger
 	*serverutil.PerUserMethodLimiter
+	ownerUsers                   map[string]struct{}
 	rwLock                       sync.RWMutex
 	getFilesLock                 sync.Mutex
 	fetchInProgress              bool // Fetch() & Update() mutually exclusive.
@@ -61,6 +63,7 @@ func Setup(subConfiguration proto.Configuration,
 	rescanObjectCacheFunction func(), workdirGoroutine *goroutine.Goroutine,
 	logger log.Logger) *HtmlWriter {
 	rpcObj := &rpcType{
+		subConfiguration:          subConfiguration,
 		scannerConfiguration:      scannerConfiguration,
 		fileSystemHistory:         fsh,
 		objectsDir:                objectsDirname,
@@ -77,6 +80,12 @@ func Setup(subConfiguration proto.Configuration,
 			map[string]uint{
 				"Poll": 1,
 			}),
+	}
+	if len(subConfiguration.OwnerUsers) > 0 {
+		rpcObj.ownerUsers = make(map[string]struct{})
+		for _, user := range subConfiguration.OwnerUsers {
+			rpcObj.ownerUsers[user] = struct{}{}
+		}
 	}
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
