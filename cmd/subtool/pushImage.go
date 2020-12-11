@@ -176,6 +176,9 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 	}
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		var pollReply sub.PollResponse
+		if err := client.BoostCpuLimit(subObj.Client); err != nil {
+			return err
+		}
 		if err := pollAndBuildPointers(subObj.Client, &generationCount,
 			&pollReply); err != nil {
 			return err
