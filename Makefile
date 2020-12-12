@@ -51,7 +51,9 @@ mdbd.tarball:
 
 subd.tarball:
 	@cd c; make
-	@./scripts/make-tarball subd -C $(GOPATH) bin/run-in-mntns \
+	@./scripts/make-tarball subd           \
+		-C cmd/subd  set-owner         \
+		-C $(GOPATH) bin/run-in-mntns  \
 		-C $(ETCDIR) ssl
 
 
