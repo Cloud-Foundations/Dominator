@@ -87,7 +87,7 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 func (b *Builder) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		"Number of image streams: <a href=\"showImageStreams\">%d</a><p>\n",
-		b.getNumNormalStreams())
+		b.getNumStreams())
 	currentBuilds := make([]string, 0)
 	goodBuilds := make(map[string]buildResultType)
 	failedBuilds := make(map[string]buildResultType)
