@@ -33,6 +33,9 @@ func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
 		return errors.New("maximum expiration time is 1 day")
 	}
 	if builder, ok := builder.(*imageStreamType); ok {
+		if _, ok := builder.builderUsers[authInfo.Username]; ok {
+			return nil
+		}
 		for _, group := range builder.BuilderGroups {
 			if _, ok := authInfo.GroupList[group]; ok {
 				return nil

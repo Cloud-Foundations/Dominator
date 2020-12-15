@@ -71,8 +71,10 @@ type manifestType struct {
 
 type imageStreamType struct {
 	builder           *Builder
+	builderUsers      map[string]struct{}
 	name              string
 	BuilderGroups     []string
+	BuilderUsers      []string
 	ManifestUrl       string
 	ManifestDirectory string
 }

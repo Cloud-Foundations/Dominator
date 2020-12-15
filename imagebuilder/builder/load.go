@@ -34,10 +34,23 @@ func getNamespace() (string, error) {
 }
 
 func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
+	return imageStreamsRealDecoder(reader)
+}
+
+func imageStreamsRealDecoder(reader io.Reader) (
+	*imageStreamsConfigurationType, error) {
 	var config imageStreamsConfigurationType
 	decoder := json.NewDecoder(bufio.NewReader(reader))
 	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("error reading image streams: %s", err)
+		return nil, err
+	}
+	for _, stream := range config.Streams {
+		if length := len(stream.BuilderUsers); length > 0 {
+			stream.builderUsers = make(map[string]struct{}, length)
+			for _, user := range stream.BuilderUsers {
+				stream.builderUsers[user] = struct{}{}
+			}
+		}
 	}
 	return &config, nil
 }
@@ -117,13 +130,12 @@ func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
 		return nil, err
 	}
 	defer file.Close()
-	var configuration imageStreamsConfigurationType
-	decoder := json.NewDecoder(bufio.NewReader(file))
-	if err := decoder.Decode(&configuration); err != nil {
+	configuration, err := imageStreamsRealDecoder(file)
+	if err != nil {
 		return nil, fmt.Errorf("error decoding image streams from: %s: %s",
 			url, err)
 	}
-	return &configuration, nil
+	return configuration, nil
 }
 
 func masterConfiguration(url string) (*masterConfigurationType, error) {
