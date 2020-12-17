@@ -105,8 +105,7 @@ func readSysfsUint64(filename string) (uint64, error) {
 		return 0, err
 	}
 	if nScanned < 1 {
-		return 0, errors.New(fmt.Sprintf("only read %d values from: %s",
-			nScanned, filename))
+		return 0, fmt.Errorf("only read %d values from: %s", nScanned, filename)
 	}
 	return value, nil
 }
