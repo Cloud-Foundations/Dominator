@@ -34,8 +34,8 @@ func (objClient *ObjectClient) addObject(reader io.Reader, length uint64,
 		return reply.Hash, false, err
 	}
 	if uint64(nCopied) != length {
-		return reply.Hash, false, errors.New(fmt.Sprintf(
-			"failed to copy, wanted: %d, got: %d bytes", length, nCopied))
+		return reply.Hash, false, fmt.Errorf(
+			"failed to copy, wanted: %d, got: %d bytes", length, nCopied)
 	}
 	// Send end-of-stream marker.
 	request = objectserver.AddObjectRequest{}
@@ -48,9 +48,9 @@ func (objClient *ObjectClient) addObject(reader io.Reader, length uint64,
 		return reply.Hash, false, errors.New(reply.ErrorString)
 	}
 	if expectedHash != nil && *expectedHash != reply.Hash {
-		return reply.Hash, false, errors.New(fmt.Sprintf(
+		return reply.Hash, false, fmt.Errorf(
 			"received hash: %x != expected: %x",
-			reply.Hash, *expectedHash))
+			reply.Hash, *expectedHash)
 	}
 	return reply.Hash, reply.Added, nil
 }
