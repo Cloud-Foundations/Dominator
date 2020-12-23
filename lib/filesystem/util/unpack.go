@@ -47,8 +47,7 @@ func unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 	defer os.RemoveAll(inodesDir)
 	var statfs syscall.Statfs_t
 	if err := syscall.Statfs(inodesDir, &statfs); err != nil {
-		return errors.New(fmt.Sprintf("Unable to Statfs: %s %s\n",
-			inodesDir, err))
+		return fmt.Errorf("Unable to Statfs: %s %s\n", inodesDir, err)
 	}
 	if fs.TotalDataBytes > uint64(statfs.Bsize)*statfs.Bfree {
 		return errors.New("image will not fit on file-system")
