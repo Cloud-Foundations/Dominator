@@ -5,8 +5,7 @@ import (
 )
 
 var (
-	errorInsufficientUnallocatedCPU = errors.New(
-		"insufficient unallocated CPU")
+	errorInsufficientUnallocatedCPU = errors.New("insufficient unallocated CPU")
 )
 
 func (m *Manager) checkSufficientCPUWithLock(milliCPU uint) error {
