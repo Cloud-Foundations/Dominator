@@ -27,8 +27,7 @@ func loadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
 	replicationMaster string, logger log.DebugLogger) (*ImageDataBase, error) {
 	fi, err := os.Stat(baseDir)
 	if err != nil {
-		return nil, errors.New(
-			fmt.Sprintf("Cannot stat: %s: %s\n", baseDir, err))
+		return nil, fmt.Errorf("Cannot stat: %s: %s\n", baseDir, err)
 	}
 	if !fi.IsDir() {
 		return nil, fmt.Errorf("%s is not a directory\n", baseDir)
