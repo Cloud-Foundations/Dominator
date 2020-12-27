@@ -9,7 +9,7 @@ import (
 
 func setTagsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := setTags(logger); err != nil {
-		return fmt.Errorf("Error setting tags: %s", err)
+		return fmt.Errorf("error setting tags: %s", err)
 	}
 	return nil
 }

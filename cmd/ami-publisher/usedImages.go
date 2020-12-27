@@ -11,7 +11,7 @@ import (
 
 func listUsedImagesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := listUsedImages(logger); err != nil {
-		return fmt.Errorf("Error listing used images: %s", err)
+		return fmt.Errorf("error listing used images: %s", err)
 	}
 	logMemoryUsage(logger)
 	return nil

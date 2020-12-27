@@ -10,7 +10,7 @@ import (
 
 func copyBootstrapImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := copyBootstrapImage(args[0], logger); err != nil {
-		return fmt.Errorf("Error copying bootstrap image: %s", err)
+		return fmt.Errorf("error copying bootstrap image: %s", err)
 	}
 	return nil
 }
