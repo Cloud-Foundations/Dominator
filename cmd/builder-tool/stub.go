@@ -8,7 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-var errorNotAvailable = errors.New("Not available on this OS")
+var errorNotAvailable = errors.New("not available on this OS")
 
 func buildFromManifestSubcommand(args []string, logger log.DebugLogger) error {
 	return errorNotAvailable

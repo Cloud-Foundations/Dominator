@@ -27,7 +27,7 @@ type dummyHasher struct{}
 func buildRawFromManifestSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := buildRawFromManifest(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error building RAW image from manifest: %s", err)
+		return fmt.Errorf("error building RAW image from manifest: %s", err)
 	}
 	return nil
 }
