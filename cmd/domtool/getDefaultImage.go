@@ -10,7 +10,7 @@ import (
 
 func getDefaultImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getDefaultImage(getClient()); err != nil {
-		return fmt.Errorf("Error getting default image: %s", err)
+		return fmt.Errorf("error getting default image: %s", err)
 	}
 	return nil
 }

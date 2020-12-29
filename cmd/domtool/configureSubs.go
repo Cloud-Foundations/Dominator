@@ -10,7 +10,7 @@ import (
 
 func configureSubsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := configureSubs(getClient()); err != nil {
-		return fmt.Errorf("Error setting config for subs: %s", err)
+		return fmt.Errorf("error setting config for subs: %s", err)
 	}
 	return nil
 }

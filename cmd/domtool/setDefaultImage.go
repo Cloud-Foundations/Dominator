@@ -10,7 +10,7 @@ import (
 
 func setDefaultImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := setDefaultImage(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error setting default image: %s", err)
+		return fmt.Errorf("error setting default image: %s", err)
 	}
 	return nil
 }

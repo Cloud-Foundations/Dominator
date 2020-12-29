@@ -12,7 +12,7 @@ import (
 func getSubsConfigurationSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := getSubsConfiguration(getClient()); err != nil {
-		return fmt.Errorf("Error getting config for subs: %s", err)
+		return fmt.Errorf("error getting config for subs: %s", err)
 	}
 	return nil
 }

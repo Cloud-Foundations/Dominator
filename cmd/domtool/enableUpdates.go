@@ -11,7 +11,7 @@ import (
 
 func enableUpdatesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := enableUpdates(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error enabling updates: %s", err)
+		return fmt.Errorf("error enabling updates: %s", err)
 	}
 	return nil
 }
