@@ -12,7 +12,7 @@ import (
 func writeNetbootFilesSubcommand(args []string, logger log.DebugLogger) error {
 	err := writeNetbootFiles(args[0], args[1], logger)
 	if err != nil {
-		return fmt.Errorf("Error writing netboot files: %s", err)
+		return fmt.Errorf("error writing netboot files: %s", err)
 	}
 	return nil
 }

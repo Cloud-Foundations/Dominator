@@ -25,7 +25,7 @@ func showNetworkConfigurationSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := showNetworkConfiguration(logger)
 	if err != nil {
-		return fmt.Errorf("Error showing network configuration: %s", err)
+		return fmt.Errorf("error showing network configuration: %s", err)
 	}
 	return nil
 }

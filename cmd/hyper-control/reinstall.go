@@ -15,7 +15,7 @@ import (
 func reinstallSubcommand(args []string, logger log.DebugLogger) error {
 	err := reinstall(logger)
 	if err != nil {
-		return fmt.Errorf("Error reinstalling: %s", err)
+		return fmt.Errorf("error reinstalling: %s", err)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 func addSubnetSubcommand(args []string, logger log.DebugLogger) error {
 	err := addSubnet(args[0], args[1], args[2], args[3:], logger)
 	if err != nil {
-		return fmt.Errorf("Error adding subnet: %s", err)
+		return fmt.Errorf("error adding subnet: %s", err)
 	}
 	return nil
 }

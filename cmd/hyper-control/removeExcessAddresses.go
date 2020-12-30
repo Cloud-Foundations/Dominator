@@ -14,7 +14,7 @@ func removeExcessAddressesSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := removeExcessAddresses(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error removing excess addresses: %s", err)
+		return fmt.Errorf("error removing excess addresses: %s", err)
 	}
 	return nil
 }

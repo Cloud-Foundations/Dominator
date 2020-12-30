@@ -16,7 +16,7 @@ import (
 func getMachineInfoSubcommand(args []string, logger log.DebugLogger) error {
 	err := getMachineInfo(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error getting machine info: %s", err)
+		return fmt.Errorf("error getting machine info: %s", err)
 	}
 	return nil
 }

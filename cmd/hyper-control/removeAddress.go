@@ -13,11 +13,11 @@ import (
 func removeIpAddressSubcommand(args []string, logger log.DebugLogger) error {
 	ipAddr := net.ParseIP(args[0])
 	if len(ipAddr) < 4 {
-		return fmt.Errorf("Invalid IP address: %s", args[0])
+		return fmt.Errorf("invalid IP address: %s", args[0])
 	}
 	err := removeAddress(proto.Address{IpAddress: ipAddr}, logger)
 	if err != nil {
-		return fmt.Errorf("Error removing IP address: %s", err)
+		return fmt.Errorf("error removing IP address: %s", err)
 	}
 	return nil
 }
@@ -26,7 +26,7 @@ func removeMacAddressSubcommand(args []string, logger log.DebugLogger) error {
 	address := proto.Address{MacAddress: args[0]}
 	err := removeAddress(address, logger)
 	if err != nil {
-		return fmt.Errorf("Error removing MAC address: %s", err)
+		return fmt.Errorf("error removing MAC address: %s", err)
 	}
 	return nil
 }

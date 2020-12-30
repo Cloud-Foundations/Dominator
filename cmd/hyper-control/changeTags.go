@@ -11,7 +11,7 @@ import (
 
 func changeTagsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := changeTags(logger); err != nil {
-		return fmt.Errorf("Error changing Hypervisor tags: %s", err)
+		return fmt.Errorf("error changing Hypervisor tags: %s", err)
 	}
 	return nil
 }

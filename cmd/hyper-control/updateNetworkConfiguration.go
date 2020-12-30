@@ -13,7 +13,7 @@ func updateNetworkConfigurationSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := updateNetworkConfiguration(logger)
 	if err != nil {
-		return fmt.Errorf("Error updating network configuration: %s", err)
+		return fmt.Errorf("error updating network configuration: %s", err)
 	}
 	return nil
 }

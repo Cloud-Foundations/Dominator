@@ -31,7 +31,7 @@ type leaseType struct {
 func netbootHostSubcommand(args []string, logger log.DebugLogger) error {
 	err := netbootHost(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error netbooting host: %s", err)
+		return fmt.Errorf("error netbooting host: %s", err)
 	}
 	return nil
 }

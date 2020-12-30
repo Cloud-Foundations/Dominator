@@ -14,7 +14,7 @@ import (
 func netbootVmSubcommand(args []string, logger log.DebugLogger) error {
 	err := netbootVm(logger)
 	if err != nil {
-		return fmt.Errorf("Error netbooting VM: %s", err)
+		return fmt.Errorf("error netbooting VM: %s", err)
 	}
 	return nil
 }

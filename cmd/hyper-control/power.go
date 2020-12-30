@@ -14,7 +14,7 @@ import (
 func powerOffSubcommand(args []string, logger log.DebugLogger) error {
 	err := powerOff(logger)
 	if err != nil {
-		return fmt.Errorf("Error powering down: %s", err)
+		return fmt.Errorf("error powering down: %s", err)
 	}
 	return nil
 }
@@ -40,7 +40,7 @@ func powerOff(logger log.DebugLogger) error {
 func powerOnSubcommand(args []string, logger log.DebugLogger) error {
 	err := powerOn(logger)
 	if err != nil {
-		return fmt.Errorf("Error powering up: %s", err)
+		return fmt.Errorf("error powering up: %s", err)
 	}
 	return nil
 }

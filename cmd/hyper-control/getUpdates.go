@@ -14,7 +14,7 @@ import (
 
 func getUpdatesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getUpdates(logger); err != nil {
-		return fmt.Errorf("Error getting updates: %s", err)
+		return fmt.Errorf("error getting updates: %s", err)
 	}
 	return nil
 }
