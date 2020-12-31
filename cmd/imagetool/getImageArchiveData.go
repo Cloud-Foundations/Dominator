@@ -19,7 +19,7 @@ func getImageArchiveDataSubcommand(args []string,
 	imageClient, _ := getClients()
 	err := getImageArchiveDataAndWrite(imageClient, args[0], args[1])
 	if err != nil {
-		return fmt.Errorf("Error getting image: %s", err)
+		return fmt.Errorf("error getting image: %s", err)
 	}
 	return nil
 }

@@ -14,7 +14,7 @@ import (
 
 func copyFilteredFilesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := copyFilteredFiles(args[0], args[1], args[2], logger); err != nil {
-		return fmt.Errorf("Error copying filtered files: %s", err)
+		return fmt.Errorf("error copying filtered files: %s", err)
 	}
 	return nil
 }

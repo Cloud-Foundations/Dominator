@@ -12,7 +12,7 @@ func checkDirectorySubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, _ := getClients()
 	directoryExists, err := client.CheckDirectory(imageSClient, args[0])
 	if err != nil {
-		return fmt.Errorf("Error checking directory: %s", err)
+		return fmt.Errorf("error checking directory: %s", err)
 	}
 	if directoryExists {
 		return nil

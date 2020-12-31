@@ -17,7 +17,7 @@ func getImageSubcommand(args []string, logger log.DebugLogger) error {
 	_, objectClient := getClients()
 	err := getImageAndWrite(objectClient, args[0], args[1], logger)
 	if err != nil {
-		return fmt.Errorf("Error getting image: %s", err)
+		return fmt.Errorf("error getting image: %s", err)
 	}
 	return nil
 }

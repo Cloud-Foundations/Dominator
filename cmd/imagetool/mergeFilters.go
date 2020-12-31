@@ -9,7 +9,7 @@ import (
 
 func mergeFiltersSubcommand(args []string, logger log.DebugLogger) error {
 	if err := mergeFilters(args); err != nil {
-		return fmt.Errorf("Error merging filter: %s", err)
+		return fmt.Errorf("error merging filter: %s", err)
 	}
 	return nil
 }

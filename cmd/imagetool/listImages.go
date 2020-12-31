@@ -12,7 +12,7 @@ import (
 func listImagesSubcommand(args []string, logger log.DebugLogger) error {
 	imageClient, _ := getClients()
 	if err := listImages(imageClient); err != nil {
-		return fmt.Errorf("Error listing images: %s", err)
+		return fmt.Errorf("error listing images: %s", err)
 	}
 	return nil
 }

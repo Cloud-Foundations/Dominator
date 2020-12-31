@@ -17,7 +17,7 @@ func addImagefileSubcommand(args []string, logger log.DebugLogger) error {
 	err := addImagefile(imageSClient, objectClient, args[0], args[1], args[2],
 		args[3], logger)
 	if err != nil {
-		return fmt.Errorf("Error adding image: \"%s\": %s", args[0], err)
+		return fmt.Errorf("error adding image: \"%s\": %s", args[0], err)
 	}
 	return nil
 }

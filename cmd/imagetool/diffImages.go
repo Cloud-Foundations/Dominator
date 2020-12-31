@@ -30,21 +30,21 @@ func diffSubcommand(args []string, logger log.DebugLogger) error {
 func diffTypedImages(tool string, lName string, rName string) error {
 	lfs, err := getTypedImage(lName)
 	if err != nil {
-		return fmt.Errorf("Error getting left image: %s", err)
+		return fmt.Errorf("error getting left image: %s", err)
 	}
 	if lfs, err = applyDeleteFilter(lfs); err != nil {
-		return fmt.Errorf("Error filtering left image: %s", err)
+		return fmt.Errorf("error filtering left image: %s", err)
 	}
 	rfs, err := getTypedImage(rName)
 	if err != nil {
-		return fmt.Errorf("Error getting right image: %s", err)
+		return fmt.Errorf("error getting right image: %s", err)
 	}
 	if rfs, err = applyDeleteFilter(rfs); err != nil {
-		return fmt.Errorf("Error filtering right image: %s", err)
+		return fmt.Errorf("error filtering right image: %s", err)
 	}
 	err = diffImages(tool, lfs, rfs)
 	if err != nil {
-		return fmt.Errorf("Error diffing images: %s", err)
+		return fmt.Errorf("error diffing images: %s", err)
 	}
 	return nil
 }
@@ -136,7 +136,7 @@ func pollImage(name string) (*filesystem.FileSystem, error) {
 	clientName := fmt.Sprintf("%s:%d", name, constants.SubPortNumber)
 	srpcClient, err := srpc.DialHTTP("tcp", clientName, 0)
 	if err != nil {
-		return nil, fmt.Errorf("Error dialing %s", err)
+		return nil, fmt.Errorf("error dialing %s", err)
 	}
 	defer srpcClient.Close()
 	var request sub.PollRequest
