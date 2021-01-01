@@ -16,14 +16,14 @@ import (
 func watchSubcommand(args []string, logger log.DebugLogger) error {
 	level, err := strconv.ParseInt(args[0], 10, 16)
 	if err != nil {
-		return fmt.Errorf("Error parsing level: %s", err)
+		return fmt.Errorf("error parsing level: %s", err)
 	}
 	clients, addrs, err := dial(true)
 	if err != nil {
 		return err
 	}
 	if err := watchAll(clients, addrs, int16(level)); err != nil {
-		return fmt.Errorf("Error watching: %s", err)
+		return fmt.Errorf("error watching: %s", err)
 	}
 	return nil
 }

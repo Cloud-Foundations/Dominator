@@ -12,14 +12,14 @@ import (
 func setDebugLevelSubcommand(args []string, logger log.DebugLogger) error {
 	level, err := strconv.ParseInt(args[0], 10, 16)
 	if err != nil {
-		return fmt.Errorf("Error parsing level: %s", err)
+		return fmt.Errorf("error parsing level: %s", err)
 	}
 	clients, _, err := dial(false)
 	if err != nil {
 		return err
 	}
 	if err := setDebugLevel(clients[0], int16(level)); err != nil {
-		return fmt.Errorf("Error setting debug level: %s", err)
+		return fmt.Errorf("error setting debug level: %s", err)
 	}
 	return nil
 }

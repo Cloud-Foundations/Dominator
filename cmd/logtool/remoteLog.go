@@ -12,7 +12,7 @@ import (
 func debugSubcommand(args []string, logger log.DebugLogger) error {
 	level, err := strconv.ParseUint(args[0], 10, 8)
 	if err != nil {
-		return fmt.Errorf("Error parsing level: %s", err)
+		return fmt.Errorf("error parsing level: %s", err)
 	}
 	clients, _, err := dial(false)
 	if err != nil {
