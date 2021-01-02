@@ -161,7 +161,7 @@ func writeMdb(mdb *mdb.Mdb, mdbFileName string) error {
 	tmpFileName := mdbFileName + "~"
 	file, err := os.Create(tmpFileName)
 	if err != nil {
-		return errors.New("Error opening file " + err.Error())
+		return errors.New("error opening file " + err.Error())
 	}
 	defer os.Remove(tmpFileName)
 	defer file.Close()

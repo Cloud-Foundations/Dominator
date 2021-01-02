@@ -45,7 +45,7 @@ func loadCis(reader io.Reader, datacentre string, logger log.Logger) (
 	var outMdb mdb.Mdb
 	decoder := json.NewDecoder(reader)
 	if err := decoder.Decode(&inMdb); err != nil {
-		return nil, errors.New("Error decoding: " + err.Error())
+		return nil, errors.New("error decoding: " + err.Error())
 	}
 	for _, hit := range inMdb.Hits.Hits {
 		var outMachine mdb.Machine
