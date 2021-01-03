@@ -16,7 +16,7 @@ import (
 func testBandwidthFromServerSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := testBandwidthFromServer(); err != nil {
-		return fmt.Errorf("Error testing bandwidth: %s", err)
+		return fmt.Errorf("error testing bandwidth: %s", err)
 	}
 	return nil
 }
@@ -24,7 +24,7 @@ func testBandwidthFromServerSubcommand(args []string,
 func testBandwidthToServerSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := testBandwidthToServer(); err != nil {
-		return fmt.Errorf("Error testing bandwidth: %s", err)
+		return fmt.Errorf("error testing bandwidth: %s", err)
 	}
 	return nil
 }

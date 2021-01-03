@@ -13,7 +13,7 @@ import (
 func addObjectsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := addObjects(fmt.Sprintf("%s:%d",
 		*objectServerHostname, *objectServerPortNum), args); err != nil {
-		return fmt.Errorf("Error adding objects hash: %s", err)
+		return fmt.Errorf("error adding objects hash: %s", err)
 	}
 	return nil
 }
