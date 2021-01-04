@@ -16,7 +16,7 @@ func fetchSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
 	if err := fetch(srpcClient, args[0]); err != nil {
-		return fmt.Errorf("Error fetching: %s", err)
+		return fmt.Errorf("error fetching: %s", err)
 	}
 	return nil
 }

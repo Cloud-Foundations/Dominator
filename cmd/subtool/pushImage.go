@@ -40,7 +40,7 @@ func pushImageSubcommand(args []string, logger log.DebugLogger) error {
 	defer srpcClient.Close()
 	showTimeTaken(startTime)
 	if err := pushImage(srpcClient, args[0]); err != nil {
-		return fmt.Errorf("Error pushing image: %s: %s", args[0], err)
+		return fmt.Errorf("error pushing image: %s: %s", args[0], err)
 	}
 	return nil
 }

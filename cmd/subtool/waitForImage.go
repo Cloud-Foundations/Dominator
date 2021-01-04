@@ -15,7 +15,7 @@ func waitForImageSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClientRetry(logger)
 	defer srpcClient.Close()
 	if err := waitForImage(srpcClient, args[0], logger); err != nil {
-		return fmt.Errorf("Error waiting for image: %s: %s", args[0], err)
+		return fmt.Errorf("error waiting for image: %s: %s", args[0], err)
 	}
 	return nil
 }

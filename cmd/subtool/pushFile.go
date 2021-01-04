@@ -18,7 +18,7 @@ func pushFileSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
 	if err := pushFile(srpcClient, args[0], args[1]); err != nil {
-		return fmt.Errorf("Error pushing file: %s", err)
+		return fmt.Errorf("error pushing file: %s", err)
 	}
 	return nil
 }

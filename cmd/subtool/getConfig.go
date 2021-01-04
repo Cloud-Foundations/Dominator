@@ -12,7 +12,7 @@ func getConfigSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
 	if err := getConfig(srpcClient); err != nil {
-		return fmt.Errorf("Error getting config: %s", err)
+		return fmt.Errorf("error getting config: %s", err)
 	}
 	return nil
 }

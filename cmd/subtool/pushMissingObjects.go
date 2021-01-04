@@ -18,7 +18,7 @@ func pushMissingObjectsSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClientRetry(logger)
 	defer srpcClient.Close()
 	if err := pushMissingObjects(srpcClient, args[0]); err != nil {
-		return fmt.Errorf("Error pushing missing objects: %s: %s", args[0], err)
+		return fmt.Errorf("error pushing missing objects: %s: %s", args[0], err)
 	}
 	return nil
 }
