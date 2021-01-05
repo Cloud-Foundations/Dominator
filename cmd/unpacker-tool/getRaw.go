@@ -13,7 +13,7 @@ import (
 
 func getRawSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getRaw(getClient(), args[0], logger); err != nil {
-		return fmt.Errorf("Error getting raw data: %s", err)
+		return fmt.Errorf("error getting raw data: %s", err)
 	}
 	return nil
 }

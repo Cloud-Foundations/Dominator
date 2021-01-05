@@ -10,7 +10,7 @@ import (
 func associateSubcommand(args []string, logger log.DebugLogger) error {
 	err := client.AssociateStreamWithDevice(getClient(), args[0], args[1])
 	if err != nil {
-		return fmt.Errorf("Error associating: %s", err)
+		return fmt.Errorf("error associating: %s", err)
 	}
 	return nil
 }

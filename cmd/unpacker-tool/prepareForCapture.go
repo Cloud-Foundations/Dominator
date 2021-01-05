@@ -9,7 +9,7 @@ import (
 
 func prepareForCaptureSubcommand(args []string, logger log.DebugLogger) error {
 	if err := client.PrepareForCapture(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error preparing for capture: %s", err)
+		return fmt.Errorf("error preparing for capture: %s", err)
 	}
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 
 func prepareForUnpackSubcommand(args []string, logger log.DebugLogger) error {
 	if err := prepareForUnpack(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error preparing for unpack: %s", err)
+		return fmt.Errorf("error preparing for unpack: %s", err)
 	}
 	return nil
 }
