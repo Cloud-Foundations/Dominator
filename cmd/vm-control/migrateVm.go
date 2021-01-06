@@ -14,7 +14,7 @@ import (
 
 func migrateVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := migrateVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error migrating VM: %s", err)
+		return fmt.Errorf("error migrating VM: %s", err)
 	}
 	return nil
 }

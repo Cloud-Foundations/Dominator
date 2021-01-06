@@ -84,7 +84,7 @@ func commitVm(client *srpc.Client, ipAddress net.IP) error {
 
 func importLocalVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := importLocalVm(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error importing VM: %s", err)
+		return fmt.Errorf("error importing VM: %s", err)
 	}
 	return nil
 }

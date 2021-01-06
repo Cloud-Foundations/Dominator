@@ -13,7 +13,7 @@ import (
 
 func copyVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := copyVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error copying VM: %s", err)
+		return fmt.Errorf("error copying VM: %s", err)
 	}
 	return nil
 }

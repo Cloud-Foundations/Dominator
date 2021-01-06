@@ -12,7 +12,7 @@ import (
 func changeVmConsoleTypeSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := changeVmConsoleType(args[0], logger); err != nil {
-		return fmt.Errorf("Error changing VM console type: %s", err)
+		return fmt.Errorf("error changing VM console type: %s", err)
 	}
 	return nil
 }

@@ -26,7 +26,7 @@ type vmExporterExec struct {
 
 func exportLocalVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := exportLocalVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error exporting VM: %s", err)
+		return fmt.Errorf("error exporting VM: %s", err)
 	}
 	return nil
 }

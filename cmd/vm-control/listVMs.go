@@ -12,7 +12,7 @@ import (
 
 func listVMsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := listVMs(logger); err != nil {
-		return fmt.Errorf("Error listing VMs: %s", err)
+		return fmt.Errorf("error listing VMs: %s", err)
 	}
 	return nil
 }

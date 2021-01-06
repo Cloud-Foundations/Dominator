@@ -11,7 +11,7 @@ import (
 
 func restoreVmImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := restoreVmImage(args[0], logger); err != nil {
-		return fmt.Errorf("Error restoring VM image: %s", err)
+		return fmt.Errorf("error restoring VM image: %s", err)
 	}
 	return nil
 }

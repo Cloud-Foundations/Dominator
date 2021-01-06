@@ -145,7 +145,7 @@ func encodeJsonToVmSaver(saver vmSaver, filename string,
 
 func saveVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := saveVm(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error saving VM: %s", err)
+		return fmt.Errorf("error saving VM: %s", err)
 	}
 	return nil
 }

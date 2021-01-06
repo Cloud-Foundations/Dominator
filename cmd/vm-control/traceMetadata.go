@@ -12,7 +12,7 @@ import (
 
 func traceVmMetadataSubcommand(args []string, logger log.DebugLogger) error {
 	if err := traceVmMetadata(args[0], logger); err != nil {
-		return fmt.Errorf("Error tracing VM metadata: %s", err)
+		return fmt.Errorf("error tracing VM metadata: %s", err)
 	}
 	return nil
 }

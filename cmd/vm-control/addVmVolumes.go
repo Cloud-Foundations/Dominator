@@ -10,7 +10,7 @@ import (
 
 func addVmVolumesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := addVmVolumes(args[0], logger); err != nil {
-		return fmt.Errorf("Error adding VM volumes: %s", err)
+		return fmt.Errorf("error adding VM volumes: %s", err)
 	}
 	return nil
 }

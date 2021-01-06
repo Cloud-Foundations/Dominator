@@ -11,7 +11,7 @@ import (
 
 func stopVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := stopVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error stopping VM: %s", err)
+		return fmt.Errorf("error stopping VM: %s", err)
 	}
 	return nil
 }

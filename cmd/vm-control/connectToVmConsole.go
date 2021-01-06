@@ -11,7 +11,7 @@ import (
 func connectToVmConsoleSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := connectToVmConsole(args[0], logger); err != nil {
-		return fmt.Errorf("Error connecting to VM console: %s", err)
+		return fmt.Errorf("error connecting to VM console: %s", err)
 	}
 	return nil
 }

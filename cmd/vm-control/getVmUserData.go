@@ -45,7 +45,7 @@ func callGetVmUserData(client *srpc.Client,
 
 func getVmUserDataSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getVmUserData(args[0], logger); err != nil {
-		return fmt.Errorf("Error getting VM user data: %s", err)
+		return fmt.Errorf("error getting VM user data: %s", err)
 	}
 	return nil
 }

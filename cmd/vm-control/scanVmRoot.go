@@ -14,7 +14,7 @@ import (
 
 func scanVmRootSubcommand(args []string, logger log.DebugLogger) error {
 	if err := scanVmRoot(args[0], logger); err != nil {
-		return fmt.Errorf("Error scanning VM root: %s", err)
+		return fmt.Errorf("error scanning VM root: %s", err)
 	}
 	return nil
 }

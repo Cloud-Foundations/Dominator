@@ -14,7 +14,7 @@ import (
 
 func replaceVmImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := replaceVmImage(args[0], logger); err != nil {
-		return fmt.Errorf("Error replacing VM image: %s", err)
+		return fmt.Errorf("error replacing VM image: %s", err)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 
 func changeVmTagsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := changeVmTags(args[0], logger); err != nil {
-		return fmt.Errorf("Error changing VM tags: %s", err)
+		return fmt.Errorf("error changing VM tags: %s", err)
 	}
 	return nil
 }

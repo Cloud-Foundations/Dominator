@@ -34,7 +34,7 @@ func init() {
 
 func createVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := createVm(logger); err != nil {
-		return fmt.Errorf("Error creating VM: %s", err)
+		return fmt.Errorf("error creating VM: %s", err)
 	}
 	return nil
 }

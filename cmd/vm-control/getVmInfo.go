@@ -14,7 +14,7 @@ import (
 
 func getVmInfoSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getVmInfo(args[0], logger); err != nil {
-		return fmt.Errorf("Error getting VM info: %s", err)
+		return fmt.Errorf("error getting VM info: %s", err)
 	}
 	return nil
 }

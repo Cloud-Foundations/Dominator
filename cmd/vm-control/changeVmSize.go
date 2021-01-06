@@ -11,14 +11,14 @@ import (
 
 func changeVmCPUsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := changeVmSize(args[0], 0, *milliCPUs, logger); err != nil {
-		return fmt.Errorf("Error changing VM CPUs: %s", err)
+		return fmt.Errorf("error changing VM CPUs: %s", err)
 	}
 	return nil
 }
 
 func changeVmMemorySubcommand(args []string, logger log.DebugLogger) error {
 	if err := changeVmSize(args[0], uint64(memory>>20), 0, logger); err != nil {
-		return fmt.Errorf("Error changing VM memory: %s", err)
+		return fmt.Errorf("error changing VM memory: %s", err)
 	}
 	return nil
 }

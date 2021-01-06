@@ -96,7 +96,7 @@ func readFromVmRestorer(restorer vmRestorer, filename string) ([]byte, error) {
 
 func restoreVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := restoreVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error restoring VM: %s", err)
+		return fmt.Errorf("error restoring VM: %s", err)
 	}
 	return nil
 }
