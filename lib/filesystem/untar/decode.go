@@ -76,7 +76,7 @@ func (decoderData *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
 	header *tar.Header) error {
 	parentDir, ok := decoderData.directoryTable[path.Dir(header.Name)]
 	if !ok {
-		return fmt.Errorf("No parent directory found for: %s", header.Name)
+		return fmt.Errorf("no parent directory found for: %s", header.Name)
 	}
 	leafName := path.Base(header.Name)
 	if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeRegA {
@@ -95,7 +95,7 @@ func (decoderData *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
 	} else if header.Typeflag == tar.TypeFifo {
 		return decoderData.addSpecialFile(header, parentDir, leafName)
 	} else {
-		return fmt.Errorf("Unsupported file type: %v", header.Typeflag)
+		return fmt.Errorf("unsupported file type: %v", header.Typeflag)
 	}
 }
 
