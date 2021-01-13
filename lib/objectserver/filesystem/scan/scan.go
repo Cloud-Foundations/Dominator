@@ -12,7 +12,7 @@ import (
 
 func scanTree(baseDir string, registerFunc func(hash.Hash, uint64)) error {
 	if fi, err := os.Stat(baseDir); err != nil {
-		return fmt.Errorf("Cannot stat: %s: %s\n", baseDir, err)
+		return fmt.Errorf("cannot stat: %s: %s\n", baseDir, err)
 	} else {
 		if !fi.IsDir() {
 			return fmt.Errorf("%s is not a directory\n", baseDir)
