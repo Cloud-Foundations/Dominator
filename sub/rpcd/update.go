@@ -51,7 +51,7 @@ func (t *rpcType) getUpdateLock() error {
 	}
 	fs := t.fileSystemHistory.FileSystem()
 	if fs == nil {
-		return errors.New("No file-system history yet")
+		return errors.New("no file-system history yet")
 	}
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
