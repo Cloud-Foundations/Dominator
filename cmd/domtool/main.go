@@ -79,7 +79,7 @@ func doMain() int {
 	clientName := fmt.Sprintf("%s:%d", *domHostname, *domPortNum)
 	client, err := srpc.DialHTTP("tcp", clientName, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error dialing\t%s\n", err)
+		fmt.Fprintf(os.Stderr, "Error dialing: %s\n", err)
 		os.Exit(1)
 	}
 	dominatorSrpcClient = client
