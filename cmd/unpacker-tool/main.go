@@ -77,7 +77,7 @@ func doMain() int {
 		*imageUnpackerHostname, *imageUnpackerPortNum)
 	client, err := srpc.DialHTTP("tcp", clientName, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error dialing\t%s\n", err)
+		fmt.Fprintf(os.Stderr, "Error dialing: %s\n", err)
 		return 1
 	}
 	unpackerSrpcClient = client
