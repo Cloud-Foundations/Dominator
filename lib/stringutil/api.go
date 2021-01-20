@@ -16,6 +16,11 @@ type StringDuplicationStatistics struct {
 	UniqueStrings    uint64
 }
 
+// ConvertMapKeysToList will return a list of map keys.
+func ConvertMapKeysToList(mapData map[string]struct{}, doSort bool) []string {
+	return convertMapKeysToList(mapData, doSort)
+}
+
 // NewStringDeduplicator will create a StringDeduplicator which may be used to
 // eliminate duplicate string contents. It maintains an internal map of unique
 // strings. If lock is true then each method call will take an exclusive lock.
