@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -137,11 +137,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
 		fmt.Fprintln(writer, "</body>")
-		primaryOwners := make([]string, 0, len(primaryOwnersMap))
-		for primaryOwner := range primaryOwnersMap {
-			primaryOwners = append(primaryOwners, primaryOwner)
-		}
-		sort.Strings(primaryOwners)
+		primaryOwners := stringutil.ConvertMapKeysToList(primaryOwnersMap, true)
 		fmt.Fprintln(writer, "Filter by primary owner:<br>")
 		for _, primaryOwner := range primaryOwners {
 			fmt.Fprintf(writer,
