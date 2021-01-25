@@ -1,18 +1,14 @@
 package filter
 
 import (
-	"sort"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func (mf *MergeableFilter) exportFilter() *Filter {
 	if mf.filterLines == nil {
 		return nil // Sparse filter.
 	}
-	filterLines := make([]string, 0, len(mf.filterLines))
-	for filterLine := range mf.filterLines {
-		filterLines = append(filterLines, filterLine)
-	}
-	sort.Strings(filterLines)
+	filterLines := stringutil.ConvertMapKeysToList(mf.filterLines, true)
 	return &Filter{FilterLines: filterLines}
 }
 
