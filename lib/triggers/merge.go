@@ -2,6 +2,8 @@ package triggers
 
 import (
 	"sort"
+
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func (mt *MergeableTriggers) exportTriggers() *Triggers {
@@ -16,11 +18,7 @@ func (mt *MergeableTriggers) exportTriggers() *Triggers {
 	sort.Strings(serviceNames)
 	for _, service := range serviceNames {
 		trigger := mt.triggers[service]
-		matchLines := make([]string, 0, len(trigger.matchLines))
-		for matchLine := range trigger.matchLines {
-			matchLines = append(matchLines, matchLine)
-		}
-		sort.Strings(matchLines)
+		matchLines := stringutil.ConvertMapKeysToList(trigger.matchLines, true)
 		triggerList = append(triggerList, &Trigger{
 			MatchLines: matchLines,
 			Service:    service,
