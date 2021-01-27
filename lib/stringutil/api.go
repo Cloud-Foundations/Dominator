@@ -16,6 +16,12 @@ type StringDuplicationStatistics struct {
 	UniqueStrings    uint64
 }
 
+// ConvertListToMap will convert list entries to map keys. If makeIfEmpty is
+// true then a map is made for an empty list, otherwise nil is returned.
+func ConvertListToMap(list []string, makeIfEmpty bool) map[string]struct{} {
+	return convertListToMap(list, makeIfEmpty)
+}
+
 // ConvertMapKeysToList will return a list of map keys.
 func ConvertMapKeysToList(mapData map[string]struct{}, doSort bool) []string {
 	return convertMapKeysToList(mapData, doSort)
