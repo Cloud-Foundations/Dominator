@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
@@ -388,10 +389,7 @@ func (to *ownersType) merge(from *ownersType) {
 	if from == nil {
 		return
 	}
-	ownerGroups := make(map[string]struct{}, len(to.OwnerGroups))
-	for _, group := range to.OwnerGroups {
-		ownerGroups[group] = struct{}{}
-	}
+	ownerGroups := stringutil.ConvertListToMap(to.OwnerGroups, false)
 	changedOwnerGroups := false
 	for _, group := range from.OwnerGroups {
 		if _, ok := ownerGroups[group]; !ok {
@@ -402,10 +400,7 @@ func (to *ownersType) merge(from *ownersType) {
 	if changedOwnerGroups {
 		sort.Strings(to.OwnerGroups)
 	}
-	ownerUsers := make(map[string]struct{}, len(to.OwnerUsers))
-	for _, group := range to.OwnerUsers {
-		ownerUsers[group] = struct{}{}
-	}
+	ownerUsers := stringutil.ConvertListToMap(to.OwnerUsers, false)
 	changedOwnerUsers := false
 	for _, group := range from.OwnerUsers {
 		if _, ok := ownerUsers[group]; !ok {
