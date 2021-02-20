@@ -36,6 +36,7 @@ import (
 	objclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/rsync"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
@@ -418,10 +419,7 @@ func (m *Manager) becomePrimaryVmOwner(ipAddr net.IP,
 		}
 	}
 	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, user := range ownerUsers {
-		vm.ownerUsers[user] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -529,10 +527,7 @@ func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
 		ownerUsers = append(ownerUsers, user)
 	}
 	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, user := range ownerUsers {
-		vm.ownerUsers[user] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -715,10 +710,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		return err
 	}
 	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, username := range ownerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
 	vm.Volumes = vmInfo.Volumes
 	if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
 		return err
@@ -740,10 +732,6 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 		vm.cleanup()
 	}()
-	vm.ownerUsers = make(map[string]struct{}, len(vm.OwnerUsers))
-	for _, username := range vm.OwnerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		return err
 	}
@@ -837,10 +825,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}()
 	memoryError := tryAllocateMemory(request.MemoryInMiB)
 	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, username := range ownerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
@@ -1346,10 +1331,7 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	}
 	request.VmInfo.OwnerUsers = []string{authInfo.Username}
 	request.VmInfo.Uncommitted = true
-	volumeDirectories := make(map[string]struct{}, len(m.volumeDirectories))
-	for _, dirname := range m.volumeDirectories {
-		volumeDirectories[dirname] = struct{}{}
-	}
+	volumeDirectories := stringutil.ConvertListToMap(m.volumeDirectories, false)
 	volumes := make([]proto.Volume, 0, len(request.VolumeFilenames))
 	for index, filename := range request.VolumeFilenames {
 		dirname := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
@@ -1565,10 +1547,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 			hyperclient.StartVm(hypervisor, request.IpAddress, accessToken)
 		}
 	}()
-	vm.ownerUsers = make(map[string]struct{}, len(vm.OwnerUsers))
-	for _, username := range vm.OwnerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(vm.OwnerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		return err
 	}

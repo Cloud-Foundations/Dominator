@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/rpcclientpool"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/messages"
 	trimsg "github.com/Cloud-Foundations/tricorder/go/tricorder/messages"
@@ -133,10 +134,8 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.manager = manager
 		vmInfo.dirname = vmDirname
 		vmInfo.ipAddress = ipAddr
-		vmInfo.ownerUsers = make(map[string]struct{}, len(vmInfo.OwnerUsers))
-		for _, username := range vmInfo.OwnerUsers {
-			vmInfo.ownerUsers[username] = struct{}{}
-		}
+		vmInfo.ownerUsers = stringutil.ConvertListToMap(vmInfo.OwnerUsers,
+			false)
 		vmInfo.logger = prefixlogger.New(ipAddr+": ", manager.Logger)
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
