@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 )
@@ -45,12 +46,8 @@ func imageStreamsRealDecoder(reader io.Reader) (
 		return nil, err
 	}
 	for _, stream := range config.Streams {
-		if length := len(stream.BuilderUsers); length > 0 {
-			stream.builderUsers = make(map[string]struct{}, length)
-			for _, user := range stream.BuilderUsers {
-				stream.builderUsers[user] = struct{}{}
-			}
-		}
+		stream.builderUsers = stringutil.ConvertListToMap(stream.BuilderUsers,
+			false)
 	}
 	return &config, nil
 }
