@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 var sysfsDirectory = "/sys/block"
@@ -76,11 +77,7 @@ func scanDevices() (map[string]struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	scannedDevices := make(map[string]struct{})
-	for _, name := range names {
-		scannedDevices[name] = struct{}{}
-	}
-	return scannedDevices, nil
+	return stringutil.ConvertListToMap(names, true), nil
 }
 
 func updateDeviceSize(device *deviceInfo) error {
