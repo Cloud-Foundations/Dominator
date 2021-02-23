@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/net"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
@@ -139,10 +140,7 @@ func registerName(name string, rcvr interface{},
 	if err != nil {
 		return err
 	}
-	publicMethods := make(map[string]struct{}, len(options.PublicMethods))
-	for _, methodName := range options.PublicMethods {
-		publicMethods[methodName] = struct{}{}
-	}
+	publicMethods := stringutil.ConvertListToMap(options.PublicMethods, false)
 	for index := 0; index < typeOfReceiver.NumMethod(); index++ {
 		method := typeOfReceiver.Method(index)
 		if method.PkgPath != "" { // Method must be exported.
