@@ -9,6 +9,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/scanner"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -81,12 +82,8 @@ func Setup(subConfiguration proto.Configuration,
 				"Poll": 1,
 			}),
 	}
-	if len(subConfiguration.OwnerUsers) > 0 {
-		rpcObj.ownerUsers = make(map[string]struct{})
-		for _, user := range subConfiguration.OwnerUsers {
-			rpcObj.ownerUsers[user] = struct{}{}
-		}
-	}
+	rpcObj.ownerUsers = stringutil.ConvertListToMap(subConfiguration.OwnerUsers,
+		false)
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
