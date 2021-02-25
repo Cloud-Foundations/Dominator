@@ -231,6 +231,7 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 		bufrw: bufio.NewReadWriter(bufio.NewReader(dataConn),
 			bufio.NewWriter(dataConn)),
 		conn:        dataConn,
+		connType:    "unknown",
 		localAddr:   rawConn.LocalAddr().String(),
 		isEncrypted: isEncrypted,
 		makeCoder:   makeCoder,
@@ -238,6 +239,10 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 	}
 	if tcpConn, ok := rawConn.(libnet.TCPConn); ok {
 		client.tcpConn = tcpConn
+		client.connType = "TCP"
+	}
+	if isEncrypted {
+		client.connType += "/TLS"
 	}
 	if attemptTransportUpgrade {
 		if _, err := client.localAttemptUpgradeToUnix(); err != nil {
@@ -245,10 +250,15 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 			return nil, err
 		}
 		if client.conn != dataConn {
+			logger.Debugf(0,
+				"transport type: %s did not replace buffer, fixing\n",
+				client.connType)
 			client.bufrw = bufio.NewReadWriter(bufio.NewReader(client.conn),
 				bufio.NewWriter(client.conn))
 		}
 	}
+	logger.Debugf(0, "made %s connection to: %s\n",
+		client.connType, client.remoteAddr)
 	return client, nil
 }
 

@@ -188,6 +188,7 @@ func (*builtinReceiver) LocalUpgradeToUnix(conn *Conn) error {
 	conn.ReadWriter = bufio.NewReadWriter(
 		bufio.NewReaderSize(newConn, unixBufferSize),
 		bufio.NewWriterSize(newConn, unixBufferSize))
+	logger.Debugf(0, "upgraded connection from: %s to Unix\n", conn.remoteAddr)
 	return nil
 }
 
@@ -273,6 +274,7 @@ func (client *Client) localAttemptUpgradeToUnix() (bool, error) {
 	doClose = false
 	client.conn.Close()
 	client.conn = newConn
+	client.connType = "Unix"
 	client.tcpConn = nil
 	client.bufrw = bufio.NewReadWriter(
 		bufio.NewReaderSize(newConn, unixBufferSize),
