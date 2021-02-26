@@ -245,11 +245,12 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 		client.connType += "/TLS"
 	}
 	if attemptTransportUpgrade {
+		oldBufrw := client.bufrw
 		if _, err := client.localAttemptUpgradeToUnix(); err != nil {
 			client.Close()
 			return nil, err
 		}
-		if client.conn != dataConn {
+		if client.conn != dataConn && client.bufrw == oldBufrw {
 			logger.Debugf(0,
 				"transport type: %s did not replace buffer, fixing\n",
 				client.connType)
