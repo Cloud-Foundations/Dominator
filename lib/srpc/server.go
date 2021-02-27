@@ -36,7 +36,7 @@ const (
 	methodTypeRequestReply
 )
 
-type builtinReceiver struct{}
+type builtinReceiver struct{} // NOTE: GrantMethod allows all access.
 
 type methodWrapper struct {
 	methodType                    int
@@ -174,6 +174,11 @@ func registerName(name string, rcvr interface{},
 	}
 	receivers[name] = receiver
 	return nil
+}
+
+func (*builtinReceiver) GrantMethod(
+	serviceMethod string, authInfo *AuthInformation) bool {
+	return true
 }
 
 func getMethod(methodType reflect.Type, fn reflect.Value) *methodWrapper {
