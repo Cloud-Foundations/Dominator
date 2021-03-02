@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb/mdbd"
 	objectserver "github.com/Cloud-Foundations/Dominator/lib/objectserver/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -94,6 +95,7 @@ func main() {
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	if err := setupserver.SetupTls(); err != nil {
 		if *permitInsecureMode {
 			logger.Println(err)
