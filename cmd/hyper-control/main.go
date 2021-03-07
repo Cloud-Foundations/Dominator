@@ -163,6 +163,7 @@ func doMain() int {
 		return 2
 	}
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := loadCerts(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
