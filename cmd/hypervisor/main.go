@@ -19,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -109,6 +110,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	if err := setupserver.SetupTls(); err != nil {
 		logger.Fatalln(err)
 	}
