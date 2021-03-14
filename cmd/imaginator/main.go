@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -56,6 +57,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	if umask := syscall.Umask(022); umask != 022 {
 		// Since we can't cleanly fix umask for all threads, fail instead.
 		logger.Fatalf("Umask must be 022, not 0%o\n", umask)
