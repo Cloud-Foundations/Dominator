@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -71,6 +72,7 @@ func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
 	logBuffer := logbuf.NewWithOptions(options)
 	logger := debuglogger.New(stdlog.New(logBuffer, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
+	srpc.SetDefaultLogger(logger)
 	return logBuffer, logger
 }
 
@@ -88,7 +90,6 @@ func install(updateHwClock bool, logFlusher flusher,
 	if err != nil {
 		return nil, err
 	}
-
 	if !*skipStorage {
 		rebooter, err = configureStorage(*machineInfo, logger)
 		if err != nil {
