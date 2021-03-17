@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -161,6 +162,7 @@ func main() {
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	// We have to have inputs.
 	if *sourcesFile == "" {
 		printUsage()
