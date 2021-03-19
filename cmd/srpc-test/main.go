@@ -49,6 +49,7 @@ func main() {
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	if err := doMain(logger); err != nil {
 		logger.Fatalln(err)
 	}
