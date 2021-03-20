@@ -26,6 +26,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/memstats"
 	"github.com/Cloud-Foundations/Dominator/lib/netspeed"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
@@ -276,6 +277,7 @@ func main() {
 	}
 	runtime.GOMAXPROCS(int(*maxThreads))
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	if err := setupserver.SetupTls(); err != nil {
 		if *permitInsecureMode {
 			logger.Println(err)
