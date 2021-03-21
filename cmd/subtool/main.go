@@ -147,6 +147,7 @@ func doMain() int {
 		return 2
 	}
 	logger = cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if *triggersFile != "" && *triggersString != "" {
 		logger.Fatalln(os.Stderr,
 			"Cannot specify both -triggersFile and -triggersString")
