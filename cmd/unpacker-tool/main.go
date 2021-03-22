@@ -69,6 +69,7 @@ func doMain() int {
 		return 2
 	}
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := setupclient.SetupTls(true); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
