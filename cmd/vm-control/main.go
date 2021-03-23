@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net/rrdialer"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -190,6 +191,7 @@ func doMain() int {
 		return 3
 	}
 	logger = cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := setupclient.SetupTls(false); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
