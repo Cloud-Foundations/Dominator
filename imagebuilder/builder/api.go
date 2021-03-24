@@ -184,7 +184,7 @@ func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(client, manifestDir, rootDir,
+	_, err := unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
 		bindMounts, true, nil, buildLog)
 	return err
 }

@@ -259,7 +259,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
-		rootDir, bindMounts, false, envGetter, buildLog)
+		request.MaxSourceAge, rootDir, bindMounts, false, envGetter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func buildTreeFromManifest(client *srpc.Client, manifestDir string,
 	if err != nil {
 		return "", err
 	}
-	_, err = unpackImageAndProcessManifest(client, manifestDir, rootDir,
+	_, err = unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
 		bindMounts, true, envGetter, buildLog)
 	if err != nil {
 		os.RemoveAll(rootDir)
@@ -427,7 +427,7 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 }
 
 func unpackImage(client *srpc.Client, streamName string,
-	maxSourceAge, expiresIn time.Duration, rootDir string,
+	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
 	imageName, sourceImage, err := getLatestImage(client, streamName, buildLog)
 	if err != nil {
@@ -437,7 +437,7 @@ func unpackImage(client *srpc.Client, streamName string,
 		return nil, errors.New(errNoSourceImage + streamName)
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		return nil, errors.New(errNoSourceImage + streamName)
+		return nil, errors.New(errTooOldSourceImage + streamName)
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()

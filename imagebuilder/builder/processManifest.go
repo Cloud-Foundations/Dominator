@@ -90,8 +90,9 @@ func makeMountPoints(rootDir string, bindMounts []string,
 }
 
 func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
-	rootDir string, bindMounts []string, applyFilter bool,
-	envGetter environmentGetter, buildLog io.Writer) (manifestType, error) {
+	maxSourceAge time.Duration, rootDir string, bindMounts []string,
+	applyFilter bool, envGetter environmentGetter,
+	buildLog io.Writer) (manifestType, error) {
 	manifestFile := filepath.Join(manifestDir, "manifest")
 	var manifestConfig manifestConfigType
 	if err := json.ReadFromFile(manifestFile, &manifestConfig); err != nil {
@@ -104,8 +105,8 @@ func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 			return envGetter.getenv()[name]
 		})
 	}
-	sourceImageInfo, err := unpackImage(client, sourceImageName,
-		0, 0, rootDir, buildLog)
+	sourceImageInfo, err := unpackImage(client, sourceImageName, maxSourceAge,
+		rootDir, buildLog)
 	if err != nil {
 		return manifestType{},
 			errors.New("error unpacking image: " + err.Error())
