@@ -23,3 +23,10 @@ type BuildImageResponse struct {
 	BuildLog    []byte
 	ErrorString string
 }
+
+type GetDirectedGraphRequest struct{}
+
+type GetDirectedGraphResponse struct {
+	GraphvizDot []byte
+	Error       string
+}
