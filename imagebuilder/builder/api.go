@@ -142,6 +142,10 @@ func (b *Builder) GetCurrentBuildLog(streamName string) ([]byte, error) {
 	return b.getCurrentBuildLog(streamName)
 }
 
+func (b *Builder) GetDirectedGraph() ([]byte, error) {
+	return b.getDirectedGraph()
+}
+
 func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
 }

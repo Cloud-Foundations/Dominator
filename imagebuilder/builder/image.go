@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -195,6 +196,37 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	}
 	doCleanup = false
 	return manifestRoot, gitInfo, nil
+}
+
+func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
+	string, string, *gitInfoType, []byte, *manifestConfigType, error) {
+	manifestDirectory, gitInfo, err := stream.getManifest(stream.builder,
+		stream.name, "", nil, buildLog)
+	if err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	doRemove := true
+	defer func() {
+		if doRemove {
+			os.RemoveAll(manifestDirectory)
+		}
+	}()
+	manifestFilename := filepath.Join(manifestDirectory, "manifest")
+	manifestBytes, err := ioutil.ReadFile(manifestFilename)
+	if err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	var manifest manifestConfigType
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	sourceImageName := os.Expand(manifest.SourceImage,
+		func(name string) string {
+			return stream.getenv()[name]
+		})
+	doRemove = false
+	return manifestDirectory, sourceImageName, gitInfo, manifestBytes,
+		&manifest, nil
 }
 
 func getTreeSize(dirname string) (uint64, error) {

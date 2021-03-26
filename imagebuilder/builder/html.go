@@ -2,10 +2,8 @@ package builder
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -181,8 +179,8 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 	fmt.Fprintf(writer, "Manifest Directory: <code>%s</code><br>\n",
 		stream.ManifestDirectory)
 	buildLog := new(bytes.Buffer)
-	manifestDirectory, gitInfo, err := stream.getManifest(stream.builder,
-		stream.name, "", nil, buildLog)
+	manifestDirectory, sourceImageName, gitInfo, manifestBytes, _, err :=
+		stream.getSourceImage(stream.builder, buildLog)
 	if err != nil {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
 		return
@@ -193,21 +191,6 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 			"Latest commit on branch: <code>%s</code>: <code>%s</code>s<br>\n",
 			gitInfo.branch, gitInfo.commitId)
 	}
-	manifestFilename := path.Join(manifestDirectory, "manifest")
-	manifestBytes, err := ioutil.ReadFile(manifestFilename)
-	if err != nil {
-		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
-		return
-	}
-	var manifest manifestConfigType
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
-		return
-	}
-	sourceImageName := os.Expand(manifest.SourceImage,
-		func(name string) string {
-			return stream.getenv()[name]
-		})
 	if stream.builder.getHtmlWriter(sourceImageName) == nil {
 		fmt.Fprintf(writer, "SourceImage: <code>%s</code><br>\n",
 			sourceImageName)
