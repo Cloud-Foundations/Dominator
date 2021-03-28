@@ -45,3 +45,16 @@ func buildImage(client *srpc.Client, request proto.BuildImageRequest,
 		}
 	}
 }
+
+func getDirectedGraph(client *srpc.Client) ([]byte, error) {
+	request := proto.GetDirectedGraphRequest{}
+	var reply proto.GetDirectedGraphResponse
+	err := client.RequestReply("Imaginator.GetDirectedGraph", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if reply.Error != "" {
+		return nil, errors.New(reply.Error)
+	}
+	return reply.GraphvizDot, nil
+}
