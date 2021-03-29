@@ -63,6 +63,7 @@ var subcommands = []commands.Command{
 		buildRawFromManifestSubcommand},
 	{"build-tree-from-manifest", "manifestDir", 1, 1,
 		buildTreeFromManifestSubcommand},
+	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
 	{"process-manifest", "rootDir", 2, 2, processManifestSubcommand},
 }
 
