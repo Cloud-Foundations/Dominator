@@ -29,6 +29,7 @@ func StartServer(portNum uint, builderObj *builder.Builder,
 	myState := state{builderObj}
 	html.HandleFunc("/", myState.statusHandler)
 	html.HandleFunc("/showCurrentBuildLog", myState.showCurrentBuildLogHandler)
+	html.HandleFunc("/showDirectedGraph", myState.showDirectedGraphHandler)
 	html.HandleFunc("/showImageStream", myState.showImageStreamHandler)
 	html.HandleFunc("/showImageStreams", myState.showImageStreamsHandler)
 	html.HandleFunc("/showLastBuildLog", myState.showLastBuildLogHandler)
