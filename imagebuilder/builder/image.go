@@ -97,41 +97,15 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	}
 	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
 		stream.ManifestUrl, gitBranch)
-	err = runCommand(buildLog, "", "git", "init", manifestRoot)
-	if err != nil {
-		return "", nil, err
-	}
-	err = runCommand(buildLog, manifestRoot, "git", "remote", "add", "origin",
-		manifestUrl)
-	if err != nil {
-		return "", nil, err
-	}
-	err = runCommand(buildLog, manifestRoot, "git", "config",
-		"core.sparsecheckout", "true")
-	if err != nil {
-		return "", nil, err
-	}
-	directorySelector := "*\n"
+	var patterns []string
 	if manifestDirectory != "" {
-		directorySelector = manifestDirectory + "/*\n"
-	}
-	err = ioutil.WriteFile(
-		filepath.Join(manifestRoot, ".git", "info", "sparse-checkout"),
-		[]byte(directorySelector), 0644)
-	if err != nil {
-		return "", nil, err
+		patterns = append(patterns, manifestDirectory+"/*\n")
 	}
 	startTime := time.Now()
-	err = runCommand(buildLog, manifestRoot, "git", "pull", "--depth=1",
-		"origin", gitBranch)
+	err = gitShallowClone(manifestRoot, manifestUrl, gitBranch, patterns,
+		buildLog)
 	if err != nil {
 		return "", nil, err
-	}
-	if gitBranch != "master" {
-		err = runCommand(buildLog, manifestRoot, "git", "checkout", gitBranch)
-		if err != nil {
-			return "", nil, err
-		}
 	}
 	loadTime := time.Since(startTime)
 	repoSize, err := getTreeSize(manifestRoot)
