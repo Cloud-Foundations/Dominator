@@ -26,6 +26,7 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<h1>imaginator image stream relationships</h1>")
 	fmt.Fprintln(writer, "</center>")
 	s.writeDirectedGraph(writer)
+	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
 }
@@ -42,6 +43,7 @@ func (s state) writeDirectedGraph(writer io.Writer) {
 	cmd.Stderr = writer
 	err = cmd.Run()
 	if err == nil {
+		fmt.Fprintln(writer, "<p>")
 		return
 	}
 	fmt.Fprintf(writer, "error rendering graph: %s<br>\n", err)
