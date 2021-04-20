@@ -64,6 +64,13 @@ type manifestConfigType struct {
 	*filter.Filter
 }
 
+// manifestLocationType contains the expanded location of a manifest. These
+// data may include secrets (i.e. username and password).
+type manifestLocationType struct {
+	directory string
+	url       string
+}
+
 type manifestType struct {
 	filter          *filter.Filter
 	sourceImageInfo *sourceImageInfoType

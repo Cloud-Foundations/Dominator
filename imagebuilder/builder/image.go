@@ -56,13 +56,21 @@ func (stream *imageStreamType) getenv() map[string]string {
 	return envTable
 }
 
+func (stream *imageStreamType) getManifestLocation(b *Builder,
+	variables map[string]string) manifestLocationType {
+	variableFunc := b.getVariableFunc(stream.getenv(), variables)
+	return manifestLocationType{
+		directory: os.Expand(stream.ManifestDirectory, variableFunc),
+		url:       os.Expand(stream.ManifestUrl, variableFunc),
+	}
+}
+
 func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	gitBranch string, variables map[string]string,
 	buildLog io.Writer) (string, *gitInfoType, error) {
 	if gitBranch == "" {
 		gitBranch = "master"
 	}
-	variableFunc := b.getVariableFunc(stream.getenv(), variables)
 	manifestRoot, err := makeTempDirectory("",
 		strings.Replace(streamName, "/", "_", -1)+".manifest")
 	if err != nil {
@@ -74,9 +82,8 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 			os.RemoveAll(manifestRoot)
 		}
 	}()
-	manifestDirectory := os.Expand(stream.ManifestDirectory, variableFunc)
-	manifestUrl := os.Expand(stream.ManifestUrl, variableFunc)
-	if parsedUrl, err := url.Parse(manifestUrl); err == nil {
+	manifestLocation := stream.getManifestLocation(b, variables)
+	if parsedUrl, err := url.Parse(manifestLocation.url); err == nil {
 		if parsedUrl.Scheme == "dir" {
 			if parsedUrl.Path[0] != '/' {
 				return "", nil, fmt.Errorf("missing leading slash: %s",
@@ -86,7 +93,8 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 				return "", nil,
 					fmt.Errorf("branch: %s is not master", gitBranch)
 			}
-			sourceTree := filepath.Join(parsedUrl.Path, manifestDirectory)
+			sourceTree := filepath.Join(parsedUrl.Path,
+				manifestLocation.directory)
 			fmt.Fprintf(buildLog, "Copying manifest tree: %s\n", sourceTree)
 			if err := fsutil.CopyTree(manifestRoot, sourceTree); err != nil {
 				return "", nil, fmt.Errorf("error copying manifest: %s", err)
@@ -98,12 +106,12 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
 		stream.ManifestUrl, gitBranch)
 	var patterns []string
-	if manifestDirectory != "" {
-		patterns = append(patterns, manifestDirectory+"/*\n")
+	if manifestLocation.directory != "" {
+		patterns = append(patterns, manifestLocation.directory+"/*\n")
 	}
 	startTime := time.Now()
-	err = gitShallowClone(manifestRoot, manifestUrl, gitBranch, patterns,
-		buildLog)
+	err = gitShallowClone(manifestRoot, manifestLocation.url, gitBranch,
+		patterns, buildLog)
 	if err != nil {
 		return "", nil, err
 	}
@@ -133,9 +141,10 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	if err := os.RemoveAll(gitDirectory); err != nil {
 		return "", nil, err
 	}
-	if manifestDirectory != "" {
-		// Move manifestDirectory into manifestRoot, remove anything else.
-		err := os.Rename(filepath.Join(manifestRoot, manifestDirectory),
+	if manifestLocation.directory != "" {
+		// Move manifest directory into manifestRoot, remove anything else.
+		err := os.Rename(filepath.Join(manifestRoot,
+			manifestLocation.directory),
 			gitDirectory)
 		if err != nil {
 			return "", nil, err
