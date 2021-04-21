@@ -56,9 +56,20 @@ func (stream *imageStreamType) getenv() map[string]string {
 	return envTable
 }
 
+// getManifestLocation will expand variables and return the actual manifest
+// location. These data may include secrets (i.e. username and password).
+// If b is nil then secret variables are not expaned and thus the returned
+// data do not contain secrets but may be incorrect.
 func (stream *imageStreamType) getManifestLocation(b *Builder,
 	variables map[string]string) manifestLocationType {
-	variableFunc := b.getVariableFunc(stream.getenv(), variables)
+	var variableFunc func(string) string
+	if b == nil {
+		variableFunc = func(name string) string {
+			return stream.getenv()[name]
+		}
+	} else {
+		variableFunc = b.getVariableFunc(stream.getenv(), variables)
+	}
 	return manifestLocationType{
 		directory: os.Expand(stream.ManifestDirectory, variableFunc),
 		url:       os.Expand(stream.ManifestUrl, variableFunc),

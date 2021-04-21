@@ -176,10 +176,20 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		fmt.Fprintf(writer, "BuilderUsers: %s<br>\n",
 			strings.Join(stream.BuilderUsers, ", "))
 	}
+	manifestLocation := stream.getManifestLocation(nil, nil)
 	fmt.Fprintf(writer, "Manifest URL: <code>%s</code><br>\n",
 		stream.ManifestUrl)
+	if manifestLocation.url != stream.ManifestUrl {
+		fmt.Fprintf(writer, "Manifest URL (expanded): <code>%s</code><br>\n",
+			manifestLocation.url)
+	}
 	fmt.Fprintf(writer, "Manifest Directory: <code>%s</code><br>\n",
 		stream.ManifestDirectory)
+	if manifestLocation.directory != stream.ManifestDirectory {
+		fmt.Fprintf(writer,
+			"Manifest Directory (expanded): <code>%s</code><br>\n",
+			manifestLocation.directory)
+	}
 	buildLog := new(bytes.Buffer)
 	manifestDirectory, sourceImageName, gitInfo, manifestBytes, _, err :=
 		stream.getSourceImage(stream.builder, buildLog)
