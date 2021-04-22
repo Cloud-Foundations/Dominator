@@ -10,8 +10,6 @@ import (
 
 func gitShallowClone(manifestRoot, manifestUrl, gitBranch string,
 	patterns []string, buildLog io.Writer) error {
-	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
-		manifestUrl, gitBranch)
 	err := runCommand(buildLog, "", "git", "init", manifestRoot)
 	if err != nil {
 		return err
