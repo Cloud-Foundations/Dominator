@@ -118,7 +118,7 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		stream.ManifestUrl, gitBranch)
 	var patterns []string
 	if manifestLocation.directory != "" {
-		patterns = append(patterns, manifestLocation.directory+"/*\n")
+		patterns = append(patterns, manifestLocation.directory+"/*")
 	}
 	startTime := time.Now()
 	err = gitShallowClone(manifestRoot, manifestLocation.url, gitBranch,
