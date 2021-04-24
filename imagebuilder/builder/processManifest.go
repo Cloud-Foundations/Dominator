@@ -89,24 +89,37 @@ func makeMountPoints(rootDir string, bindMounts []string,
 	return retval, nil
 }
 
+// readManifestFile will read the manifest file in the manifest directory and
+// will apply variable expansion to the source image name using envGetter if not
+// nil.
+func readManifestFile(manifestDir string, envGetter environmentGetter) (
+	manifestConfigType, error) {
+	manifestFile := filepath.Join(manifestDir, "manifest")
+	var manifestConfig manifestConfigType
+	if err := json.ReadFromFile(manifestFile, &manifestConfig); err != nil {
+		return manifestConfigType{},
+			errors.New("error reading manifest file: " + err.Error())
+	}
+	if envGetter == nil {
+		return manifestConfig, nil
+	}
+	manifestConfig.SourceImage = os.Expand(manifestConfig.SourceImage,
+		func(name string) string {
+			return envGetter.getenv()[name]
+		})
+	return manifestConfig, nil
+}
+
 func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	maxSourceAge time.Duration, rootDir string, bindMounts []string,
 	applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer) (manifestType, error) {
-	manifestFile := filepath.Join(manifestDir, "manifest")
-	var manifestConfig manifestConfigType
-	if err := json.ReadFromFile(manifestFile, &manifestConfig); err != nil {
-		return manifestType{},
-			errors.New("error reading manifest file: " + err.Error())
+	manifestConfig, err := readManifestFile(manifestDir, envGetter)
+	if err != nil {
+		return manifestType{}, err
 	}
-	sourceImageName := manifestConfig.SourceImage
-	if envGetter != nil {
-		sourceImageName = os.Expand(sourceImageName, func(name string) string {
-			return envGetter.getenv()[name]
-		})
-	}
-	sourceImageInfo, err := unpackImage(client, sourceImageName, maxSourceAge,
-		rootDir, buildLog)
+	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
+		maxSourceAge, rootDir, buildLog)
 	if err != nil {
 		return manifestType{},
 			errors.New("error unpacking image: " + err.Error())
