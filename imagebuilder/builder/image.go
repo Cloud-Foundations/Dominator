@@ -94,25 +94,20 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		}
 	}()
 	manifestLocation := stream.getManifestLocation(b, variables)
-	if parsedUrl, err := url.Parse(manifestLocation.url); err == nil {
-		if parsedUrl.Scheme == "dir" {
-			if parsedUrl.Path[0] != '/' {
-				return "", nil, fmt.Errorf("missing leading slash: %s",
-					parsedUrl.Path)
-			}
-			if gitBranch != "master" {
-				return "", nil,
-					fmt.Errorf("branch: %s is not master", gitBranch)
-			}
-			sourceTree := filepath.Join(parsedUrl.Path,
-				manifestLocation.directory)
-			fmt.Fprintf(buildLog, "Copying manifest tree: %s\n", sourceTree)
-			if err := fsutil.CopyTree(manifestRoot, sourceTree); err != nil {
-				return "", nil, fmt.Errorf("error copying manifest: %s", err)
-			}
-			doCleanup = false
-			return manifestRoot, nil, nil
+	if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
+		return "", nil, err
+	} else if rootDir != "" {
+		if gitBranch != "master" {
+			return "", nil,
+				fmt.Errorf("branch: %s is not master", gitBranch)
 		}
+		sourceTree := filepath.Join(rootDir, manifestLocation.directory)
+		fmt.Fprintf(buildLog, "Copying manifest tree: %s\n", sourceTree)
+		if err := fsutil.CopyTree(manifestRoot, sourceTree); err != nil {
+			return "", nil, fmt.Errorf("error copying manifest: %s", err)
+		}
+		doCleanup = false
+		return manifestRoot, nil, nil
 	}
 	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
 		stream.ManifestUrl, gitBranch)
@@ -478,4 +473,17 @@ func unpackImage(client *srpc.Client, streamName string,
 		sourceImage.Filter,
 		sourceImage.Triggers,
 	}, nil
+}
+
+func urlToLocal(urlValue string) (string, error) {
+	if parsedUrl, err := url.Parse(urlValue); err == nil {
+		if parsedUrl.Scheme == "dir" {
+			if parsedUrl.Path[0] != '/' {
+				return "", fmt.Errorf("missing leading slash: %s",
+					parsedUrl.Path)
+			}
+			return parsedUrl.Path, nil
+		}
+	}
+	return "", nil
 }
