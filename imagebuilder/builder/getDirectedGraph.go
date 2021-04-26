@@ -3,14 +3,25 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 )
 
 func (b *Builder) getDirectedGraph() ([]byte, error) {
+	var directoriesToRemove []string
+	defer func() {
+		for _, directory := range directoriesToRemove {
+			os.RemoveAll(directory)
+		}
+	}()
+	urlToDirectory := make(map[string]string)
 	buffer := bytes.NewBuffer(nil)
 	streamNames := b.listNormalStreamNames()
+	sort.Strings(streamNames) // For consistent output.
 	fmt.Fprintln(buffer, "digraph all {")
-	buildLog := new(bytes.Buffer)
 	for _, streamName := range streamNames {
 		b.streamsLock.RLock()
 		stream := b.imageStreams[streamName]
@@ -18,13 +29,35 @@ func (b *Builder) getDirectedGraph() ([]byte, error) {
 		if stream == nil {
 			return nil, fmt.Errorf("stream: %s does not exist", streamName)
 		}
-		dirname, sourceImage, _, _, _, err := stream.getSourceImage(b, buildLog)
-		if err != nil {
-			return nil, fmt.Errorf("error getting manifest for: %s: %s",
-				streamName, err)
+		manifestLocation := stream.getManifestLocation(b, nil)
+		var directory string
+		if rootDir, ok := urlToDirectory[manifestLocation.url]; ok {
+			directory = filepath.Join(rootDir, manifestLocation.directory)
+		} else if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
+			return nil, err
+		} else if rootDir != "" {
+			directory = filepath.Join(rootDir, manifestLocation.directory)
+		} else {
+			gitRoot, err := makeTempDirectory("",
+				strings.Replace(streamName, "/", "_", -1)+".manifest")
+			if err != nil {
+				return nil, err
+			}
+			directoriesToRemove = append(directoriesToRemove, gitRoot)
+			err = gitShallowClone(gitRoot, manifestLocation.url, "master",
+				[]string{"**/manifest\n"}, ioutil.Discard)
+			if err != nil {
+				return nil, err
+			}
+			urlToDirectory[manifestLocation.url] = gitRoot
+			directory = filepath.Join(gitRoot, manifestLocation.directory)
 		}
-		os.RemoveAll(dirname)
-		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n", streamName, sourceImage)
+		manifestConfig, err := readManifestFile(directory, stream)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n",
+			streamName, manifestConfig.SourceImage)
 	}
 	fmt.Fprintln(buffer, "}")
 	return buffer.Bytes(), nil
