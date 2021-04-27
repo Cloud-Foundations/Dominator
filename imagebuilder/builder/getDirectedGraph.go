@@ -45,7 +45,7 @@ func (b *Builder) getDirectedGraph() ([]byte, error) {
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
 			err = gitShallowClone(gitRoot, manifestLocation.url, "master",
-				[]string{"**/manifest\n"}, ioutil.Discard)
+				[]string{"**/manifest"}, ioutil.Discard)
 			if err != nil {
 				return nil, err
 			}
