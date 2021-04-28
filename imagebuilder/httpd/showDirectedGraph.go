@@ -9,6 +9,7 @@ import (
 	"os/exec"
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
 func (s state) showDirectedGraphHandler(w http.ResponseWriter,
@@ -32,7 +33,7 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 }
 
 func (s state) writeDirectedGraph(writer io.Writer) {
-	graph, err := s.builder.GetDirectedGraph()
+	graph, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
