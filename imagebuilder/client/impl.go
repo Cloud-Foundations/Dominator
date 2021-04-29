@@ -46,8 +46,8 @@ func buildImage(client *srpc.Client, request proto.BuildImageRequest,
 	}
 }
 
-func getDirectedGraph(client *srpc.Client) ([]byte, error) {
-	request := proto.GetDirectedGraphRequest{}
+func getDirectedGraph(client *srpc.Client,
+	request proto.GetDirectedGraphRequest) ([]byte, error) {
 	var reply proto.GetDirectedGraphResponse
 	err := client.RequestReply("Imaginator.GetDirectedGraph", request, &reply)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
 func getDirectedGraphSubcommand(args []string, logger log.DebugLogger) error {
@@ -17,7 +18,8 @@ func getDirectedGraphSubcommand(args []string, logger log.DebugLogger) error {
 
 func getDirectedGraph(logger log.Logger) error {
 	srpcClient := getImaginatorClient()
-	if graph, err := client.GetDirectedGraph(srpcClient); err != nil {
+	req := proto.GetDirectedGraphRequest{}
+	if graph, err := client.GetDirectedGraph(srpcClient, req); err != nil {
 		return err
 	} else {
 		os.Stdout.Write(graph)
