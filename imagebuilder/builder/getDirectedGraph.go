@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
-func (b *Builder) getDirectedGraph() ([]byte, error) {
+func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
+	var zero proto.GetDirectedGraphResult
 	var directoriesToRemove []string
 	defer func() {
 		for _, directory := range directoriesToRemove {
@@ -27,38 +30,40 @@ func (b *Builder) getDirectedGraph() ([]byte, error) {
 		stream := b.imageStreams[streamName]
 		b.streamsLock.RUnlock()
 		if stream == nil {
-			return nil, fmt.Errorf("stream: %s does not exist", streamName)
+			return zero, fmt.Errorf("stream: %s does not exist", streamName)
 		}
 		manifestLocation := stream.getManifestLocation(b, nil)
 		var directory string
 		if rootDir, ok := urlToDirectory[manifestLocation.url]; ok {
 			directory = filepath.Join(rootDir, manifestLocation.directory)
 		} else if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
-			return nil, err
+			return zero, err
 		} else if rootDir != "" {
 			directory = filepath.Join(rootDir, manifestLocation.directory)
 		} else {
 			gitRoot, err := makeTempDirectory("",
 				strings.Replace(streamName, "/", "_", -1)+".manifest")
 			if err != nil {
-				return nil, err
+				return zero, err
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
 			err = gitShallowClone(gitRoot, manifestLocation.url, "master",
 				[]string{"**/manifest"}, ioutil.Discard)
 			if err != nil {
-				return nil, err
+				return zero, err
 			}
 			urlToDirectory[manifestLocation.url] = gitRoot
 			directory = filepath.Join(gitRoot, manifestLocation.directory)
 		}
 		manifestConfig, err := readManifestFile(directory, stream)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n",
 			streamName, manifestConfig.SourceImage)
 	}
 	fmt.Fprintln(buffer, "}")
-	return buffer.Bytes(), nil
+	return proto.GetDirectedGraphResult{
+		GraphvizDot: buffer.Bytes(),
+	}, nil
 }

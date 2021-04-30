@@ -27,6 +27,10 @@ type BuildImageResponse struct {
 type GetDirectedGraphRequest struct{}
 
 type GetDirectedGraphResponse struct {
+	GetDirectedGraphResult
+	Error string
+}
+
+type GetDirectedGraphResult struct {
 	GraphvizDot []byte
-	Error       string
 }

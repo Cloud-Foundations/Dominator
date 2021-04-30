@@ -150,7 +150,7 @@ func (b *Builder) GetCurrentBuildLog(streamName string) ([]byte, error) {
 }
 
 func (b *Builder) GetDirectedGraph(request proto.GetDirectedGraphRequest) (
-	[]byte, error) {
+	proto.GetDirectedGraphResult, error) {
 	return b.getDirectedGraph()
 }
 

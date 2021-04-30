@@ -9,8 +9,10 @@ import (
 func (t *srpcType) GetDirectedGraph(conn *srpc.Conn,
 	request proto.GetDirectedGraphRequest,
 	reply *proto.GetDirectedGraphResponse) error {
-	data, err := t.builder.GetDirectedGraph(request)
-	reply.GraphvizDot = data
-	reply.Error = errors.ErrorToString(err)
+	if result, err := t.builder.GetDirectedGraph(request); err != nil {
+		reply.Error = errors.ErrorToString(err)
+	} else {
+		reply.GetDirectedGraphResult = result
+	}
 	return nil
 }

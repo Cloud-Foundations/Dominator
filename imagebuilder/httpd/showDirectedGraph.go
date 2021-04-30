@@ -33,13 +33,13 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 }
 
 func (s state) writeDirectedGraph(writer io.Writer) {
-	graph, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
+	result, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
 	}
 	cmd := exec.Command("dot", "-Tsvg")
-	cmd.Stdin = bytes.NewReader(graph)
+	cmd.Stdin = bytes.NewReader(result.GraphvizDot)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
 	err = cmd.Run()
@@ -50,6 +50,6 @@ func (s state) writeDirectedGraph(writer io.Writer) {
 	fmt.Fprintf(writer, "error rendering graph: %s<br>\n", err)
 	fmt.Fprintln(writer, "Showing graph data:<br>")
 	fmt.Fprintln(writer, "<pre>")
-	writer.Write(graph)
+	writer.Write(result.GraphvizDot)
 	fmt.Fprintln(writer, "</pre>")
 }
