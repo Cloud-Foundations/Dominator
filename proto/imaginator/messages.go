@@ -32,5 +32,6 @@ type GetDirectedGraphResponse struct {
 }
 
 type GetDirectedGraphResult struct {
+	FetchLog    []byte
 	GraphvizDot []byte
 }
