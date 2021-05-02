@@ -3,7 +3,6 @@ package builder
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +21,7 @@ func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
 	}()
 	urlToDirectory := make(map[string]string)
 	buffer := bytes.NewBuffer(nil)
+	fetchLog := bytes.NewBuffer(nil)
 	streamNames := b.listNormalStreamNames()
 	sort.Strings(streamNames) // For consistent output.
 	fmt.Fprintln(buffer, "digraph all {")
@@ -48,7 +48,7 @@ func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
 			err = gitShallowClone(gitRoot, manifestLocation.url, "master",
-				[]string{"**/manifest"}, ioutil.Discard)
+				[]string{"**/manifest"}, fetchLog)
 			if err != nil {
 				return zero, err
 			}
@@ -64,6 +64,7 @@ func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
 	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
+		FetchLog:    fetchLog.Bytes(),
 		GraphvizDot: buffer.Bytes(),
 	}, nil
 }
