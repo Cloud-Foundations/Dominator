@@ -17,7 +17,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
-	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -109,28 +108,15 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		doCleanup = false
 		return manifestRoot, nil, nil
 	}
-	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
-		stream.ManifestUrl, gitBranch)
 	var patterns []string
 	if manifestLocation.directory != "" {
 		patterns = append(patterns, manifestLocation.directory+"/*")
 	}
-	startTime := time.Now()
-	err = gitShallowClone(manifestRoot, manifestLocation.url, gitBranch,
-		patterns, buildLog)
+	err = gitShallowClone(manifestRoot, manifestLocation.url,
+		stream.ManifestUrl, gitBranch, patterns, buildLog)
 	if err != nil {
 		return "", nil, err
 	}
-	loadTime := time.Since(startTime)
-	repoSize, err := getTreeSize(manifestRoot)
-	if err != nil {
-		return "", nil, err
-	}
-	speed := float64(repoSize) / loadTime.Seconds()
-	fmt.Fprintf(buildLog,
-		"Downloaded partial repository in %s, size: %s (%s/s)\n",
-		format.Duration(loadTime), format.FormatBytes(repoSize),
-		format.FormatBytes(uint64(speed)))
 	gitDirectory := filepath.Join(manifestRoot, ".git")
 	var gitInfo *gitInfoType
 	filename := filepath.Join(gitDirectory, "refs", "heads", gitBranch)

@@ -6,10 +6,22 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 )
 
-func gitShallowClone(manifestRoot, manifestUrl, gitBranch string,
+// gitShallowClone will make a shallow clone of a Git repository. The repository
+// will be written to the directory specified by manifestRoot. The URL of the
+// repository must be specified by manifestUrl and the public version (not
+// containing secrets) must be specified by publicUrl. The branch to fetch must
+// be specified by gitBranch. Only the patterns specified will be fetched.
+// The fetch log fill be written to buildLog.
+func gitShallowClone(manifestRoot, manifestUrl, publicUrl, gitBranch string,
 	patterns []string, buildLog io.Writer) error {
+	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
+		publicUrl, gitBranch)
+	startTime := time.Now()
 	err := runCommand(buildLog, "", "git", "init", manifestRoot)
 	if err != nil {
 		return err
@@ -51,5 +63,15 @@ func gitShallowClone(manifestRoot, manifestUrl, gitBranch string,
 			return err
 		}
 	}
+	loadTime := time.Since(startTime)
+	repoSize, err := getTreeSize(manifestRoot)
+	if err != nil {
+		return err
+	}
+	speed := float64(repoSize) / loadTime.Seconds()
+	fmt.Fprintf(buildLog,
+		"Downloaded partial repository in %s, size: %s (%s/s)\n",
+		format.Duration(loadTime), format.FormatBytes(repoSize),
+		format.FormatBytes(uint64(speed)))
 	return nil
 }
