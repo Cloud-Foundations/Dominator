@@ -13,6 +13,7 @@ func BuildImage(client *srpc.Client, request proto.BuildImageRequest,
 }
 
 func GetDirectedGraph(client *srpc.Client,
-	request proto.GetDirectedGraphRequest) ([]byte, error) {
+	request proto.GetDirectedGraphRequest) (
+	proto.GetDirectedGraphResult, error) {
 	return getDirectedGraph(client, request)
 }
