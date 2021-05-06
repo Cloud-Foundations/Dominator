@@ -35,7 +35,9 @@ var (
 		"Port number of image server")
 	maxSourceAge = flag.Duration("maxSourceAge", time.Hour,
 		"Maximum age of a source image before it is rebuilt")
-	rawSize flagutil.Size
+	rawSize      flagutil.Size
+	showFetchLog = flag.Bool("showFetchLog", false,
+		"If true, show fetch log when getting directed graph")
 
 	minimumExpiration = 5 * time.Minute
 )

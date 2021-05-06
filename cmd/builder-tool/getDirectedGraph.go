@@ -26,6 +26,9 @@ func getDirectedGraph(logger log.Logger) error {
 		if result.GraphvizDot[len(result.GraphvizDot)-1] != '\n' {
 			fmt.Println()
 		}
+		if *showFetchLog {
+			os.Stderr.Write(result.FetchLog)
+		}
 	}
 	return nil
 }
