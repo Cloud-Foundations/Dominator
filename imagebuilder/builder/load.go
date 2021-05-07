@@ -85,8 +85,10 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	if variables == nil {
 		variables = make(map[string]string)
 	}
+	generateDependencyTrigger := make(chan struct{}, 0)
 	b := &Builder{
 		bindMounts:                masterConfiguration.BindMounts,
+		generateDependencyTrigger: generateDependencyTrigger,
 		stateDir:                  stateDir,
 		imageServerAddress:        imageServerAddress,
 		logger:                    logger,
@@ -113,6 +115,7 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	if err != nil {
 		return nil, err
 	}
+	go b.dependencyGeneratorLoop(generateDependencyTrigger)
 	go b.watchConfigLoop(imageStreamsConfigChannel)
 	go b.rebuildImages(imageRebuildInterval)
 	return b, nil
@@ -250,6 +253,7 @@ func (b *Builder) updateImageStreams(
 	b.streamsLock.Lock()
 	b.imageStreams = imageStreamsConfiguration.Streams
 	b.streamsLock.Unlock()
+	b.triggerDependencyDataGeneration()
 	return b.makeRequiredDirectories()
 }
 

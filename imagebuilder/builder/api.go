@@ -50,6 +50,12 @@ type buildResultType struct {
 	error      error
 }
 
+type dependencyDataType struct {
+	fetchLog       []byte
+	generatedAt    time.Time
+	streamToSource map[string]string // Key: stream name, value: source stream.
+}
+
 type masterConfigurationType struct {
 	BindMounts                []string                    `json:",omitempty"`
 	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
@@ -115,9 +121,10 @@ type sourceImageInfoType struct {
 
 type Builder struct {
 	bindMounts                []string
+	generateDependencyTrigger chan<- struct{}
 	stateDir                  string
 	imageServerAddress        string
-	logger                    log.Logger
+	logger                    log.DebugLogger
 	imageStreamsUrl           string
 	initialNamespace          string // For catching golang bugs.
 	streamsLock               sync.RWMutex
@@ -130,6 +137,10 @@ type Builder struct {
 	lastBuildResults          map[string]buildResultType // Key: stream name.
 	packagerTypes             map[string]packagerType
 	variables                 map[string]string
+	dependencyDataLock        sync.RWMutex
+	dependencyData            *dependencyDataType
+	dependencyDataAttempt     time.Time
+	dependencyDataError       error
 }
 
 func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
