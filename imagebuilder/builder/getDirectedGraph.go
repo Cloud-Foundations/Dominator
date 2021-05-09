@@ -151,6 +151,7 @@ func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
 		FetchLog:    dependencyData.fetchLog,
+		GeneratedAt: dependencyData.generatedAt,
 		GraphvizDot: buffer.Bytes(),
 	}, nil
 }
