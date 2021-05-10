@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -58,6 +59,8 @@ func (s state) writeDirectedGraph(writer io.Writer) {
 		fmt.Fprintln(writer, "<pre>")
 		writer.Write(result.FetchLog)
 		fmt.Fprintln(writer, "</pre>")
+		fmt.Fprintf(writer, "Data generated at: %s\n",
+			result.GeneratedAt.Format(format.TimeFormatSeconds))
 		fmt.Fprintln(writer, "</font>")
 	}
 }
