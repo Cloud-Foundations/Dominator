@@ -24,7 +24,9 @@ type BuildImageResponse struct {
 	ErrorString string
 }
 
-type GetDirectedGraphRequest struct{}
+type GetDirectedGraphRequest struct {
+	MaxAge time.Duration
+}
 
 type GetDirectedGraphResponse struct {
 	GetDirectedGraphResult
