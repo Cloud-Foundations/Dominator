@@ -162,7 +162,7 @@ func (b *Builder) GetCurrentBuildLog(streamName string) ([]byte, error) {
 
 func (b *Builder) GetDirectedGraph(request proto.GetDirectedGraphRequest) (
 	proto.GetDirectedGraphResult, error) {
-	return b.getDirectedGraph()
+	return b.getDirectedGraph(request)
 }
 
 func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {

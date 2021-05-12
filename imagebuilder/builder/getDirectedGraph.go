@@ -131,9 +131,10 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 	}
 }
 
-func (b *Builder) getDirectedGraph() (proto.GetDirectedGraphResult, error) {
+func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
+	proto.GetDirectedGraphResult, error) {
 	var zero proto.GetDirectedGraphResult
-	dependencyData, err := b.getDependencyData(0)
+	dependencyData, err := b.getDependencyData(request.MaxAge)
 	if err != nil {
 		return zero, err
 	}
