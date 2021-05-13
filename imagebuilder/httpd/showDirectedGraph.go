@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
@@ -27,14 +28,18 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, "<h1>imaginator image stream relationships</h1>")
 	fmt.Fprintln(writer, "</center>")
-	s.writeDirectedGraph(writer)
+	s.writeDirectedGraph(writer, req.Method == "POST")
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
 }
 
-func (s state) writeDirectedGraph(writer io.Writer) {
-	result, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
+func (s state) writeDirectedGraph(writer io.Writer, regenerate bool) {
+	request := proto.GetDirectedGraphRequest{}
+	if regenerate {
+		request.MaxAge = time.Second
+	}
+	result, err := s.builder.GetDirectedGraph(request)
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
@@ -59,8 +64,14 @@ func (s state) writeDirectedGraph(writer io.Writer) {
 		fmt.Fprintln(writer, "<pre>")
 		writer.Write(result.FetchLog)
 		fmt.Fprintln(writer, "</pre>")
+		fmt.Fprintln(writer, "</font>")
+	}
+	if time.Since(result.GeneratedAt) > time.Second {
 		fmt.Fprintf(writer, "Data generated at: %s\n",
 			result.GeneratedAt.Format(format.TimeFormatSeconds))
-		fmt.Fprintln(writer, "</font>")
+		fmt.Fprintln(writer,
+			`<form enctype="application/x-www-form-urlencoded" action="/showDirectedGraph" method="post">`)
+		fmt.Fprintln(writer,
+			`<input type="submit" value="Regenerate">`)
 	}
 }
