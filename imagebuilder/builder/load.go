@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -97,7 +96,7 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
 		slaveDriver:               slaveDriver,
-		currentBuildLogs:          make(map[string]*bytes.Buffer),
+		currentBuildInfos:         make(map[string]*currentBuildInfo),
 		lastBuildResults:          make(map[string]buildResultType),
 		packagerTypes:             masterConfiguration.PackagerTypes,
 		variables:                 variables,

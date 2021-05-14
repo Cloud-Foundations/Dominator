@@ -88,12 +88,14 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		b.getNumStreams())
 	fmt.Fprintln(writer,
 		"Show image stream <a href=\"showDirectedGraph\">relationships</a><p>")
-	currentBuilds := make([]string, 0)
+	currentBuildNames := make([]string, 0)
+	currentBuildTimes := make([]time.Time, 0)
 	goodBuilds := make(map[string]buildResultType)
 	failedBuilds := make(map[string]buildResultType)
 	b.buildResultsLock.RLock()
-	for name := range b.currentBuildLogs {
-		currentBuilds = append(currentBuilds, name)
+	for name, info := range b.currentBuildInfos {
+		currentBuildNames = append(currentBuildNames, name)
+		currentBuildTimes = append(currentBuildTimes, info.startedAt)
 	}
 	for name, result := range b.lastBuildResults {
 		if result.error == nil {
@@ -104,15 +106,17 @@ func (b *Builder) writeHtml(writer io.Writer) {
 	}
 	b.buildResultsLock.RUnlock()
 	currentTime := time.Now()
-	if len(currentBuilds) > 0 {
+	if len(currentBuildNames) > 0 {
 		fmt.Fprintln(writer, "Current image builds:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
-		tw, _ := html.NewTableWriter(writer, true, "Image Stream", "Build log")
-		for _, streamName := range currentBuilds {
+		tw, _ := html.NewTableWriter(writer, true, "Image Stream", "Build log",
+			"Duration")
+		for index, streamName := range currentBuildNames {
 			tw.WriteRow("", "",
 				streamName,
 				fmt.Sprintf("<a href=\"showCurrentBuildLog?%s#bottom\">log</a>",
 					streamName),
+				format.Duration(time.Since(currentBuildTimes[index])),
 			)
 		}
 		fmt.Fprintln(writer, "</table><br>")

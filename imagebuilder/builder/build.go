@@ -69,7 +69,10 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	}
 	buildLogBuffer := &bytes.Buffer{}
 	b.buildResultsLock.Lock()
-	b.currentBuildLogs[request.StreamName] = buildLogBuffer
+	b.currentBuildInfos[request.StreamName] = &currentBuildInfo{
+		buffer:    buildLogBuffer,
+		startedAt: time.Now(),
+	}
 	b.buildResultsLock.Unlock()
 	var buildLog buildLogger
 	if logWriter == nil {
@@ -85,7 +88,7 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	finishTime := time.Now()
 	b.buildResultsLock.Lock()
 	defer b.buildResultsLock.Unlock()
-	delete(b.currentBuildLogs, request.StreamName)
+	delete(b.currentBuildInfos, request.StreamName)
 	b.lastBuildResults[request.StreamName] = buildResultType{
 		name, startTime, finishTime, buildLog.Bytes(), err}
 	if err == nil {
@@ -258,11 +261,11 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
 	b.buildResultsLock.RLock()
 	defer b.buildResultsLock.RUnlock()
-	if result, ok := b.currentBuildLogs[streamName]; !ok {
+	if result, ok := b.currentBuildInfos[streamName]; !ok {
 		return nil, errors.New("unknown image: " + streamName)
 	} else {
-		log := make([]byte, result.Len())
-		copy(log, result.Bytes())
+		log := make([]byte, result.buffer.Len())
+		copy(log, result.buffer.Bytes())
 		return log, nil
 	}
 }

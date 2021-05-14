@@ -50,6 +50,11 @@ type buildResultType struct {
 	error      error
 }
 
+type currentBuildInfo struct {
+	buffer    *bytes.Buffer
+	startedAt time.Time
+}
+
 type dependencyDataType struct {
 	fetchLog       []byte
 	generatedAt    time.Time
@@ -133,8 +138,8 @@ type Builder struct {
 	imageStreamsToAutoRebuild []string
 	slaveDriver               *slavedriver.SlaveDriver
 	buildResultsLock          sync.RWMutex
-	currentBuildLogs          map[string]*bytes.Buffer   // Key: stream name.
-	lastBuildResults          map[string]buildResultType // Key: stream name.
+	currentBuildInfos         map[string]*currentBuildInfo // Key: stream name.
+	lastBuildResults          map[string]buildResultType   // Key: stream name.
 	packagerTypes             map[string]packagerType
 	variables                 map[string]string
 	dependencyDataLock        sync.RWMutex
