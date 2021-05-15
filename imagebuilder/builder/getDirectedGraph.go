@@ -138,16 +138,26 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	if err != nil {
 		return zero, err
 	}
-	buffer := bytes.NewBuffer(nil)
+	unbuildableSources := make(map[string]struct{})
 	streamNames := make([]string, 0, len(dependencyData.streamToSource))
-	for streamName := range dependencyData.streamToSource {
+	for streamName, sourceName := range dependencyData.streamToSource {
+		unbuildableSources[sourceName] = struct{}{}
 		streamNames = append(streamNames, streamName)
 	}
 	sort.Strings(streamNames) // For consistent output.
+	buffer := bytes.NewBuffer(nil)
 	fmt.Fprintln(buffer, "digraph all {")
 	for _, streamName := range streamNames {
 		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n",
 			streamName, dependencyData.streamToSource[streamName])
+		delete(unbuildableSources, streamName)
+	}
+	// Mark streams with no source in red, to show they are unbuildable.
+	for sourceName := range unbuildableSources {
+		if b.getBootstrapStream(sourceName) != nil {
+			continue
+		}
+		fmt.Fprintf(buffer, "  \"%s\" [fontcolor=red]\n", sourceName)
 	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
