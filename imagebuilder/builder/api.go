@@ -95,6 +95,7 @@ type imageStreamType struct {
 	BuilderUsers      []string
 	ManifestUrl       string
 	ManifestDirectory string
+	Variables         map[string]string
 }
 
 type imageStreamsConfigurationType struct {
