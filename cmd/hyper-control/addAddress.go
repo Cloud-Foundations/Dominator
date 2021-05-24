@@ -26,8 +26,13 @@ func addAddress(macAddr, ipAddr string, logger log.DebugLogger) error {
 	address := proto.Address{MacAddress: macAddr}
 	if ipAddr != "" {
 		address.IpAddress = net.ParseIP(ipAddr)
+		address.Shrink()
+		if address.MacAddress == "" {
+			address.MacAddress = fmt.Sprintf("52:54:%02x:%02x:%02x:%02x",
+				address.IpAddress[0], address.IpAddress[1],
+				address.IpAddress[2], address.IpAddress[3])
+		}
 	}
-	address.Shrink()
 	request := proto.ChangeAddressPoolRequest{
 		AddressesToAdd: []proto.Address{address}}
 	var reply proto.ChangeAddressPoolResponse

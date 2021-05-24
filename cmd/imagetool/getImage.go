@@ -25,7 +25,11 @@ func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
 	if err != nil {
 		return err
 	}
-	return util.Unpack(fs, objectsGetter, dirname, nulllogger.New())
+	err = util.Unpack(fs, objectsGetter, dirname, nulllogger.New())
+	if err != nil {
+		return err
+	}
+	return util.WriteImageName(dirname, name)
 }
 
 func getImageForUnpack(objectClient *objectclient.ObjectClient, name string) (

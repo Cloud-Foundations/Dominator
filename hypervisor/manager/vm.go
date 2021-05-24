@@ -27,6 +27,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
@@ -103,6 +104,42 @@ func createTapDevice(bridge string) (*os.File, error) {
 	}
 	doAutoClose = false
 	return tapFile, nil
+}
+
+func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
+	rootDir string, logger log.DebugLogger) error {
+	var totalBytes uint64
+	imgHashToInodesTable := imgFS.HashToInodesTable()
+	imgComputedFiles := make(map[string]struct{})
+	imgFS.ForEachFile(func(name string, inodeNumber uint64,
+		inode filesystem.GenericInode) error {
+		if _, ok := inode.(*filesystem.ComputedRegularInode); ok {
+			imgComputedFiles[name] = struct{}{}
+		}
+		return nil
+	})
+	for filename, inum := range vmFS.FilenameToInodeTable() {
+		if inode, ok := vmFS.InodeTable[inum].(*filesystem.RegularInode); ok {
+			if inode.Size < 1 {
+				continue
+			}
+			if _, isComputed := imgComputedFiles[filename]; isComputed {
+				continue
+			}
+			if _, inImage := imgHashToInodesTable[inode.Hash]; inImage {
+				continue
+			}
+			pathname := filepath.Join(rootDir, filename)
+			if err := os.Remove(pathname); err != nil {
+				return err
+			}
+			logger.Debugf(1, "pre-delete: %s\n", pathname)
+			totalBytes += inode.Size
+		}
+	}
+	logger.Debugf(0, "pre-delete: totalBytes: %s\n",
+		format.FormatBytes(totalBytes))
+	return nil
 }
 
 func extractKernel(volume proto.LocalVolume, extension string,
@@ -1384,14 +1421,17 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	return nil
 }
 
-func (m *Manager) listVMs(ownerUsers []string, doSort bool) []string {
+func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 	m.mutex.RLock()
 	ipAddrs := make([]string, 0, len(m.vms))
 	for ipAddr, vm := range m.vms {
+		if request.IgnoreStateMask&(1<<vm.State) != 0 {
+			continue
+		}
 		include := true
-		if len(ownerUsers) > 0 {
+		if len(request.OwnerUsers) > 0 {
 			include = false
-			for _, ownerUser := range ownerUsers {
+			for _, ownerUser := range request.OwnerUsers {
 				if _, ok := vm.ownerUsers[ownerUser]; ok {
 					include = true
 					break
@@ -1403,7 +1443,7 @@ func (m *Manager) listVMs(ownerUsers []string, doSort bool) []string {
 		}
 	}
 	m.mutex.RUnlock()
-	if doSort {
+	if request.Sort {
 		verstr.Sort(ipAddrs)
 	}
 	return ipAddrs
@@ -1932,6 +1972,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer objectsReader.Close()
+	err = sendVmPatchImageMessage(conn, "pre-deleting unneeded files")
+	if err != nil {
+		return err
+	}
+	err = deleteFilesNotInImage(img.FileSystem, &fs.FileSystem, rootDir,
+		vm.logger)
+	if err != nil {
+		return err
+	}
 	msg := fmt.Sprintf("fetching(%s) %d objects",
 		imageName, len(objectsToFetch))
 	if err := sendVmPatchImageMessage(conn, msg); err != nil {
@@ -3149,9 +3198,13 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
 		}
+		options := interfaceDriver
+		if vm.manager.checkTrim(volume.Filename) {
+			options += ",discard=on"
+		}
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
-				interfaceDriver)
+				options)
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.

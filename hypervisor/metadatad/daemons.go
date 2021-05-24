@@ -81,6 +81,11 @@ func (s *server) addSubnets(bridge net.Interface, namespaceFd int,
 
 func addRouteForBridge(bridge net.Interface, subnet proto.Subnet,
 	logger log.DebugLogger) {
+	if subnet.DisableMetadata {
+		logger.Debugf(0, "metadata service disabled for subnet: %s\n",
+			subnet.Id)
+		return
+	}
 	subnetMask := net.IPMask(subnet.IpMask)
 	subnetAddr := subnet.IpGateway.Mask(subnetMask)
 	addr := subnetAddr.String()
@@ -88,10 +93,11 @@ func addRouteForBridge(bridge net.Interface, subnet proto.Subnet,
 		subnetMask[0], subnetMask[1], subnetMask[2], subnetMask[3])
 	cmd := exec.Command("route", "add", "-net", addr, "netmask", mask, "eth0")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		logger.Printf("error adding route: %s/%s: %s: %s",
-			addr, mask, err, string(output))
+		logger.Printf("error adding route: for subnet: %s: %s/%s: %s: %s",
+			subnet.Id, addr, mask, err, string(output))
 	} else {
-		logger.Debugf(0, "added route: %s/%s\n", addr, mask)
+		logger.Debugf(0, "added route for subnet: %s: %s/%s\n",
+			subnet.Id, addr, mask)
 	}
 }
 

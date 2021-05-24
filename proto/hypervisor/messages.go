@@ -352,8 +352,9 @@ type ImportLocalVmResponse struct {
 }
 
 type ListVMsRequest struct {
-	OwnerUsers []string
-	Sort       bool
+	IgnoreStateMask uint64
+	OwnerUsers      []string
+	Sort            bool
 }
 
 type ListVMsResponse struct {
@@ -561,10 +562,13 @@ type Subnet struct {
 	IpMask            net.IP // net.IPMask can't be JSON {en,de}coded.
 	DomainName        string `json:",omitempty"`
 	DomainNameServers []net.IP
+	DisableMetadata   bool     `json:",omitempty"`
 	Manage            bool     `json:",omitempty"`
 	VlanId            uint     `json:",omitempty"`
 	AllowedGroups     []string `json:",omitempty"`
 	AllowedUsers      []string `json:",omitempty"`
+	FirstDynamicIP    net.IP   `json:",omitempty"`
+	LastDynamicIP     net.IP   `json:",omitempty"`
 }
 
 type TraceVmMetadataRequest struct {

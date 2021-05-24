@@ -22,7 +22,6 @@ import (
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/cpusharer"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
@@ -243,10 +242,6 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err := installTmpRoot(img.FileSystem, objGetter, logger); err != nil {
 		return nil, err
 	}
-	err = run("modprobe", *tmpRoot, logger, "-a", "algif_skcipher", "dm_crypt")
-	if err != nil {
-		return nil, err
-	}
 	err = ioutil.WriteFile(filepath.Join(*tmpRoot, keyFile), randomKey,
 		fsutil.PrivateFilePerms)
 	if err != nil {
@@ -342,22 +337,12 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err := fsutil.CopyTree(logdir, *tftpDirectory); err != nil {
 		return nil, err
 	}
-	if err := writeImageName(*mountPoint, imageName); err != nil {
+	if err := util.WriteImageName(*mountPoint, imageName); err != nil {
 		return nil, err
 	}
 	logger.Printf("configureStorage() took %s\n",
 		format.Duration(time.Since(startTime)))
 	return rebooter, nil
-}
-
-func writeImageName(mountPoint, imageName string) error {
-	pathname := filepath.Join(mountPoint, constants.InitialImageNameFile)
-	if err := os.MkdirAll(filepath.Dir(pathname), fsutil.DirPerms); err != nil {
-		return err
-	}
-	buffer := &bytes.Buffer{}
-	fmt.Fprintln(buffer, imageName)
-	return fsutil.CopyToFile(pathname, fsutil.PublicFilePerms, buffer, 0)
 }
 
 func eraseStart(device string, logger log.DebugLogger) error {

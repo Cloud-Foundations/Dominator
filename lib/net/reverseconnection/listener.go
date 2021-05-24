@@ -61,7 +61,7 @@ func listen(network string, portNumber uint, logger log.DebugLogger) (
 	rListener, err := libnet.ListenWithReuse(network,
 		fmt.Sprintf(":%d", portNumber))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating %s listener: %s", network, err)
 	}
 	acceptChannel := make(chan acceptEvent, 1)
 	listener := &Listener{

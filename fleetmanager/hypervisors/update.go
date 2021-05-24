@@ -327,21 +327,24 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 			m.sendUpdate(location, updateForLocation)
 		}
 	}
-	subnetsToDelete := make(map[string]struct{}, len(m.subnets))
-	for gatewayIp := range m.subnets {
-		subnetsToDelete[gatewayIp] = struct{}{}
-	}
+	// (Re)build map of managed subnets.
+	m.subnets = make(map[string]*subnetType, len(m.subnets))
 	t.Walk(func(directory *topology.Directory) error {
 		for _, tSubnet := range directory.Subnets {
+			if !tSubnet.Manage {
+				continue
+			}
 			gatewayIp := tSubnet.IpGateway.String()
-			delete(subnetsToDelete, gatewayIp)
+			if _, ok := m.subnets[gatewayIp]; ok {
+				m.logger.Printf(
+					"ignoring duplicate subnet Id: %s gateway IP: %s\n",
+					tSubnet.Id, gatewayIp)
+				continue
+			}
 			m.subnets[gatewayIp] = m.makeSubnet(tSubnet)
 		}
 		return nil
 	})
-	for gatewayIp := range subnetsToDelete {
-		delete(m.subnets, gatewayIp)
-	}
 	return deleteList
 }
 

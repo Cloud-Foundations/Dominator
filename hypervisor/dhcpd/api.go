@@ -3,33 +3,51 @@ package dhcpd
 import (
 	"net"
 	"sync"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 type DhcpServer struct {
-	logger           log.DebugLogger
-	myIP             net.IP
-	networkBootImage []byte
-	requestInterface string
-	mutex            sync.RWMutex             // Protect everything below.
-	ackChannels      map[string]chan struct{} // Key: IPaddr.
-	ipAddrToMacAddr  map[string]string        // Key: IPaddr, V: MACaddr.
-	leases           map[string]leaseType     // Key: MACaddr.
-	requestChannels  map[string]chan net.IP   // Key: MACaddr.
-	subnets          []proto.Subnet
+	dynamicLeasesFile string
+	logger            log.DebugLogger
+	cleanupTrigger    chan<- struct{}
+	interfaceIPs      map[string][]net.IP // Key: interface name.
+	myIPs             []net.IP
+	networkBootImage  []byte
+	requestInterface  string
+	routeTable        map[string]*util.RouteEntry // Key: interface name.
+	mutex             sync.RWMutex                // Protect everything below.
+	ackChannels       map[string]chan struct{}    // Key: IPaddr.
+	dynamicLeases     map[string]*leaseType       // Key: MACaddr.
+	interfaceSubnets  map[string][]*subnetType    // Key: interface name.
+	ipAddrToMacAddr   map[string]string           // Key: IPaddr, V: MACaddr.
+	staticLeases      map[string]leaseType        // Key: MACaddr.
+	requestChannels   map[string]chan net.IP      // Key: MACaddr.
+	subnets           []*subnetType
 }
 
 type leaseType struct {
 	proto.Address
-	Hostname  string
-	doNetboot bool
-	subnet    *proto.Subnet
+	clientHostname string
+	expires        time.Time
+	hostname       string
+	doNetboot      bool
+	subnet         *subnetType
 }
 
-func New(interfaceNames []string, logger log.DebugLogger) (*DhcpServer, error) {
-	return newServer(interfaceNames, logger)
+type subnetType struct {
+	amGateway     bool
+	myIP          net.IP
+	nextDynamicIP net.IP
+	proto.Subnet
+}
+
+func New(interfaceNames []string, dynamicLeasesFile string,
+	logger log.DebugLogger) (*DhcpServer, error) {
+	return newServer(interfaceNames, dynamicLeasesFile, logger)
 }
 
 func (s *DhcpServer) AddLease(address proto.Address, hostname string) error {

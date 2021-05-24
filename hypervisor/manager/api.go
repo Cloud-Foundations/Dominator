@@ -37,7 +37,8 @@ type Manager struct {
 	numCPU            int
 	serialNumber      string
 	volumeDirectories []string
-	mutex             sync.RWMutex // Lock everything below (those can change).
+	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
+	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
 	healthStatus      string
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
@@ -82,6 +83,10 @@ type vmInfoType struct {
 	stoppedNotifier            chan<- struct{}
 	updating                   bool
 	proto.LocalVmInfo
+}
+
+type volumeInfo struct {
+	canTrim bool
 }
 
 func New(startOptions StartOptions) (*Manager, error) {
@@ -270,8 +275,8 @@ func (m *Manager) ListSubnets(doSort bool) []proto.Subnet {
 	return m.listSubnets(doSort)
 }
 
-func (m *Manager) ListVMs(ownerUsers []string, doSort bool) []string {
-	return m.listVMs(ownerUsers, doSort)
+func (m *Manager) ListVMs(request proto.ListVMsRequest) []string {
+	return m.listVMs(request)
 }
 
 func (m *Manager) ListVolumeDirectories() []string {

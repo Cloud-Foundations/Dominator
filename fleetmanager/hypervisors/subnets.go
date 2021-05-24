@@ -5,45 +5,8 @@ import (
 	"net"
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
+	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 )
-
-func copyIp(ip net.IP) net.IP {
-	retval := make(net.IP, len(ip))
-	copy(retval, ip)
-	return retval
-}
-
-func decrementIp(ip net.IP) {
-	for index := len(ip) - 1; index >= 0; index-- {
-		if ip[index] > 0 {
-			ip[index]--
-			return
-		}
-		ip[index] = 0xff
-	}
-}
-
-func incrementIp(ip net.IP) {
-	for index := len(ip) - 1; index >= 0; index-- {
-		if ip[index] < 255 {
-			ip[index]++
-			return
-		}
-		ip[index] = 0
-	}
-}
-
-func invertByte(input byte) byte {
-	var inverted byte
-	for index := 0; index < 8; index++ {
-		inverted <<= 1
-		if input&0x80 == 0 {
-			inverted |= 1
-		}
-		input <<= 1
-	}
-	return inverted
-}
 
 // This must be called with the lock held.
 func (m *Manager) checkIpReserved(tSubnet *topology.Subnet, ip net.IP) bool {
@@ -73,7 +36,7 @@ func (m *Manager) findFreeIPs(tSubnet *topology.Subnet,
 	if !ok {
 		return nil, fmt.Errorf("subnet for gateway: %s not found", gatewayIp)
 	}
-	initialIp := copyIp(subnet.nextIp)
+	initialIp := util.CopyIP(subnet.nextIp)
 	for numNeeded > 0 {
 		if !m.checkIpReserved(subnet.subnet, subnet.nextIp) {
 			registered, err := m.storer.CheckIpIsRegistered(subnet.nextIp)
@@ -81,11 +44,11 @@ func (m *Manager) findFreeIPs(tSubnet *topology.Subnet,
 				return nil, err
 			}
 			if !registered {
-				freeIPs = append(freeIPs, copyIp(subnet.nextIp))
+				freeIPs = append(freeIPs, util.CopyIP(subnet.nextIp))
 				numNeeded--
 			}
 		}
-		incrementIp(subnet.nextIp)
+		util.IncrementIP(subnet.nextIp)
 		if subnet.nextIp.Equal(subnet.stopIp) {
 			copy(subnet.nextIp, subnet.startIp)
 		}
@@ -99,35 +62,23 @@ func (m *Manager) findFreeIPs(tSubnet *topology.Subnet,
 	return freeIPs, nil
 }
 
-func (m *Manager) initInvertTable() {
-	for value := 0; value < 256; value++ {
-		m.invertTable[value] = invertByte(byte(value))
-	}
-}
-
-func (m *Manager) invertIP(input net.IP) net.IP {
-	inverted := make(net.IP, len(input))
-	for index, value := range input {
-		inverted[index] = m.invertTable[value]
-	}
-	return inverted
-}
-
 func (m *Manager) makeSubnet(tSubnet *topology.Subnet) *subnetType {
 	networkIp := tSubnet.IpGateway.Mask(net.IPMask(tSubnet.IpMask))
 	var startIp, stopIp net.IP
 	if len(tSubnet.FirstAutoIP) > 0 {
 		startIp = tSubnet.FirstAutoIP
 	} else {
-		startIp = copyIp(networkIp)
-		incrementIp(startIp)
+		startIp = util.CopyIP(networkIp)
+		util.IncrementIP(startIp)
 	}
 	if len(tSubnet.LastAutoIP) > 0 {
-		stopIp = tSubnet.LastAutoIP
-		incrementIp(stopIp)
+		stopIp = util.CopyIP(tSubnet.LastAutoIP)
+		util.IncrementIP(stopIp)
 	} else {
 		stopIp = make(net.IP, len(networkIp))
-		for index, value := range m.invertIP(tSubnet.IpMask) {
+		invertedMask := util.CopyIP(tSubnet.IpMask)
+		util.InvertIP(invertedMask)
+		for index, value := range invertedMask {
 			stopIp[index] = networkIp[index] | value
 		}
 	}
@@ -135,7 +86,7 @@ func (m *Manager) makeSubnet(tSubnet *topology.Subnet) *subnetType {
 		subnet:  tSubnet,
 		startIp: startIp,
 		stopIp:  stopIp,
-		nextIp:  copyIp(startIp),
+		nextIp:  util.CopyIP(startIp),
 	}
 }
 

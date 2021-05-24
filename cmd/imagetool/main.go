@@ -64,7 +64,8 @@ var (
 	requiredPaths = flagutil.StringToRuneMap(constants.RequiredPaths)
 	roundupPower  = flag.Uint64("roundupPower", 24,
 		"power of 2 to round up raw image size")
-	skipFields = flag.String("skipFields", "",
+	scanExcludeList flagutil.StringList = constants.ScanExcludeList
+	skipFields                          = flag.String("skipFields", "",
 		"Fields to skip when showing or diffing images")
 	tableType mbr.TableType = mbr.TABLE_TYPE_MSDOS
 	timeout                 = flag.Duration("timeout", 0,
@@ -87,6 +88,8 @@ var (
 func init() {
 	flag.Var(&requiredPaths, "requiredPaths",
 		"Comma separated list of required path:type entries")
+	flag.Var(&scanExcludeList, "scanExcludeList",
+		"Comma separated list of patterns to exclude from scanning")
 	flag.Var(&tableType, "tableType", "partition table type for make-raw-image")
 }
 
@@ -124,6 +127,8 @@ var subcommands = []commands.Command{
 	{"check-directory", "dirname", 1, 1, checkDirectorySubcommand},
 	{"chown", " dirname ownerGroup", 2, 2, chownDirectorySubcommand},
 	{"copy", "  name oldimagename", 2, 2, copyImageSubcommand},
+	{"copy-filtered-files", "name srcdir destdir", 3, 3,
+		copyFilteredFilesSubcommand},
 	{"delete", "name", 1, 1, deleteImageSubcommand},
 	{"delunrefobj", "percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},
@@ -139,18 +144,21 @@ var subcommands = []commands.Command{
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
-	{"make-raw-image", "     name rawfile", 2, 2, makeRawImageSubcommand},
-	{"match-triggers", "     name triggers-file", 2, 2,
+	{"make-raw-image", "      name rawfile", 2, 2, makeRawImageSubcommand},
+	{"match-triggers", "      name triggers-file", 2, 2,
 		matchTriggersSubcommand},
-	{"merge-filters", "      filter-file...", 1, -1, mergeFiltersSubcommand},
-	{"merge-triggers", "     triggers-file...", 1, -1, mergeTriggersSubcommand},
-	{"mkdir", "              name", 1, 1, makeDirectorySubcommand},
-	{"patch-directory", "    name directory", 2, 2, patchDirectorySubcommand},
-	{"show", "               name", 1, 1, showImageSubcommand},
-	{"show-filter", "               name", 1, 1, showImageFilterSubcommand},
+	{"merge-filters", "       filter-file...", 1, -1, mergeFiltersSubcommand},
+	{"merge-triggers", "      triggers-file...", 1, -1,
+		mergeTriggersSubcommand},
+	{"mkdir", "               name", 1, 1, makeDirectorySubcommand},
+	{"patch-directory", "     name directory", 2, 2, patchDirectorySubcommand},
+	{"scan-filtered-files", " name directory", 2, 2,
+		scanFilteredFilesSubcommand},
+	{"show", "                name", 1, 1, showImageSubcommand},
+	{"show-filter", "         name", 1, 1, showImageFilterSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
-	{"tar", "                name [file]", 1, 2, tarImageSubcommand},
-	{"test-download-speed", "name", 1, 1, testDownloadSpeedSubcommand},
+	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
+	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},
 }
 
 var imageSrpcClient *srpc.Client

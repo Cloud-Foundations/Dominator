@@ -87,6 +87,9 @@ func (left *NetworkEntry) Equal(right *NetworkEntry) bool {
 	if left.SubnetId != right.SubnetId {
 		return false
 	}
+	if left.VlanTrunk != right.VlanTrunk {
+		return false
+	}
 	return true
 }
 

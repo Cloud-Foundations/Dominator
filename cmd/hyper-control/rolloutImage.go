@@ -346,7 +346,12 @@ func markUnusedHypervisors(hypervisors []*hypervisorType,
 				return
 			}
 			defer client.Put()
-			request := hyper_proto.ListVMsRequest{}
+			request := hyper_proto.ListVMsRequest{
+				IgnoreStateMask: 1<<hyper_proto.StateFailedToStart |
+					1<<hyper_proto.StateStopping |
+					1<<hyper_proto.StateStopped |
+					1<<hyper_proto.StateDestroying,
+			}
 			var reply hyper_proto.ListVMsResponse
 			err = client.RequestReply("Hypervisor.ListVMs", request, &reply)
 			if err != nil {

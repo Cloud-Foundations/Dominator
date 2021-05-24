@@ -28,7 +28,6 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		subnets:          make(map[string]*subnetType),
 		vms:              make(map[string]*vmInfoType),
 	}
-	manager.initInvertTable()
 	html.HandleFunc("/listHypervisors", manager.listHypervisorsHandler)
 	html.HandleFunc("/listLocations", manager.listLocationsHandler)
 	html.HandleFunc("/listVMs", manager.listVMsHandler)
