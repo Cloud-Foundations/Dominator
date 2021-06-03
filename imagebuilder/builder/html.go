@@ -215,6 +215,12 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 			"SourceImage: <a href=\"showImageStream?%s\"><code>%s</code></a><br>\n",
 			sourceImageName, sourceImageName)
 	}
+	if len(stream.Variables) > 0 {
+		fmt.Fprintln(writer, "Stream variables:<br>")
+		fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
+		libjson.WriteWithIndent(writer, "    ", stream.Variables)
+		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
+	}
 	fmt.Fprintln(writer, "Contents of <code>manifest</code> file:<br>")
 	fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
 	writer.Write(manifestBytes)
