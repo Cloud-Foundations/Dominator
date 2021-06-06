@@ -73,8 +73,8 @@ func (stream *imageStreamType) getManifestLocation(b *Builder,
 		variableFunc = b.getVariableFunc(stream.getenv(), variables)
 	}
 	return manifestLocationType{
-		directory: os.Expand(stream.ManifestDirectory, variableFunc),
-		url:       os.Expand(stream.ManifestUrl, variableFunc),
+		directory: expandExpression(stream.ManifestDirectory, variableFunc),
+		url:       expandExpression(stream.ManifestUrl, variableFunc),
 	}
 }
 
@@ -198,7 +198,7 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return "", "", nil, nil, nil, err
 	}
-	sourceImageName := os.Expand(manifest.SourceImage,
+	sourceImageName := expandExpression(manifest.SourceImage,
 		func(name string) string {
 			return stream.getenv()[name]
 		})

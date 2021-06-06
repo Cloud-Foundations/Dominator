@@ -103,7 +103,7 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	if envGetter == nil {
 		return manifestConfig, nil
 	}
-	manifestConfig.SourceImage = os.Expand(manifestConfig.SourceImage,
+	manifestConfig.SourceImage = expandExpression(manifestConfig.SourceImage,
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
