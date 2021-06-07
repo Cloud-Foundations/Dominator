@@ -50,7 +50,12 @@ func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
 func (stream *imageStreamType) getenv() map[string]string {
 	envTable := make(map[string]string, len(stream.Variables)+3)
 	for key, value := range stream.Variables {
-		envTable[key] = value
+		envTable[key] = expandExpression(value, func(name string) string {
+			if name == "IMAGE_STREAM" {
+				return stream.name
+			}
+			return ""
+		})
 	}
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
