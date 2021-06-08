@@ -56,9 +56,10 @@ type currentBuildInfo struct {
 }
 
 type dependencyDataType struct {
-	fetchLog       []byte
-	generatedAt    time.Time
-	streamToSource map[string]string // Key: stream name, value: source stream.
+	fetchLog           []byte
+	generatedAt        time.Time
+	streamToSource     map[string]string // K: stream name, V: source stream.
+	unbuildableSources map[string]struct{}
 }
 
 type masterConfigurationType struct {

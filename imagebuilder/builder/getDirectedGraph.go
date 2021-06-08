@@ -104,10 +104,23 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 		}
 		streamToSource[streamName] = manifestConfig.SourceImage
 	}
+	unbuildableSources := make(map[string]struct{})
+	for streamName, sourceName := range streamToSource {
+		if _, ok := streamToSource[sourceName]; ok {
+			continue
+		}
+		if b.getBootstrapStream(sourceName) != nil {
+			continue
+		}
+		unbuildableSources[sourceName] = struct{}{}
+		b.logger.Printf("stream: %s has unbuildable source: %s\n",
+			streamName, sourceName)
+	}
 	return &dependencyDataType{
-		fetchLog:       fetchLog.Bytes(),
-		generatedAt:    time.Now(),
-		streamToSource: streamToSource,
+		fetchLog:           fetchLog.Bytes(),
+		generatedAt:        time.Now(),
+		streamToSource:     streamToSource,
+		unbuildableSources: unbuildableSources,
 	}, nil
 }
 
@@ -138,10 +151,8 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	if err != nil {
 		return zero, err
 	}
-	unbuildableSources := make(map[string]struct{})
 	streamNames := make([]string, 0, len(dependencyData.streamToSource))
-	for streamName, sourceName := range dependencyData.streamToSource {
-		unbuildableSources[sourceName] = struct{}{}
+	for streamName := range dependencyData.streamToSource {
 		streamNames = append(streamNames, streamName)
 	}
 	sort.Strings(streamNames) // For consistent output.
@@ -150,13 +161,9 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	for _, streamName := range streamNames {
 		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n",
 			streamName, dependencyData.streamToSource[streamName])
-		delete(unbuildableSources, streamName)
 	}
 	// Mark streams with no source in red, to show they are unbuildable.
-	for sourceName := range unbuildableSources {
-		if b.getBootstrapStream(sourceName) != nil {
-			continue
-		}
+	for sourceName := range dependencyData.unbuildableSources {
 		fmt.Fprintf(buffer, "  \"%s\" [fontcolor=red]\n", sourceName)
 	}
 	fmt.Fprintln(buffer, "}")
