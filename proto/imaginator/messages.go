@@ -34,7 +34,9 @@ type GetDirectedGraphResponse struct {
 }
 
 type GetDirectedGraphResult struct {
-	FetchLog    []byte
-	GeneratedAt time.Time
-	GraphvizDot []byte
+	FetchLog         []byte
+	GeneratedAt      time.Time
+	GraphvizDot      []byte
+	LastAttemptAt    time.Time
+	LastAttemptError string
 }
