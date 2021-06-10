@@ -37,11 +37,15 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 func (s state) writeDirectedGraph(writer io.Writer, regenerate bool) {
 	request := proto.GetDirectedGraphRequest{}
 	if regenerate {
-		request.MaxAge = time.Second
+		request.MaxAge = 2 * time.Second
 	}
 	result, err := s.builder.GetDirectedGraph(request)
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
+		return
+	}
+	if result.GeneratedAt.IsZero() { // No data yet.
+		fmt.Fprintln(writer, "No data generated yet<br>")
 		return
 	}
 	cmd := exec.Command("dot", "-Tsvg")
@@ -59,16 +63,23 @@ func (s state) writeDirectedGraph(writer io.Writer, regenerate bool) {
 		fmt.Fprintln(writer, "</pre>")
 	}
 	if len(result.FetchLog) > 0 {
-		fmt.Fprintln(writer, "<hr style=\"height:2px\"><font color=\"#bbb\">")
+		fmt.Fprintln(writer,
+			"<hr style=\"height:2px\"><font color=\"#bbb\">")
 		fmt.Fprintln(writer, "<b>Fetch log:</b>")
 		fmt.Fprintln(writer, "<pre>")
 		writer.Write(result.FetchLog)
 		fmt.Fprintln(writer, "</pre>")
 		fmt.Fprintln(writer, "</font>")
 	}
-	if time.Since(result.GeneratedAt) > time.Second {
-		fmt.Fprintf(writer, "Data generated at: %s\n",
-			result.GeneratedAt.Format(format.TimeFormatSeconds))
+	fmt.Fprintf(writer, "Data generated at: %s<br>\n",
+		result.GeneratedAt.Format(format.TimeFormatSeconds))
+	if result.LastAttemptError != "" {
+		fmt.Fprintf(writer,
+			"Last generation attempt at: %s failed: %s<br>\n",
+			result.LastAttemptAt.Format(format.TimeFormatSeconds),
+			result.LastAttemptError)
+	}
+	if time.Since(result.GeneratedAt) > 2*time.Second {
 		fmt.Fprintln(writer,
 			`<form enctype="application/x-www-form-urlencoded" action="/showDirectedGraph" method="post">`)
 		fmt.Fprintln(writer,
