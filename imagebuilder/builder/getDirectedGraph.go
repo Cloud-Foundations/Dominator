@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -36,11 +37,11 @@ func (b *Builder) dependencyGeneratorLoop(
 				format.Duration(timeTaken))
 		}
 		b.dependencyDataLock.Lock()
-		if dependencyData != nil || b.dependencyData == nil {
+		if dependencyData != nil {
 			b.dependencyData = dependencyData
-			b.dependencyDataError = err
 		}
 		b.dependencyDataAttempt = finishTime
+		b.dependencyDataError = err
 		b.dependencyDataLock.Unlock()
 		interval = timeTaken * 10
 		if interval < 10*time.Second {
@@ -124,11 +125,18 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 	}, nil
 }
 
+// getDependencyData returns the dependency data (possibly stale or nil), the
+// time of the last attempt to generate and the error result for the last
+// attempt. If maxAge is larger than zero, getDependencyData will wait until
+// there is an attempt less than maxAge ago.
 func (b *Builder) getDependencyData(maxAge time.Duration) (
-	*dependencyDataType, error) {
+	*dependencyDataType, time.Time, error) {
 	if maxAge <= 0 {
-		maxAge = time.Minute
-	} else if maxAge < 2*time.Second {
+		b.dependencyDataLock.RLock()
+		defer b.dependencyDataLock.RUnlock()
+		return b.dependencyData, b.dependencyDataAttempt, b.dependencyDataError
+	}
+	if maxAge < 2*time.Second {
 		maxAge = 2 * time.Second
 	}
 	for {
@@ -138,7 +146,7 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 		err := b.dependencyDataError
 		b.dependencyDataLock.RUnlock()
 		if time.Since(lastAttempt) < maxAge {
-			return dependencyData, err
+			return dependencyData, lastAttempt, err
 		}
 		b.generateDependencyTrigger <- struct{}{} // Trigger and wait.
 	}
@@ -146,10 +154,12 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 
 func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	proto.GetDirectedGraphResult, error) {
-	var zero proto.GetDirectedGraphResult
-	dependencyData, err := b.getDependencyData(request.MaxAge)
-	if err != nil {
-		return zero, err
+	dependencyData, lastAttempt, lastErr := b.getDependencyData(request.MaxAge)
+	if dependencyData == nil {
+		return proto.GetDirectedGraphResult{
+			LastAttemptAt:    lastAttempt,
+			LastAttemptError: errors.ErrorToString(lastErr),
+		}, nil
 	}
 	streamNames := make([]string, 0, len(dependencyData.streamToSource))
 	for streamName := range dependencyData.streamToSource {
@@ -168,9 +178,11 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
-		FetchLog:    dependencyData.fetchLog,
-		GeneratedAt: dependencyData.generatedAt,
-		GraphvizDot: buffer.Bytes(),
+		FetchLog:         dependencyData.fetchLog,
+		GeneratedAt:      dependencyData.generatedAt,
+		GraphvizDot:      buffer.Bytes(),
+		LastAttemptAt:    lastAttempt,
+		LastAttemptError: errors.ErrorToString(lastErr),
 	}, nil
 }
 
