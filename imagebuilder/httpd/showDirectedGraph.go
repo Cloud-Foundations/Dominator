@@ -16,6 +16,12 @@ import (
 
 func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	req *http.Request) {
+	if req.Method == "POST" {
+		s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{
+			MaxAge: 2 * time.Second,
+		})
+		http.Redirect(w, req, "/showDirectedGraph", http.StatusFound)
+	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	fmt.Fprintln(writer, "<title>imaginator image stream relationshops</title>")
@@ -28,18 +34,14 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, "<h1>imaginator image stream relationships</h1>")
 	fmt.Fprintln(writer, "</center>")
-	s.writeDirectedGraph(writer, req.Method == "POST")
+	s.writeDirectedGraph(writer)
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
 }
 
-func (s state) writeDirectedGraph(writer io.Writer, regenerate bool) {
-	request := proto.GetDirectedGraphRequest{}
-	if regenerate {
-		request.MaxAge = 2 * time.Second
-	}
-	result, err := s.builder.GetDirectedGraph(request)
+func (s state) writeDirectedGraph(writer io.Writer) {
+	result, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
