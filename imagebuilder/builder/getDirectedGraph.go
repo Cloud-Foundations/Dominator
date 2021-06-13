@@ -69,6 +69,7 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 	urlToDirectory := make(map[string]string)
 	fetchLog := bytes.NewBuffer(nil)
 	streamNames := b.listNormalStreamNames()
+	startTime := time.Now()
 	for _, streamName := range streamNames {
 		b.streamsLock.RLock()
 		stream := b.imageStreams[streamName]
@@ -117,9 +118,12 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 		b.logger.Printf("stream: %s has unbuildable source: %s\n",
 			streamName, sourceName)
 	}
+	finishTime := time.Now()
+	fmt.Fprintf(fetchLog, "Generated dependencies in: %s\n",
+		format.Duration(finishTime.Sub(startTime)))
 	return &dependencyDataType{
 		fetchLog:           fetchLog.Bytes(),
-		generatedAt:        time.Now(),
+		generatedAt:        finishTime,
 		streamToSource:     streamToSource,
 		unbuildableSources: unbuildableSources,
 	}, nil
