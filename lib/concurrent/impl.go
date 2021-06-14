@@ -49,11 +49,12 @@ func (state *State) goRun(doFunc func() error) error {
 func (state *State) reap() error {
 	state.reaped = true
 	close(state.semaphore)
+	var err error
 	for ; state.pending > 0; state.pending-- {
-		if err := <-state.errorChannel; err != nil {
-			return err
+		if e := <-state.errorChannel; err == nil && e != nil {
+			err = e
 		}
 	}
 	close(state.errorChannel)
-	return nil
+	return err
 }
