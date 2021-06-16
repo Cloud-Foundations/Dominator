@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
@@ -27,14 +29,14 @@ func (b *Builder) dependencyGeneratorLoop(
 		case <-timer.C:
 		}
 		startTime := time.Now()
-		dependencyData, err := b.generateDependencyData()
+		dependencyData, fetchTime, err := b.generateDependencyData()
 		finishTime := time.Now()
 		timeTaken := finishTime.Sub(startTime)
 		if err != nil {
 			b.logger.Printf("failed to generate dependencies: %s\n", err)
 		} else {
-			b.logger.Debugf(0, "generated dependencies in: %s\n",
-				format.Duration(timeTaken))
+			b.logger.Debugf(0, "generated dependencies in: %s (fetch: %s)\n",
+				format.Duration(timeTaken), fetchTime)
 		}
 		b.dependencyDataLock.Lock()
 		if dependencyData != nil {
@@ -43,7 +45,7 @@ func (b *Builder) dependencyGeneratorLoop(
 		b.dependencyDataAttempt = finishTime
 		b.dependencyDataError = err
 		b.dependencyDataLock.Unlock()
-		interval = timeTaken * 10
+		interval = fetchTime * 10
 		if interval < 10*time.Second {
 			interval = 10 * time.Second
 		}
@@ -58,7 +60,8 @@ func (b *Builder) dependencyGeneratorLoop(
 	}
 }
 
-func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
+func (b *Builder) generateDependencyData() (
+	*dependencyDataType, time.Duration, error) {
 	var directoriesToRemove []string
 	defer func() {
 		for _, directory := range directoriesToRemove {
@@ -67,45 +70,73 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 	}()
 	streamToSource := make(map[string]string) // K: stream name, V: source.
 	urlToDirectory := make(map[string]string)
-	fetchLog := bytes.NewBuffer(nil)
 	streamNames := b.listNormalStreamNames()
 	startTime := time.Now()
+	streams := make(map[string]*imageStreamType, len(streamNames))
+	// First pass to process local manifests and start Git fetches.
+	state := concurrent.NewState(0)
+	var lock sync.Mutex
+	fetchLog := bytes.NewBuffer(nil)
+	var serialisedFetchTime time.Duration
 	for _, streamName := range streamNames {
 		b.streamsLock.RLock()
 		stream := b.imageStreams[streamName]
 		b.streamsLock.RUnlock()
 		if stream == nil {
-			return nil, fmt.Errorf("stream: %s does not exist", streamName)
+			return nil, 0, fmt.Errorf("stream: %s does not exist", streamName)
 		}
+		streams[streamName] = stream
 		manifestLocation := stream.getManifestLocation(b, nil)
-		var directory string
-		if rootDir, ok := urlToDirectory[manifestLocation.url]; ok {
-			directory = filepath.Join(rootDir, manifestLocation.directory)
+		if _, ok := urlToDirectory[manifestLocation.url]; ok {
+			continue // Git fetch has started.
 		} else if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
-			return nil, err
+			return nil, 0, err
 		} else if rootDir != "" {
-			directory = filepath.Join(rootDir, manifestLocation.directory)
+			manifestConfig, err := readManifestFile(
+				filepath.Join(rootDir, manifestLocation.directory), stream)
+			if err != nil {
+				return nil, 0, err
+			}
+			streamToSource[streamName] = manifestConfig.SourceImage
+			delete(streams, streamName) // Mark as completed.
 		} else {
 			gitRoot, err := makeTempDirectory("",
 				strings.Replace(streamName, "/", "_", -1)+".manifest")
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
-			err = gitShallowClone(gitRoot, manifestLocation.url,
-				stream.ManifestUrl, "master", []string{"**/manifest"}, fetchLog)
-			if err != nil {
-				return nil, err
-			}
-			urlToDirectory[manifestLocation.url] = gitRoot
-			directory = filepath.Join(gitRoot, manifestLocation.directory)
+			err = state.GoRun(func() error {
+				myFetchLog := bytes.NewBuffer(nil)
+				startTime := time.Now()
+				err := gitShallowClone(gitRoot, manifestLocation.url,
+					stream.ManifestUrl, "master", []string{"**/manifest"},
+					myFetchLog)
+				lock.Lock()
+				fetchLog.Write(myFetchLog.Bytes())
+				serialisedFetchTime += time.Since(startTime)
+				lock.Unlock()
+				return err
+			})
+			urlToDirectory[manifestLocation.url] = gitRoot // Mark fetch started
 		}
-		manifestConfig, err := readManifestFile(directory, stream)
+	}
+	if err := state.Reap(); err != nil {
+		return nil, 0, err
+	}
+	// Second pass to process fetched manifests.
+	for streamName, stream := range streams {
+		manifestLocation := stream.getManifestLocation(b, nil)
+		manifestConfig, err := readManifestFile(
+			filepath.Join(urlToDirectory[manifestLocation.url],
+				manifestLocation.directory), stream)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		streamToSource[streamName] = manifestConfig.SourceImage
 	}
+	fmt.Fprintf(fetchLog, "Cumulative fetch time: %s\n",
+		format.Duration(serialisedFetchTime))
 	unbuildableSources := make(map[string]struct{})
 	for streamName, sourceName := range streamToSource {
 		if _, ok := streamToSource[sourceName]; ok {
@@ -126,7 +157,7 @@ func (b *Builder) generateDependencyData() (*dependencyDataType, error) {
 		generatedAt:        finishTime,
 		streamToSource:     streamToSource,
 		unbuildableSources: unbuildableSources,
-	}, nil
+	}, serialisedFetchTime, nil
 }
 
 // getDependencyData returns the dependency data (possibly stale or nil), the
