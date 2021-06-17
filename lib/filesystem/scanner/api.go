@@ -15,6 +15,11 @@ type Hasher interface {
 	Hash(reader io.Reader, length uint64) (hash.Hash, error)
 }
 
+type openingHasher interface {
+	Hasher
+	OpenAndHash(inode *filesystem.RegularInode, pathName string) (bool, error)
+}
+
 type simpleHasher bool // If true, ignore short reads.
 
 type cpuLimitedHasher struct {
