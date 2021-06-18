@@ -12,11 +12,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -278,6 +280,13 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	if err != nil {
 		return nil, err
 	}
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(ctimeResolution)
+	fmt.Fprintf(buildLog, "Waited %s (Ctime resolution)\n",
+		format.Duration(ctimeResolution))
 	if fi, err := os.Lstat(filepath.Join(manifestDir, "tests")); err == nil {
 		if fi.IsDir() {
 			testsDir := filepath.Join(rootDir, "tests", request.StreamName)
@@ -307,7 +316,8 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
-		computedFilesList, imageFilter, imageTriggers, buildLog)
+		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
+		imageTriggers, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +342,53 @@ func buildImageFromManifestAndUpload(client *srpc.Client, manifestDir string,
 		return nil, "", err
 	}
 	return img, name, nil
+}
+
+func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
+	buildLog io.Writer) (*treeCache, error) {
+	cache := treeCache{
+		inodeTable:  make(map[uint64]inodeData),
+		pathToInode: make(map[string]uint64),
+	}
+	filenameToInodeTable := fs.FilenameToInodeTable()
+	rootLength := len(rootDir)
+	startTime := time.Now()
+	err := filepath.Walk(rootDir,
+		func(path string, info os.FileInfo, err error) error {
+			if info.Mode()&os.ModeType != 0 {
+				return nil
+			}
+			rootedPath := path[rootLength:]
+			inum, ok := filenameToInodeTable[rootedPath]
+			if !ok {
+				return nil
+			}
+			gInode, ok := fs.InodeTable[inum]
+			if !ok {
+				return nil
+			}
+			rInode, ok := gInode.(*filesystem.RegularInode)
+			if !ok {
+				return nil
+			}
+			var stat syscall.Stat_t
+			if err := syscall.Stat(path, &stat); err != nil {
+				return err
+			}
+			cache.inodeTable[stat.Ino] = inodeData{
+				ctime: stat.Ctim,
+				hash:  rInode.Hash,
+				size:  uint64(stat.Size),
+			}
+			cache.pathToInode[path] = uint64(stat.Ino)
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(buildLog, "Built tree cache in: %s\n",
+		format.Duration(time.Since(startTime)))
+	return &cache, nil
 }
 
 func buildTreeFromManifest(client *srpc.Client, manifestDir string,
@@ -444,6 +501,10 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 func unpackImage(client *srpc.Client, streamName string,
 	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
 	imageName, sourceImage, err := getLatestImage(client, streamName, buildLog)
 	if err != nil {
 		return nil, err
@@ -462,10 +523,18 @@ func unpackImage(client *srpc.Client, streamName string,
 		return nil, err
 	}
 	fmt.Fprintf(buildLog, "Source image: %s\n", imageName)
+	treeCache, err := buildTreeCache(rootDir, sourceImage.FileSystem, buildLog)
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(ctimeResolution)
+	fmt.Fprintf(buildLog, "Waited %s (Ctime resolution)\n",
+		format.Duration(ctimeResolution))
 	return &sourceImageInfoType{
-		listComputedFiles(sourceImage.FileSystem),
-		sourceImage.Filter,
-		sourceImage.Triggers,
+		computedFiles: listComputedFiles(sourceImage.FileSystem),
+		filter:        sourceImage.Filter,
+		treeCache:     treeCache,
+		triggers:      sourceImage.Triggers,
 	}, nil
 }
 

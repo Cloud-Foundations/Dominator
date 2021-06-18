@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"io"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
@@ -15,6 +17,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
+
+// Private interface types.
 
 type buildLogger interface {
 	Bytes() []byte
@@ -29,6 +33,10 @@ type imageBuilder interface {
 	build(b *Builder, client *srpc.Client, request proto.BuildImageRequest,
 		buildLog buildLogger) (*image.Image, error)
 }
+
+// Other private types.
+
+type argList []string
 
 type bootstrapStream struct {
 	builder          *Builder
@@ -62,30 +70,8 @@ type dependencyDataType struct {
 	unbuildableSources map[string]struct{}
 }
 
-type masterConfigurationType struct {
-	BindMounts                []string                    `json:",omitempty"`
-	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
-	ImageStreamsCheckInterval uint                        `json:",omitempty"`
-	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
-	ImageStreamsUrl           string                      `json:",omitempty"`
-	PackagerTypes             map[string]packagerType     `json:",omitempty"`
-}
-
-type manifestConfigType struct {
-	SourceImage string
-	*filter.Filter
-}
-
-// manifestLocationType contains the expanded location of a manifest. These
-// data may include secrets (i.e. username and password).
-type manifestLocationType struct {
-	directory string
-	url       string
-}
-
-type manifestType struct {
-	filter          *filter.Filter
-	sourceImageInfo *sourceImageInfoType
+type imageStreamsConfigurationType struct {
+	Streams map[string]*imageStreamType `json:",omitempty"`
 }
 
 type imageStreamType struct {
@@ -99,15 +85,40 @@ type imageStreamType struct {
 	Variables         map[string]string
 }
 
-type imageStreamsConfigurationType struct {
-	Streams map[string]*imageStreamType `json:",omitempty"`
+type inodeData struct {
+	ctime syscall.Timespec
+	hash  hash.Hash
+	size  uint64
 }
-
-type argList []string
 
 type listCommandType struct {
 	ArgList        argList
 	SizeMultiplier uint64
+}
+
+type manifestConfigType struct {
+	SourceImage string
+	*filter.Filter
+}
+type masterConfigurationType struct {
+	BindMounts                []string                    `json:",omitempty"`
+	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
+	ImageStreamsCheckInterval uint                        `json:",omitempty"`
+	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
+	ImageStreamsUrl           string                      `json:",omitempty"`
+	PackagerTypes             map[string]packagerType     `json:",omitempty"`
+}
+
+// manifestLocationType contains the expanded location of a manifest. These
+// data may include secrets (i.e. username and password).
+type manifestLocationType struct {
+	directory string
+	url       string
+}
+
+type manifestType struct {
+	filter          *filter.Filter
+	sourceImageInfo *sourceImageInfoType
 }
 
 type packagerType struct {
@@ -123,7 +134,22 @@ type packagerType struct {
 type sourceImageInfoType struct {
 	computedFiles []util.ComputedFile
 	filter        *filter.Filter
+	treeCache     *treeCache
 	triggers      *triggers.Triggers
+}
+
+type testResultType struct {
+	buffer   chan byte
+	duration time.Duration
+	err      error
+	prog     string
+}
+
+type treeCache struct {
+	hitBytes    uint64
+	inodeTable  map[uint64]inodeData
+	numHits     uint64
+	pathToInode map[string]uint64
 }
 
 type Builder struct {

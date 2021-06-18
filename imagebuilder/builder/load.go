@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
@@ -54,6 +55,12 @@ func imageStreamsRealDecoder(reader io.Reader) (
 func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
+	logger.Printf("Inode Ctime resolution: %s\n",
+		format.Duration(ctimeResolution))
 	initialNamespace, err := getNamespace()
 	if err != nil {
 		return nil, err
