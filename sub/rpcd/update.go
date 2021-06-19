@@ -197,7 +197,12 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 			logger.Flush()
 		}
 		time.Sleep(time.Second)
-		return !runCommand(logger, "reboot")
+		if runCommand(logger, "reboot") {
+			return false
+		}
+		logger.Printf("%sReboot failed, trying harder\n", logPrefix)
+		time.Sleep(time.Second)
+		return !runCommand(logger, "reboot", "-f")
 	}
 	if needRestart {
 		logger.Printf("%sAction: service subd restart\n", logPrefix)
