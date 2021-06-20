@@ -166,7 +166,7 @@ func getImageRetry(clientName, imageName string,
 func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 	imageServerAddress string, timeoutTime time.Time,
 	logger log.DebugLogger) error {
-	var generationCount uint64
+	var generationCount, lastGenerationCount, lastScanCount uint64
 	deleteEarly := *deleteBeforeFetch
 	ignoreMissingComputedFiles := true
 	pushComputedFiles := true
@@ -183,6 +183,23 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			&pollReply); err != nil {
 			return err
 		}
+		if pollReply.GenerationCount != lastGenerationCount ||
+			pollReply.ScanCount != lastScanCount {
+			if pollReply.FileSystem == nil {
+				logger.Debugf(0,
+					"Poll Scan: %d, Generation: %d, cached objects: %d\n",
+					pollReply.ScanCount, pollReply.GenerationCount,
+					len(pollReply.ObjectCache))
+			} else {
+				logger.Debugf(0,
+					"Poll Scan: %d, Generation: %d, FS objects: %d, cached objects: %d\n",
+					pollReply.ScanCount, pollReply.GenerationCount,
+					len(pollReply.FileSystem.InodeTable),
+					len(pollReply.ObjectCache))
+			}
+		}
+		lastGenerationCount = pollReply.GenerationCount
+		lastScanCount = pollReply.ScanCount
 		if pollReply.FileSystem == nil {
 			continue
 		}
@@ -203,6 +220,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			return nil
 		}
 		if len(objectsToFetch) > 0 {
+			logger.Debugln(0, "Fetch()")
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
 				ServerAddress: imageServerAddress,
