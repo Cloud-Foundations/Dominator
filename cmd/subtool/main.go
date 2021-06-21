@@ -122,6 +122,7 @@ var subcommands = []commands.Command{
 	{"cleanup", "", 0, 0, cleanupSubcommand},
 	{"delete", "pathname...", 1, 1, deleteSubcommand},
 	{"fetch", "hashesFile", 1, 1, fetchSubcommand},
+	{"fetch-image", "image", 1, 1, fetchImageSubcommand},
 	{"get-config", "", 0, 0, getConfigSubcommand},
 	{"get-file", "remoteFile localFile", 2, 2, getFileSubcommand},
 	{"list-missing-objects", "image", 1, 1, listMissingObjectsSubcommand},

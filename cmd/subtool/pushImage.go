@@ -98,8 +98,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 			return err
 		}
 	}
-	if err := pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime,
-		logger); err != nil {
+	err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, false,
+		logger)
+	if err != nil {
 		return err
 	}
 	var updateRequest sub.UpdateRequest
@@ -164,7 +165,7 @@ func getImageRetry(clientName, imageName string,
 }
 
 func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
-	imageServerAddress string, timeoutTime time.Time,
+	imageServerAddress string, timeoutTime time.Time, singleFetch bool,
 	logger log.DebugLogger) error {
 	var generationCount, lastGenerationCount, lastScanCount uint64
 	deleteEarly := *deleteBeforeFetch
@@ -233,6 +234,9 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 				return err
 			}
 			showTimeTaken(startTime)
+			if singleFetch {
+				return nil
+			}
 		}
 		if len(objectsToPush) > 0 {
 			startTime := showStart("lib.PushObjects()")
