@@ -145,6 +145,7 @@ func getImageRetry(clientName, imageName string,
 		return nil, err
 	}
 	defer imageSrpcClient.Close()
+	firstTime := true
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		img, err := imgclient.GetImage(imageSrpcClient, imageName)
 		if err != nil {
@@ -159,6 +160,9 @@ func getImageRetry(clientName, imageName string,
 			img.FileSystem.ComputeTotalDataBytes()
 			img.FileSystem.BuildEntryMap()
 			return img, nil
+		} else if firstTime {
+			logger.Printf("Image: %s not found, will retry\n", imageName)
+			firstTime = false
 		}
 	}
 	return nil, errors.New("timed out getting image")
