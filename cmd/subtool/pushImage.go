@@ -225,7 +225,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			return nil
 		}
 		if len(objectsToFetch) > 0 {
-			logger.Debugln(0, "Fetch()")
+			logger.Debugf(0, "Fetch(%d)\n", len(objectsToFetch))
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
 				ServerAddress: imageServerAddress,
@@ -243,6 +243,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			}
 		}
 		if len(objectsToPush) > 0 {
+			logger.Debugf(0, "PushObjects(%d)\n", len(objectsToPush))
 			startTime := showStart("lib.PushObjects()")
 			err := lib.PushObjects(*subObj, objectsToPush, logger)
 			if err != nil {
