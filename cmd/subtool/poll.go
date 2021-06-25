@@ -28,7 +28,8 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 		request.ShortPollOnly = *shortPoll
 		pollStartTime := time.Now()
 		err = client.CallPoll(srpcClient, request, &reply)
-		fmt.Printf("Poll duration: %s\n", time.Since(pollStartTime))
+		fmt.Printf("Poll duration: %s, ScanCount: %d, GenerationCount: %d\n",
+			time.Since(pollStartTime), reply.ScanCount, reply.GenerationCount)
 		if err != nil {
 			logger.Fatalf("Error calling: %s\n", err)
 		}
