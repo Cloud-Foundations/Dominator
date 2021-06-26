@@ -359,7 +359,9 @@ func main() {
 				oldTriggersFilename, disableScanner,
 				func() {
 					invalidateNextScanObjectCache = true
-					fsh.UpdateObjectCacheOnly()
+					if err := fsh.UpdateObjectCacheOnly(); err != nil {
+						logger.Printf("Error updating object cache: %s\n", err)
+					}
 				},
 				workdirGoroutine, logger)
 		configMetricsDir, err := tricorder.RegisterDirectory("/config")
@@ -410,6 +412,9 @@ func main() {
 				}
 				if invalidateNextScanObjectCache {
 					fs.ScanObjectCache()
+					if err := fs.ScanObjectCache(); err != nil {
+						logger.Printf("Error scanning object cache: %s\n", err)
+					}
 					invalidateNextScanObjectCache = false
 				}
 				fsh.Update(fs)
