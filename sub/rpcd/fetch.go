@@ -102,7 +102,7 @@ func (t *rpcType) doFetch(request sub.FetchRequest) error {
 	}
 	defer objectsReader.Close()
 	var totalLength uint64
-	defer t.rescanObjectCacheFunction()
+	defer t.workdirGoroutine.Run(t.rescanObjectCacheFunction)
 	timeStart := time.Now()
 	for _, hash := range request.Hashes {
 		length, reader, err := objectsReader.NextObject()
