@@ -411,10 +411,12 @@ func main() {
 					fmt.Printf("Completed cycle: %d\n", iter)
 				}
 				if invalidateNextScanObjectCache {
-					fs.ScanObjectCache()
-					if err := fs.ScanObjectCache(); err != nil {
-						logger.Printf("Error scanning object cache: %s\n", err)
-					}
+					workdirGoroutine.Run(func() {
+						if err := fs.ScanObjectCache(); err != nil {
+							logger.Printf("Error scanning object cache: %s\n",
+								err)
+						}
+					})
 					invalidateNextScanObjectCache = false
 				}
 				fsh.Update(fs)
