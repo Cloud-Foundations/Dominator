@@ -225,7 +225,8 @@ func (client *Client) localAttemptUpgradeToUnix() (bool, error) {
 	newConn, err := net.Dial("unix", replyOne.SocketPathname)
 	if err != nil {
 		conn.Encode(localUpgradeToUnixRequestTwo{})
-		return false, err
+		logger.Println(err)
+		return false, nil
 	}
 	doClose := true
 	defer func() {
