@@ -244,7 +244,7 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 	if isEncrypted {
 		client.connType += "/TLS"
 	}
-	if attemptTransportUpgrade {
+	if attemptTransportUpgrade && *srpcProxy == "" {
 		oldBufrw := client.bufrw
 		if _, err := client.localAttemptUpgradeToUnix(); err != nil {
 			client.Close()
