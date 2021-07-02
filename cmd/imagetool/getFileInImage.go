@@ -26,7 +26,7 @@ func getFileInImageSubcommand(args []string, logger log.DebugLogger) error {
 
 func getFileInImage(objectClient *objectclient.ObjectClient, imageName,
 	imageFile, outFileName string) error {
-	fs, err := getTypedImage(imageName)
+	fs, _, err := getTypedImage(imageName)
 	if err != nil {
 		return err
 	}

@@ -37,14 +37,15 @@ func addImageimage(imageSClient *srpc.Client,
 		triggersFilename); err != nil {
 		return err
 	}
-	fs, err := getFsOfImage(imageSClient, oldImageName)
+	img, err := getImage(imageSClient, oldImageName)
 	if err != nil {
 		return err
 	}
-	if err := spliceComputedFiles(fs); err != nil {
+	if err := spliceComputedFiles(img.FileSystem); err != nil {
 		return err
 	}
-	if fs, err = applyDeleteFilter(fs); err != nil {
+	fs, err := applyDeleteFilter(img.FileSystem, img.Filter)
+	if err != nil {
 		return err
 	}
 	fs = fs.Filter(newImage.Filter)

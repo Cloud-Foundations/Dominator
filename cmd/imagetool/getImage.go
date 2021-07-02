@@ -46,7 +46,7 @@ func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
 
 func getImageForUnpack(objectClient *objectclient.ObjectClient, name string) (
 	*filesystem.FileSystem, objectserver.ObjectsGetter, error) {
-	fs, err := getTypedImage(name)
+	fs, _, err := getTypedImage(name)
 	if err != nil {
 		return nil, nil, err
 	}

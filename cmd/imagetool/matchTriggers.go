@@ -22,7 +22,7 @@ func matchTriggersSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func matchTriggers(image string, triggersFile string) error {
-	fs, err := getTypedImage(image)
+	fs, _, err := getTypedImage(image)
 	if err != nil {
 		return err
 	}

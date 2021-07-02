@@ -15,7 +15,7 @@ func showImageSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func showImage(image string) error {
-	fs, err := getTypedImage(image)
+	fs, _, err := getTypedImage(image)
 	if err != nil {
 		return err
 	}

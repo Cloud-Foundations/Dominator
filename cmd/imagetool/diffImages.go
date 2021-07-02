@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -28,18 +29,24 @@ func diffSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func diffTypedImages(tool string, lName string, rName string) error {
-	lfs, err := getTypedImage(lName)
+	lfs, lFilter, err := getTypedImage(lName)
 	if err != nil {
 		return fmt.Errorf("error getting left image: %s", err)
 	}
-	if lfs, err = applyDeleteFilter(lfs); err != nil {
-		return fmt.Errorf("error filtering left image: %s", err)
-	}
-	rfs, err := getTypedImage(rName)
+	rfs, rFilter, err := getTypedImage(rName)
 	if err != nil {
 		return fmt.Errorf("error getting right image: %s", err)
 	}
-	if rfs, err = applyDeleteFilter(rfs); err != nil {
+	var filt *filter.Filter
+	if lFilter != nil && rFilter == nil {
+		filt = lFilter
+	} else if lFilter == nil && rFilter != nil {
+		filt = rFilter
+	}
+	if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
+		return fmt.Errorf("error filtering left image: %s", err)
+	}
+	if rfs, err = applyDeleteFilter(rfs, filt); err != nil {
 		return fmt.Errorf("error filtering right image: %s", err)
 	}
 	err = diffImages(tool, lfs, rfs)
@@ -49,27 +56,39 @@ func diffTypedImages(tool string, lName string, rName string) error {
 	return nil
 }
 
-func getTypedImage(typedName string) (*filesystem.FileSystem, error) {
+func getTypedImage(typedName string) (
+	*filesystem.FileSystem, *filter.Filter, error) {
 	if len(typedName) < 3 || typedName[1] != ':' {
-		imageSClient, _ := getClients()
-		return getFsOfImage(imageSClient, typedName)
+		typedName = "i:" + typedName
 	}
 	switch name := typedName[2:]; typedName[0] {
 	case 'd':
-		return scanDirectory(name)
+		fs, err := scanDirectory(name)
+		return fs, nil, err
 	case 'f':
-		return readFileSystem(name)
+		fs, err := readFileSystem(name)
+		return fs, nil, err
 	case 'i':
 		imageSClient, _ := getClients()
-		return getFsOfImage(imageSClient, name)
+		if img, err := getImage(imageSClient, name); err != nil {
+			return nil, nil, err
+		} else {
+			return img.FileSystem, img.Filter, nil
+		}
 	case 'l':
-		return readFsOfImage(name)
+		if img, err := readImage(name); err != nil {
+			return nil, nil, err
+		} else {
+			return img.FileSystem, img.Filter, nil
+		}
 	case 's':
-		return pollImage(name)
+		fs, err := pollImage(name)
+		return fs, nil, err
 	case 'v':
-		return scanVm(name)
+		fs, err := scanVm(name)
+		return fs, nil, err
 	default:
-		return nil, errors.New("unknown image type: " + typedName[:1])
+		return nil, nil, errors.New("unknown image type: " + typedName[:1])
 	}
 }
 
@@ -118,18 +137,18 @@ func getFsOfImage(client *srpc.Client, name string) (
 	}
 }
 
-func readFsOfImage(name string) (*filesystem.FileSystem, error) {
+func readImage(name string) (*image.Image, error) {
 	file, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	var image image.Image
-	if err := gob.NewDecoder(file).Decode(&image); err != nil {
+	var img image.Image
+	if err := gob.NewDecoder(file).Decode(&img); err != nil {
 		return nil, err
 	}
-	image.FileSystem.RebuildInodePointers()
-	return image.FileSystem, nil
+	img.FileSystem.RebuildInodePointers()
+	return &img, nil
 }
 
 func pollImage(name string) (*filesystem.FileSystem, error) {
