@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -43,12 +44,16 @@ func cloneSet(set map[string]struct{}) map[string]struct{} {
 	return clone
 }
 
-func load(topologyDir string) (*Topology, error) {
+func load(params Params) (*Topology, error) {
+	if params.Logger == nil {
+		params.Logger = nulllogger.New()
+	}
 	topology := &Topology{
+		logger:          params.Logger,
 		machineParents:  make(map[string]*Directory),
 		reservedIpAddrs: make(map[string]struct{}),
 	}
-	directory, err := topology.readDirectory(topologyDir, "",
+	directory, err := topology.readDirectory(params.TopologyDir, "",
 		newInheritingState(),
 		&commonStateType{
 			hostnames:    make(map[string]struct{}),
@@ -250,6 +255,7 @@ func (t *Topology) loadSubnets(directory *Directory, dirpath string,
 			t.reservedIpAddrs[ipAddr] = struct{}{}
 		}
 	}
+	t.logger.Debugf(2, "T.loadSubnets: subnets: %v\n", subnetIds)
 	return nil
 }
 
@@ -261,6 +267,7 @@ func (t *Topology) readDirectory(topDir, dirname string,
 		subnetIdToSubnet: make(map[string]*Subnet),
 	}
 	dirpath := filepath.Join(topDir, dirname)
+	t.logger.Debugf(1, "T.readDirectory(%s)\n", dirpath)
 	if err := directory.loadOwners(dirpath, state.owners); err != nil {
 		return nil, err
 	}
