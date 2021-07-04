@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/proxy"
@@ -47,8 +48,11 @@ var (
 		"URL of Git repository containing repository")
 )
 
-func doCheck() {
-	topo, err := topology.Load(*topologyDir)
+func doCheck(logger log.DebugLogger) {
+	topo, err := topology.LoadWithParams(topology.Params{
+		Logger:      logger,
+		TopologyDir: *topologyDir,
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -66,12 +70,12 @@ func main() {
 		os.Exit(1)
 	}
 	flag.Parse()
-	if *checkTopology {
-		doCheck()
-	}
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
+	if *checkTopology {
+		doCheck(logger)
+	}
 	if err := setupserver.SetupTls(); err != nil {
 		logger.Fatalln(err)
 	}
