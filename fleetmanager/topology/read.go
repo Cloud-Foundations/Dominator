@@ -141,30 +141,31 @@ func loadTags(filename string) (tags.Tags, error) {
 	return loadedTags, nil
 }
 
-func (state *commonStateType) addHostname(name string) error {
+func (cState *commonStateType) addHostname(name string) error {
 	if name == "" {
 		return nil
 	}
-	if _, ok := state.hostnames[name]; ok {
+	if _, ok := cState.hostnames[name]; ok {
 		return fmt.Errorf("duplicate hostname: %s", name)
 	}
-	state.hostnames[name] = struct{}{}
+	cState.hostnames[name] = struct{}{}
 	return nil
 }
 
-func (state *commonStateType) addIpAddress(ipAddr net.IP) error {
+func (cState *commonStateType) addIpAddress(ipAddr net.IP) error {
 	if len(ipAddr) < 1 {
 		return nil
 	}
 	name := ipAddr.String()
-	if _, ok := state.ipAddresses[name]; ok {
+	if _, ok := cState.ipAddresses[name]; ok {
 		return fmt.Errorf("duplicate IP address: %s", name)
 	}
-	state.ipAddresses[name] = struct{}{}
+	cState.ipAddresses[name] = struct{}{}
 	return nil
 }
 
-func (state *commonStateType) addMacAddress(macAddr proto.HardwareAddr) error {
+func (cState *commonStateType) addMacAddress(
+	macAddr proto.HardwareAddr) error {
 	if len(macAddr) < 1 {
 		return nil
 	}
@@ -172,39 +173,41 @@ func (state *commonStateType) addMacAddress(macAddr proto.HardwareAddr) error {
 		return nil
 	}
 	name := macAddr.String()
-	if _, ok := state.macAddresses[name]; ok {
+	if _, ok := cState.macAddresses[name]; ok {
 		return fmt.Errorf("duplicate MAC address: %s", name)
 	}
-	state.macAddresses[name] = struct{}{}
+	cState.macAddresses[name] = struct{}{}
 	return nil
 }
 
-func (state *commonStateType) addMachine(machine *proto.Machine,
-	subnets map[string]*Subnet) error {
+func (cState *commonStateType) addMachine(machine *proto.Machine,
+	subnetIds map[string]struct{}) error {
 	if machine.GatewaySubnetId != "" {
-		if _, ok := subnets[machine.GatewaySubnetId]; !ok {
-			return fmt.Errorf("unknown subnetId: %s", machine.GatewaySubnetId)
+		if _, ok := subnetIds[machine.GatewaySubnetId]; !ok {
+			return fmt.Errorf("unknown gateway subnetId: %s",
+				machine.GatewaySubnetId)
 		}
 	}
-	if err := state.addNetworkEntry(machine.NetworkEntry, subnets); err != nil {
+	err := cState.addNetworkEntry(machine.NetworkEntry, subnetIds)
+	if err != nil {
 		return err
 	}
-	if err := state.addNetworkEntry(machine.IPMI, nil); err != nil {
+	if err := cState.addNetworkEntry(machine.IPMI, nil); err != nil {
 		return err
 	}
 	for _, entry := range machine.SecondaryNetworkEntries {
-		if err := state.addNetworkEntry(entry, subnets); err != nil {
+		if err := cState.addNetworkEntry(entry, subnetIds); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (state *commonStateType) addNetworkEntry(entry proto.NetworkEntry,
-	subnets map[string]*Subnet) error {
+func (cState *commonStateType) addNetworkEntry(entry proto.NetworkEntry,
+	subnetIds map[string]struct{}) error {
 	if entry.SubnetId != "" {
-		if _, ok := subnets[entry.SubnetId]; !ok {
-			return fmt.Errorf("unknown subnetId: %s", entry.SubnetId)
+		if _, ok := subnetIds[entry.SubnetId]; !ok {
+			return fmt.Errorf("unknown netentry subnetId: %s", entry.SubnetId)
 		}
 		if entry.Hostname != "" {
 			return fmt.Errorf(
@@ -217,13 +220,13 @@ func (state *commonStateType) addNetworkEntry(entry proto.NetworkEntry,
 				entry.SubnetId, entry.HostIpAddress)
 		}
 	}
-	if err := state.addHostname(entry.Hostname); err != nil {
+	if err := cState.addHostname(entry.Hostname); err != nil {
 		return err
 	}
-	if err := state.addIpAddress(entry.HostIpAddress); err != nil {
+	if err := cState.addIpAddress(entry.HostIpAddress); err != nil {
 		return err
 	}
-	if err := state.addMacAddress(entry.HostMacAddress); err != nil {
+	if err := cState.addMacAddress(entry.HostMacAddress); err != nil {
 		return err
 	}
 	return nil
@@ -237,11 +240,11 @@ func newInheritingState() *inheritingState {
 	}
 }
 
-func (state *inheritingState) copy() *inheritingState {
+func (iState *inheritingState) copy() *inheritingState {
 	return &inheritingState{
-		owners:    state.owners.copy(),
-		subnetIds: cloneSet(state.subnetIds),
-		tags:      state.tags.Copy(),
+		owners:    iState.owners.copy(),
+		subnetIds: cloneSet(iState.subnetIds),
+		tags:      iState.tags.Copy(),
 	}
 }
 
@@ -260,7 +263,7 @@ func (t *Topology) loadSubnets(directory *Directory, dirpath string,
 }
 
 func (t *Topology) readDirectory(topDir, dirname string,
-	state *inheritingState, commonState *commonStateType) (*Directory, error) {
+	iState *inheritingState, cState *commonStateType) (*Directory, error) {
 	directory := &Directory{
 		nameToDirectory:  make(map[string]*Directory),
 		path:             dirname,
@@ -268,16 +271,16 @@ func (t *Topology) readDirectory(topDir, dirname string,
 	}
 	dirpath := filepath.Join(topDir, dirname)
 	t.logger.Debugf(1, "T.readDirectory(%s)\n", dirpath)
-	if err := directory.loadOwners(dirpath, state.owners); err != nil {
+	if err := directory.loadOwners(dirpath, iState.owners); err != nil {
 		return nil, err
 	}
-	if err := t.loadSubnets(directory, dirpath, state.subnetIds); err != nil {
+	if err := t.loadSubnets(directory, dirpath, iState.subnetIds); err != nil {
 		return nil, err
 	}
-	if err := directory.loadTags(dirpath, state.tags); err != nil {
+	if err := directory.loadTags(dirpath, iState.tags); err != nil {
 		return nil, err
 	}
-	if err := t.loadMachines(directory, dirpath, commonState); err != nil {
+	if err := t.loadMachines(directory, dirpath, cState, iState); err != nil {
 		return nil, err
 	}
 	dirnames, err := fsutil.ReadDirnames(dirpath, false)
@@ -296,8 +299,8 @@ func (t *Topology) readDirectory(topDir, dirname string,
 		if !fi.IsDir() {
 			continue
 		}
-		state := state.copy()
-		subdir, err := t.readDirectory(topDir, path, state, commonState)
+		iState := iState.copy()
+		subdir, err := t.readDirectory(topDir, path, iState, cState)
 		if err != nil {
 			return nil, err
 		} else {
@@ -421,12 +424,12 @@ func (to *ownersType) merge(from *ownersType) {
 }
 
 func (t *Topology) loadMachines(directory *Directory, dirname string,
-	commonState *commonStateType) error {
+	cState *commonStateType, iState *inheritingState) error {
 	if err := directory.loadMachines(dirname); err != nil {
 		return err
 	}
 	for _, machine := range directory.Machines {
-		err := commonState.addMachine(machine, directory.subnetIdToSubnet)
+		err := cState.addMachine(machine, iState.subnetIds)
 		if err != nil {
 			return fmt.Errorf("error adding: %s: %s", machine.Hostname, err)
 		}
