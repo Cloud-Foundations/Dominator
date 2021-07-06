@@ -23,7 +23,7 @@ func updateNetworkConfiguration(logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	info, err := getInfoForhost("")
+	info, err := getInfoForhost("", logger)
 	if err != nil {
 		return err
 	}
