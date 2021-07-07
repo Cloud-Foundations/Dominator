@@ -68,7 +68,7 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string) error {
 }
 
 func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdb.Mdb, error) {
 	var newMdb mdb.Mdb
 	g.mutex.Lock()
 	defer g.mutex.Unlock()

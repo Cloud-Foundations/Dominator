@@ -19,7 +19,7 @@ type sourceDriverFunc func(reader io.Reader, datacentre string,
 
 // The generator interface generates an mdb from some source.
 type generator interface {
-	Generate(datacentre string, logger log.Logger) (*mdb.Mdb, error)
+	Generate(datacentre string, logger log.DebugLogger) (*mdb.Mdb, error)
 }
 
 // The eventGenerator interface generates an mdb from a source which has update
@@ -75,7 +75,7 @@ type sourceGenerator struct {
 	url        string           // The URL or path of the flat file.
 }
 
-func (s sourceGenerator) Generate(datacentre string, logger log.Logger) (
+func (s sourceGenerator) Generate(datacentre string, logger log.DebugLogger) (
 	*mdb.Mdb, error) {
 	return loadMdb(s.driverFunc, s.url, datacentre, logger)
 }

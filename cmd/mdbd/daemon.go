@@ -45,7 +45,7 @@ func init() {
 
 func runDaemon(generators []generator, mdbFileName, hostnameRegex string,
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
-	logger log.Logger, debug bool) {
+	logger log.DebugLogger, debug bool) {
 	var prevMdb *mdb.Mdb
 	var hostnameRE *regexp.Regexp
 	var err error
@@ -107,7 +107,7 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 }
 
 func loadFromAll(generators []generator, datacentre string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage

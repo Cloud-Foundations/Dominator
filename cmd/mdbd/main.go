@@ -93,6 +93,14 @@ func printUsage() {
 		"    url: URL which yields lines. Each line contains:")
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
+	fmt.Fprintln(os.Stderr,
+		"  topology: url [location]")
+	fmt.Fprintln(os.Stderr,
+		"    Load Topology")
+	fmt.Fprintln(os.Stderr,
+		"    url: directory containing the Topology")
+	fmt.Fprintln(os.Stderr,
+		"    location: optional location to limit query to")
 }
 
 type driver struct {
@@ -111,6 +119,7 @@ var drivers = []driver{
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
 	{"text", 1, 1, newTextGenerator},
+	{"topology", 1, 2, newTopologyGenerator},
 }
 
 func gracefulCleanup() {
