@@ -5,6 +5,34 @@ import (
 	"syscall"
 )
 
+const (
+	S_IFBLK  = syscall.S_IFBLK
+	S_IFCHR  = syscall.S_IFCHR
+	S_IFDIR  = syscall.S_IFDIR
+	S_IFIFO  = syscall.S_IFIFO
+	S_IFLNK  = syscall.S_IFLNK
+	S_IFMT   = syscall.S_IFMT
+	S_IFREG  = syscall.S_IFREG
+	S_IFSOCK = syscall.S_IFSOCK
+	S_IREAD  = syscall.S_IREAD
+	S_IRGRP  = syscall.S_IRGRP
+	S_IROTH  = syscall.S_IROTH
+	S_IRUSR  = syscall.S_IRUSR
+	S_IRWXG  = syscall.S_IRWXG
+	S_IRWXO  = syscall.S_IRWXO
+	S_IRWXU  = syscall.S_IRWXU
+	S_ISGID  = syscall.S_ISGID
+	S_ISUID  = syscall.S_ISUID
+	S_ISVTX  = syscall.S_ISVTX
+	S_IWGRP  = syscall.S_IWGRP
+	S_IWOTH  = syscall.S_IWOTH
+	S_IWRITE = syscall.S_IWRITE
+	S_IWUSR  = syscall.S_IWUSR
+	S_IXGRP  = syscall.S_IXGRP
+	S_IXOTH  = syscall.S_IXOTH
+	S_IXUSR  = syscall.S_IXUSR
+)
+
 func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Dev = uint64(source.Dev)
 	dest.Ino = source.Ino
