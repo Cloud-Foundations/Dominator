@@ -5,17 +5,17 @@ import (
 	"hash"
 	"io"
 	"os"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 const (
-	DirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	PrivateFilePerms = syscall.S_IRUSR | syscall.S_IWUSR
-	PublicFilePerms  = PrivateFilePerms | syscall.S_IRGRP | syscall.S_IROTH
+	DirPerms = wsyscall.S_IRWXU | wsyscall.S_IRGRP | wsyscall.S_IXGRP |
+		wsyscall.S_IROTH | wsyscall.S_IXOTH
+	PrivateFilePerms = wsyscall.S_IRUSR | wsyscall.S_IWUSR
+	PublicFilePerms  = PrivateFilePerms | wsyscall.S_IRGRP | wsyscall.S_IROTH
 )
 
 var (

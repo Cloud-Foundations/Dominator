@@ -12,5 +12,5 @@ func fallocate(filename string, size uint64) error {
 		return err
 	}
 	defer syscall.Close(fd)
-	return wsyscall.Fallocate(fd, 0, 0, int64(size))
+	return wsyscall.Fallocate(int(fd), 0, 0, int64(size))
 }
