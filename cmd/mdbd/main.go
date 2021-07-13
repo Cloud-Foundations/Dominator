@@ -32,6 +32,8 @@ var (
 		"Port number to allocate and listen on for HTTP/RPC")
 	sourcesFile = flag.String("sourcesFile", "/var/lib/mdbd/mdb.sources.list",
 		"Name of file list of driver url pairs")
+	stateDir = flag.String("stateDir", "/var/lib/mdbd",
+		"Name of state directory")
 	pidfile = flag.String("pidfile", "", "Name of file to write my PID to")
 )
 
@@ -94,13 +96,13 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
 	fmt.Fprintln(os.Stderr,
-		"  topology: url [location]")
+		"  topology: url [dir]")
 	fmt.Fprintln(os.Stderr,
 		"    Load Topology")
 	fmt.Fprintln(os.Stderr,
-		"    url: directory containing the Topology")
+		"    url: directory or Git URL containing the Topology")
 	fmt.Fprintln(os.Stderr,
-		"    location: optional location to limit query to")
+		"    location: optional subdirectory containing the Topology")
 }
 
 type driver struct {
