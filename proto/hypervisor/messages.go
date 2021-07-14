@@ -609,6 +609,7 @@ type VmInfo struct {
 	SecondarySubnetIDs []string  `json:",omitempty"`
 	SubnetId           string    `json:",omitempty"`
 	Uncommitted        bool      `json:",omitempty"`
+	VirtualCPUs        uint      `json:",omitempty"`
 	Volumes            []Volume  `json:",omitempty"`
 }
 
