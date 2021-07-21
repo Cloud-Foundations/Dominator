@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -315,6 +316,10 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if req.MilliCPUs < 1 {
 		return nil, errors.New("no CPUs specified")
 	}
+	minimumCPUs := req.MilliCPUs / 1000
+	if req.VirtualCPUs > 0 && req.VirtualCPUs < minimumCPUs {
+		return nil, fmt.Errorf("VirtualCPUs must be at least %d", minimumCPUs)
+	}
 	subnetIDs := map[string]struct{}{req.SubnetId: {}}
 	for _, subnetId := range req.SecondarySubnetIDs {
 		if subnetId == "" {
@@ -388,6 +393,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				State:              proto.StateStarting,
 				SubnetId:           subnetId,
 				Tags:               req.Tags,
+				VirtualCPUs:        req.VirtualCPUs,
 			},
 		},
 		manager:          m,
@@ -3159,6 +3165,12 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	}
 	if nCpus*1000 < vm.MilliCPUs {
 		nCpus++
+	}
+	if nCpus < vm.VirtualCPUs {
+		nCpus = vm.VirtualCPUs
+	}
+	if nCpus > uint(runtime.NumCPU()) && runtime.NumCPU() > 0 {
+		nCpus = uint(runtime.NumCPU())
 	}
 	bridges, netOptions, err := vm.getBridgesAndOptions(haveManagerLock)
 	if err != nil {
