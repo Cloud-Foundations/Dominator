@@ -114,6 +114,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		Tags:               vmTags,
 		SecondarySubnetIDs: secondarySubnetIDs,
 		SubnetId:           *subnetId,
+		VirtualCPUs:        *vCPUs,
 	}
 }
 
@@ -130,6 +131,11 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 	}
 	if request.VmInfo.MilliCPUs < 1 {
 		request.VmInfo.MilliCPUs = 250
+	}
+	minimumCPUs := request.VmInfo.MilliCPUs / 1000
+	if request.VmInfo.VirtualCPUs > 0 &&
+		request.VmInfo.VirtualCPUs < minimumCPUs {
+		return fmt.Errorf("vCPUs must be at least %d", minimumCPUs)
 	}
 	if len(requestIPs) > 0 && requestIPs[0] != "" {
 		ipAddr := net.ParseIP(requestIPs[0])
