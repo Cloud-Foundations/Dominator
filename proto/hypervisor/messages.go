@@ -110,6 +110,7 @@ type ChangeVmSizeRequest struct {
 	IpAddress   net.IP
 	MemoryInMiB uint64
 	MilliCPUs   uint
+	VirtualCPUs uint
 }
 
 type ChangeVmSizeResponse struct {
