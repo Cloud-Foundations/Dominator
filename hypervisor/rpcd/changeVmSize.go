@@ -11,7 +11,6 @@ func (t *srpcType) ChangeVmSize(conn *srpc.Conn,
 	reply *hypervisor.ChangeVmSizeResponse) error {
 	*reply = hypervisor.ChangeVmSizeResponse{
 		errors.ErrorToString(
-			t.manager.ChangeVmSize(request.IpAddress, conn.GetAuthInformation(),
-				request.MemoryInMiB, request.MilliCPUs))}
+			t.manager.ChangeVmSize(conn.GetAuthInformation(), request))}
 	return nil
 }

@@ -205,6 +205,22 @@ func maybeDrainUserData(conn *srpc.Conn, request proto.CreateVmRequest) error {
 	return nil
 }
 
+// numSpecifiedVirtualCPUs calculates the number of virtual CPUs required for
+// the specified request. The request must be correct (i.e. sufficient vCPUs).
+func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
+	nCpus := milliCPUs / 1000
+	if nCpus < 1 {
+		nCpus = 1
+	}
+	if nCpus*1000 < milliCPUs {
+		nCpus++
+	}
+	if nCpus < vCPUs {
+		nCpus = vCPUs
+	}
+	return nCpus
+}
+
 func readData(firstByte byte, moreBytes <-chan byte) []byte {
 	buffer := make([]byte, 1, len(moreBytes)+1)
 	buffer[0] = firstByte
@@ -449,35 +465,45 @@ func (m *Manager) changeVmConsoleType(ipAddr net.IP,
 }
 
 // changeVmCPUs returns true if the number of CPUs was changed.
-func (m *Manager) changeVmCPUs(vm *vmInfoType, milliCPUs uint) (bool, error) {
-	if milliCPUs == vm.MilliCPUs {
+func (m *Manager) changeVmCPUs(vm *vmInfoType, req proto.ChangeVmSizeRequest) (
+	bool, error) {
+	if req.MilliCPUs < 1 {
+		req.MilliCPUs = vm.MilliCPUs
+	}
+	if req.VirtualCPUs < 1 {
+		req.VirtualCPUs = vm.VirtualCPUs
+	}
+	minimumCPUs := numSpecifiedVirtualCPUs(req.MilliCPUs, 0)
+	if req.VirtualCPUs > 0 && req.VirtualCPUs < minimumCPUs {
+		return false, fmt.Errorf("VirtualCPUs must be at least %d", minimumCPUs)
+	}
+	if req.MilliCPUs == vm.MilliCPUs && req.VirtualCPUs == vm.VirtualCPUs {
 		return false, nil
 	}
-	changed := false
-	if milliCPUs < vm.MilliCPUs {
-		if vm.State != proto.StateStopped &&
-			milliCPUs/1000 != vm.MilliCPUs/1000 {
-			return false, errors.New("VM is not stopped")
-		}
-		vm.MilliCPUs = milliCPUs
-		changed = true
-	} else if milliCPUs > vm.MilliCPUs {
-		if vm.State != proto.StateStopped &&
-			milliCPUs/1000 != vm.MilliCPUs/1000 {
-			return false, errors.New("VM is not stopped")
-		}
-		m.mutex.Lock()
-		err := m.checkSufficientCPUWithLock(milliCPUs - vm.MilliCPUs)
-		if err == nil {
-			vm.MilliCPUs = milliCPUs
-			changed = true
-		}
-		m.mutex.Unlock()
-		if err != nil {
-			return changed, err
-		}
+	oldCPUs := numSpecifiedVirtualCPUs(vm.MilliCPUs, vm.VirtualCPUs)
+	newCPUs := numSpecifiedVirtualCPUs(req.MilliCPUs, req.VirtualCPUs)
+	if oldCPUs == newCPUs {
+		vm.MilliCPUs = req.MilliCPUs
+		vm.VirtualCPUs = req.VirtualCPUs
+		return true, nil
 	}
-	return changed, nil
+	if vm.State != proto.StateStopped {
+		return false, errors.New("VM is not stopped")
+	}
+	if newCPUs <= oldCPUs {
+		vm.MilliCPUs = req.MilliCPUs
+		vm.VirtualCPUs = req.VirtualCPUs
+		return true, nil
+	}
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	err := m.checkSufficientCPUWithLock(req.MilliCPUs - vm.MilliCPUs)
+	if err != nil {
+		return false, err
+	}
+	vm.MilliCPUs = req.MilliCPUs
+	vm.VirtualCPUs = req.VirtualCPUs
+	return true, nil
 }
 
 func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
@@ -538,23 +564,23 @@ func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
 	return nil
 }
 
-func (m *Manager) changeVmSize(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	memoryInMiB uint64, milliCPUs uint) error {
-	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+func (m *Manager) changeVmSize(authInfo *srpc.AuthInformation,
+	req proto.ChangeVmSizeRequest) error {
+	vm, err := m.getVmLockAndAuth(req.IpAddress, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
 	defer vm.mutex.Unlock()
 	changed := false
-	if memoryInMiB > 0 {
-		if _changed, _err := m.changeVmMemory(vm, memoryInMiB); _err != nil {
-			err = _err
+	if req.MemoryInMiB > 0 {
+		if _changed, e := m.changeVmMemory(vm, req.MemoryInMiB); e != nil {
+			err = e
 		} else if _changed {
 			changed = true
 		}
 	}
-	if milliCPUs > 0 && err == nil {
-		if _changed, _err := m.changeVmCPUs(vm, milliCPUs); _err != nil {
+	if (req.MilliCPUs > 0 || req.VirtualCPUs > 0) && err == nil {
+		if _changed, _err := m.changeVmCPUs(vm, req); _err != nil {
 			err = _err
 		} else if _changed {
 			changed = true
@@ -3159,16 +3185,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	if err := checkAvailableMemory(vm.MemoryInMiB); err != nil {
 		return err
 	}
-	nCpus := vm.MilliCPUs / 1000
-	if nCpus < 1 {
-		nCpus = 1
-	}
-	if nCpus*1000 < vm.MilliCPUs {
-		nCpus++
-	}
-	if nCpus < vm.VirtualCPUs {
-		nCpus = vm.VirtualCPUs
-	}
+	nCpus := numSpecifiedVirtualCPUs(vm.MilliCPUs, vm.VirtualCPUs)
 	if nCpus > uint(runtime.NumCPU()) && runtime.NumCPU() > 0 {
 		nCpus = uint(runtime.NumCPU())
 	}
