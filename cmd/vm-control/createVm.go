@@ -114,7 +114,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		Tags:               vmTags,
 		SecondarySubnetIDs: secondarySubnetIDs,
 		SubnetId:           *subnetId,
-		VirtualCPUs:        *vCPUs,
+		VirtualCPUs:        *virtualCPUs,
 	}
 }
 

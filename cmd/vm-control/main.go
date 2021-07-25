@@ -85,7 +85,7 @@ var (
 		"If true, trace metadata calls until interrupted")
 	userDataFile = flag.String("userDataFile", "",
 		"Name file containing user-data accessible from the metadata server")
-	vCPUs = flag.Uint("vCPUs", 0,
+	virtualCPUs = flag.Uint("vCPUs", 0,
 		"virtual CPUs (default rounds up milliCPUs)")
 	vmHostname = flag.String("vmHostname", "", "Hostname for VM")
 	vmTags     tags.Tags
@@ -134,6 +134,7 @@ var subcommands = []commands.Command{
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
+	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,
 		connectToVmSerialPortSubcommand},
