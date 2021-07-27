@@ -433,15 +433,10 @@ func (m *Manager) becomePrimaryVmOwner(ipAddr net.IP,
 	if vm.OwnerUsers[0] == authInfo.Username {
 		return errors.New("you already are the primary owner")
 	}
-	ownerUsers := make([]string, 1, len(vm.OwnerUsers[0]))
+	ownerUsers := make([]string, 1, len(vm.OwnerUsers))
 	ownerUsers[0] = authInfo.Username
-	for _, user := range vm.OwnerUsers {
-		if user != authInfo.Username {
-			ownerUsers = append(ownerUsers, user)
-		}
-	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
+	ownerUsers = append(ownerUsers, vm.OwnerUsers...)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -555,11 +550,8 @@ func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
 	defer vm.mutex.Unlock()
 	ownerUsers := make([]string, 1, len(extraUsers)+1)
 	ownerUsers[0] = vm.OwnerUsers[0]
-	for _, user := range extraUsers {
-		ownerUsers = append(ownerUsers, user)
-	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
+	ownerUsers = append(ownerUsers, extraUsers...)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -741,8 +733,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.Volumes = vmInfo.Volumes
 	if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
 		return err
@@ -856,8 +847,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
 	memoryError := tryAllocateMemory(request.MemoryInMiB)
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = stringutil.ConvertListToMap(ownerUsers, false)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
