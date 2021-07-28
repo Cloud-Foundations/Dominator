@@ -876,8 +876,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err != nil {
 			return sendError(conn, err)
 		}
-		err = sendUpdate(conn, "unpacking image: "+imageName)
-		if err != nil {
+		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
@@ -891,7 +890,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err != nil {
 			return sendError(conn, err)
 		}
-		m.Logger.Debugln(1, "finished writing volume")
 		if fi, err := os.Stat(vm.VolumeLocations[0].Filename); err != nil {
 			return sendError(conn, err)
 		} else {
@@ -2624,6 +2622,7 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	client *srpc.Client, fs *filesystem.FileSystem,
 	writeRawOptions util.WriteRawOptions, skipBootloader bool) error {
+	startTime := time.Now()
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
 		objectClient := objclient.AttachObjectClient(client)
@@ -2646,9 +2645,15 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 		writeRawOptions.InstallBootloader = true
 	}
 	writeRawOptions.WriteFstab = true
-	return util.WriteRawWithOptions(fs, objectsGetter,
+	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, privateFilePerms, mbr.TABLE_TYPE_MSDOS,
 		writeRawOptions, m.Logger)
+	if err != nil {
+		return err
+	}
+	m.Logger.Debugf(1, "Wrote root volume in %s\n",
+		format.Duration(time.Since(startTime)))
+	return nil
 }
 
 func (vm *vmInfoType) autoDestroy() {
