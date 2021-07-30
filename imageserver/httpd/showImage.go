@@ -75,6 +75,15 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 			"Packages: <a href=\"listPackages?%s\">%d</a><br>\n",
 			imageName, len(image.Packages))
 	}
+	if image.SourceImage != "" {
+		if s.imageDataBase.CheckImage(image.SourceImage) {
+			fmt.Fprintf(writer,
+				"Source Image: <a href=\"showImage?%s\">%s</a><br>\n",
+				image.SourceImage, image.SourceImage)
+		} else {
+			fmt.Fprintf(writer, "Source Image: %s</a><br>\n", image.SourceImage)
+		}
+	}
 	fmt.Fprintln(writer, "</body>")
 }
 
