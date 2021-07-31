@@ -325,6 +325,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		img.BuildBranch = gitInfo.branch
 		img.BuildCommitId = gitInfo.commitId
 	}
+	img.SourceImage = manifest.sourceImageInfo.imageName
 	return img, nil
 }
 
@@ -533,6 +534,7 @@ func unpackImage(client *srpc.Client, streamName string,
 	return &sourceImageInfoType{
 		computedFiles: listComputedFiles(sourceImage.FileSystem),
 		filter:        sourceImage.Filter,
+		imageName:     imageName,
 		treeCache:     treeCache,
 		triggers:      sourceImage.Triggers,
 	}, nil

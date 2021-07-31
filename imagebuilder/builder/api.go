@@ -134,6 +134,7 @@ type packagerType struct {
 type sourceImageInfoType struct {
 	computedFiles []util.ComputedFile
 	filter        *filter.Filter
+	imageName     string
 	treeCache     *treeCache
 	triggers      *triggers.Triggers
 }
