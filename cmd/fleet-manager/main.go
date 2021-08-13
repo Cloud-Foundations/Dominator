@@ -76,7 +76,8 @@ func main() {
 	if *checkTopology {
 		doCheck(logger)
 	}
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
 	}
 	if err := proxy.New(logger); err != nil {
