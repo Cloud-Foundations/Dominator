@@ -49,7 +49,8 @@ func main() {
 	}
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
 	}
 	if err := os.MkdirAll(*stateDir, dirPerms); err != nil {
