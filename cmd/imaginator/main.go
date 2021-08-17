@@ -62,7 +62,8 @@ func main() {
 		// Since we can't cleanly fix umask for all threads, fail instead.
 		logger.Fatalf("Umask must be 022, not 0%o\n", umask)
 	}
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
 	}
 	if err := os.MkdirAll(*stateDir, dirPerms); err != nil {
