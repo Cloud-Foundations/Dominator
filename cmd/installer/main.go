@@ -177,7 +177,8 @@ func doMain() error {
 	}
 	go runShellOnConsole(logger)
 	AddHtmlWriter(logBuffer)
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Println(err)
 	}
 	waitGroup := &sync.WaitGroup{}
