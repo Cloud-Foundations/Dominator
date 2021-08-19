@@ -179,7 +179,8 @@ func main() {
 		printUsage()
 		os.Exit(2)
 	}
-	setupserver.SetupTlsClientOnly()
+	params := setupserver.Params{ClientOnly: true, Logger: logger}
+	setupserver.SetupTlsWithParams(params)
 	handleSignals(logger)
 	readerChannel := fsutil.WatchFile(*sourcesFile, logger)
 	file, err := os.Open(*sourcesFile)
