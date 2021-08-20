@@ -26,7 +26,8 @@ var (
 type serverType struct{}
 
 func doMain(logger log.DebugLogger) error {
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		if *permitInsecureMode {
 			logger.Println(err)
 		} else {
