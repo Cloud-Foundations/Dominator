@@ -278,7 +278,8 @@ func main() {
 	runtime.GOMAXPROCS(int(*maxThreads))
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
-	if err := setupserver.SetupTls(); err != nil {
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		if *permitInsecureMode {
 			logger.Println(err)
 		} else {
