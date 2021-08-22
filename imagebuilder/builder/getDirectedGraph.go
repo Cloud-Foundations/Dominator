@@ -211,6 +211,13 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	for sourceName := range dependencyData.unbuildableSources {
 		fmt.Fprintf(buffer, "  \"%s\" [fontcolor=red]\n", sourceName)
 	}
+	// Mark streams which are auto rebuilt in bold.
+	for _, streamName := range b.listBootstrapStreamNames() {
+		fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+	}
+	for _, streamName := range b.imageStreamsToAutoRebuild {
+		fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
 		FetchLog:         dependencyData.fetchLog,
