@@ -118,9 +118,15 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true,
-		"Name", "Status", "IP Addr", "Serial Number", "Location", "NumVMs")
+		"Name", "Status", "IP Addr", "Serial Number", "Location", "Type",
+		"NumVMs")
 	for _, hypervisor := range hypervisors {
 		machine := hypervisor.machine
+		machineType := machine.Tags["Type"]
+		if machineTypeURL := machine.Tags["TypeURL"]; machineTypeURL != "" {
+			machineType = `<a href="` + machineTypeURL + `">` + machineType +
+				`</a>`
+		}
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 				machine.Hostname, machine.Hostname),
@@ -130,6 +136,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			machine.HostIpAddress.String(),
 			hypervisor.serialNumber,
 			hypervisor.location,
+			machineType,
 			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 				machine.Hostname, constants.HypervisorPortNumber,
 				hypervisor.getNumVMs()),
