@@ -283,6 +283,7 @@ type GetUpdatesRequest struct {
 type Update struct {
 	HaveAddressPool  bool               `json:",omitempty"`
 	AddressPool      []Address          `json:",omitempty"` // Used & free.
+	NumCPUs          *uint              `json:",omitempty"`
 	NumFreeAddresses map[string]uint    `json:",omitempty"` // Key: subnet ID.
 	HealthStatus     string             `json:",omitempty"`
 	HaveSerialNumber bool               `json:",omitempty"`
