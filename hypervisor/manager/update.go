@@ -39,6 +39,7 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 	channel <- proto.Update{
 		HaveAddressPool:  true,
 		AddressPool:      m.addressPool.Registered,
+		NumCPUs:          &m.numCPUs,
 		NumFreeAddresses: numFreeAddresses,
 		HealthStatus:     m.healthStatus,
 		HaveSerialNumber: true,

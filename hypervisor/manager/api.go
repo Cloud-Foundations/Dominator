@@ -34,7 +34,7 @@ type Manager struct {
 	StartOptions
 	rootCookie        []byte
 	memTotalInMiB     uint64
-	numCPU            int
+	numCPUs           uint
 	serialNumber      string
 	volumeDirectories []string
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.

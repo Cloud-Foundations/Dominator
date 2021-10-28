@@ -22,7 +22,7 @@ func (m *Manager) getAvailableMilliCPU() uint {
 }
 
 func (m *Manager) getAvailableMilliCPUWithLock() uint {
-	available := m.numCPU * 1000
+	available := int(m.numCPUs) * 1000
 	for _, vm := range m.vms {
 		available -= int(vm.MilliCPUs)
 	}
