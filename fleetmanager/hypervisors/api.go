@@ -38,6 +38,7 @@ type hypervisorType struct {
 	location           string
 	machine            *fm_proto.Machine
 	migratingVms       map[string]*vmInfoType // Key: VM IP address.
+	numCPUs            uint
 	ownerUsers         map[string]struct{}
 	probeStatus        probeStatus
 	serialNumber       string
