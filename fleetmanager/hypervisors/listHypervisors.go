@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
@@ -120,7 +121,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true,
 		"Name", "Status", "IP Addr", "Serial Number", "Location", "Type",
-		"CPUs", "NumVMs")
+		"CPUs", "RAM", "NumVMs")
 	for _, hypervisor := range hypervisors {
 		machine := hypervisor.machine
 		machineType := machine.Tags["Type"]
@@ -139,6 +140,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			hypervisor.location,
 			machineType,
 			strconv.FormatUint(uint64(hypervisor.numCPUs), 10),
+			format.FormatBytes(hypervisor.memoryInMiB<<20),
 			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 				machine.Hostname, constants.HypervisorPortNumber,
 				hypervisor.getNumVMs()),
