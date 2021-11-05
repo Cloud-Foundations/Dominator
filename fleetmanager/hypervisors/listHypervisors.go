@@ -129,6 +129,17 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			machineType = `<a href="` + machineTypeURL + `">` + machineType +
 				`</a>`
 		}
+		numShift := 0
+		memoryInMiB := hypervisor.memoryInMiB
+		for ; memoryInMiB >= 16; numShift++ {
+			memoryInMiB >>= 1
+		}
+		if memoryInMiB == 15 {
+			memoryInMiB++
+			memoryInMiB <<= numShift
+		} else {
+			memoryInMiB = hypervisor.memoryInMiB
+		}
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 				machine.Hostname, machine.Hostname),
@@ -140,7 +151,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			hypervisor.location,
 			machineType,
 			strconv.FormatUint(uint64(hypervisor.numCPUs), 10),
-			format.FormatBytes(hypervisor.memoryInMiB<<20),
+			format.FormatBytes(memoryInMiB<<20),
 			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 				machine.Hostname, constants.HypervisorPortNumber,
 				hypervisor.getNumVMs()),
