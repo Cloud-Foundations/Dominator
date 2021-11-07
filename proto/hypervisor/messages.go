@@ -291,6 +291,7 @@ type Update struct {
 	SerialNumber     string             `json:",omitempty"`
 	HaveSubnets      bool               `json:",omitempty"`
 	Subnets          []Subnet           `json:",omitempty"`
+	TotalVolumeBytes *uint64            `json:",omitempty"`
 	HaveVMs          bool               `json:",omitempty"`
 	VMs              map[string]*VmInfo `json:",omitempty"` // Key: IP address.
 }
