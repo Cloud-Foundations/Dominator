@@ -47,6 +47,7 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 		SerialNumber:     m.serialNumber,
 		HaveSubnets:      true,
 		Subnets:          subnets,
+		TotalVolumeBytes: &m.totalVolumeBytes,
 		HaveVMs:          true,
 		VMs:              vms,
 	}

@@ -232,6 +232,11 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 		if err := os.MkdirAll(volumeDirectory, fsutil.DirPerms); err != nil {
 			return err
 		}
+		var statbuf syscall.Statfs_t
+		if err := syscall.Statfs(volumeDirectory, &statbuf); err != nil {
+			return fmt.Errorf("error statfsing: %s: %s", volumeDirectory, err)
+		}
+		m.totalVolumeBytes += uint64(statbuf.Blocks * uint64(statbuf.Bsize))
 	}
 	return nil
 }

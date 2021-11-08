@@ -47,6 +47,7 @@ type Manager struct {
 	ownerUsers        map[string]struct{}
 	subnets           map[string]proto.Subnet // Key: Subnet ID.
 	subnetChannels    []chan<- proto.Subnet
+	totalVolumeBytes  uint64
 	vms               map[string]*vmInfoType // Key: IP address.
 	vsocketsEnabled   bool
 	uuid              string
