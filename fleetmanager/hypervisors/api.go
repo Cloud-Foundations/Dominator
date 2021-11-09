@@ -44,6 +44,7 @@ type hypervisorType struct {
 	probeStatus        probeStatus
 	serialNumber       string
 	subnets            []hyper_proto.Subnet
+	totalVolumeBytes   uint64
 	vms                map[string]*vmInfoType // Key: VM IP address.
 }
 
