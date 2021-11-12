@@ -173,6 +173,7 @@ func registerName(name string, rcvr interface{},
 		receiver.grantMethod = defaultMethodGranter
 	}
 	receivers[name] = receiver
+	startReadingSmallStackMetaData()
 	return nil
 }
 
@@ -544,7 +545,8 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	return method, nil
 }
 
-// Returns true if the method is permitted, else false if denied.
+// checkMethodAccess implements the built-in authorisation checks. It returns
+// true if the method is permitted, else false if denied.
 func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
 	if conn.permittedMethods == nil {
 		return true
@@ -552,6 +554,19 @@ func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
 	for sm := range conn.permittedMethods {
 		if matched, _ := filepath.Match(sm, serviceMethod); matched {
 			return true
+		}
+	}
+	if conn.username != "" {
+		smallStackOwners := getSmallStackOwners()
+		if smallStackOwners != nil {
+			if _, ok := smallStackOwners.users[conn.username]; ok {
+				return true
+			}
+			for _, group := range smallStackOwners.groups {
+				if _, ok := conn.groupList[group]; ok {
+					return true
+				}
+			}
 		}
 	}
 	return false

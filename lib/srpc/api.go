@@ -80,6 +80,8 @@ var (
 	logger log.DebugLogger = debuglogger.New(
 		stdlog.New(os.Stderr, "", stdlog.LstdFlags))
 
+	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
+		"If true, trust the SmallStack VM owners for all method access")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
 )
