@@ -23,6 +23,7 @@ const (
 	StateMigrating     = 6
 	StateExporting     = 7
 	StateCrashed       = 8
+	StateDebugging     = 9
 
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
@@ -194,6 +195,25 @@ type CreateVmResponse struct { // Multiple responses are sent.
 	DhcpTimedOut    bool
 	Final           bool // If true, this is the final response.
 	IpAddress       net.IP
+	ProgressMessage string
+	Error           string
+}
+
+type DebugVmImageRequest struct {
+	DhcpTimeout      time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
+	ImageDataSize    uint64
+	ImageName        string
+	ImageTimeout     time.Duration
+	ImageURL         string
+	IpAddress        net.IP
+	MinimumFreeBytes uint64
+	RoundupPower     uint64
+} // The following data are streamed afterwards in the following order:
+//     RAW image data (length=ImageDataSize)
+
+type DebugVmImageResponse struct { // Multiple responses are sent.
+	DhcpTimedOut    bool
+	Final           bool // If true, this is the final response.
 	ProgressMessage string
 	Error           string
 }

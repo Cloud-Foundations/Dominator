@@ -29,6 +29,7 @@ var (
 		StateMigrating:     "migrating",
 		StateExporting:     "exporting",
 		StateCrashed:       "crashed",
+		StateDebugging:     "debugging",
 	}
 	textToState map[string]State
 
