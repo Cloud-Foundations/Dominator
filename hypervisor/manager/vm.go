@@ -882,7 +882,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		writeRawOptions := util.WriteRawOptions{
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
-			RootLabel:        vm.rootLabel(),
+			RootLabel:        vm.rootLabel(false),
 			RoundupPower:     request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs, writeRawOptions,
@@ -990,6 +990,159 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	return nil
 }
 
+func (m *Manager) debugVmImage(conn *srpc.Conn,
+	authInfo *srpc.AuthInformation) error {
+
+	sendError := func(conn *srpc.Conn, err error) error {
+		return conn.Encode(proto.DebugVmImageResponse{Error: err.Error()})
+	}
+
+	sendUpdate := func(conn *srpc.Conn, message string) error {
+		response := proto.DebugVmImageResponse{
+			ProgressMessage: message,
+		}
+		if err := conn.Encode(response); err != nil {
+			return err
+		}
+		return conn.Flush()
+	}
+
+	var request proto.DebugVmImageRequest
+	if err := conn.Decode(&request); err != nil {
+		return err
+	}
+	m.Logger.Debugf(1, "DebugVmImage(%s) starting\n", request.IpAddress)
+	vm, err := m.getVmLockAndAuth(request.IpAddress, true, authInfo, nil)
+	if err != nil {
+		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+			return err
+		}
+		return sendError(conn, err)
+	}
+	rootFilename := vm.VolumeLocations[0].Filename + ".debug"
+	defer func() {
+		vm.updating = false
+		vm.mutex.Unlock()
+	}()
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
+		if len(vm.Address.IpAddress) < 1 {
+			if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+				return err
+			}
+			return errors.New("cannot stop VM with externally managed lease")
+		}
+	default:
+		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+			return err
+		}
+		return sendError(conn, errors.New("VM is not running or stopped"))
+	}
+	if vm.updating {
+		return errors.New("cannot update already updating VM")
+	}
+	vm.updating = true
+	doCleanup := true
+	defer func() {
+		if doCleanup {
+			os.Remove(rootFilename)
+		}
+	}()
+	if request.ImageName != "" {
+		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+			return sendError(conn, err)
+		}
+		if err := sendUpdate(conn, "getting image"); err != nil {
+			return sendError(conn, err)
+		}
+		client, img, imageName, err := m.getImage(request.ImageName,
+			request.ImageTimeout)
+		if err != nil {
+			return sendError(conn, err)
+		}
+		defer client.Close()
+		fs := img.FileSystem
+		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
+			return err
+		}
+		m.Logger.Printf("HACK: debug image: %s\n", imageName)
+		writeRawOptions := util.WriteRawOptions{
+			InitialImageName: imageName,
+			MinimumFreeBytes: request.MinimumFreeBytes,
+			RootLabel:        vm.rootLabel(true),
+			RoundupPower:     request.RoundupPower,
+		}
+		err = m.writeRaw(vm.VolumeLocations[0], ".debug", client, fs,
+			writeRawOptions, false)
+		if err != nil {
+			return sendError(conn, err)
+		}
+	} else if request.ImageDataSize > 0 {
+		err := copyData(rootFilename, conn, request.ImageDataSize)
+		if err != nil {
+			return sendError(conn, err)
+		}
+	} else if request.ImageURL != "" {
+		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+			return sendError(conn, err)
+		}
+		httpResponse, err := http.Get(request.ImageURL)
+		if err != nil {
+			return sendError(conn, err)
+		}
+		defer httpResponse.Body.Close()
+		if httpResponse.StatusCode != http.StatusOK {
+			return sendError(conn, errors.New(httpResponse.Status))
+		}
+		if httpResponse.ContentLength < 0 {
+			return sendError(conn,
+				errors.New("ContentLength from: "+request.ImageURL))
+		}
+		err = copyData(rootFilename, httpResponse.Body,
+			uint64(httpResponse.ContentLength))
+		if err != nil {
+			return sendError(conn, err)
+		}
+	} else {
+		return sendError(conn, errors.New("no image specified"))
+	}
+	if vm.State == proto.StateRunning {
+		if err := sendUpdate(conn, "stopping VM"); err != nil {
+			return err
+		}
+		stoppedNotifier := make(chan struct{}, 1)
+		vm.stoppedNotifier = stoppedNotifier
+		vm.setState(proto.StateStopping)
+		vm.commandChannel <- "system_powerdown"
+		time.AfterFunc(time.Second*15, vm.kill)
+		vm.mutex.Unlock()
+		<-stoppedNotifier
+		vm.mutex.Lock()
+		if vm.State != proto.StateStopped {
+			return sendError(conn,
+				errors.New("VM is not stopped after stop attempt"))
+		}
+	}
+	vm.writeAndSendInfo()
+	vm.setState(proto.StateStarting)
+	sendUpdate(conn, "starting VM")
+	vm.mutex.Unlock()
+	_, err = vm.startManaging(-1, false, false)
+	vm.mutex.Lock()
+	if err != nil {
+		sendError(conn, err)
+	}
+	response := proto.DebugVmImageResponse{
+		Final: true,
+	}
+	if err := conn.Encode(response); err != nil {
+		return err
+	}
+	doCleanup = false
+	return nil
+}
+
 func (m *Manager) deleteVmVolume(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	accessToken []byte, volumeIndex uint) error {
 	if volumeIndex < 1 {
@@ -1034,7 +1187,7 @@ func (m *Manager) destroyVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	switch vm.State {
 	case proto.StateStarting:
 		return errors.New("VM is starting")
-	case proto.StateRunning:
+	case proto.StateRunning, proto.StateDebugging:
 		if vm.DestroyProtection {
 			return errors.New("cannot destroy running VM when protected")
 		}
@@ -1920,7 +2073,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return errors.New("cannot update already updating VM")
 	}
 	vm.updating = true
-	bootInfo, err := util.GetBootInfo(img.FileSystem, vm.rootLabel(),
+	bootInfo, err := util.GetBootInfo(img.FileSystem, vm.rootLabel(false),
 		"net.ifnames=0")
 	if err != nil {
 		return err
@@ -2242,7 +2395,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		writeRawOptions := util.WriteRawOptions{
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
-			RootLabel:        vm.rootLabel(),
+			RootLabel:        vm.rootLabel(false),
 			RoundupPower:     request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
@@ -2556,6 +2709,8 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return false, errors.New("VM is destroying")
 	case proto.StateMigrating:
 		return false, errors.New("VM is migrating")
+	case proto.StateDebugging:
+		return false, errors.New("VM is running in debug mode")
 	default:
 		return false, errors.New("unknown state: " + vm.State.String())
 	}
@@ -2576,9 +2731,14 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	switch vm.State {
 	case proto.StateStarting:
 		return errors.New("VM is starting")
-	case proto.StateRunning:
+	case proto.StateRunning, proto.StateDebugging:
 		if len(vm.Address.IpAddress) < 1 {
 			return errors.New("cannot stop VM with externally managed lease")
+		}
+		if debugRoot := vm.getDebugRoot(); debugRoot != "" {
+			if err := os.Remove(debugRoot); err != nil {
+				return err
+			}
 		}
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
@@ -2844,6 +3004,14 @@ func (vm *vmInfoType) getActiveKernelPath() string {
 	return ""
 }
 
+func (vm *vmInfoType) getDebugRoot() string {
+	filename := vm.VolumeLocations[0].Filename + ".debug"
+	if _, err := os.Stat(filename); err == nil {
+		return filename
+	}
+	return ""
+}
+
 func (vm *vmInfoType) getInitrdPath() string {
 	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "initrd")
 }
@@ -2917,7 +3085,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 		default:
 		}
 		return
-	case proto.StateRunning:
+	case proto.StateRunning, proto.StateDebugging:
 		vm.setState(proto.StateCrashed)
 		select {
 		case vm.stoppedNotifier <- struct{}{}:
@@ -2949,10 +3117,16 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 	}
 }
 
-func (vm *vmInfoType) rootLabel() string {
+func (vm *vmInfoType) rootLabel(debug bool) string {
 	ipAddr := vm.Address.IpAddress
-	return fmt.Sprintf("rootfs@%02x%02x%02x%02x",
-		ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
+	var prefix string
+	if debug {
+		prefix = "debugfs" // 16 characters: the limit.
+	} else {
+		prefix = "rootfs"
+	}
+	return fmt.Sprintf("%s@%02x%02x%02x%02x",
+		prefix, ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }
 
 func (vm *vmInfoType) serialManager() {
@@ -3071,6 +3245,7 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	case proto.StateMigrating:
 		return false, nil
 	case proto.StateCrashed:
+	case proto.StateDebugging:
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
 		return false, nil
@@ -3107,7 +3282,11 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	vm.commandChannel = commandChannel
 	go vm.monitor(monitorSock, commandChannel)
 	commandChannel <- "qmp_capabilities"
-	vm.setState(proto.StateRunning)
+	if vm.getDebugRoot() == "" {
+		vm.setState(proto.StateRunning)
+	} else {
+		vm.setState(proto.StateDebugging)
+	}
 	if len(vm.Address.IpAddress) < 1 {
 		// Must wait to see what IP address is given by external DHCP server.
 		reqCh := vm.manager.DhcpServer.MakeRequestChannel(vm.Address.MacAddress)
@@ -3209,12 +3388,23 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		"-runas", vm.manager.Username,
 		"-qmp", "unix:"+vm.monitorSockname+",server,nowait",
 		"-daemonize")
-	if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
+	var interfaceDriver string
+	if !vm.DisableVirtIO {
+		interfaceDriver = ",if=virtio"
+	}
+	if debugRoot := vm.getDebugRoot(); debugRoot != "" {
+		options := interfaceDriver
+		if vm.manager.checkTrim(vm.VolumeLocations[0].Filename) {
+			options += ",discard=on"
+		}
+		cmd.Args = append(cmd.Args,
+			"-drive", "file="+debugRoot+",format=raw"+options)
+	} else if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
 		cmd.Args = append(cmd.Args, "-kernel", kernelPath)
 		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
 			cmd.Args = append(cmd.Args,
 				"-initrd", initrdPath,
-				"-append", util.MakeKernelOptions("LABEL="+vm.rootLabel(),
+				"-append", util.MakeKernelOptions("LABEL="+vm.rootLabel(false),
 					"net.ifnames=0"),
 			)
 		} else {
@@ -3241,10 +3431,6 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 				"-usb", "-device", "usb-tablet",
 			)
 		}
-	}
-	var interfaceDriver string
-	if !vm.DisableVirtIO {
-		interfaceDriver = ",if=virtio"
 	}
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat

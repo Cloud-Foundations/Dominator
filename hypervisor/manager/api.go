@@ -184,6 +184,11 @@ func (m *Manager) CreateVm(conn *srpc.Conn) error {
 	return m.createVm(conn)
 }
 
+func (m *Manager) DebugVmImage(conn *srpc.Conn,
+	authInfo *srpc.AuthInformation) error {
+	return m.debugVmImage(conn, authInfo)
+}
+
 func (m *Manager) DeleteVmVolume(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	accessToken []byte, volumeIndex uint) error {
 	return m.deleteVmVolume(ipAddr, authInfo, accessToken, volumeIndex)
