@@ -140,6 +140,7 @@ var subcommands = []commands.Command{
 		connectToVmSerialPortSubcommand},
 	{"copy-vm", "IPaddr", 1, 1, copyVmSubcommand},
 	{"create-vm", "", 0, 0, createVmSubcommand},
+	{"debug-vm-image", "IPaddr", 1, 1, debugVmImageSubcommand},
 	{"delete-vm-volume", "IPaddr", 1, 1, deleteVmVolumeSubcommand},
 	{"destroy-vm", "IPaddr", 1, 1, destroyVmSubcommand},
 	{"discard-vm-old-image", "IPaddr", 1, 1, discardVmOldImageSubcommand},
