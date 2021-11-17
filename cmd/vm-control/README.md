@@ -36,6 +36,9 @@ Some of the sub-commands available are:
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
 - **copy-vm**: make a copy of a VM. The new VM will have a different IP address
 - **create-vm**: create a VM
+- **debug-vm-image**: (re)start a VM with a temporary debug image. The old root
+                      volume will become the first secondary volume. Debugging
+                      ends when the VM is stopped
 - **delete-vm-volume**: delete a specified volume from a VM
 - **destroy-vm**: destroy a VM (all ephemeral data and metadata are lost)
 - **discard-vm-old-image**: discard the previous root image for a VM
@@ -57,7 +60,7 @@ Some of the sub-commands available are:
 - **list-hypervisors**: list healthy Hypervisors in the specified location
 - **list-locations**: list locations within the specified top location
 - **list-vms**: list the IP addresses for all VMs
-- **migrate-vm*: migrate a VM to another Hypervisor
+- **migrate-vm**: migrate a VM to another Hypervisor
 - **patch-vm-image**: patch the root image for a VM. Files listed in the image
                       filter are not changed. The old root image is saved. The
                       VM must not be running
