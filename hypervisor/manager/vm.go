@@ -1066,7 +1066,6 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
-		m.Logger.Printf("HACK: debug image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
@@ -2677,6 +2676,7 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+// startVm returns true if the DHCP check timed out.
 func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	accessToken []byte, dhcpTimeout time.Duration) (bool, error) {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, accessToken)
@@ -2710,7 +2710,29 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	case proto.StateMigrating:
 		return false, errors.New("VM is migrating")
 	case proto.StateDebugging:
-		return false, errors.New("VM is running in debug mode")
+		debugRoot := vm.getDebugRoot()
+		if debugRoot == "" {
+			return false, errors.New("debugging volume missing")
+		}
+		stoppedNotifier := make(chan struct{}, 1)
+		vm.stoppedNotifier = stoppedNotifier
+		vm.setState(proto.StateStopping)
+		vm.commandChannel <- "system_powerdown"
+		time.AfterFunc(time.Second*15, vm.kill)
+		vm.mutex.Unlock()
+		<-stoppedNotifier
+		vm.mutex.Lock()
+		if vm.State != proto.StateStopped {
+			return false, errors.New("VM is not stopped after stop attempt")
+		}
+		if err := os.Remove(debugRoot); err != nil {
+			return false, err
+		}
+		vm.writeAndSendInfo()
+		vm.setState(proto.StateStarting)
+		vm.mutex.Unlock()
+		doUnlock = false
+		return vm.startManaging(-1, false, false)
 	default:
 		return false, errors.New("unknown state: " + vm.State.String())
 	}
