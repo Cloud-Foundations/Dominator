@@ -38,7 +38,7 @@ Some of the sub-commands available are:
 - **create-vm**: create a VM
 - **debug-vm-image**: (re)start a VM with a temporary debug image. The old root
                       volume will become the first secondary volume. Debugging
-                      ends when the VM is stopped
+                      ends when the VM is stopped or (re)started
 - **delete-vm-volume**: delete a specified volume from a VM
 - **destroy-vm**: destroy a VM (all ephemeral data and metadata are lost)
 - **discard-vm-old-image**: discard the previous root image for a VM
