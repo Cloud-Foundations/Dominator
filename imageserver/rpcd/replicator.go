@@ -83,6 +83,18 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 					format.Duration(time.Since(replicationStartTime)))
 				continue
 			}
+			if t.excludeFilter != nil &&
+				t.excludeFilter.Match(imageUpdate.Name) {
+				t.logger.Debugf(0, "Excluding %s from replication\n",
+					imageUpdate.Name)
+				continue
+			}
+			if t.includeFilter != nil &&
+				!t.includeFilter.Match(imageUpdate.Name) {
+				t.logger.Debugf(0, "Not including %s in replication\n",
+					imageUpdate.Name)
+				continue
+			}
 			if initialImages != nil {
 				initialImages[imageUpdate.Name] = struct{}{}
 			}

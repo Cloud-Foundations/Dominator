@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/scanner"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -17,16 +18,22 @@ var (
 		"If true, replicate expiring images when in archive mode")
 	archiveMode = flag.Bool("archiveMode", false,
 		"If true, disable delete operations and require update server")
+	replicationExcludeFilter = flag.String("replicationExcludeFilter", "",
+		"Filename containing filter to exclude images from replication (default do not exclude any)")
+	replicationIncludeFilter = flag.String("replicationIncludeFilter", "",
+		"Filename containing filter to include images for replication (default include all)")
 )
 
 type srpcType struct {
 	imageDataBase             *scanner.ImageDataBase
+	excludeFilter             *filter.Filter
 	finishedReplication       <-chan struct{} // Closed when finished.
+	includeFilter             *filter.Filter
 	replicationMaster         string
 	imageserverResource       *srpc.ClientResource
 	objSrv                    objectserver.FullObjectServer
 	archiveMode               bool
-	logger                    log.Logger
+	logger                    log.DebugLogger
 	numReplicationClientsLock sync.RWMutex // Protect numReplicationClients.
 	numReplicationClients     uint
 	imagesBeingInjectedLock   sync.Mutex // Protect imagesBeingInjected.
@@ -44,7 +51,7 @@ var replicationMessage = "cannot make changes while under replication control" +
 
 func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
 	objSrv objectserver.FullObjectServer,
-	logger log.Logger) (*htmlWriter, error) {
+	logger log.DebugLogger) (*htmlWriter, error) {
 	if *archiveMode && replicationMaster == "" {
 		return nil, errors.New("replication master required in archive mode")
 	}
@@ -58,6 +65,19 @@ func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
 		logger:              logger,
 		archiveMode:         *archiveMode,
 		imagesBeingInjected: make(map[string]struct{}),
+	}
+	var err error
+	if *replicationExcludeFilter != "" {
+		srpcObj.excludeFilter, err = filter.Load(*replicationExcludeFilter)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if *replicationIncludeFilter != "" {
+		srpcObj.includeFilter, err = filter.Load(*replicationIncludeFilter)
+		if err != nil {
+			return nil, err
+		}
 	}
 	srpc.RegisterNameWithOptions("ImageServer", srpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
