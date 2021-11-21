@@ -17,6 +17,7 @@ type putter interface {
 // State maintains state needed to manage running functions concurrently.
 type State struct {
 	entered      bool
+	error        error
 	errorChannel chan error
 	pending      uint64
 	putter       putter
