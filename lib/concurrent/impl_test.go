@@ -69,3 +69,19 @@ func TestReapGoodAndBad(t *testing.T) {
 		t.Fatalf("Expected 2 returns, got: %d", len(waitForReturn))
 	}
 }
+
+func TestReapBadGoodGood(t *testing.T) {
+	state := NewState(1)
+	state.GoRun(badFunc)
+	waitToBadReturn <- struct{}{}
+	state.GoRun(goodFunc)
+	waitToGoodReturn <- struct{}{}
+	state.GoRun(goodFunc)
+	waitToGoodReturn <- struct{}{}
+	<-waitForReturn
+	<-waitForReturn
+	<-waitForReturn
+	if err := state.Reap(); err == nil {
+		t.Fatal("No error reaped")
+	}
+}
