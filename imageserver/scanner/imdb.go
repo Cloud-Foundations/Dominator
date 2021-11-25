@@ -52,8 +52,8 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		}
 		filename := filepath.Join(imdb.baseDir, name)
 		flags := os.O_CREATE | os.O_RDWR
-		if imdb.replicationMaster != "" {
-			flags |= os.O_EXCL
+		if imdb.replicationMaster == "" {
+			flags |= os.O_EXCL // I am the master.
 		} else {
 			flags |= os.O_TRUNC
 		}
