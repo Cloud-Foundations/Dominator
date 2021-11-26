@@ -410,7 +410,10 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 		}
 		grubConfigFile = filepath.Join(rootDir, "boot", "grub2", "grub.cfg")
 	}
-	cmd := exec.Command(grubInstaller, "--boot-directory="+bootDir, deviceName)
+	cmd := exec.Command(grubInstaller,
+		"--boot-directory="+bootDir,
+		"--target=i386-pc", // TODO(rgooch): make this configurable.
+		deviceName)
 	if doChroot {
 		cmd.Dir = "/"
 		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: chrootDir}
