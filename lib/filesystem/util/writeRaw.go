@@ -553,8 +553,24 @@ func writeToFile(fs *filesystem.FileSystem,
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, loopDevice+"p1",
-		options, logger)
+	rootDevice := loopDevice + "p1"
+	// Probe for partition device because it might not be immediately available.
+	// Need to open rather than just test for inode existance.
+	startTime := time.Now()
+	stopTime := startTime.Add(time.Second)
+	for count := 0; time.Until(stopTime) >= 0; count++ {
+		if file, err := os.Open(rootDevice); err == nil {
+			file.Close()
+			if count > 0 {
+				logger.Debugf(0, "%s valid after: %d iterations, %s\n",
+					rootDevice, count, format.Duration(time.Since(startTime)))
+			}
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
+		logger)
 	if options.AllocateBlocks { // mkfs discards blocks, so do this after.
 		if err := fsutil.Fallocate(tmpFilename, imageSize); err != nil {
 			return err
