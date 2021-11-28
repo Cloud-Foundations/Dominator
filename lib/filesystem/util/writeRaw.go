@@ -268,7 +268,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
-	defer syscall.Unmount(mountPoint, 0)
+	doUnmount := true
+	defer func() {
+		if doUnmount {
+			syscall.Unmount(mountPoint, 0)
+		}
+	}()
 	os.RemoveAll(filepath.Join(mountPoint, "lost+found"))
 	if err := Unpack(fs, objectsGetter, mountPoint, logger); err != nil {
 		return err
@@ -288,6 +293,15 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 		if err != nil {
 			return err
 		}
+	}
+	doUnmount = false
+	startTime := time.Now()
+	if err := syscall.Unmount(mountPoint, 0); err != nil {
+		return err
+	}
+	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
+		logger.Debugf(0, "Unmounted: %s in %s\n",
+			rootDevice, format.Duration(time.Since(startTime)))
 	}
 	return nil
 }
