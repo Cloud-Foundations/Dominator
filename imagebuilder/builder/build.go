@@ -244,6 +244,9 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 	if request.ReturnImage {
 		return img, "", nil
 	}
+	if authInfo != nil {
+		img.CreatedFor = authInfo.Username
+	}
 	uploadStartTime := time.Now()
 	if name, err := addImage(client, request, img); err != nil {
 		fmt.Fprintln(buildLog, err)
