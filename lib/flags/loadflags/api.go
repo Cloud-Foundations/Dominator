@@ -1,13 +1,11 @@
 package loadflags
 
 import (
-	"os"
 	"path/filepath"
 )
 
 func LoadForCli(progName string) error {
-	return loadFlags(
-		filepath.Join(os.Getenv("HOME"), ".config", progName))
+	return loadForCli(progName)
 }
 
 func LoadForDaemon(progName string) error {

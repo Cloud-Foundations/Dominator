@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+const systemDir = "/etc/config"
 
 func loadFlags(dirname string) error {
 	err := loadFlagsFromFile(filepath.Join(dirname, "flags.default"))
@@ -48,4 +51,12 @@ func loadFlagsFromFile(filename string) error {
 		}
 	}
 	return scanner.Err()
+}
+
+func loadForCli(progName string) error {
+	if err := loadFlags(filepath.Join(systemDir, progName)); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
+	}
+	return loadFlags(
+		filepath.Join(os.Getenv("HOME"), ".config", progName))
 }
