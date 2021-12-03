@@ -71,6 +71,8 @@ var (
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
+	registerBuiltin              sync.Once
+	registerBuiltinError         error
 )
 
 // Precompute some reflect types. Can't use the types directly because Typeof
@@ -87,9 +89,6 @@ func init() {
 	http.HandleFunc(jsonTlsRpcPath, jsonTlsHttpHandler)
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
 	registerServerMetrics()
-	if err := RegisterName("", &builtinReceiver{}); err != nil {
-		panic(err)
-	}
 }
 
 func registerServerMetrics() {
@@ -128,6 +127,18 @@ func defaultMethodGranter(serviceMethod string,
 }
 
 func registerName(name string, rcvr interface{},
+	options ReceiverOptions) error {
+	registerBuiltin.Do(func() {
+		registerBuiltinError = _registerName("", &builtinReceiver{},
+			ReceiverOptions{})
+	})
+	if registerBuiltinError != nil {
+		return registerBuiltinError
+	}
+	return _registerName(name, rcvr, options)
+}
+
+func _registerName(name string, rcvr interface{},
 	options ReceiverOptions) error {
 	if _, ok := receivers[name]; ok {
 		return fmt.Errorf("SRPC receiver already registered: %s", name)
