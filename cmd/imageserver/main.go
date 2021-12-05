@@ -37,8 +37,9 @@ var (
 )
 
 type imageObjectServersType struct {
-	imdb   *scanner.ImageDataBase
-	objSrv *filesystem.ObjectServer
+	imageServerAddress string
+	imdb               *scanner.ImageDataBase
+	objSrv             *filesystem.ObjectServer
 }
 
 func main() {
@@ -87,7 +88,11 @@ func main() {
 	objSrvRpcHtmlWriter := objectserverRpcd.Setup(objSrv, imageServerAddress,
 		logger)
 	httpd.AddHtmlWriter(imdb)
-	httpd.AddHtmlWriter(&imageObjectServersType{imdb, objSrv})
+	httpd.AddHtmlWriter(&imageObjectServersType{
+		imageServerAddress: imageServerAddress,
+		imdb:               imdb,
+		objSrv:             objSrv,
+	})
 	httpd.AddHtmlWriter(imgSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(objSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
