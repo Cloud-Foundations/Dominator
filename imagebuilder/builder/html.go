@@ -89,8 +89,8 @@ func (b *Builder) writeHtml(writer io.Writer) {
 	fmt.Fprintln(writer,
 		"Image stream <a href=\"showDirectedGraph\">relationships</a><br>")
 	fmt.Fprintf(writer,
-		"Image server <a href=\"http://%s/\">dashboard</a><p>\n",
-		b.imageServerAddress)
+		"Image server: <a href=\"http://%s/\">%s</a><p>\n",
+		b.imageServerAddress, b.imageServerAddress)
 	currentBuildNames := make([]string, 0)
 	currentBuildTimes := make([]time.Time, 0)
 	goodBuilds := make(map[string]buildResultType)
