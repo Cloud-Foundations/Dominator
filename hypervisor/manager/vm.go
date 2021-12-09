@@ -846,7 +846,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	defer func() {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
-	memoryError := tryAllocateMemory(request.MemoryInMiB)
+	var memoryError <-chan error
+	if !request.SkipMemoryCheck {
+		memoryError = tryAllocateMemory(request.MemoryInMiB)
+	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
@@ -952,13 +955,15 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			vm.Volumes = append(vm.Volumes, volume)
 		}
 	}
-	if len(memoryError) < 1 {
-		msg := "waiting for test memory allocation"
-		sendUpdate(conn, msg)
-		vm.logger.Debugln(0, msg)
-	}
-	if err := <-memoryError; err != nil {
-		return sendError(conn, err)
+	if memoryError != nil {
+		if len(memoryError) < 1 {
+			msg := "waiting for test memory allocation"
+			sendUpdate(conn, msg)
+			vm.logger.Debugln(0, msg)
+		}
+		if err := <-memoryError; err != nil {
+			return sendError(conn, err)
+		}
 	}
 	if vm.ipAddress == "" {
 		ipAddressToSend = net.ParseIP(vm.ipAddress)
