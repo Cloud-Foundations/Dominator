@@ -72,6 +72,8 @@ var (
 		"Serial port number on VM")
 	skipBootloader = flag.Bool("skipBootloader", false,
 		"If true, directly boot into the kernel")
+	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,
+		"If true, skip memory availability check before creating VM")
 	subnetId = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
 	requestIPs   flagutil.StringList

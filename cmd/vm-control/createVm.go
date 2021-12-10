@@ -124,6 +124,7 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		EnableNetboot:    *enableNetboot,
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
+		SkipMemoryCheck:  *skipMemoryCheck,
 		VmInfo:           createVmInfoFromFlags(),
 	}
 	if request.VmInfo.MemoryInMiB < 1 {
