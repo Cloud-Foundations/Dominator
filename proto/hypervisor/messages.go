@@ -163,6 +163,7 @@ type ConsoleType uint
 type CopyVmRequest struct {
 	AccessToken      []byte
 	IpAddress        net.IP
+	SkipMemoryCheck  bool
 	SourceHypervisor string
 	VmInfo
 }
