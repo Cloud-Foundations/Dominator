@@ -735,8 +735,10 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.Volumes = vmInfo.Volumes
-	if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
-		return err
+	if !request.SkipMemoryCheck {
+		if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
+			return err
+		}
 	}
 	var secondaryVolumes []proto.Volume
 	for index, volume := range vmInfo.Volumes {
