@@ -113,6 +113,7 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	request := hyper_proto.CopyVmRequest{
 		AccessToken:      accessToken,
 		IpAddress:        vmIP,
+		SkipMemoryCheck:  *skipMemoryCheck,
 		SourceHypervisor: sourceHypervisorAddress,
 		VmInfo:           vmInfo,
 	}
