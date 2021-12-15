@@ -369,6 +369,7 @@ type ListSubnetsResponse struct {
 }
 
 type ImportLocalVmRequest struct {
+	SkipMemoryCheck    bool
 	VerificationCookie []byte `json:",omitempty"`
 	VmInfo
 	VolumeFilenames []string
