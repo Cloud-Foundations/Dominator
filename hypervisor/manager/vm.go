@@ -1533,8 +1533,10 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 		}
 	}
 	request.Volumes = volumes
-	if err := <-tryAllocateMemory(request.MemoryInMiB); err != nil {
-		return err
+	if !request.SkipMemoryCheck {
+		if err := <-tryAllocateMemory(request.MemoryInMiB); err != nil {
+			return err
+		}
 	}
 	ipAddress := request.Address.IpAddress.String()
 	vm := &vmInfoType{
