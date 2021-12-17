@@ -131,6 +131,7 @@ func importLocalVmInfo(vmInfo proto.VmInfo, rootVolume string,
 		}
 	}
 	request := proto.ImportLocalVmRequest{
+		SkipMemoryCheck:    *skipMemoryCheck,
 		VerificationCookie: rootCookie,
 		VmInfo:             vmInfo,
 		VolumeFilenames:    []string{rootFilename},
