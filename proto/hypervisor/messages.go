@@ -410,6 +410,7 @@ type MigrateVmRequest struct {
 	AccessToken      []byte
 	DhcpTimeout      time.Duration
 	IpAddress        net.IP
+	SkipMemoryCheck  bool
 	SourceHypervisor string
 }
 
