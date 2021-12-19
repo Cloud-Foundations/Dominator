@@ -1695,7 +1695,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		return fmt.Errorf("inconsistent IP address: %s",
 			vmInfo.Address.IpAddress)
 	}
-	if err := m.migrateVmChecks(vmInfo); err != nil {
+	if err := m.migrateVmChecks(vmInfo, request.SkipMemoryCheck); err != nil {
 		return err
 	}
 	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
@@ -1866,7 +1866,8 @@ func sendVmPatchImageMessage(conn *srpc.Conn, message string) error {
 	return conn.Flush()
 }
 
-func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo) error {
+func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
+	skipMemoryCheck bool) error {
 	switch vmInfo.State {
 	case proto.StateStopped:
 	case proto.StateRunning:
@@ -1891,8 +1892,10 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo) error {
 	if err := m.checkSufficientMemoryWithLock(vmInfo.MemoryInMiB); err != nil {
 		return err
 	}
-	if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
-		return err
+	if !skipMemoryCheck {
+		if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
+			return err
+		}
 	}
 	return nil
 }
