@@ -84,6 +84,7 @@ func migrateVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	request := hyper_proto.MigrateVmRequest{
 		AccessToken:      accessToken,
 		IpAddress:        vmIP,
+		SkipMemoryCheck:  *skipMemoryCheck,
 		SourceHypervisor: sourceHypervisorAddress,
 	}
 	if err := conn.Encode(request); err != nil {
