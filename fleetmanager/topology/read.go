@@ -80,11 +80,19 @@ func loadMachines(filename string) ([]*proto.Machine, error) {
 		if len(machine.HostIpAddress) == 0 {
 			if addrs, err := net.LookupIP(machine.Hostname); err != nil {
 				return nil, err
-			} else if len(addrs) != 1 {
-				return nil, fmt.Errorf("num addresses for: %s: %d!=1",
-					machine.Hostname, len(addrs))
 			} else {
-				machine.HostIpAddress = addrs[0]
+				var addrsIPv4 []net.IP
+				for _, addr := range addrs {
+					if addrIPv4 := addr.To4(); addrIPv4 != nil {
+						addrsIPv4 = append(addrsIPv4, addrIPv4)
+					}
+				}
+				if len(addrsIPv4) != 1 {
+					return nil, fmt.Errorf("num IPv4 addresses for: %s: %d!=1",
+						machine.Hostname, len(addrsIPv4))
+				} else {
+					machine.HostIpAddress = addrs[0]
+				}
 			}
 		}
 		if len(machine.HostIpAddress) == 16 {
