@@ -28,6 +28,8 @@ var (
 		"Number of poll slots per CPU")
 	subConnectTimeout = flag.Uint("subConnectTimeout", 15,
 		"Timeout in seconds for sub connections. If zero, OS timeout is used")
+	subdInstaller = flag.String("subdInstaller", "",
+		"Path to programme used to install subd if connections fail")
 )
 
 func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
@@ -54,6 +56,7 @@ func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
 		herd.cpuSharer)
 	herd.currentScanStartTime = time.Now()
 	herd.setupMetrics(metricsDir)
+	go herd.subdInstallerLoop()
 	return &herd
 }
 

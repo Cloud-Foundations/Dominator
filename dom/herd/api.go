@@ -119,27 +119,29 @@ func (sub *Sub) String() string {
 }
 
 type Herd struct {
-	sync.RWMutex          // Protect map and slice mutations.
-	imageManager          *images.Manager
-	objectServer          objectserver.ObjectServer
-	computedFilesManager  *filegenclient.Manager
-	logger                log.DebugLogger
-	htmlWriters           []HtmlWriter
-	updatesDisabledReason string
-	updatesDisabledBy     string
-	updatesDisabledTime   time.Time
-	defaultImageName      string
-	nextDefaultImageName  string
-	configurationForSubs  subproto.Configuration
-	nextSubToPoll         uint
-	subsByName            map[string]*Sub
-	subsByIndex           []*Sub // Sorted by Sub.hostname.
-	pollSemaphore         chan struct{}
-	pushSemaphore         chan struct{}
-	cpuSharer             *cpusharer.FifoCpuSharer
-	dialer                net.Dialer
-	currentScanStartTime  time.Time
-	previousScanDuration  time.Duration
+	sync.RWMutex             // Protect map and slice mutations.
+	imageManager             *images.Manager
+	objectServer             objectserver.ObjectServer
+	computedFilesManager     *filegenclient.Manager
+	logger                   log.DebugLogger
+	htmlWriters              []HtmlWriter
+	updatesDisabledReason    string
+	updatesDisabledBy        string
+	updatesDisabledTime      time.Time
+	defaultImageName         string
+	nextDefaultImageName     string
+	configurationForSubs     subproto.Configuration
+	nextSubToPoll            uint
+	subsByName               map[string]*Sub
+	subsByIndex              []*Sub // Sorted by Sub.hostname.
+	pollSemaphore            chan struct{}
+	pushSemaphore            chan struct{}
+	cpuSharer                *cpusharer.FifoCpuSharer
+	dialer                   net.Dialer
+	currentScanStartTime     time.Time
+	previousScanDuration     time.Duration
+	subdInstallerQueueAdd    chan<- string
+	subdInstallerQueueDelete chan<- string
 }
 
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,

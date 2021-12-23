@@ -116,6 +116,18 @@ func (sub *Sub) connectAndPoll() {
 	defer func() {
 		timer.Stop()
 		sub.publishedStatus = sub.status
+		switch sub.status {
+		case statusUnknown:
+		case statusConnecting:
+		case statusDNSError:
+		case statusNoRouteToHost:
+		case statusConnectionRefused,
+			statusConnectTimeout,
+			statusFailedToConnect:
+			sub.herd.addSubToInstallerQueue(sub.mdb.Hostname)
+		default:
+			sub.herd.removeSubFromInstallerQueue(sub.mdb.Hostname)
+		}
 	}()
 	sub.lastConnectionStartTime = time.Now()
 	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
