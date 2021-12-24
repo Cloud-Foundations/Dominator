@@ -70,11 +70,15 @@ func (herd *Herd) subdInstallerLoop() {
 }
 
 func (herd *Herd) addSubToInstallerQueue(subHostname string) {
-	herd.subdInstallerQueueAdd <- subHostname
+	if herd.subdInstallerQueueAdd != nil {
+		herd.subdInstallerQueueAdd <- subHostname
+	}
 }
 
 func (herd *Herd) removeSubFromInstallerQueue(subHostname string) {
-	herd.subdInstallerQueueDelete <- subHostname
+	if herd.subdInstallerQueueDelete != nil {
+		herd.subdInstallerQueueDelete <- subHostname
+	}
 }
 
 func (herd *Herd) subInstall(subHostname string, completion chan<- string) {
