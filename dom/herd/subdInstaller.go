@@ -32,7 +32,7 @@ func (herd *Herd) subdInstallerLoop() {
 	queue := installerQueueType{entries: make(map[string]*queueEntry)}
 	for {
 		sleepInterval := time.Hour
-		if queue.first != nil {
+		if queue.first != nil && availableSlots > 0 {
 			sleepInterval = time.Until(queue.first.startTime)
 		}
 		timer := time.NewTimer(sleepInterval)
