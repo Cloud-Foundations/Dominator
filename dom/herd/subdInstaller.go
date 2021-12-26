@@ -1,9 +1,16 @@
 package herd
 
 import (
+	"bytes"
 	"os/exec"
 	"runtime"
 	"time"
+)
+
+var (
+	carriageReturnLiteral = []byte{'\r'}
+	newlineLiteral        = []byte{'\n'}
+	newlineReplacement    = []byte{'\\', 'n'}
 )
 
 type queueEntry struct {
@@ -87,6 +94,11 @@ func (herd *Herd) subInstall(subHostname string, completion chan<- string) {
 	cmd := exec.Command(*subdInstaller, subHostname)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if output[len(output)-1] == '\n' {
+			output = output[:len(output)-1]
+		}
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
 		herd.logger.Printf("Error installing subd on: %s: %s: %s\n",
 			subHostname, err, string(output))
 	}
