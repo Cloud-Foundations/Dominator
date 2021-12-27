@@ -13,17 +13,17 @@ var (
 	newlineReplacement    = []byte{'\\', 'n'}
 )
 
+type installerQueueType struct {
+	entries map[string]*queueEntry // Key: subHostname (nil: processing).
+	first   *queueEntry
+	last    *queueEntry
+}
+
 type queueEntry struct {
 	startTime time.Time
 	hostname  string
 	prev      *queueEntry
 	next      *queueEntry
-}
-
-type installerQueueType struct {
-	entries map[string]*queueEntry // Key: subHostname (nil: processing).
-	first   *queueEntry
-	last    *queueEntry
 }
 
 func (herd *Herd) subdInstallerLoop() {
@@ -46,7 +46,7 @@ func (herd *Herd) subdInstallerLoop() {
 		select {
 		case <-timer.C:
 		case hostname := <-queueAdd:
-			if queue.entries[hostname] == nil {
+			if _, ok := queue.entries[hostname]; !ok {
 				entry := &queueEntry{
 					startTime: time.Now().Add(5 * time.Minute),
 					hostname:  hostname,
