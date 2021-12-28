@@ -13,6 +13,11 @@ var (
 	newlineReplacement    = []byte{'\\', 'n'}
 )
 
+type completionType struct {
+	failed   bool
+	hostname string
+}
+
 type installerQueueType struct {
 	entries map[string]*queueEntry // Key: subHostname (nil: processing).
 	first   *queueEntry
@@ -31,7 +36,7 @@ func (herd *Herd) subdInstallerLoop() {
 		return
 	}
 	availableSlots := runtime.NumCPU()
-	completion := make(chan string, 1)
+	completion := make(chan completionType, 1)
 	queueAdd := make(chan string, 1)
 	herd.subdInstallerQueueAdd = queueAdd
 	queueDelete := make(chan string, 1)
@@ -59,9 +64,17 @@ func (herd *Herd) subdInstallerLoop() {
 				queue.delete(entry)
 				delete(queue.entries, hostname)
 			}
-		case hostname := <-completion:
+		case result := <-completion:
 			availableSlots++
-			delete(queue.entries, hostname)
+			delete(queue.entries, result.hostname)
+			if result.failed { // Come back later rather than sooner.
+				entry := &queueEntry{
+					startTime: time.Now().Add(time.Hour),
+					hostname:  result.hostname,
+					prev:      queue.last,
+				}
+				queue.add(entry)
+			}
 		}
 		timer.Stop()
 		entry := queue.first
@@ -88,12 +101,15 @@ func (herd *Herd) removeSubFromInstallerQueue(subHostname string) {
 	}
 }
 
-func (herd *Herd) subInstall(subHostname string, completion chan<- string) {
-	defer func() { completion <- subHostname }()
+func (herd *Herd) subInstall(subHostname string,
+	completion chan<- completionType) {
+	failed := false
+	defer func() { completion <- completionType{failed, subHostname} }()
 	herd.logger.Printf("Installing subd on: %s\n", subHostname)
 	cmd := exec.Command(*subdInstaller, subHostname)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		failed = true
 		if output[len(output)-1] == '\n' {
 			output = output[:len(output)-1]
 		}
