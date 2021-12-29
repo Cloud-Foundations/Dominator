@@ -28,6 +28,10 @@ var (
 		"Number of poll slots per CPU")
 	subConnectTimeout = flag.Uint("subConnectTimeout", 15,
 		"Timeout in seconds for sub connections. If zero, OS timeout is used")
+	subdInstallDelay = flag.Duration("subdInstallDelay", 5*time.Minute,
+		"Time to wait before attempting to install subd")
+	subdInstallRetryDelay = flag.Duration("subdInstallRetryDelay", time.Hour,
+		"Time to wait before reattempting to install subd")
 	subdInstaller = flag.String("subdInstaller", "",
 		"Path to programme used to install subd if connections fail")
 )

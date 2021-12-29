@@ -53,7 +53,7 @@ func (herd *Herd) subdInstallerLoop() {
 		case hostname := <-queueAdd:
 			if _, ok := queue.entries[hostname]; !ok {
 				entry := &queueEntry{
-					startTime: time.Now().Add(5 * time.Minute),
+					startTime: time.Now().Add(*subdInstallDelay),
 					hostname:  hostname,
 					prev:      queue.last,
 				}
@@ -67,9 +67,10 @@ func (herd *Herd) subdInstallerLoop() {
 		case result := <-completion:
 			availableSlots++
 			delete(queue.entries, result.hostname)
-			if result.failed { // Come back later rather than sooner.
+			if result.failed && *subdInstallRetryDelay > *subdInstallDelay {
+				// Come back later rather than sooner, must re-inject now.
 				entry := &queueEntry{
-					startTime: time.Now().Add(time.Hour),
+					startTime: time.Now().Add(*subdInstallRetryDelay),
 					hostname:  result.hostname,
 					prev:      queue.last,
 				}
