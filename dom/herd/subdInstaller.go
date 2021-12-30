@@ -41,6 +41,8 @@ func (herd *Herd) subdInstallerLoop() {
 	herd.subdInstallerQueueAdd = queueAdd
 	queueDelete := make(chan string, 1)
 	herd.subdInstallerQueueDelete = queueDelete
+	queueErase := make(chan string, 1)
+	herd.subdInstallerQueueErase = queueErase
 	queue := installerQueueType{entries: make(map[string]*queueEntry)}
 	for {
 		sleepInterval := time.Hour
@@ -64,17 +66,24 @@ func (herd *Herd) subdInstallerLoop() {
 				queue.delete(entry)
 				delete(queue.entries, hostname)
 			}
+		case hostname := <-queueErase:
+			if entry := queue.entries[hostname]; entry != nil {
+				queue.delete(entry)
+			}
+			delete(queue.entries, hostname)
 		case result := <-completion:
 			availableSlots++
-			delete(queue.entries, result.hostname)
-			if result.failed && *subdInstallRetryDelay > *subdInstallDelay {
-				// Come back later rather than sooner, must re-inject now.
-				entry := &queueEntry{
-					startTime: time.Now().Add(*subdInstallRetryDelay),
-					hostname:  result.hostname,
-					prev:      queue.last,
+			if _, ok := queue.entries[result.hostname]; ok { // Not erased.
+				delete(queue.entries, result.hostname)
+				if result.failed && *subdInstallRetryDelay > *subdInstallDelay {
+					// Come back later rather than sooner, must re-inject now.
+					entry := &queueEntry{
+						startTime: time.Now().Add(*subdInstallRetryDelay),
+						hostname:  result.hostname,
+						prev:      queue.last,
+					}
+					queue.add(entry)
 				}
-				queue.add(entry)
 			}
 		}
 		timer.Stop()
@@ -93,6 +102,12 @@ func (herd *Herd) subdInstallerLoop() {
 func (herd *Herd) addSubToInstallerQueue(subHostname string) {
 	if herd.subdInstallerQueueAdd != nil {
 		herd.subdInstallerQueueAdd <- subHostname
+	}
+}
+
+func (herd *Herd) eraseSubFromInstallerQueue(subHostname string) {
+	if herd.subdInstallerQueueErase != nil {
+		herd.subdInstallerQueueErase <- subHostname
 	}
 }
 

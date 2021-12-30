@@ -142,6 +142,7 @@ type Herd struct {
 	previousScanDuration     time.Duration
 	subdInstallerQueueAdd    chan<- string
 	subdInstallerQueueDelete chan<- string
+	subdInstallerQueueErase  chan<- string
 }
 
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,

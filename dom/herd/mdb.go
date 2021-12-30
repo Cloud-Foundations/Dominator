@@ -109,6 +109,7 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 		sub.deletingFlagMutex.Unlock()
 		herd.computedFilesManager.Remove(subHostname)
 		delete(herd.subsByName, subHostname)
+		herd.eraseSubFromInstallerQueue(subHostname)
 		numDeleted++
 	}
 	mdbUpdateTimeDistribution.Add(time.Since(startTime))
