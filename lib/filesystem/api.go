@@ -57,6 +57,10 @@ func Decode(reader io.Reader) (*FileSystem, error) {
 	return decode(reader)
 }
 
+func (fs *FileSystem) BuildNumLinksTable() NumLinksTable {
+	return buildNumLinksTable(fs)
+}
+
 func (fs *FileSystem) ComputeTotalDataBytes() {
 	fs.computeTotalDataBytes()
 }
