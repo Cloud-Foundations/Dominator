@@ -59,6 +59,7 @@ Some of the sub-commands available are:
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
 - **show-filter**: show the filter for an image
+- **show-inode**: show metadata for an inode in an image
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
