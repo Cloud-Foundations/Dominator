@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -13,6 +14,15 @@ func showImageInodeSubcommand(args []string, logger log.DebugLogger) error {
 		return fmt.Errorf("error showing image inode: %s", err)
 	}
 	return nil
+}
+
+func listInode(inode filesystem.GenericInode, inodePath string,
+	numLinks int) error {
+	filt, err := filter.New([]string{".*"})
+	if err != nil {
+		return err
+	}
+	return inode.List(os.Stdout, inodePath, nil, numLinks, listSelector, filt)
 }
 
 func showImageInode(image, inodePath string) error {
@@ -26,12 +36,7 @@ func showImageInode(image, inodePath string) error {
 	} else if inode, ok := fs.InodeTable[inum]; !ok {
 		return fmt.Errorf("inode: %d not present in image", inum)
 	} else {
-		filt, err := filter.New([]string{".*"})
-		if err != nil {
-			return err
-		}
 		numLinksTable := fs.BuildNumLinksTable()
-		return inode.List(os.Stdout, inodePath, nil, numLinksTable[inum],
-			listSelector, filt)
+		return listInode(inode, inodePath, numLinksTable[inum])
 	}
 }

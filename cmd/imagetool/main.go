@@ -160,6 +160,8 @@ var subcommands = []commands.Command{
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},
+	{"trace-inode-history", " name inodePath", 2, 2,
+		traceInodeHistorySubcommand},
 }
 
 var imageSrpcClient *srpc.Client
