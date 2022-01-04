@@ -63,6 +63,7 @@ Some of the sub-commands available are:
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
+- **trace-inode-history**: trace the change history of an inode in an image and its sources
 
 ## Security
 *[Imageserver](../imageserver/README.md)* restricts RPC access using TLS client
