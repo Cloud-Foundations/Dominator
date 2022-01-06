@@ -70,9 +70,13 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	if err != nil {
 		return nil, fmt.Errorf("error making mounts private: %s", err)
 	}
-	masterConfiguration, err := masterConfiguration(confUrl)
+	masterConfiguration, err := loadMasterConfiguration(confUrl)
 	if err != nil {
 		return nil, fmt.Errorf("error getting master configuration: %s", err)
+	}
+	if len(masterConfiguration.BootstrapStreams) < 1 {
+		logger.Println(
+			"No bootstrap streams configured: some operations degraded")
 	}
 	imageStreamsToAutoRebuild := make([]string, 0)
 	for name := range masterConfiguration.BootstrapStreams {
@@ -144,7 +148,7 @@ func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
 	return configuration, nil
 }
 
-func masterConfiguration(url string) (*masterConfigurationType, error) {
+func loadMasterConfiguration(url string) (*masterConfigurationType, error) {
 	file, err := urlutil.Open(url)
 	if err != nil {
 		return nil, err

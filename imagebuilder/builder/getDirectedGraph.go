@@ -146,8 +146,10 @@ func (b *Builder) generateDependencyData() (
 			continue
 		}
 		unbuildableSources[sourceName] = struct{}{}
-		b.logger.Printf("stream: %s has unbuildable source: %s\n",
-			streamName, sourceName)
+		if b.getNumBootstrapStreams() > 0 {
+			b.logger.Printf("stream: %s has unbuildable source: %s\n",
+				streamName, sourceName)
+		}
 	}
 	finishTime := time.Now()
 	fmt.Fprintf(fetchLog, "Generated dependencies in: %s\n",
