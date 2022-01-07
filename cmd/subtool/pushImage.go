@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
@@ -117,6 +118,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	showTimeTaken(startTime)
 	updateRequest.ImageName = imageName
 	updateRequest.Wait = true
+	if !*showTimes {
+		logger.Println("Starting Subd.Update()")
+	}
 	startTime = showStart("Subd.Update()")
 	err = client.CallUpdate(srpcClient, updateRequest, &updateReply)
 	if err != nil {
@@ -182,6 +186,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		ignoreMissingComputedFiles = false
 		pushComputedFiles = false
 	}
+	logger.Println("Starting polling loop, waiting for completed scan")
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		var pollReply sub.PollResponse
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
@@ -190,6 +195,13 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		if err := pollAndBuildPointers(subObj.Client, &generationCount,
 			&pollReply); err != nil {
 			return err
+		}
+		if !*showTimes {
+			if pollReply.FileSystem == nil {
+				fmt.Fprintf(os.Stderr, ".")
+			} else {
+				fmt.Fprintln(os.Stderr)
+			}
 		}
 		if pollReply.GenerationCount != lastGenerationCount ||
 			pollReply.ScanCount != lastScanCount {
