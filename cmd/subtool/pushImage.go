@@ -118,11 +118,14 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	showTimeTaken(startTime)
 	updateRequest.ImageName = imageName
 	updateRequest.Wait = true
+	stopTicker := make(chan struct{}, 1)
 	if !*showTimes {
 		logger.Println("Starting Subd.Update()")
+		go tickerLoop(stopTicker)
 	}
 	startTime = showStart("Subd.Update()")
 	err = client.CallUpdate(srpcClient, updateRequest, &updateReply)
+	stopTicker <- struct{}{}
 	if err != nil {
 		showBlankLine()
 		return err
@@ -187,7 +190,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		pushComputedFiles = false
 	}
 	logger.Println("Starting polling loop, waiting for completed scan")
-	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
+	interval := time.Second
+	for ; time.Now().Before(timeoutTime); time.Sleep(interval) {
 		var pollReply sub.PollResponse
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
 			return err
@@ -195,6 +199,13 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		if err := pollAndBuildPointers(subObj.Client, &generationCount,
 			&pollReply); err != nil {
 			return err
+		}
+		if pollReply.FileSystem == nil {
+			if interval < 5*time.Second {
+				interval += 200 * time.Millisecond
+			}
+		} else {
+			interval = time.Second
 		}
 		if !*showTimes {
 			if pollReply.FileSystem == nil {
@@ -335,6 +346,22 @@ func showTimeTaken(startTime time.Time) {
 func showBlankLine() {
 	if *showTimes {
 		logger.Println()
+	}
+}
+
+func tickerLoop(stopTicker <-chan struct{}) {
+	for {
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-timer.C:
+			fmt.Fprintf(os.Stderr, ".")
+		case <-stopTicker:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			fmt.Fprintln(os.Stderr)
+			return
+		}
 	}
 }
 
