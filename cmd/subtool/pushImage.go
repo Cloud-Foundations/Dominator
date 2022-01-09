@@ -284,22 +284,20 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 
 func fetchUntil(subObj *lib.Sub, request sub.FetchRequest,
 	timeoutTime time.Time, logger log.DebugLogger) error {
-	showBlank := true
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
+		stopTicker := make(chan struct{}, 1)
+		if !*showTimes {
+			logger.Println("Starting Subd.Fetch()")
+			go tickerLoop(stopTicker)
+		}
 		err := subObj.Client.RequestReply("Subd.Fetch", request,
 			&sub.FetchResponse{})
+		stopTicker <- struct{}{}
 		if err == nil {
 			return nil
 		}
-		if showBlank {
-			showBlankLine()
-			showBlank = false
-		}
 		logger.Printf("Error calling %s:Subd.Fetch(): %s\n",
 			subObj.Hostname, err)
-	}
-	if showBlank {
-		showBlankLine()
 	}
 	return errors.New("timed out fetching objects")
 }
