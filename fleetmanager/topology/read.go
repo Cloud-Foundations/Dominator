@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -68,18 +69,20 @@ func load(params Params) (*Topology, error) {
 	return topology, nil
 }
 
-func loadMachines(filename string) ([]*proto.Machine, error) {
-	var machines []*proto.Machine
+func loadMachines(filename string, logger log.DebugLogger) (
+	[]*proto.Machine, error) {
+	var machines, rawMachines []*proto.Machine
 	if err := json.ReadFromFile(filename, &machines); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("error reading: %s: %s", filename, err)
 	}
-	for _, machine := range machines {
+	for _, machine := range rawMachines {
 		if len(machine.HostIpAddress) == 0 {
 			if addrs, err := net.LookupIP(machine.Hostname); err != nil {
-				return nil, err
+				logger.Printf("not including machine: %s\n", err)
+				continue
 			} else {
 				var addrsIPv4 []net.IP
 				for _, addr := range addrs {
@@ -98,6 +101,7 @@ func loadMachines(filename string) ([]*proto.Machine, error) {
 		if len(machine.HostIpAddress) == 16 {
 			machine.HostIpAddress = machine.HostIpAddress.To4()
 		}
+		machines = append(machines, machine)
 	}
 	return machines, nil
 }
@@ -273,6 +277,7 @@ func (t *Topology) loadSubnets(directory *Directory, dirpath string,
 func (t *Topology) readDirectory(topDir, dirname string,
 	iState *inheritingState, cState *commonStateType) (*Directory, error) {
 	directory := &Directory{
+		logger:           t.logger,
 		nameToDirectory:  make(map[string]*Directory),
 		path:             dirname,
 		subnetIdToSubnet: make(map[string]*Subnet),
@@ -324,7 +329,8 @@ func (t *Topology) readDirectory(topDir, dirname string,
 func (directory *Directory) loadMachines(dirname string) error {
 	var err error
 	directory.Machines, err = loadMachines(
-		filepath.Join(dirname, "machines.json"))
+		filepath.Join(dirname, "machines.json"),
+		directory.logger)
 	if err != nil {
 		return err
 	}
