@@ -10,6 +10,15 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type Config struct {
+	ReplicationMaster string
+}
+
+type Params struct {
+	Logger       log.DebugLogger
+	ObjectServer objectserver.StashingObjectServer
+}
+
 type srpcType struct {
 	objectServer      objectserver.StashingObjectServer
 	replicationMaster string
@@ -25,10 +34,14 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
 }
 
-func Setup(objSrv objectserver.StashingObjectServer, replicationMaster string,
-	logger log.DebugLogger) *htmlWriter {
+func Setup(config Config, params Params) *htmlWriter {
 	getSemaphore := make(chan bool, 100)
-	srpcObj := &srpcType{objSrv, replicationMaster, getSemaphore, logger}
+	srpcObj := &srpcType{
+		objectServer:      params.ObjectServer,
+		replicationMaster: config.ReplicationMaster,
+		getSemaphore:      getSemaphore,
+		logger:            params.Logger,
+	}
 	srpc.RegisterName("ObjectServer", srpcObj)
 	tricorder.RegisterMetric("/get-requests",
 		func() uint { return uint(len(getSemaphore)) },

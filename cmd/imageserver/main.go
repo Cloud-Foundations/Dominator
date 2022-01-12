@@ -85,8 +85,14 @@ func main() {
 	if err != nil {
 		logger.Fatalln(err)
 	}
-	objSrvRpcHtmlWriter := objectserverRpcd.Setup(objSrv, imageServerAddress,
-		logger)
+	objSrvRpcHtmlWriter := objectserverRpcd.Setup(
+		objectserverRpcd.Config{
+			ReplicationMaster: imageServerAddress,
+		},
+		objectserverRpcd.Params{
+			Logger:       logger,
+			ObjectServer: objSrv,
+		})
 	httpd.AddHtmlWriter(imdb)
 	httpd.AddHtmlWriter(&imageObjectServersType{
 		imageServerAddress: imageServerAddress,
