@@ -20,6 +20,8 @@ import (
 )
 
 var (
+	allowPublicCheckObjects = flag.Bool("allowPublicCheckObjects", false,
+		"If true, allow all users to call CheckObjects method")
 	debug    = flag.Bool("debug", false, "If true, show debugging output")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
 		"Name of image server data directory.")
@@ -87,7 +89,8 @@ func main() {
 	}
 	objSrvRpcHtmlWriter := objectserverRpcd.Setup(
 		objectserverRpcd.Config{
-			ReplicationMaster: imageServerAddress,
+			AllowPublicCheckObjects: *allowPublicCheckObjects,
+			ReplicationMaster:       imageServerAddress,
 		},
 		objectserverRpcd.Params{
 			Logger:       logger,
