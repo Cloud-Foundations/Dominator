@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	AllowPublicCheckObjects bool
+	AllowPublicGetObjects   bool
 	ReplicationMaster       string
 }
 
@@ -46,6 +47,9 @@ func Setup(config Config, params Params) *htmlWriter {
 	var publicMethods []string
 	if config.AllowPublicCheckObjects {
 		publicMethods = append(publicMethods, "CheckObjects")
+	}
+	if config.AllowPublicGetObjects {
+		publicMethods = append(publicMethods, "GetObjects")
 	}
 	srpc.RegisterNameWithOptions("ObjectServer", srpcObj,
 		srpc.ReceiverOptions{PublicMethods: publicMethods})
