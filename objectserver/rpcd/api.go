@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	AllowPublicAddObjects   bool
 	AllowPublicCheckObjects bool
 	AllowPublicGetObjects   bool
 	ReplicationMaster       string
@@ -45,6 +46,9 @@ func Setup(config Config, params Params) *htmlWriter {
 		logger:            params.Logger,
 	}
 	var publicMethods []string
+	if config.AllowPublicAddObjects {
+		publicMethods = append(publicMethods, "AddObjects")
+	}
 	if config.AllowPublicCheckObjects {
 		publicMethods = append(publicMethods, "CheckObjects")
 	}
