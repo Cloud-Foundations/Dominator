@@ -20,6 +20,8 @@ import (
 )
 
 var (
+	allowPublicAddObjects = flag.Bool("allowPublicAddObjects", false,
+		"If true, allow all users to call AddObjects method")
 	allowPublicCheckObjects = flag.Bool("allowPublicCheckObjects", false,
 		"If true, allow all users to call CheckObjects method")
 	allowPublicGetObjects = flag.Bool("allowPublicGetObjects", false,
@@ -91,6 +93,7 @@ func main() {
 	}
 	objSrvRpcHtmlWriter := objectserverRpcd.Setup(
 		objectserverRpcd.Config{
+			AllowPublicAddObjects:   *allowPublicAddObjects,
 			AllowPublicCheckObjects: *allowPublicCheckObjects,
 			AllowPublicGetObjects:   *allowPublicGetObjects,
 			ReplicationMaster:       imageServerAddress,
