@@ -1,9 +1,12 @@
 package rpcd
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"sync"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
@@ -77,6 +80,7 @@ func Setup(subConfiguration proto.Configuration,
 		systemGoroutine:           goroutine.New(),
 		workdirGoroutine:          workdirGoroutine,
 		logger:                    logger,
+		lastSuccessfulImageName:   readPatchedImageFile(),
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"Poll": 1,
@@ -103,4 +107,18 @@ func Setup(subConfiguration proto.Configuration,
 
 func (hw *HtmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
+}
+
+func readPatchedImageFile() string {
+	if file, err := os.Open(constants.PatchedImageNameFile); err != nil {
+		return ""
+	} else {
+		defer file.Close()
+		var imageName string
+		num, err := fmt.Fscanf(file, "%s", &imageName)
+		if err == nil && num == 1 {
+			return imageName
+		}
+		return ""
+	}
 }
