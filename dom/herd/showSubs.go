@@ -27,6 +27,11 @@ func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {
 	herd.showSubs(w, "compliant ", selectCompliantSub)
 }
 
+func (herd *Herd) showLikelyCompliantSubsHandler(w io.Writer,
+	req *http.Request) {
+	herd.showSubs(w, "likely compliant ", selectLikelyCompliantSub)
+}
+
 func (herd *Herd) showDeviantSubsHandler(w io.Writer, req *http.Request) {
 	herd.showSubs(w, "deviant ", selectDeviantSub)
 }
