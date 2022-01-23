@@ -110,6 +110,7 @@ func (sub *Sub) connectAndPoll() {
 	}
 	sub.deletingFlagMutex.Unlock()
 	previousStatus := sub.status
+	sub.status = statusConnecting
 	timer := time.AfterFunc(time.Second, func() {
 		sub.publishedStatus = sub.status
 	})
