@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	net_url "net/url"
 	"strings"
 	"time"
 
@@ -20,7 +21,21 @@ func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
 }
 
 func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "", nil)
+	parsedQuery := url.ParseQuery(req.URL)
+	var statusToMatch string
+	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
+		statusToMatch = uesc
+	}
+	var selectFunc func(*Sub) bool
+	if statusToMatch != "" {
+		selectFunc = func(sub *Sub) bool {
+			if sub.status.String() == statusToMatch {
+				return true
+			}
+			return false
+		}
+	}
+	herd.showSubs(w, "", selectFunc)
 }
 
 func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {
