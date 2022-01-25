@@ -146,9 +146,21 @@ func selectAliveSub(sub *Sub) bool {
 
 func selectDeviantSub(sub *Sub) bool {
 	switch sub.publishedStatus {
-	case statusComputingUpdate:
+	case statusWaitingToPoll:
 		return true
+	case statusNotEnoughFreeSpace:
+		return true
+	case statusFetching, statusFetchDenied, statusFailedToFetch:
+		return true
+	case statusPushing, statusPushDenied, statusFailedToPush:
+		return true
+	case statusFailedToGetObject:
+		return true
+	case statusComputingUpdate:
+		return sub.lastSuccessfulImageName != sub.mdb.RequiredImage
 	case statusSendingUpdate:
+		return true
+	case statusMissingComputedFile:
 		return true
 	case statusUpdatesDisabled:
 		return true
