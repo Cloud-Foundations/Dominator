@@ -68,6 +68,8 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
 		numSubs)
+	fmt.Fprintln(writer,
+		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a><br>")
 	subs := herd.getSelectedSubs(nil)
 	connectDurations := getConnectDurations(subs)
 	shortPollDurations := getPollDurations(subs, false)

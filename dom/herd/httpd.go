@@ -26,6 +26,8 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		html.BenchmarkedHandler(herd.showLikelyCompliantSubsHandler))
 	html.HandleFunc("/showDeviantSubs",
 		html.BenchmarkedHandler(herd.showDeviantSubsHandler))
+	html.HandleFunc("/showImagesForSubs",
+		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
 	html.HandleFunc("/showReachableSubs",
 		html.BenchmarkedHandler(herd.showReachableSubsHandler))
 	html.HandleFunc("/showSub", html.BenchmarkedHandler(herd.showSubHandler))
