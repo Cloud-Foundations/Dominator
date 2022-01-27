@@ -14,6 +14,7 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		return err
 	}
 	html.HandleFunc("/", herd.statusHandler)
+	html.HandleFunc("/listImagesForSubs", herd.listImagesForSubsHandler)
 	html.HandleFunc("/listReachableSubs", herd.listReachableSubsHandler)
 	html.HandleFunc("/listSubs", herd.listSubsHandler)
 	html.HandleFunc("/showAliveSubs",

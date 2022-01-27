@@ -1,6 +1,7 @@
 package herd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,8 +9,24 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
+
+type imageSubType struct {
+	Hostname            string
+	LastSuccessfulImage string `json:",omitempty"`
+	PlannedImage        string `json:",omitempty"`
+	RequiredImage       string `json:",omitempty"`
+	Status              string
+}
+
+func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	herd.showImagesForSubsJSON(writer)
+}
 
 func (herd *Herd) showImagesForSubsHandler(w io.Writer, req *http.Request) {
 	herd.showImagesForSubsHTML(w)
@@ -42,6 +59,21 @@ func (herd *Herd) showImagesForSubsHTML(writer io.Writer) {
 		showImagesForSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
+}
+
+func (herd *Herd) showImagesForSubsJSON(writer io.Writer) {
+	subs := herd.getSelectedSubs(selectAliveSub)
+	output := make([]imageSubType, 0, len(subs))
+	for _, sub := range subs {
+		output = append(output, imageSubType{
+			Hostname:            sub.mdb.Hostname,
+			PlannedImage:        sub.mdb.PlannedImage,
+			LastSuccessfulImage: sub.lastSuccessfulImageName,
+			RequiredImage:       sub.mdb.RequiredImage,
+			Status:              sub.publishedStatus.String(),
+		})
+	}
+	json.WriteWithIndent(writer, "   ", output)
 }
 
 func showImagesForSub(tw *html.TableWriter, sub *Sub) {
