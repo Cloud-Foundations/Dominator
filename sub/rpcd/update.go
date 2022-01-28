@@ -33,11 +33,11 @@ type flusher interface {
 func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 	reply *sub.UpdateResponse) error {
 	if err := t.getUpdateLock(); err != nil {
-		t.logger.Println(err)
+		t.params.Logger.Println(err)
 		return err
 	}
-	t.logger.Printf("Update()\n")
-	fs := t.fileSystemHistory.FileSystem()
+	t.params.Logger.Printf("Update()\n")
+	fs := t.params.FileSystemHistory.FileSystem()
 	if request.Wait {
 		return t.updateAndUnlock(request, fs.RootDirectoryName())
 	}
@@ -49,7 +49,7 @@ func (t *rpcType) getUpdateLock() error {
 	if *readOnly || *disableUpdates {
 		return errors.New("Update() rejected due to read-only mode")
 	}
-	fs := t.fileSystemHistory.FileSystem()
+	fs := t.params.FileSystemHistory.FileSystem()
 	if fs == nil {
 		return errors.New("no file-system history yet")
 	}
@@ -69,12 +69,12 @@ func (t *rpcType) getUpdateLock() error {
 func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 	rootDirectoryName string) error {
 	defer t.clearUpdateInProgress()
-	defer t.scannerConfiguration.BoostCpuLimit(t.logger)
-	t.disableScannerFunc(true)
-	defer t.disableScannerFunc(false)
+	defer t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
+	t.params.DisableScannerFunction(true)
+	defer t.params.DisableScannerFunction(false)
 	startTime := time.Now()
 	oldTriggers := &triggers.MergeableTriggers{}
-	file, err := os.Open(t.oldTriggersFilename)
+	file, err := os.Open(t.config.OldTriggersFilename)
 	if err == nil {
 		decoder := json.NewDecoder(file)
 		var trig triggers.Triggers
@@ -83,19 +83,20 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 		if err == nil {
 			oldTriggers.Merge(&trig)
 		} else {
-			t.logger.Printf("Error decoding old triggers: %s", err.Error())
+			t.params.Logger.Printf(
+				"Error decoding old triggers: %s", err.Error())
 		}
 	}
 	if request.Triggers != nil {
 		// Merge new triggers into old triggers. This supports initial
 		// Domination of a machine and when the old triggers are incomplete.
 		oldTriggers.Merge(request.Triggers)
-		file, err = os.Create(t.oldTriggersFilename)
+		file, err = os.Create(t.config.OldTriggersFilename)
 		if err == nil {
 			writer := bufio.NewWriter(file)
 			if err := jsonlib.WriteWithIndent(writer, "    ",
 				request.Triggers.Triggers); err != nil {
-				t.logger.Printf("Error marshaling triggers: %s", err)
+				t.params.Logger.Printf("Error marshaling triggers: %s", err)
 			}
 			writer.Flush()
 			file.Close()
@@ -104,23 +105,24 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 	var hadTriggerFailures bool
 	var fsChangeDuration time.Duration
 	var lastUpdateError error
-	t.workdirGoroutine.Run(func() {
+	t.params.WorkdirGoroutine.Run(func() {
 		hadTriggerFailures, fsChangeDuration, lastUpdateError = lib.Update(
-			request, rootDirectoryName, t.objectsDir,
+			request, rootDirectoryName, t.config.ObjectsDirectoryName,
 			oldTriggers.ExportTriggers(),
-			t.scannerConfiguration.ScanFilter, t.runTriggers, t.logger)
+			t.params.ScannerConfiguration.ScanFilter, t.runTriggers,
+			t.params.Logger)
 	})
 	t.lastUpdateHadTriggerFailures = hadTriggerFailures
 	t.lastUpdateError = lastUpdateError
 	timeTaken := time.Since(startTime)
 	if t.lastUpdateError != nil {
-		t.logger.Printf("Update(): last error: %s\n", t.lastUpdateError)
+		t.params.Logger.Printf("Update(): last error: %s\n", t.lastUpdateError)
 	} else {
 		t.rwLock.Lock()
 		t.lastSuccessfulImageName = request.ImageName
 		t.rwLock.Unlock()
 	}
-	t.logger.Printf("Update() completed in %s (change window: %s)\n",
+	t.params.Logger.Printf("Update() completed in %s (change window: %s)\n",
 		timeTaken, fsChangeDuration)
 	return t.lastUpdateError
 }

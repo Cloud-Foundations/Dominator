@@ -354,17 +354,29 @@ func main() {
 			uint64(configParams.NetworkSpeedPercent), &rateio.ReadMeasurer{})
 		configuration.NetworkReaderContext = networkReaderContext
 		invalidateNextScanObjectCache := false
-		rpcdHtmlWriter :=
-			rpcd.Setup(configParams, &configuration, &fsh, objectsDir,
-				workingRootDir, networkReaderContext, netbenchFilename,
-				oldTriggersFilename, disableScanner,
-				func() {
-					invalidateNextScanObjectCache = true
-					if err := fsh.UpdateObjectCacheOnly(); err != nil {
-						logger.Printf("Error updating object cache: %s\n", err)
-					}
-				},
-				workdirGoroutine, logger)
+		rescanFunc := func() {
+			invalidateNextScanObjectCache = true
+			if err := fsh.UpdateObjectCacheOnly(); err != nil {
+				logger.Printf("Error updating object cache: %s\n", err)
+			}
+		}
+		rpcdHtmlWriter := rpcd.Setup(
+			rpcd.Config{
+				NetworkBenchmarkFilename: netbenchFilename,
+				ObjectsDirectoryName:     objectsDir,
+				OldTriggersFilename:      oldTriggersFilename,
+				RootDirectoryName:        workingRootDir,
+				SubConfiguration:         configParams,
+			},
+			rpcd.Params{
+				DisableScannerFunction:    disableScanner,
+				FileSystemHistory:         &fsh,
+				Logger:                    logger,
+				NetworkReaderContext:      networkReaderContext,
+				RescanObjectCacheFunction: rescanFunc,
+				ScannerConfiguration:      &configuration,
+				WorkdirGoroutine:          workdirGoroutine,
+			})
 		configMetricsDir, err := tricorder.RegisterDirectory("/config")
 		if err != nil {
 			fmt.Fprintf(os.Stderr,

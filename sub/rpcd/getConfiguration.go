@@ -17,12 +17,12 @@ func (t *rpcType) GetConfiguration(conn *srpc.Conn,
 func (t *rpcType) getConfiguration() sub.Configuration {
 	var configuration sub.Configuration
 	configuration.CpuPercent =
-		t.scannerConfiguration.DefaultCpuPercent
+		t.params.ScannerConfiguration.DefaultCpuPercent
 	configuration.NetworkSpeedPercent =
-		t.scannerConfiguration.NetworkReaderContext.SpeedPercent()
+		t.params.ScannerConfiguration.NetworkReaderContext.SpeedPercent()
 	configuration.ScanSpeedPercent =
-		t.scannerConfiguration.FsScanContext.GetContext().SpeedPercent()
+		t.params.ScannerConfiguration.FsScanContext.GetContext().SpeedPercent()
 	configuration.ScanExclusionList =
-		t.scannerConfiguration.ScanFilter.FilterLines
+		t.params.ScannerConfiguration.ScanFilter.FilterLines
 	return configuration
 }

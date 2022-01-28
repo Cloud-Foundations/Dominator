@@ -19,20 +19,28 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type Config struct {
+	NetworkBenchmarkFilename string
+	ObjectsDirectoryName     string
+	OldTriggersFilename      string
+	RootDirectoryName        string
+	SubConfiguration         proto.Configuration
+}
+
+type Params struct {
+	DisableScannerFunction    func(disableScanner bool)
+	FileSystemHistory         *scanner.FileSystemHistory
+	Logger                    log.DebugLogger
+	NetworkReaderContext      *rateio.ReaderContext
+	RescanObjectCacheFunction func()
+	ScannerConfiguration      *scanner.Configuration
+	WorkdirGoroutine          *goroutine.Goroutine
+}
+
 type rpcType struct {
-	subConfiguration          proto.Configuration
-	scannerConfiguration      *scanner.Configuration
-	fileSystemHistory         *scanner.FileSystemHistory
-	objectsDir                string
-	rootDir                   string
-	networkReaderContext      *rateio.ReaderContext
-	netbenchFilename          string
-	oldTriggersFilename       string
-	rescanObjectCacheFunction func()
-	disableScannerFunc        func(disableScanner bool)
-	systemGoroutine           *goroutine.Goroutine
-	workdirGoroutine          *goroutine.Goroutine
-	logger                    log.Logger
+	config          Config
+	params          Params
+	systemGoroutine *goroutine.Goroutine
 	*serverutil.PerUserMethodLimiter
 	ownerUsers                   map[string]struct{}
 	rwLock                       sync.RWMutex
@@ -58,45 +66,28 @@ type HtmlWriter struct {
 	lastSuccessfulImageName *string
 }
 
-func Setup(subConfiguration proto.Configuration,
-	scannerConfiguration *scanner.Configuration, fsh *scanner.FileSystemHistory,
-	objectsDirname string, rootDirname string,
-	netReaderContext *rateio.ReaderContext,
-	netbenchFname string, oldTriggersFname string,
-	disableScannerFunction func(disableScanner bool),
-	rescanObjectCacheFunction func(), workdirGoroutine *goroutine.Goroutine,
-	logger log.Logger) *HtmlWriter {
+func Setup(config Config, params Params) *HtmlWriter {
 	rpcObj := &rpcType{
-		subConfiguration:          subConfiguration,
-		scannerConfiguration:      scannerConfiguration,
-		fileSystemHistory:         fsh,
-		objectsDir:                objectsDirname,
-		rootDir:                   rootDirname,
-		networkReaderContext:      netReaderContext,
-		netbenchFilename:          netbenchFname,
-		oldTriggersFilename:       oldTriggersFname,
-		rescanObjectCacheFunction: rescanObjectCacheFunction,
-		disableScannerFunc:        disableScannerFunction,
-		systemGoroutine:           goroutine.New(),
-		workdirGoroutine:          workdirGoroutine,
-		logger:                    logger,
-		lastSuccessfulImageName:   readPatchedImageFile(),
+		config:                  config,
+		params:                  params,
+		systemGoroutine:         goroutine.New(),
+		lastSuccessfulImageName: readPatchedImageFile(),
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"Poll": 1,
 			}),
 	}
-	rpcObj.ownerUsers = stringutil.ConvertListToMap(subConfiguration.OwnerUsers,
-		false)
+	rpcObj.ownerUsers = stringutil.ConvertListToMap(
+		config.SubConfiguration.OwnerUsers, false)
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
 				"Poll",
 			}})
 	addObjectsHandler := &addObjectsHandlerType{
-		objectsDir:           objectsDirname,
-		scannerConfiguration: scannerConfiguration,
-		logger:               logger,
+		objectsDir:           config.ObjectsDirectoryName,
+		scannerConfiguration: params.ScannerConfiguration,
+		logger:               params.Logger,
 		rpcObj:               rpcObj,
 	}
 	srpc.RegisterName("ObjectServer", addObjectsHandler)

@@ -24,7 +24,7 @@ func (t *rpcType) GetFiles(conn *srpc.Conn) error {
 		if filename == "" {
 			break
 		}
-		filename = path.Join(t.rootDir, filename)
+		filename = path.Join(t.config.RootDirectoryName, filename)
 		if err := t.getFile(conn, filename); err != nil {
 			return err
 		}
@@ -33,14 +33,14 @@ func (t *rpcType) GetFiles(conn *srpc.Conn) error {
 	if numFiles == 1 {
 		plural = ""
 	}
-	t.logger.Printf("GetFiles(): %d file%s provided\n", numFiles, plural)
+	t.params.Logger.Printf("GetFiles(): %d file%s provided\n", numFiles, plural)
 	return nil
 }
 
 func (t *rpcType) getFile(conn *srpc.Conn, filename string) error {
 	var file *os.File
 	var err error
-	t.workdirGoroutine.Run(func() { file, err = os.Open(filename) })
+	t.params.WorkdirGoroutine.Run(func() { file, err = os.Open(filename) })
 	var response sub.GetFileResponse
 	if err != nil {
 		response.Error = err.Error()
