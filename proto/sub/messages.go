@@ -59,6 +59,7 @@ type PollResponse struct {
 	LastUpdateError              string
 	LastUpdateHadTriggerFailures bool
 	LastSuccessfulImageName      string
+	LastNote                     string // Updated after successful Update().
 	FreeSpace                    *uint64
 	StartTime                    time.Time
 	PollTime                     time.Time
