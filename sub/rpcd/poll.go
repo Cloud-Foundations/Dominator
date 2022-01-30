@@ -40,6 +40,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 		response.LastUpdateHadTriggerFailures = t.lastUpdateHadTriggerFailures
 	}
 	response.LastSuccessfulImageName = t.lastSuccessfulImageName
+	response.LastNote = t.lastNote
 	response.FreeSpace = t.getFreeSpace()
 	t.rwLock.RUnlock()
 	response.StartTime = startTime

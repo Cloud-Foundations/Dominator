@@ -118,8 +118,15 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 	if t.lastUpdateError != nil {
 		t.params.Logger.Printf("Update(): last error: %s\n", t.lastUpdateError)
 	} else {
+		note, err := t.generateNote()
+		if err != nil {
+			t.params.Logger.Println(err)
+		}
 		t.rwLock.Lock()
 		t.lastSuccessfulImageName = request.ImageName
+		if err == nil {
+			t.lastNote = note
+		}
 		t.rwLock.Unlock()
 	}
 	t.params.Logger.Printf("Update() completed in %s (change window: %s)\n",

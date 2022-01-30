@@ -21,6 +21,7 @@ import (
 
 type Config struct {
 	NetworkBenchmarkFilename string
+	NoteGeneratorCommand     string
 	ObjectsDirectoryName     string
 	OldTriggersFilename      string
 	RootDirectoryName        string
@@ -50,6 +51,7 @@ type rpcType struct {
 	startTimeNanoSeconds         int32 // For Fetch() or Update().
 	startTimeSeconds             int64
 	lastFetchError               error
+	lastNote                     string
 	lastUpdateError              error
 	lastUpdateHadTriggerFailures bool
 	lastSuccessfulImageName      string
@@ -93,6 +95,11 @@ func Setup(config Config, params Params) *HtmlWriter {
 	srpc.RegisterName("ObjectServer", addObjectsHandler)
 	tricorder.RegisterMetric("/image-name", &rpcObj.lastSuccessfulImageName,
 		units.None, "name of the image for the last successful update")
+	if note, err := rpcObj.generateNote(); err != nil {
+		params.Logger.Println(err)
+	} else if note != "" {
+		rpcObj.lastNote = note
+	}
 	return &HtmlWriter{&rpcObj.lastSuccessfulImageName}
 }
 
