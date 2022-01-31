@@ -48,6 +48,8 @@ var (
 		"Scan speed as percentage of capacity (default 2)")
 	maxThreads = flag.Uint("maxThreads", 1,
 		"Maximum number of parallel OS threads to use")
+	noteGenerator = flag.String("noteGenerator", "",
+		"Optional command to run (usually after succesful update) to generate a short note")
 	permitInsecureMode = flag.Bool("permitInsecureMode", false,
 		"If true, run in insecure mode. This gives remote root access to all")
 	pidfile = flag.String("pidfile", "/var/run/subd.pid",
@@ -363,6 +365,7 @@ func main() {
 		rpcdHtmlWriter := rpcd.Setup(
 			rpcd.Config{
 				NetworkBenchmarkFilename: netbenchFilename,
+				NoteGeneratorCommand:     *noteGenerator,
 				ObjectsDirectoryName:     objectsDir,
 				OldTriggersFilename:      oldTriggersFilename,
 				RootDirectoryName:        workingRootDir,
