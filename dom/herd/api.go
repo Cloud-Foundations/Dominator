@@ -112,6 +112,7 @@ type Sub struct {
 	lastUpdateTime               time.Time
 	lastSyncTime                 time.Time
 	lastSuccessfulImageName      string
+	lastNote                     string
 }
 
 func (sub *Sub) String() string {

@@ -15,6 +15,7 @@ import (
 
 type imageSubType struct {
 	Hostname            string
+	LastNote            string `json:",omitempty"`
 	LastSuccessfulImage string `json:",omitempty"`
 	PlannedImage        string `json:",omitempty"`
 	RequiredImage       string `json:",omitempty"`
@@ -53,7 +54,7 @@ func (herd *Herd) showImagesForSubsHTML(writer io.Writer) {
 	}
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true, "Name", "Required Image",
-		"Planned Image", "Status", "Last Image Update")
+		"Planned Image", "Status", "Last Image Update", "Last Note")
 	subs := herd.getSelectedSubs(selectAliveSub)
 	for _, sub := range subs {
 		showImagesForSub(tw, sub)
@@ -67,8 +68,9 @@ func (herd *Herd) showImagesForSubsJSON(writer io.Writer) {
 	for _, sub := range subs {
 		output = append(output, imageSubType{
 			Hostname:            sub.mdb.Hostname,
-			PlannedImage:        sub.mdb.PlannedImage,
+			LastNote:            sub.lastNote,
 			LastSuccessfulImage: sub.lastSuccessfulImageName,
+			PlannedImage:        sub.mdb.PlannedImage,
 			RequiredImage:       sub.mdb.RequiredImage,
 			Status:              sub.publishedStatus.String(),
 		})
@@ -92,4 +94,5 @@ func showImagesForSub(tw *html.TableWriter, sub *Sub) {
 		fmt.Sprintf("<a href=\"showSub?%s\">%s</a>",
 			sub.mdb.Hostname, sub.publishedStatus.html()))
 	sub.herd.showImage(tw, sub.lastSuccessfulImageName, false)
+	tw.WriteData("", sub.lastNote)
 }
