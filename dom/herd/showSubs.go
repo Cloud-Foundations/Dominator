@@ -177,6 +177,10 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 	sub.herd.showImage(tw, sub.mdb.PlannedImage, false)
 	newRow(w, "Last successful image update", false)
 	sub.herd.showImage(tw, sub.lastSuccessfulImageName, false)
+	if sub.lastNote != "" {
+		newRow(w, "Last note", false)
+		tw.WriteData("", sub.lastNote)
+	}
 	newRow(w, "Busy time", false)
 	sub.showBusy(tw)
 	newRow(w, "Status", false)
