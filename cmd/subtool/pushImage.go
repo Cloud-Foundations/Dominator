@@ -130,6 +130,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 		showBlankLine()
 		return err
 	}
+	if !*showTimes {
+		logger.Println("Subd.Update() complete")
+	}
 	showTimeTaken(startTime)
 	return nil
 }
@@ -248,6 +251,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			pushComputedFiles, ignoreMissingComputedFiles, logger)
 		showTimeTaken(startTime)
 		if len(objectsToFetch) < 1 && len(objectsToPush) < 1 {
+			logger.Println("No objects need to be fetched")
 			return nil
 		}
 		if len(objectsToFetch) > 0 {
