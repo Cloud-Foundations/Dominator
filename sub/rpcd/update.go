@@ -36,7 +36,7 @@ func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 		t.params.Logger.Println(err)
 		return err
 	}
-	t.params.Logger.Printf("Update()\n")
+	t.params.Logger.Printf("Update(%s)\n", conn.Username())
 	fs := t.params.FileSystemHistory.FileSystem()
 	if request.Wait {
 		return t.updateAndUnlock(request, fs.RootDirectoryName())

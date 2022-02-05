@@ -39,9 +39,9 @@ func (t *rpcType) Fetch(conn *srpc.Conn, request sub.FetchRequest,
 		return err
 	}
 	if request.Wait {
-		return t.fetchAndUnlock(request)
+		return t.fetchAndUnlock(request, conn.Username())
 	}
-	go t.fetchAndUnlock(request)
+	go t.fetchAndUnlock(request, conn.Username())
 	return nil
 }
 
@@ -60,8 +60,9 @@ func (t *rpcType) getFetchLock() error {
 	return nil
 }
 
-func (t *rpcType) fetchAndUnlock(request sub.FetchRequest) error {
-	err := t.doFetch(request)
+func (t *rpcType) fetchAndUnlock(request sub.FetchRequest,
+	username string) error {
+	err := t.doFetch(request, username)
 	if err != nil && *exitOnFetchFailure {
 		os.Exit(1)
 	}
@@ -71,7 +72,7 @@ func (t *rpcType) fetchAndUnlock(request sub.FetchRequest) error {
 	return err
 }
 
-func (t *rpcType) doFetch(request sub.FetchRequest) error {
+func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 	defer t.clearFetchInProgress()
 	objectServer := objectclient.NewObjectClient(request.ServerAddress)
 	defer objectServer.Close()
@@ -80,20 +81,25 @@ func (t *rpcType) doFetch(request sub.FetchRequest) error {
 	linkSpeed, haveLinkSpeed := netspeed.GetSpeedToAddress(
 		request.ServerAddress)
 	if haveLinkSpeed {
-		t.logFetch(request, linkSpeed)
+		t.logFetch(request, linkSpeed, username)
 	} else {
 		if t.params.NetworkReaderContext.MaximumSpeed() < 1 {
 			benchmark = enoughBytesForBenchmark(objectServer, request)
 			if benchmark {
 				objectServer.SetExclusiveGetObjects(true)
+				var suffix string
+				if username != "" {
+					suffix = " by " + username
+				}
 				t.params.Logger.Printf(
-					"Fetch(%s) %d objects and benchmark speed\n",
-					request.ServerAddress, len(request.Hashes))
+					"Fetch(%s) %d objects and benchmark speed%s\n",
+					request.ServerAddress, len(request.Hashes), suffix)
 			} else {
-				t.logFetch(request, 0)
+				t.logFetch(request, 0, username)
 			}
 		} else {
-			t.logFetch(request, t.params.NetworkReaderContext.MaximumSpeed())
+			t.logFetch(request, t.params.NetworkReaderContext.MaximumSpeed(),
+				username)
 		}
 	}
 	objectsReader, err := objectServer.GetObjects(request.Hashes)
@@ -147,15 +153,20 @@ func (t *rpcType) doFetch(request sub.FetchRequest) error {
 	return nil
 }
 
-func (t *rpcType) logFetch(request sub.FetchRequest, speed uint64) {
+func (t *rpcType) logFetch(request sub.FetchRequest, speed uint64,
+	username string) {
 	speedString := "unlimited speed"
 	if speed > 0 {
 		speedString = format.FormatBytes(
 			speed*uint64(
 				t.params.NetworkReaderContext.SpeedPercent())/100) + "/s"
 	}
-	t.params.Logger.Printf("Fetch(%s) %d objects at %s\n",
-		request.ServerAddress, len(request.Hashes), speedString)
+	var suffix string
+	if username != "" {
+		suffix = " by " + username
+	}
+	t.params.Logger.Printf("Fetch(%s) %d objects at %s%s\n",
+		request.ServerAddress, len(request.Hashes), speedString, suffix)
 }
 
 func enoughBytesForBenchmark(objectServer *objectclient.ObjectClient,
