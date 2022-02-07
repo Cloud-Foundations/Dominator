@@ -194,6 +194,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 	}
 	logger.Println("Starting polling loop, waiting for completed scan")
 	interval := time.Second
+	newlineNeeded := false
+	objectsNeeded := false
 	for ; time.Now().Before(timeoutTime); time.Sleep(interval) {
 		var pollReply sub.PollResponse
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
@@ -213,8 +215,10 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		if !*showTimes {
 			if pollReply.FileSystem == nil {
 				fmt.Fprintf(os.Stderr, ".")
-			} else {
+				newlineNeeded = true
+			} else if newlineNeeded {
 				fmt.Fprintln(os.Stderr)
+				newlineNeeded = false
 			}
 		}
 		if pollReply.GenerationCount != lastGenerationCount ||
@@ -251,9 +255,12 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			pushComputedFiles, ignoreMissingComputedFiles, logger)
 		showTimeTaken(startTime)
 		if len(objectsToFetch) < 1 && len(objectsToPush) < 1 {
-			logger.Println("No objects need to be fetched")
+			if !objectsNeeded {
+				logger.Println("No objects need to be fetched or pushed")
+			}
 			return nil
 		}
+		objectsNeeded = true
 		if len(objectsToFetch) > 0 {
 			logger.Debugf(0, "Fetch(%d)\n", len(objectsToFetch))
 			startTime := showStart("Fetch()")
