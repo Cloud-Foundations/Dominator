@@ -9,6 +9,7 @@ const (
 	OutputTypeHtml = iota
 	OutputTypeText
 	OutputTypeJson
+	OutputTypeCsv
 )
 
 type ParsedQuery struct {
