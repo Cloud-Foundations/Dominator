@@ -303,7 +303,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	request.HaveGeneration = sub.generationCount
 	var reply subproto.PollResponse
 	haveImage := false
-	if sub.requiredImage == nil {
+	if sub.requiredImage == nil && sub.plannedImage == nil {
 		request.ShortPollOnly = true
 		// Ensure a full poll when the image becomes available later. This will
 		// cover the special case when an image expiration is extended, which
