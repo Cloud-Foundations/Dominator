@@ -20,12 +20,15 @@ type CleanupRequest struct {
 type CleanupResponse struct{}
 
 type FetchRequest struct {
+	LockFor       time.Duration // Duration to lock other clients from mutating.
 	ServerAddress string
 	Wait          bool
 	Hashes        []hash.Hash
 }
 
-type FetchResponse struct{}
+type FetchResponse struct {
+	LockedUntil time.Time
+}
 
 type GetConfigurationRequest struct{}
 
@@ -44,6 +47,7 @@ type GetFileResponse struct {
 
 type PollRequest struct {
 	HaveGeneration uint64
+	LockFor        time.Duration
 	ShortPollOnly  bool // If true, do not send FileSystem or ObjectCache.
 }
 
@@ -57,6 +61,8 @@ type PollResponse struct {
 	LastUpdateHadTriggerFailures bool
 	LastSuccessfulImageName      string
 	LastNote                     string // Updated after successful Update().
+	LockedByAnotherClient        bool   // Fetch() and Update() restricted.
+	LockedUntil                  time.Time
 	FreeSpace                    *uint64
 	StartTime                    time.Time
 	PollTime                     time.Time
