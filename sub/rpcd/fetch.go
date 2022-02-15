@@ -35,19 +35,24 @@ func (t *rpcType) Fetch(conn *srpc.Conn, request sub.FetchRequest,
 		t.params.Logger.Println(txt)
 		return errors.New(txt)
 	}
-	if err := t.getFetchLock(); err != nil {
+	if err := t.getFetchLock(conn, request); err != nil {
 		return err
 	}
 	if request.Wait {
-		return t.fetchAndUnlock(request, conn.Username())
+		return t.fetchAndUnlock(conn, request, conn.Username())
 	}
-	go t.fetchAndUnlock(request, conn.Username())
+	go t.fetchAndUnlock(conn, request, conn.Username())
 	return nil
 }
 
-func (t *rpcType) getFetchLock() error {
+func (t *rpcType) getFetchLock(conn *srpc.Conn,
+	request sub.FetchRequest) error {
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
+	if err := t.getClientLock(conn, request.LockFor); err != nil {
+		t.params.Logger.Printf("Error: %s\n", err)
+		return err
+	}
 	if t.fetchInProgress {
 		t.params.Logger.Println("Error: fetch already in progress")
 		return errors.New("fetch already in progress")
@@ -60,7 +65,7 @@ func (t *rpcType) getFetchLock() error {
 	return nil
 }
 
-func (t *rpcType) fetchAndUnlock(request sub.FetchRequest,
+func (t *rpcType) fetchAndUnlock(conn *srpc.Conn, request sub.FetchRequest,
 	username string) error {
 	err := t.doFetch(request, username)
 	if err != nil && *exitOnFetchFailure {
@@ -68,12 +73,15 @@ func (t *rpcType) fetchAndUnlock(request sub.FetchRequest,
 	}
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
+	t.fetchInProgress = false
 	t.lastFetchError = err
+	if err := t.getClientLock(conn, request.LockFor); err != nil {
+		return err
+	}
 	return err
 }
 
 func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
-	defer t.clearFetchInProgress()
 	objectServer := objectclient.NewObjectClient(request.ServerAddress)
 	defer objectServer.Close()
 	defer t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
@@ -193,10 +201,4 @@ func readOne(objectsDir string, hash hash.Hash, length uint64,
 		return err
 	}
 	return fsutil.CopyToFile(filename, filePerms, reader, length)
-}
-
-func (t *rpcType) clearFetchInProgress() {
-	t.rwLock.Lock()
-	defer t.rwLock.Unlock()
-	t.fetchInProgress = false
 }

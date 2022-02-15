@@ -32,7 +32,7 @@ type flusher interface {
 
 func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 	reply *sub.UpdateResponse) error {
-	if err := t.getUpdateLock(); err != nil {
+	if err := t.getUpdateLock(conn); err != nil {
 		t.params.Logger.Println(err)
 		return err
 	}
@@ -45,7 +45,7 @@ func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 	return nil
 }
 
-func (t *rpcType) getUpdateLock() error {
+func (t *rpcType) getUpdateLock(conn *srpc.Conn) error {
 	if *readOnly || *disableUpdates {
 		return errors.New("Update() rejected due to read-only mode")
 	}
@@ -55,6 +55,10 @@ func (t *rpcType) getUpdateLock() error {
 	}
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
+	if err := t.checkIfLockedByAnotherClient(conn); err != nil {
+		t.params.Logger.Printf("Error: %s\n", err)
+		return err
+	}
 	if t.fetchInProgress {
 		return errors.New("Fetch() in progress")
 	}

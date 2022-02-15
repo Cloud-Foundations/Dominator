@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
@@ -44,7 +45,7 @@ type rpcType struct {
 	systemGoroutine *goroutine.Goroutine
 	*serverutil.PerUserMethodLimiter
 	ownerUsers                   map[string]struct{}
-	rwLock                       sync.RWMutex
+	rwLock                       sync.RWMutex // Protect everything below.
 	getFilesLock                 sync.Mutex
 	fetchInProgress              bool // Fetch() & Update() mutually exclusive.
 	updateInProgress             bool
@@ -55,6 +56,8 @@ type rpcType struct {
 	lastUpdateError              error
 	lastUpdateHadTriggerFailures bool
 	lastSuccessfulImageName      string
+	lockedBy                     *srpc.Conn
+	lockedUntil                  time.Time
 }
 
 type addObjectsHandlerType struct {
