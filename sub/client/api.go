@@ -12,6 +12,11 @@ func BoostCpuLimit(client *srpc.Client) error {
 	return boostCpuLimit(client)
 }
 
+func CallFetch(client *srpc.Client, request sub.FetchRequest,
+	reply *sub.FetchResponse) error {
+	return callFetch(client, request, reply)
+}
+
 func CallPoll(client *srpc.Client, request sub.PollRequest,
 	reply *sub.PollResponse) error {
 	return callPoll(client, request, reply)
