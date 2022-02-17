@@ -265,6 +265,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			logger.Debugf(0, "Fetch(%d)\n", len(objectsToFetch))
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
+				LockFor:       *lockDuration,
 				ServerAddress: imageServerAddress,
 				Wait:          true,
 				Hashes:        objectcache.ObjectMapToCache(objectsToFetch)},
@@ -301,8 +302,7 @@ func fetchUntil(subObj *lib.Sub, request sub.FetchRequest,
 			logger.Println("Starting Subd.Fetch()")
 			go tickerLoop(stopTicker)
 		}
-		err := subObj.Client.RequestReply("Subd.Fetch", request,
-			&sub.FetchResponse{})
+		err := client.CallFetch(subObj.Client, request, &sub.FetchResponse{})
 		stopTicker <- struct{}{}
 		if err == nil {
 			return nil
@@ -315,7 +315,10 @@ func fetchUntil(subObj *lib.Sub, request sub.FetchRequest,
 
 func pollAndBuildPointers(srpcClient *srpc.Client, generationCount *uint64,
 	pollReply *sub.PollResponse) error {
-	pollRequest := sub.PollRequest{HaveGeneration: *generationCount}
+	pollRequest := sub.PollRequest{
+		HaveGeneration: *generationCount,
+		LockFor:        *lockDuration,
+	}
 	startTime := showStart("Poll()")
 	err := client.CallPoll(srpcClient, pollRequest, pollReply)
 	if err != nil {
