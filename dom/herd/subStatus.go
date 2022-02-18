@@ -40,6 +40,8 @@ func (status subStatus) string() string {
 		return "image not ready"
 	case statusNotEnoughFreeSpace:
 		return "insufficient space"
+	case statusLocked:
+		return "locked"
 	case statusFetching:
 		return "fetching"
 	case statusFetchDenied:

@@ -381,6 +381,11 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.status = statusSubNotReady
 		return
 	}
+	if reply.LockedByAnotherClient {
+		sub.status = statusLocked
+		sub.reclaim()
+		return
+	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
 		logger.Printf("Fetch failure for: %s: %s\n", sub, reply.LastFetchError)
 		sub.status = statusFailedToFetch

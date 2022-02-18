@@ -45,6 +45,7 @@ const (
 	statusImageUndefined
 	statusImageNotReady
 	statusNotEnoughFreeSpace
+	statusLocked
 	statusFetching
 	statusFetchDenied
 	statusFailedToFetch
