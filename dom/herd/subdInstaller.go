@@ -126,7 +126,7 @@ func (herd *Herd) subInstall(subHostname string,
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		failed = true
-		if output[len(output)-1] == '\n' {
+		if len(output) > 0 && output[len(output)-1] == '\n' {
 			output = output[:len(output)-1]
 		}
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
