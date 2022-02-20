@@ -31,6 +31,7 @@ Some of the sub-commands available are:
 - **change-vm-memory**: change the memory for a VM
 - **change-vm-owner-users**: change the extra owners for a VM
 - **change-vm-tags**: change the tags for a VM
+- **change-vm-vcpus**: change the number of vCPUs for a VM
 - **connect-to-vm-console**: connect to the Virtual Network Console for the
                              specified VM
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
@@ -82,6 +83,7 @@ Some of the sub-commands available are:
 - **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **save-vm**: save (backup) all VM data (volumes) and metadata to a storage
                destination
+- **scan-vm**: scan the root file-system of stopped VM and write to scanFilename
 - **start-vm**: start a stopped VM
 - **stop-vm**: stop a running VM. All data and metadata are preserved
 - **trace-vm-metadata**: trace the requests a VM makes to the metadata service
