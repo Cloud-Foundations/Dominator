@@ -65,6 +65,10 @@ Some of the sub-commands available are:
                           *Hypervisor*
 - **rollout-image**: safely roll out specified image to all *Hypervisors* in a
                      location
+- **show-network-configuration**: show the network configuration for the
+                                  specified *Hypervisor*
+- **update-network-configuration**: update the network configuration for the
+                                    local *Hypervisor*
 - **write-netboot-files**: write the configuration files for installing a
                            machine. This is primarily for debugging
 
