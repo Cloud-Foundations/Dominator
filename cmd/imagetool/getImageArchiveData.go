@@ -36,6 +36,9 @@ func getImageArchiveDataAndWrite(imageClient *srpc.Client, name,
 	if err != nil {
 		return err
 	}
+	if reply.Image == nil {
+		return fmt.Errorf("%s not found", name)
+	}
 	img := reply.Image
 	img.Filter = nil
 	img.Triggers = nil
