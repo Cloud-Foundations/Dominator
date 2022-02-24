@@ -138,6 +138,8 @@ var subcommands = []commands.Command{
 	{"get", "                name directory", 2, 2, getImageSubcommand},
 	{"get-archive-data", "   name outfile", 2, 2,
 		getImageArchiveDataSubcommand},
+	{"get-build-log", "  name [outfile]", 1, 2,
+		getImageBuildLogSubcommand},
 	{"get-file-in-image", "  name imageFile [outfile]", 2, 3,
 		getFileInImageSubcommand},
 	{"get-image-expiration", "name", 1, 1, getImageExpirationSubcommand},
