@@ -45,6 +45,7 @@ Some of the sub-commands available are:
 - **find-latest-image**: find the latest image in a directory
 - **get**: get and unpack an image
 - **get-archive-data**: get archive (audit) data for an image
+- **get-build-log**: get build log for an image
 - **get-file-in-image**: get file in an image
 - **get-image-expiration**: get the expiration time for an image
 - **list**: list all images
