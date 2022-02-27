@@ -143,6 +143,8 @@ var subcommands = []commands.Command{
 	{"get-file-in-image", "  name imageFile [outfile]", 2, 3,
 		getFileInImageSubcommand},
 	{"get-image-expiration", "name", 1, 1, getImageExpirationSubcommand},
+	{"get-package-list", "  name [outfile]", 1, 2,
+		getImagePackageListSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
