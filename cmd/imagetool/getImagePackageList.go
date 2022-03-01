@@ -20,7 +20,7 @@ func getImagePackageListSubcommand(args []string,
 	}
 	err := getImagePackageList(args[0], outFileName)
 	if err != nil {
-		return fmt.Errorf("error getting image build log: %s", err)
+		return fmt.Errorf("error getting image package list: %s", err)
 	}
 	return nil
 }
