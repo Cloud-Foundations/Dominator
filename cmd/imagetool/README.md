@@ -41,6 +41,7 @@ Some of the sub-commands available are:
 - **delete**: delete an image
 - **delunrefobj**: delete (garbage collect) unreferenced objects
 - **diff**: compare two images
+- **diff-package-lists**: compare the package lists for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image
 - **find-latest-image**: find the latest image in a directory
 - **get**: get and unpack an image
