@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -48,19 +49,29 @@ func getImagePackageList(imageName, outFileName string) error {
 		writer = bw
 	}
 	var nameWidth, versionWidth int
-	for _, pkg := range img.Packages {
-		if len(pkg.Name) > nameWidth {
-			nameWidth = len(pkg.Name)
+	getWidthsForPackages(img.Packages, &nameWidth, &versionWidth)
+	listPackages(writer, img.Packages, nameWidth, versionWidth)
+	return nil
+}
+
+func getWidthsForPackages(packages []image.Package,
+	nameWidth, versionWidth *int) {
+	for _, pkg := range packages {
+		if len(pkg.Name) > *nameWidth {
+			*nameWidth = len(pkg.Name)
 		}
-		if len(pkg.Version) > versionWidth {
-			versionWidth = len(pkg.Version)
+		if len(pkg.Version) > *versionWidth {
+			*versionWidth = len(pkg.Version)
 		}
 	}
-	for _, pkg := range img.Packages {
+}
+
+func listPackages(writer io.Writer, packages []image.Package,
+	nameWidth, versionWidth int) {
+	for _, pkg := range packages {
 		fmt.Fprintf(writer, "%-*s %-*s %s\n",
 			nameWidth, pkg.Name,
 			versionWidth, pkg.Version,
 			format.FormatBytes(pkg.Size))
 	}
-	return nil
 }

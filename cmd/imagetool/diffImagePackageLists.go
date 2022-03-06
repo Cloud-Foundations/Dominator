@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -38,22 +37,8 @@ func diffImagePackageLists(tool, leftName, rightName string) error {
 		return errors.New("no right image package data")
 	}
 	var nameWidth, versionWidth int
-	for _, pkg := range leftImage.Packages {
-		if len(pkg.Name) > nameWidth {
-			nameWidth = len(pkg.Name)
-		}
-		if len(pkg.Version) > versionWidth {
-			versionWidth = len(pkg.Version)
-		}
-	}
-	for _, pkg := range rightImage.Packages {
-		if len(pkg.Name) > nameWidth {
-			nameWidth = len(pkg.Name)
-		}
-		if len(pkg.Version) > versionWidth {
-			versionWidth = len(pkg.Version)
-		}
-	}
+	getWidthsForPackages(leftImage.Packages, &nameWidth, &versionWidth)
+	getWidthsForPackages(rightImage.Packages, &nameWidth, &versionWidth)
 	leftFile, err := writePackageListToTempfile(leftImage.Packages,
 		nameWidth, versionWidth)
 	if err != nil {
@@ -79,11 +64,6 @@ func writePackageListToTempfile(packages []image.Package,
 	}
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
-	for _, pkg := range packages {
-		fmt.Fprintf(writer, "%-*s %-*s %s\n",
-			nameWidth, pkg.Name,
-			versionWidth, pkg.Version,
-			format.FormatBytes(pkg.Size))
-	}
+	listPackages(writer, packages, nameWidth, versionWidth)
 	return file.Name(), nil
 }
