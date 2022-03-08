@@ -127,6 +127,16 @@ type ChangeVmTagsResponse struct {
 	Error string
 }
 
+type ChangeVmVolumeSizeRequest struct {
+	IpAddress   net.IP
+	VolumeIndex uint
+	VolumeSize  uint64
+}
+
+type ChangeVmVolumeSizeResponse struct {
+	Error string
+}
+
 type CommitImportedVmRequest struct {
 	IpAddress net.IP
 }
