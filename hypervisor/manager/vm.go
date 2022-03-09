@@ -596,6 +596,45 @@ func (m *Manager) changeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, index uint, size uint64) error {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if index >= uint(len(vm.Volumes)) {
+		return errors.New("invalid volume index")
+	}
+	volume := vm.Volumes[index]
+	if volume.Format != proto.VolumeFormatRaw {
+		return errors.New("cannot resize non-RAW volumes")
+	}
+	localVolume := vm.VolumeLocations[index]
+	if size == volume.Size {
+		return nil
+	}
+	if size < volume.Size {
+		return errors.New("volume shrinking not supported")
+	}
+	var statbuf syscall.Statfs_t
+	if err := syscall.Statfs(localVolume.Filename, &statbuf); err != nil {
+		return err
+	}
+	if size-volume.Size > uint64(statbuf.Bfree*uint64(statbuf.Bsize)) {
+		return errors.New("not enough free space")
+	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	if err := setVolumeSize(localVolume.Filename, size); err != nil {
+		return err
+	}
+	vm.Volumes[index].Size = size
+	vm.writeAndSendInfo()
+	return nil
+}
+
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
 	if err != nil {
