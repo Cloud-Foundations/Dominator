@@ -45,6 +45,21 @@ func changeVmSize(client *srpc.Client,
 	return errors.New(reply.Error)
 }
 
+func changeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+	size uint64) error {
+	request := proto.ChangeVmVolumeSizeRequest{
+		IpAddress:   ipAddress,
+		VolumeIndex: index,
+		VolumeSize:  size,
+	}
+	var reply proto.ChangeVmVolumeSizeResponse
+	err := client.RequestReply("Hypervisor.ChangeVmVolumeSize", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func connectToVmConsole(client *srpc.Client, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	serverConn, err := client.Call("Hypervisor.ConnectToVmConsole")

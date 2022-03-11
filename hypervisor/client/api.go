@@ -23,6 +23,11 @@ func ChangeVmSize(client *srpc.Client,
 	return changeVmSize(client, request)
 }
 
+func ChangeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+	size uint64) error {
+	return changeVmVolumeSize(client, ipAddress, index, size)
+}
+
 func ConnectToVmConsole(client *srpc.Client, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	return connectToVmConsole(client, ipAddr, vncViewerCommand, logger)
