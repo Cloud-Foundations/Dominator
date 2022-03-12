@@ -97,6 +97,7 @@ var (
 		"Name of file to write volume data to")
 	volumeIndex = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
+	volumeSize flagutil.Size
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -115,6 +116,7 @@ func init() {
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
+	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 }
 
 func printUsage() {
@@ -137,6 +139,7 @@ var subcommands = []commands.Command{
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
 	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
+	{"change-vm-volume-size", "IPaddr", 1, 1, changeVmVolumeSizeSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,
 		connectToVmSerialPortSubcommand},
