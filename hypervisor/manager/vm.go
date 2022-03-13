@@ -52,7 +52,10 @@ const (
 )
 
 var (
+	carriageReturnLiteral   = []byte{'\r'}
 	errorNoAccessToResource = errors.New("no access to resource")
+	newlineLiteral          = []byte{'\n'}
+	newlineReplacement      = []byte{'\\', 'n'}
 )
 
 func computeSize(minimumFreeBytes, roundupPower, size uint64) uint64 {
@@ -632,6 +635,30 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	}
 	vm.Volumes[index].Size = size
 	vm.writeAndSendInfo()
+	// Try and resize an ext{2,3,4} file-system.
+	if index == 0 {
+		return nil
+	}
+	cmd := exec.Command("e2label", localVolume.Filename)
+	if err := cmd.Run(); err != nil {
+		return nil // Not an ext{2,3,4} file-system.
+	}
+	cmd = exec.Command("e2fsck", "-f", "-y", localVolume.Filename)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		vm.logger.Printf("error running e2fsck for: %s: %s: %s\n",
+			localVolume.Filename, err, string(output))
+		return nil
+	}
+	cmd = exec.Command("resize2fs", localVolume.Filename)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		vm.logger.Printf("error running resize2fs for: %s: %s: %s\n",
+			localVolume.Filename, err, string(output))
+		return nil
+	}
 	return nil
 }
 
