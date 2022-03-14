@@ -636,30 +636,44 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	vm.Volumes[index].Size = size
 	vm.writeAndSendInfo()
 	// Try and resize an ext{2,3,4} file-system.
-	if index == 0 {
+	if index != 0 {
+		// Simple case of secondary volume: assume no partition table.
+		return resize2fs(localVolume.Filename, vm.logger)
+	}
+	// Read MBR and check it's a simple single-partition volume.
+	file, err := os.Open(localVolume.Filename)
+	if err != nil {
+		vm.logger.Printf("error opening: %s: %s\n", localVolume.Filename, err)
 		return nil
 	}
-	cmd := exec.Command("e2label", localVolume.Filename)
-	if err := cmd.Run(); err != nil {
-		return nil // Not an ext{2,3,4} file-system.
+	partitionTable, err := mbr.Decode(file)
+	file.Close()
+	if err != nil {
+		return nil
 	}
-	cmd = exec.Command("e2fsck", "-f", "-y", localVolume.Filename)
+	if partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(2) > 0 {
+		return nil
+	}
+	// Try and extend the partition.
+	cmd := exec.Command("parted", "-s", localVolume.Filename, "resizepart",
+		"1", "100%")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
 		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		vm.logger.Printf("error running e2fsck for: %s: %s: %s\n",
+		vm.logger.Printf("error running parted for: %s: %s: %s\n",
 			localVolume.Filename, err, string(output))
 		return nil
 	}
-	cmd = exec.Command("resize2fs", localVolume.Filename)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
-		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		vm.logger.Printf("error running resize2fs for: %s: %s: %s\n",
-			localVolume.Filename, err, string(output))
+	// Try and resize the file-system in the partition (need a loop device).
+	device, err := fsutil.LoopbackSetup(localVolume.Filename)
+	if err != nil {
+		vm.logger.Println(err)
 		return nil
 	}
-	return nil
+	defer fsutil.LoopbackDelete(device)
+	return resize2fs(device+"p1", vm.logger)
 }
 
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {

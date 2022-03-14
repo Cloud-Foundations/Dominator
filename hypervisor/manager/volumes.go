@@ -1,9 +1,11 @@
 package manager
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -94,6 +97,30 @@ func getMounts(mountTable *mounts.MountTable) (
 		}
 	}
 	return mountMap, nil
+}
+
+func resize2fs(device string, logger log.DebugLogger) error {
+	cmd := exec.Command("e2label", device)
+	if err := cmd.Run(); err != nil {
+		return nil // Not an ext{2,3,4} file-system.
+	}
+	cmd = exec.Command("e2fsck", "-f", "-y", device)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		logger.Printf("error running e2fsck for: %s: %s: %s\n",
+			device, err, string(output))
+		return nil
+	}
+	cmd = exec.Command("resize2fs", device)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		logger.Printf("error running resize2fs for: %s: %s: %s\n",
+			device, err, string(output))
+		return nil
+	}
+	return nil
 }
 
 func (m *Manager) checkTrim(filename string) bool {
