@@ -32,6 +32,7 @@ Some of the sub-commands available are:
 - **change-vm-owner-users**: change the extra owners for a VM
 - **change-vm-tags**: change the tags for a VM
 - **change-vm-vcpus**: change the number of vCPUs for a VM
+- **change-vm-volume-size**: change the size of a specified volume on a VM
 - **connect-to-vm-console**: connect to the Virtual Network Console for the
                              specified VM
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
