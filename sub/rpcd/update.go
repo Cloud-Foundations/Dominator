@@ -211,9 +211,15 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		}
 		time.Sleep(time.Second)
 		if runCommand(logger, "reboot") {
-			return false
+			time.Sleep(30 * time.Second)
+			logger.Printf("%sStill alive after 30 seconds, rebooting harder\n",
+				logPrefix)
+		} else {
+			logger.Printf("%sReboot failed, trying harder\n", logPrefix)
 		}
-		logger.Printf("%sReboot failed, trying harder\n", logPrefix)
+		if logger, ok := logger.(flusher); ok {
+			logger.Flush()
+		}
 		time.Sleep(time.Second)
 		return !runCommand(logger, "reboot", "-f")
 	}
