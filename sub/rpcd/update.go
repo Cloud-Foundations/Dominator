@@ -193,7 +193,12 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 			continue
 		}
 		if !runCommand(logger, "service", trigger.Service, action) {
-			hadFailures = true
+			// Ignore failure for the "reboot" service: try later.
+			if action != "start" ||
+				!trigger.DoReboot ||
+				trigger.Service != "reboot" {
+				hadFailures = true
+			}
 		}
 	}
 	if len(rebootingTriggers) > 0 {
