@@ -635,45 +635,10 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	}
 	vm.Volumes[index].Size = size
 	vm.writeAndSendInfo()
-	// Try and resize an ext{2,3,4} file-system.
-	if index != 0 {
-		// Simple case of secondary volume: assume no partition table.
-		return resize2fs(localVolume.Filename, vm.logger)
-	}
-	// Read MBR and check it's a simple single-partition volume.
-	file, err := os.Open(localVolume.Filename)
-	if err != nil {
-		vm.logger.Printf("error opening: %s: %s\n", localVolume.Filename, err)
-		return nil
-	}
-	partitionTable, err := mbr.Decode(file)
-	file.Close()
-	if err != nil {
-		return nil
-	}
-	if partitionTable.GetPartitionSize(1) > 0 ||
-		partitionTable.GetPartitionSize(1) > 0 ||
-		partitionTable.GetPartitionSize(2) > 0 {
-		return nil
-	}
-	// Try and extend the partition.
-	cmd := exec.Command("parted", "-s", localVolume.Filename, "resizepart",
-		"1", "100%")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
-		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		vm.logger.Printf("error running parted for: %s: %s: %s\n",
-			localVolume.Filename, err, string(output))
-		return nil
-	}
-	// Try and resize the file-system in the partition (need a loop device).
-	device, err := fsutil.LoopbackSetup(localVolume.Filename)
-	if err != nil {
-		vm.logger.Println(err)
-		return nil
-	}
-	defer fsutil.LoopbackDelete(device)
-	return resize2fs(device+"p1", vm.logger)
+	// Try and grow an ext{2,3,4} file-system. If this fails, return the error
+	// to the caller, but the volume will have been expanded. Someone else can
+	// deal with adjusting partitions and growing file-systems.
+	return grow2fs(localVolume.Filename)
 }
 
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {

@@ -14,7 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
-	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -25,6 +25,12 @@ const (
 type mountInfo struct {
 	mountEntry *mounts.MountEntry
 	size       uint64
+}
+
+// check2fs returns true if the device hosts an ext{2,3,4} file-system.
+func check2fs(device string) bool {
+	cmd := exec.Command("e2label", device)
+	return cmd.Run() == nil
 }
 
 func checkTrim(mountEntry *mounts.MountEntry) bool {
@@ -99,26 +105,67 @@ func getMounts(mountTable *mounts.MountTable) (
 	return mountMap, nil
 }
 
-func resize2fs(device string, logger log.DebugLogger) error {
-	cmd := exec.Command("e2label", device)
-	if err := cmd.Run(); err != nil {
-		return nil // Not an ext{2,3,4} file-system.
+// grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size.
+func grow2fs(volume string) error {
+	if check2fs(volume) {
+		// Simple case: file-system is on the raw volume, no partition table.
+		return resize2fs(volume)
 	}
-	cmd = exec.Command("e2fsck", "-f", "-y", device)
+	// Read MBR and check if it's a simple single-partition volume.
+	file, err := os.Open(volume)
+	if err != nil {
+		return err
+	}
+	partitionTable, err := mbr.Decode(file)
+	file.Close()
+	if err != nil {
+		return err
+	}
+	if partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(2) > 0 {
+		return fmt.Errorf("unsupported partition sizes: [%s,%s,%s,%s]",
+			format.FormatBytes(partitionTable.GetPartitionSize(0)),
+			format.FormatBytes(partitionTable.GetPartitionSize(1)),
+			format.FormatBytes(partitionTable.GetPartitionSize(2)),
+			format.FormatBytes(partitionTable.GetPartitionSize(3)))
+	}
+	// Try and extend the partition.
+	cmd := exec.Command("parted", "-s", volume, "resizepart", "1", "100%")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
 		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		logger.Printf("error running e2fsck for: %s: %s: %s\n",
-			device, err, string(output))
+		return fmt.Errorf("error running parted for: %s: %s: %s",
+			volume, err, string(output))
+	}
+	// Try and resize the file-system in the partition (need a loop device).
+	device, err := fsutil.LoopbackSetup(volume)
+	if err != nil {
+		return err
+	}
+	defer fsutil.LoopbackDelete(device)
+	partition := device + "p1"
+	if !check2fs(partition) {
 		return nil
+	}
+	return resize2fs(partition)
+}
+
+// resize2fs will grow an ext{2,3,4} file-system to fit the device size.
+func resize2fs(device string) error {
+	cmd := exec.Command("e2fsck", "-f", "-y", device)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		return fmt.Errorf("error running e2fsck for: %s: %s: %s",
+			device, err, string(output))
 	}
 	cmd = exec.Command("resize2fs", device)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
 		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		logger.Printf("error running resize2fs for: %s: %s: %s\n",
+		return fmt.Errorf("error running resize2fs for: %s: %s: %s",
 			device, err, string(output))
-		return nil
 	}
 	return nil
 }
