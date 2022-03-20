@@ -617,8 +617,19 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	if size == volume.Size {
 		return nil
 	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
 	if size < volume.Size {
-		return errors.New("volume shrinking not supported")
+		if err := shrink2fs(localVolume.Filename, size); err != nil {
+			return err
+		}
+		if err := setVolumeSize(localVolume.Filename, size); err != nil {
+			return err
+		}
+		vm.Volumes[index].Size = size
+		vm.writeAndSendInfo()
+		return nil
 	}
 	var statbuf syscall.Statfs_t
 	if err := syscall.Statfs(localVolume.Filename, &statbuf); err != nil {
@@ -626,9 +637,6 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	}
 	if size-volume.Size > uint64(statbuf.Bfree*uint64(statbuf.Bsize)) {
 		return errors.New("not enough free space")
-	}
-	if vm.State != proto.StateStopped {
-		return errors.New("VM is not stopped")
 	}
 	if err := setVolumeSize(localVolume.Filename, size); err != nil {
 		return err

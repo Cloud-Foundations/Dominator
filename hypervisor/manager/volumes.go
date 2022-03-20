@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -105,11 +106,12 @@ func getMounts(mountTable *mounts.MountTable) (
 	return mountMap, nil
 }
 
-// grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size.
+// grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size,
+// expanding the partition if appropriate.
 func grow2fs(volume string) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
-		return resize2fs(volume)
+		return resize2fs(volume, 0)
 	}
 	// Read MBR and check if it's a simple single-partition volume.
 	file, err := os.Open(volume)
@@ -148,11 +150,12 @@ func grow2fs(volume string) error {
 	if !check2fs(partition) {
 		return nil
 	}
-	return resize2fs(partition)
+	return resize2fs(partition, 0)
 }
 
-// resize2fs will grow an ext{2,3,4} file-system to fit the device size.
-func resize2fs(device string) error {
+// resize2fs will resize an ext{2,3,4} file-system to fit the specified size.
+// If size is zero, it will resize to fit the device size.
+func resize2fs(device string, size uint64) error {
 	cmd := exec.Command("e2fsck", "-f", "-y", device)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
@@ -161,6 +164,12 @@ func resize2fs(device string) error {
 			device, err, string(output))
 	}
 	cmd = exec.Command("resize2fs", device)
+	if size > 0 {
+		if size < 1<<20 {
+			return fmt.Errorf("size: %d too small", size)
+		}
+		cmd.Args = append(cmd.Args, strconv.FormatUint(size>>9, 10)+"s")
+	}
 	if output, err := cmd.CombinedOutput(); err != nil {
 		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
 		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
@@ -168,6 +177,15 @@ func resize2fs(device string) error {
 			device, err, string(output))
 	}
 	return nil
+}
+
+// shrink2fs will try and shrink an ext{2,3,4} file-system on a volume.
+func shrink2fs(volume string, size uint64) error {
+	if check2fs(volume) {
+		// Simple case: file-system is on the raw volume, no partition table.
+		return resize2fs(volume, size)
+	}
+	return errors.New("partition shrinking not supported")
 }
 
 func (m *Manager) checkTrim(filename string) bool {
