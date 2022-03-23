@@ -123,9 +123,12 @@ func grow2fs(volume string) error {
 	if err != nil {
 		return err
 	}
+	if partitionTable == nil {
+		return fmt.Errorf("no DOS partition table found")
+	}
 	if partitionTable.GetPartitionSize(1) > 0 ||
-		partitionTable.GetPartitionSize(1) > 0 ||
-		partitionTable.GetPartitionSize(2) > 0 {
+		partitionTable.GetPartitionSize(2) > 0 ||
+		partitionTable.GetPartitionSize(3) > 0 {
 		return fmt.Errorf("unsupported partition sizes: [%s,%s,%s,%s]",
 			format.FormatBytes(partitionTable.GetPartitionSize(0)),
 			format.FormatBytes(partitionTable.GetPartitionSize(1)),
