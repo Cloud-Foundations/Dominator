@@ -107,7 +107,7 @@ func getMounts(mountTable *mounts.MountTable) (
 }
 
 // grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size,
-// expanding the partition if appropriate.
+// expanding the partition first if appropriate.
 func grow2fs(volume string) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
@@ -182,13 +182,65 @@ func resize2fs(device string, size uint64) error {
 	return nil
 }
 
-// shrink2fs will try and shrink an ext{2,3,4} file-system on a volume.
+// shrink2fs will try and shrink an ext{2,3,4} file-system on a volume,
+// shrinking the partition afterwards if appropriate.
 func shrink2fs(volume string, size uint64) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
 		return resize2fs(volume, size)
 	}
-	return errors.New("partition shrinking not supported")
+	// Read MBR and check if it's a simple single-partition volume.
+	file, err := os.Open(volume)
+	if err != nil {
+		return err
+	}
+	partitionTable, err := mbr.Decode(file)
+	file.Close()
+	if err != nil {
+		return err
+	}
+	if partitionTable == nil {
+		return fmt.Errorf("no DOS partition table found")
+	}
+	if partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(2) > 0 ||
+		partitionTable.GetPartitionSize(3) > 0 {
+		return fmt.Errorf("unsupported partition sizes: [%s,%s,%s,%s]",
+			format.FormatBytes(partitionTable.GetPartitionSize(0)),
+			format.FormatBytes(partitionTable.GetPartitionSize(1)),
+			format.FormatBytes(partitionTable.GetPartitionSize(2)),
+			format.FormatBytes(partitionTable.GetPartitionSize(3)))
+	}
+	size -= partitionTable.GetPartitionOffset(0)
+	if size >= partitionTable.GetPartitionSize(0) {
+		return errors.New("size greater than existing partition")
+	}
+	if err := partitionTable.SetPartitionSize(0, size); err != nil {
+		return err
+	}
+	// Try and resize the file-system in the partition (need a loop device).
+	device, err := fsutil.LoopbackSetup(volume)
+	if err != nil {
+		return err
+	}
+	deleteLoopback := true
+	defer func() {
+		if deleteLoopback {
+			fsutil.LoopbackDelete(device)
+		}
+	}()
+	partition := device + "p1"
+	if !check2fs(partition) {
+		return errors.New("no ext2 file-system found in partition")
+	}
+	if err := resize2fs(partition, size); err != nil {
+		return err
+	}
+	deleteLoopback = false
+	if err := fsutil.LoopbackDelete(device); err != nil {
+		return err
+	}
+	return partitionTable.Write(volume)
 }
 
 func (m *Manager) checkTrim(filename string) bool {
