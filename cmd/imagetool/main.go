@@ -80,6 +80,7 @@ var (
            d: name of directory tree to scan
            f: name of file containing a FileSystem
            i: name of an image on the imageserver
+           I: name of an image stream on the imageserver
            l: name of file containing an Image
            s: name of sub to poll
            v: hostname/IP of SmallStack VM to scan`

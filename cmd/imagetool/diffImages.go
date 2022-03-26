@@ -75,6 +75,13 @@ func getTypedImage(typedName string) (
 		} else {
 			return img.FileSystem, img.Filter, nil
 		}
+	case 'I':
+		imageSClient, _ := getClients()
+		if img, err := getLatestImage(imageSClient, name); err != nil {
+			return nil, nil, err
+		} else {
+			return img.FileSystem, img.Filter, nil
+		}
 	case 'l':
 		if img, err := readImage(name); err != nil {
 			return nil, nil, err
@@ -126,6 +133,14 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+func getLatestImage(client *srpc.Client, name string) (*image.Image, error) {
+	imageName, err := imgclient.FindLatestImage(client, name, *ignoreExpiring)
+	if err != nil {
+		return nil, err
+	}
+	return getImage(client, imageName)
 }
 
 func getFsOfImage(client *srpc.Client, name string) (
