@@ -613,13 +613,22 @@ func writeRaw(fs *filesystem.FileSystem,
 }
 
 func writeRootFstabEntry(rootDir, rootLabel string) error {
-	file, err := os.Create(filepath.Join(rootDir, "etc", "fstab"))
+	pathname := filepath.Join(rootDir, "etc", "fstab")
+	oldFstab, err := ioutil.ReadFile(pathname)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	file, err := os.Create(pathname)
 	if err != nil {
 		return err
 	} else {
 		defer file.Close()
-		return writeFstabEntry(file, "LABEL="+rootLabel, "/", "ext4",
-			"", 0, 1)
+		err := writeFstabEntry(file, "LABEL="+rootLabel, "/", "ext4", "", 0, 1)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write(oldFstab)
+		return err
 	}
 }
 
