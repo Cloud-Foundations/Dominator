@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -278,6 +279,13 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err := Unpack(fs, objectsGetter, mountPoint, logger); err != nil {
 		return err
 	}
+	for filename, data := range options.OverlayFiles {
+		filename := filepath.Clean(filename) // Stop funny business.
+		err := writeFile(filepath.Join(mountPoint, filename), data)
+		if err != nil {
+			return err
+		}
+	}
 	if err := writeImageName(mountPoint, options.InitialImageName); err != nil {
 		return err
 	}
@@ -490,6 +498,19 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
 }
 
+func writeFile(filename string, data []byte) error {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+		fsutil.PublicFilePerms)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := file.Write(data); err != nil {
+		return err
+	}
+	return file.Close()
+}
+
 func writeFstabEntry(writer io.Writer,
 	source, mountPoint, fileSystemType, flags string,
 	dumpFrequency, checkOrder uint) error {
@@ -622,13 +643,25 @@ func writeRootFstabEntry(rootDir, rootLabel string) error {
 	if err != nil {
 		return err
 	} else {
-		defer file.Close()
-		err := writeFstabEntry(file, "LABEL="+rootLabel, "/", "ext4", "", 0, 1)
+		doClose := true
+		defer func() {
+			if doClose {
+				file.Close()
+			}
+		}()
+		w := bufio.NewWriter(file)
+		err := writeFstabEntry(w, "LABEL="+rootLabel, "/", "ext4", "", 0, 1)
 		if err != nil {
 			return err
 		}
-		_, err = file.Write(oldFstab)
-		return err
+		if _, err := w.Write(oldFstab); err != nil {
+			return err
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		doClose = false
+		return file.Close()
 	}
 }
 

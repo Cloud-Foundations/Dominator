@@ -118,6 +118,7 @@ type WriteRawOptions struct {
 	InitialImageName  string
 	InstallBootloader bool
 	MinimumFreeBytes  uint64
+	OverlayFiles      map[string][]byte
 	RootLabel         string
 	RoundupPower      uint64
 	WriteFstab        bool
