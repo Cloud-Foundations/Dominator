@@ -191,6 +191,7 @@ type CreateVmRequest struct {
 	ImageDataSize        uint64
 	ImageTimeout         time.Duration
 	MinimumFreeBytes     uint64
+	OverlayFiles         map[string][]byte
 	RoundupPower         uint64
 	SecondaryVolumes     []Volume
 	SecondaryVolumesData bool
