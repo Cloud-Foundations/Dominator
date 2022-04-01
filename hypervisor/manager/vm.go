@@ -940,6 +940,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		writeRawOptions := util.WriteRawOptions{
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
+			OverlayFiles:     request.OverlayFiles,
 			RootLabel:        vm.rootLabel(false),
 			RoundupPower:     request.RoundupPower,
 		}
