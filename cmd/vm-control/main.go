@@ -58,9 +58,11 @@ var (
 		"Command to destroy local VM when exporting. The VM name is given as the argument")
 	location = flag.String("location", "",
 		"Location to search for hypervisors")
-	memory       flagutil.Size
-	milliCPUs    = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
-	minFreeBytes = flagutil.Size(256 << 20)
+	memory           flagutil.Size
+	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	minFreeBytes     = flagutil.Size(256 << 20)
+	overlayDirectory = flag.String("overlayDirectory", "",
+		"Directory tree of files to overlay on top of the image")
 	ownerGroups  flagutil.StringList
 	ownerUsers   flagutil.StringList
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")

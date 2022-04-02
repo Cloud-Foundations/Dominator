@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -169,6 +170,11 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		request.ImageName = *imageName
 		request.ImageTimeout = *imageTimeout
 		request.SkipBootloader = *skipBootloader
+		if overlayFiles, err := loadOverlayFiles(); err != nil {
+			return err
+		} else {
+			request.OverlayFiles = overlayFiles
+		}
 	} else if *imageURL != "" {
 		request.ImageURL = *imageURL
 	} else if *imageFile != "" {
@@ -288,6 +294,29 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 			return nil, -1, errors.New("unsupported file type")
 		}
 	}
+}
+
+func loadOverlayFiles() (map[string][]byte, error) {
+	if *overlayDirectory == "" {
+		return nil, nil
+	}
+	overlayFiles := make(map[string][]byte)
+	err := filepath.Walk(*overlayDirectory,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			overlayFiles[path[len(*overlayDirectory):]] = data
+			return nil
+		})
+	return overlayFiles, err
 }
 
 func processCreateVmResponses(conn *srpc.Conn,
