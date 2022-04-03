@@ -509,6 +509,7 @@ type ReplaceVmImageRequest struct {
 	ImageURL         string `json:",omitempty"`
 	IpAddress        net.IP
 	MinimumFreeBytes uint64
+	OverlayFiles     map[string][]byte
 	RoundupPower     uint64
 	SkipBootloader   bool
 } // RAW image data (length=ImageDataSize) is streamed afterwards.
