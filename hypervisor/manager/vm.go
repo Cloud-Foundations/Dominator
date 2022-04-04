@@ -2460,6 +2460,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		writeRawOptions := util.WriteRawOptions{
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
+			OverlayFiles:     request.OverlayFiles,
 			RootLabel:        vm.rootLabel(false),
 			RoundupPower:     request.RoundupPower,
 		}
