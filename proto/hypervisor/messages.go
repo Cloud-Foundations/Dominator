@@ -220,6 +220,7 @@ type DebugVmImageRequest struct {
 	ImageURL         string
 	IpAddress        net.IP
 	MinimumFreeBytes uint64
+	OverlayFiles     map[string][]byte
 	RoundupPower     uint64
 } // The following data are streamed afterwards in the following order:
 //     RAW image data (length=ImageDataSize)
