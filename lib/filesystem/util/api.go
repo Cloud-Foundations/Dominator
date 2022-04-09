@@ -31,6 +31,13 @@ type ComputedFilesData struct {
 	RootDirectory string
 }
 
+type MakeExt4fsParams struct {
+	BytesPerInode      uint64
+	Label              string
+	Size               uint64
+	UnsupportedOptions []string
+}
+
 // CopyMtimes will copy modification times for files from the source to the
 // destination if the file data and metadata (other than mtime) are identical.
 // Directory entry inode pointers are invalidated by this operation, so this
@@ -66,8 +73,17 @@ func MakeBootable(fs *filesystem.FileSystem,
 
 func MakeExt4fs(deviceName, label string, unsupportedOptions []string,
 	bytesPerInode uint64, logger log.Logger) error {
-	return makeExt4fs(deviceName, label, unsupportedOptions, bytesPerInode,
+	return makeExt4fs(deviceName, MakeExt4fsParams{
+		BytesPerInode:      bytesPerInode,
+		Label:              label,
+		UnsupportedOptions: unsupportedOptions,
+	},
 		logger)
+}
+
+func MakeExt4fsWithParams(deviceName string, params MakeExt4fsParams,
+	logger log.Logger) error {
+	return makeExt4fs(deviceName, params, logger)
 }
 
 func MakeKernelOptions(rootDevice, extraOptions string) string {

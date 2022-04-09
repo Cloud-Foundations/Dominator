@@ -255,7 +255,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			return err
 		}
 	}
-	err = makeExt4fs(rootDevice, options.RootLabel, unsupportedOptions, 8192,
+	err = MakeExt4fs(rootDevice, options.RootLabel, unsupportedOptions, 8192,
 		logger)
 	if err != nil {
 		return err
@@ -328,32 +328,36 @@ func makeBootable(fs *filesystem.FileSystem,
 	}
 }
 
-func makeExt4fs(deviceName, label string, unsupportedOptions []string,
-	bytesPerInode uint64, logger log.Logger) error {
-	size, err := getDeviceSize(deviceName)
-	if err != nil {
-		return err
+func makeExt4fs(deviceName string, params MakeExt4fsParams,
+	logger log.Logger) error {
+	if params.Size < 1 {
+		var err error
+		params.Size, err = getDeviceSize(deviceName)
+		if err != nil {
+			return err
+		}
 	}
-	sizeString := strconv.FormatUint(size>>10, 10)
+	sizeString := strconv.FormatUint(params.Size>>10, 10)
 	var options []string
-	if len(unsupportedOptions) > 0 {
+	if len(params.UnsupportedOptions) > 0 {
 		defaultFeatures, err := getDefaultMkfsFeatures(deviceName, sizeString,
 			logger)
 		if err != nil {
 			return err
 		}
-		for _, option := range unsupportedOptions {
+		for _, option := range params.UnsupportedOptions {
 			if _, ok := defaultFeatures[option]; ok {
 				options = append(options, "^"+option)
 			}
 		}
 	}
 	cmd := exec.Command("mkfs.ext4")
-	if bytesPerInode != 0 {
-		cmd.Args = append(cmd.Args, "-i", strconv.FormatUint(bytesPerInode, 10))
+	if params.BytesPerInode != 0 {
+		cmd.Args = append(cmd.Args, "-i",
+			strconv.FormatUint(params.BytesPerInode, 10))
 	}
-	if label != "" {
-		cmd.Args = append(cmd.Args, "-L", label)
+	if params.Label != "" {
+		cmd.Args = append(cmd.Args, "-L", params.Label)
 	}
 	if len(options) > 0 {
 		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
@@ -365,7 +369,7 @@ func makeExt4fs(deviceName, label string, unsupportedOptions []string,
 			deviceName, err, output)
 	}
 	logger.Printf("Made %s file-system on: %s in %s\n",
-		format.FormatBytes(size), deviceName,
+		format.FormatBytes(params.Size), deviceName,
 		format.Duration(time.Since(startTime)))
 	return nil
 }
