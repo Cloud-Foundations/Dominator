@@ -194,7 +194,8 @@ type CreateVmRequest struct {
 	OverlayFiles         map[string][]byte
 	RoundupPower         uint64
 	SecondaryVolumes     []Volume
-	SecondaryVolumesData bool
+	SecondaryVolumesData bool // Exclusive of SecondaryVolumesInit.
+	SecondaryVolumesInit []VolumeInitialisationInfo
 	SkipBootloader       bool
 	SkipMemoryCheck      bool
 	UserDataSize         uint64
@@ -660,3 +661,7 @@ type Volume struct {
 }
 
 type VolumeFormat uint
+
+type VolumeInitialisationInfo struct {
+	Label string
+}
