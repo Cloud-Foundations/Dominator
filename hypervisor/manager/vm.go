@@ -1008,6 +1008,19 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if err := copyData(fname, dataReader, volume.Size); err != nil {
 				return sendError(conn, err)
 			}
+			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
+				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
+					Label: request.SecondaryVolumesInit[index].Label,
+					Size:  volume.Size,
+				},
+					vm.logger)
+				if err != nil {
+					return sendError(conn, err)
+				}
+				if err := setVolumeSize(fname, volume.Size); err != nil {
+					return err
+				}
+			}
 			vm.Volumes = append(vm.Volumes, volume)
 		}
 	}
