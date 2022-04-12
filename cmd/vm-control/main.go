@@ -52,6 +52,8 @@ var (
 		"Time to wait before timing out on image fetch")
 	imageURL = flag.String("imageURL", "",
 		"Name of URL of image to boot with")
+	initialiseSecondaryVolumes = flag.Bool("initialiseSecondaryVolumes", false,
+		"If true, initialise secondary volumes")
 	localVmCreate = flag.String("localVmCreate", "",
 		"Command to make local VM when exporting. The VM name is given as the argument. The VM JSON is available on stdin")
 	localVmDestroy = flag.String("localVmDestroy", "",

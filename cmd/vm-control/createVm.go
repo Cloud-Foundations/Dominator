@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/images/virtualbox"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -161,9 +163,17 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 				IpAddress: ipAddr}
 		}
 	}
-	for _, size := range secondaryVolumeSizes {
+	secondaryFstab := &bytes.Buffer{}
+	for index, size := range secondaryVolumeSizes {
 		request.SecondaryVolumes = append(request.SecondaryVolumes,
 			hyper_proto.Volume{Size: uint64(size)})
+		if *initialiseSecondaryVolumes {
+			label := fmt.Sprintf("/data/%d", index)
+			request.SecondaryVolumesInit = append(request.SecondaryVolumesInit,
+				hyper_proto.VolumeInitialisationInfo{Label: label})
+			util.WriteFstabEntry(secondaryFstab, "LABEL="+label, label, "ext4",
+				"discard", 0, 2)
+		}
 	}
 	var imageReader, userDataReader io.Reader
 	if *imageName != "" {
@@ -174,6 +184,13 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 			return err
 		} else {
 			request.OverlayFiles = overlayFiles
+		}
+		secondaryFstab.Write(request.OverlayFiles["/etc/fstab"])
+		if secondaryFstab.Len() > 0 {
+			if request.OverlayFiles == nil {
+				request.OverlayFiles = make(map[string][]byte)
+			}
+			request.OverlayFiles["/etc/fstab"] = secondaryFstab.Bytes()
 		}
 	} else if *imageURL != "" {
 		request.ImageURL = *imageURL
