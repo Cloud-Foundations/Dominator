@@ -129,15 +129,16 @@ func WriteImageName(mountPoint, imageName string) error {
 }
 
 type WriteRawOptions struct {
-	AllocateBlocks    bool
-	DoChroot          bool
-	InitialImageName  string
-	InstallBootloader bool
-	MinimumFreeBytes  uint64
-	OverlayFiles      map[string][]byte
-	RootLabel         string
-	RoundupPower      uint64
-	WriteFstab        bool
+	AllocateBlocks     bool
+	DoChroot           bool
+	InitialImageName   string
+	InstallBootloader  bool
+	MinimumFreeBytes   uint64
+	OverlayDirectories []string
+	OverlayFiles       map[string][]byte
+	RootLabel          string
+	RoundupPower       uint64
+	WriteFstab         bool
 }
 
 func WriteRaw(fs *filesystem.FileSystem,

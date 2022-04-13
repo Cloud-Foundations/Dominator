@@ -279,6 +279,13 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err := Unpack(fs, objectsGetter, mountPoint, logger); err != nil {
 		return err
 	}
+	for _, dirname := range options.OverlayDirectories {
+		dirname := filepath.Clean(dirname) // Stop funny business.
+		err := os.MkdirAll(filepath.Join(mountPoint, dirname), fsutil.DirPerms)
+		if err != nil {
+			return err
+		}
+	}
 	for filename, data := range options.OverlayFiles {
 		filename := filepath.Clean(filename) // Stop funny business.
 		err := writeFile(filepath.Join(mountPoint, filename), data)
