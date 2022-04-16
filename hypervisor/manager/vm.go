@@ -938,11 +938,12 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
-			InitialImageName: imageName,
-			MinimumFreeBytes: request.MinimumFreeBytes,
-			OverlayFiles:     request.OverlayFiles,
-			RootLabel:        vm.rootLabel(false),
-			RoundupPower:     request.RoundupPower,
+			InitialImageName:   imageName,
+			MinimumFreeBytes:   request.MinimumFreeBytes,
+			OverlayDirectories: request.OverlayDirectories,
+			OverlayFiles:       request.OverlayFiles,
+			RootLabel:          vm.rootLabel(false),
+			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs, writeRawOptions,
 			request.SkipBootloader)
