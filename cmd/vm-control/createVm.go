@@ -169,10 +169,13 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 			hyper_proto.Volume{Size: uint64(size)})
 		if *initialiseSecondaryVolumes {
 			label := fmt.Sprintf("/data/%d", index)
+			mountPoint := label
+			request.OverlayDirectories = append(request.OverlayDirectories,
+				mountPoint)
 			request.SecondaryVolumesInit = append(request.SecondaryVolumesInit,
 				hyper_proto.VolumeInitialisationInfo{Label: label})
-			util.WriteFstabEntry(secondaryFstab, "LABEL="+label, label, "ext4",
-				"discard", 0, 2)
+			util.WriteFstabEntry(secondaryFstab, "LABEL="+label, mountPoint,
+				"ext4", "discard", 0, 2)
 		}
 	}
 	var imageReader, userDataReader io.Reader
