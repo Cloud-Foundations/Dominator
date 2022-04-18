@@ -664,5 +664,6 @@ type Volume struct {
 type VolumeFormat uint
 
 type VolumeInitialisationInfo struct {
-	Label string
+	BytesPerInode uint64
+	Label         string
 }
