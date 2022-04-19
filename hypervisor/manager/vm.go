@@ -1010,9 +1010,11 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 				return sendError(conn, err)
 			}
 			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
+				vinit := request.SecondaryVolumesInit[index]
 				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
-					Label: request.SecondaryVolumesInit[index].Label,
-					Size:  volume.Size,
+					BytesPerInode: vinit.BytesPerInode,
+					Label:         vinit.Label,
+					Size:          volume.Size,
 				},
 					vm.logger)
 				if err != nil {
