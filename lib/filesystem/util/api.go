@@ -32,10 +32,11 @@ type ComputedFilesData struct {
 }
 
 type MakeExt4fsParams struct {
-	BytesPerInode      uint64
-	Label              string
-	Size               uint64
-	UnsupportedOptions []string
+	BytesPerInode            uint64
+	Label                    string
+	ReservedBlocksPercentage uint16
+	Size                     uint64
+	UnsupportedOptions       []string
 }
 
 // CopyMtimes will copy modification times for files from the source to the

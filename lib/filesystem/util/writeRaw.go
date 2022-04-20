@@ -366,6 +366,10 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 	if params.Label != "" {
 		cmd.Args = append(cmd.Args, "-L", params.Label)
 	}
+	if params.ReservedBlocksPercentage != 0 {
+		cmd.Args = append(cmd.Args, "-m",
+			strconv.FormatUint(uint64(params.ReservedBlocksPercentage), 10))
+	}
 	if len(options) > 0 {
 		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
 	}
