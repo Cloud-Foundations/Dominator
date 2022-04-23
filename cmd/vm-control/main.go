@@ -70,9 +70,11 @@ var (
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
-	secondarySubnetIDs   flagutil.StringList
-	secondaryVolumeSizes flagutil.SizeList
-	serialPort           = flag.Uint("serialPort", 0,
+	secondarySubnetIDs         flagutil.StringList
+	secondaryVolumeSizes       flagutil.SizeList
+	secondaryVolumesInitParams = flag.String("secondaryVolumesInitParams", "",
+		"File containing initialisation parameters for secondary volumes")
+	serialPort = flag.Uint("serialPort", 0,
 		"Serial port number on VM")
 	skipBootloader = flag.Bool("skipBootloader", false,
 		"If true, directly boot into the kernel")
