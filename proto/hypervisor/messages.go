@@ -495,6 +495,16 @@ type ProbeVmPortResponse struct {
 	Error      string
 }
 
+type RebootVmRequest struct {
+	DhcpTimeout time.Duration
+	IpAddress   net.IP
+}
+
+type RebootVmResponse struct {
+	DhcpTimedOut bool
+	Error        string
+}
+
 type RegisterExternalLeasesRequest struct {
 	Addresses AddressList
 	Hostnames []string `json:",omitempty"`
