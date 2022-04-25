@@ -49,6 +49,12 @@ import (
 const (
 	bootlogFilename    = "bootlog"
 	serialSockFilename = "serial0.sock"
+
+	rebootJson = `{ "execute": "send-key",
+     "arguments": { "keys": [ { "type": "qcode", "data": "ctrl" },
+                              { "type": "qcode", "data": "alt" },
+                              { "type": "qcode", "data": "delete" } ] } }
+`
 )
 
 var (
@@ -2387,6 +2393,59 @@ func (m *Manager) prepareVmForMigration(ipAddr net.IP,
 	return nil
 }
 
+// rebootVm returns true if the DHCP check timed out.
+func (m *Manager) rebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
+	dhcpTimeout time.Duration) (bool, error) {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return false, err
+	}
+	doUnlock := true
+	defer func() {
+		if doUnlock {
+			vm.mutex.Unlock()
+		}
+	}()
+	switch vm.State {
+	case proto.StateStarting:
+		return false, errors.New("VM is starting")
+	case proto.StateRunning:
+		vm.commandChannel <- "reboot" // Not a QMP command: interpreted locally.
+		vm.mutex.Unlock()
+		doUnlock = false
+		if dhcpTimeout > 0 {
+			ackChan := vm.manager.DhcpServer.MakeAcknowledgmentChannel(
+				vm.Address.IpAddress)
+			timer := time.NewTimer(dhcpTimeout)
+			select {
+			case <-ackChan:
+				timer.Stop()
+			case <-timer.C:
+				return true, nil
+			}
+		}
+		return false, nil
+	case proto.StateStopping:
+		return false, errors.New("VM is stopping")
+	case proto.StateStopped:
+		return false, errors.New("VM is stopped")
+	case proto.StateFailedToStart:
+		return false, errors.New("VM failed to start")
+	case proto.StateExporting:
+		return false, errors.New("VM is exporting")
+	case proto.StateCrashed:
+		return false, errors.New("VM has crashed")
+	case proto.StateDestroying:
+		return false, errors.New("VM is destroying")
+	case proto.StateMigrating:
+		return false, errors.New("VM is migrating")
+	case proto.StateDebugging:
+		return false, errors.New("VM is debugging")
+	default:
+		return false, errors.New("unknown state: " + vm.State.String())
+	}
+}
+
 func (m *Manager) registerVmMetadataNotifier(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, pathChannel chan<- string) error {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
@@ -3144,7 +3203,12 @@ func (vm *vmInfoType) monitor(monitorSock net.Conn,
 	go vm.probeHealthAgent(cancelChannel)
 	go vm.serialManager()
 	for command := range commandChannel {
-		_, err := fmt.Fprintf(monitorSock, `{"execute":"%s"}`, command)
+		var err error
+		if command == "reboot" { // Not a QMP command: convert to ctrl-alt-del.
+			_, err = monitorSock.Write([]byte(rebootJson))
+		} else {
+			_, err = fmt.Fprintf(monitorSock, `{"execute":"%s"}`, command)
+		}
 		if err != nil {
 			vm.logger.Println(err)
 		} else {

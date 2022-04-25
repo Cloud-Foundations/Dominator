@@ -338,6 +338,11 @@ func (m *Manager) PrepareVmForMigration(ipAddr net.IP,
 	return m.prepareVmForMigration(ipAddr, authInfo, accessToken, enable)
 }
 
+func (m *Manager) RebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
+	dhcpTimeout time.Duration) (bool, error) {
+	return m.rebootVm(ipAddr, authInfo, dhcpTimeout)
+}
+
 func (m *Manager) RemoveAddressesFromPool(addresses []proto.Address) error {
 	return m.removeAddressesFromPool(addresses)
 }
