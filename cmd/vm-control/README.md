@@ -67,6 +67,7 @@ Some of the sub-commands available are:
                       filter are not changed. The old root image is saved. The
                       VM must not be running
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
+- **reboot-vm**: reboot a VM
 - **replace-vm-image**: replace the root image for a VM. The old root image is
                         saved. The VM must not be running
 - **replace-vm-user-data**: replace the user data for a VM. The old user data is
