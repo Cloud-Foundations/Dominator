@@ -364,13 +364,16 @@ type GetVmUserDataResponse struct {
 // The GetVmVolume() RPC is followed by the proto/rsync.GetBlocks message.
 
 type GetVmVolumeRequest struct {
-	AccessToken []byte
-	IpAddress   net.IP
-	VolumeIndex uint
+	AccessToken      []byte
+	GetExtraFiles    bool
+	IgnoreExtraFiles bool
+	IpAddress        net.IP
+	VolumeIndex      uint
 }
 
 type GetVmVolumeResponse struct {
-	Error string
+	Error      string
+	ExtraFiles map[string][]byte // May contain "kernel", "initrd" and such.
 }
 
 type ListSubnetsRequest struct {
