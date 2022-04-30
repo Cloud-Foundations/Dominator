@@ -824,7 +824,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
-	err = vm.migrateVmVolumes(hypervisor, request.IpAddress, accessToken)
+	err = vm.migrateVmVolumes(hypervisor, request.IpAddress, accessToken, true)
 	if err != nil {
 		return err
 	}
@@ -843,7 +843,8 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		if err != nil {
 			return err
 		}
-		err = vm.migrateVmVolumes(hypervisor, request.IpAddress, accessToken)
+		err = vm.migrateVmVolumes(hypervisor, request.IpAddress, accessToken,
+			false)
 		if err != nil {
 			return err
 		}
@@ -1541,9 +1542,40 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 		return conn.Encode(proto.GetVmVolumeResponse{Error: err.Error()})
 	}
 	defer vm.mutex.RUnlock()
-	if request.VolumeIndex == 0 && vm.getActiveKernelPath() != "" {
-		return conn.Encode(proto.GetVmVolumeResponse{
-			Error: "cannot get root volume with separate kernel"})
+	var initrd, kernel []byte
+	if request.VolumeIndex == 0 {
+		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
+			if !request.GetExtraFiles && !request.IgnoreExtraFiles {
+				return conn.Encode(proto.GetVmVolumeResponse{
+					Error: "cannot get root volume with separate initrd"})
+			}
+			if request.GetExtraFiles {
+				initrd, err = ioutil.ReadFile(initrdPath)
+				if err != nil {
+					return conn.Encode(
+						proto.GetVmVolumeResponse{Error: err.Error()})
+				}
+			}
+		}
+		if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
+			if !request.GetExtraFiles && !request.IgnoreExtraFiles {
+				return conn.Encode(proto.GetVmVolumeResponse{
+					Error: "cannot get root volume with separate kernel"})
+			}
+			if request.GetExtraFiles {
+				kernel, err = ioutil.ReadFile(kernelPath)
+				if err != nil {
+					return conn.Encode(
+						proto.GetVmVolumeResponse{Error: err.Error()})
+				}
+			}
+		}
+	}
+	response := proto.GetVmVolumeResponse{}
+	if len(initrd) > 0 || len(kernel) > 0 {
+		response.ExtraFiles = make(map[string][]byte)
+		response.ExtraFiles["initrd"] = initrd
+		response.ExtraFiles["kernel"] = kernel
 	}
 	if request.VolumeIndex >= uint(len(vm.VolumeLocations)) {
 		return conn.Encode(proto.GetVmVolumeResponse{
@@ -1554,7 +1586,7 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 		return conn.Encode(proto.GetVmVolumeResponse{Error: err.Error()})
 	}
 	defer file.Close()
-	if err := conn.Encode(proto.GetVmVolumeResponse{}); err != nil {
+	if err := conn.Encode(response); err != nil {
 		return err
 	}
 	if err := conn.Flush(); err != nil {
@@ -1839,7 +1871,8 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 	if err != nil {
 		return err
 	}
-	err = vm.migrateVmVolumes(hypervisor, vm.Address.IpAddress, accessToken)
+	err = vm.migrateVmVolumes(hypervisor, vm.Address.IpAddress, accessToken,
+		true)
 	if err != nil {
 		return err
 	}
@@ -1862,7 +1895,8 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		if err != nil {
 			return err
 		}
-		err = vm.migrateVmVolumes(hypervisor, vm.Address.IpAddress, accessToken)
+		err = vm.migrateVmVolumes(hypervisor, vm.Address.IpAddress, accessToken,
+			false)
 		if err != nil {
 			return err
 		}
@@ -2019,10 +2053,11 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 }
 
 func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
-	sourceIpAddr net.IP, accessToken []byte) error {
+	sourceIpAddr net.IP, accessToken []byte, getExtraFiles bool) error {
 	for index, volume := range vm.VolumeLocations {
-		_, err := migrateVmVolume(hypervisor, volume.Filename, uint(index),
-			vm.Volumes[index].Size, sourceIpAddr, accessToken)
+		_, err := migrateVmVolume(hypervisor, volume.DirectoryToCleanup,
+			volume.Filename, uint(index), vm.Volumes[index].Size, sourceIpAddr,
+			accessToken, getExtraFiles)
 		if err != nil {
 			return err
 		}
@@ -2030,8 +2065,9 @@ func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 	return nil
 }
 
-func migrateVmVolume(hypervisor *srpc.Client, filename string,
-	volumeIndex uint, size uint64, ipAddr net.IP, accessToken []byte) (
+func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
+	volumeIndex uint, size uint64, ipAddr net.IP, accessToken []byte,
+	getExtraFiles bool) (
 	*rsync.Stats, error) {
 	var initialFileSize uint64
 	reader, err := os.OpenFile(filename, os.O_RDONLY, 0)
@@ -2057,9 +2093,11 @@ func migrateVmVolume(hypervisor *srpc.Client, filename string,
 	}
 	defer writer.Close()
 	request := proto.GetVmVolumeRequest{
-		AccessToken: accessToken,
-		IpAddress:   ipAddr,
-		VolumeIndex: volumeIndex,
+		AccessToken:      accessToken,
+		GetExtraFiles:    getExtraFiles,
+		IgnoreExtraFiles: !getExtraFiles,
+		IpAddress:        ipAddr,
+		VolumeIndex:      volumeIndex,
 	}
 	conn, err := hypervisor.Call("Hypervisor.GetVmVolume")
 	if err != nil {
@@ -2084,7 +2122,23 @@ func migrateVmVolume(hypervisor *srpc.Client, filename string,
 	}
 	stats, err := rsync.GetBlocks(conn, conn, conn, reader, writer, size,
 		initialFileSize)
-	return &stats, err
+	if err != nil {
+		return nil, err
+	}
+	if !getExtraFiles {
+		return &stats, nil
+	}
+	for name, data := range response.ExtraFiles {
+		if name != "initrd" && name != "kernel" {
+			return nil, fmt.Errorf("received unsupported extra file: %s", name)
+		}
+		err := ioutil.WriteFile(filepath.Join(directory, name), data,
+			fsutil.PrivateFilePerms)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &stats, nil
 }
 
 func (m *Manager) notifyVmMetadataRequest(ipAddr net.IP, path string) {
