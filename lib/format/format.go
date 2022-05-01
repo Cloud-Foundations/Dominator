@@ -29,11 +29,21 @@ func Duration(duration time.Duration) string {
 			duration %= day
 			return fmt.Sprintf("%dd%s", days, duration)
 		}
+		year := day*365 + day>>2
+		if duration < year {
+			weeks := duration / week
+			duration %= week
+			days := duration / day
+			duration %= day
+			return fmt.Sprintf("%dw%dd%s", weeks, days, duration)
+		}
+		years := duration / year
+		duration %= year
 		weeks := duration / week
 		duration %= week
 		days := duration / day
 		duration %= day
-		return fmt.Sprintf("%dw%dd%s", weeks, days, duration)
+		return fmt.Sprintf("%dy%dw%dd%s", years, weeks, days, duration)
 	}
 }
 
