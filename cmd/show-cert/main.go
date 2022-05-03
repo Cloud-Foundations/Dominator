@@ -46,6 +46,9 @@ func showCert(filename string) {
 	}
 	if expired := now.Sub(cert.NotAfter); expired > 0 {
 		fmt.Fprintf(os.Stderr, "  Expired %s ago\n", format.Duration(expired))
+	} else {
+		fmt.Fprintf(os.Stderr, "  Valid until %s (%s from now)\n",
+			cert.NotAfter, format.Duration(-expired))
 	}
 	username, err := x509util.GetUsername(cert)
 	if err != nil {
