@@ -3,6 +3,7 @@ Description=Imaginator image builder service
 After=remote-fs.target network.target
 
 [Service]
+Environment=HOME=%h
 ExecStart=/usr/local/sbin/imaginator
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
