@@ -571,6 +571,16 @@ type RestoreVmUserDataResponse struct {
 	Error string
 }
 
+type ReorderVmVolumesRequest struct {
+	AccessToken   []byte
+	IpAddress     net.IP
+	VolumeIndices []uint
+}
+
+type ReorderVmVolumesResponse struct {
+	Error string
+}
+
 type ScanVmRootRequest struct {
 	IpAddress net.IP
 	Filter    *filter.Filter
