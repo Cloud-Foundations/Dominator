@@ -2787,6 +2787,62 @@ func (m *Manager) restoreVmUserData(ipAddr net.IP,
 	return os.Rename(oldFilename, filename)
 }
 
+func (m *Manager) reorderVmVolumes(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte,
+	_volumeIndices []uint) error {
+	// If root volume isn't listed, insert default "keep in place" entry.
+	var volumeIndices []uint
+	for _, oldIndex := range _volumeIndices {
+		if oldIndex == 0 {
+			volumeIndices = _volumeIndices
+			break
+		}
+	}
+	if volumeIndices == nil {
+		volumeIndices = make([]uint, 1) // Map 0->0.
+		volumeIndices = append(volumeIndices, _volumeIndices...)
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, accessToken)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if volumeIndices[0] != 0 {
+		if vm.getActiveInitrdPath() != "" {
+			return errors.New("cannot reorder root volume with separate initrd")
+		}
+		if vm.getActiveKernelPath() != "" {
+			return errors.New("cannot reorder root volume with separate kernel")
+		}
+	}
+	if len(volumeIndices) != len(vm.VolumeLocations) {
+		return fmt.Errorf(
+			"number of volume indices: %d != number of volumes: %d",
+			len(volumeIndices), len(vm.VolumeLocations))
+	}
+	indexMap := make(map[uint]struct{}, len(volumeIndices))
+	volumeLocations := make([]proto.LocalVolume, len(volumeIndices))
+	volumes := make([]proto.Volume, len(volumeIndices))
+	for newIndex, oldIndex := range volumeIndices {
+		if oldIndex >= uint(len(vm.VolumeLocations)) {
+			return fmt.Errorf("volume index: %d too large", oldIndex)
+		}
+		if _, ok := indexMap[oldIndex]; ok {
+			return fmt.Errorf("duplicate volume index: %d", oldIndex)
+		}
+		indexMap[oldIndex] = struct{}{}
+		volumeLocations[newIndex] = vm.VolumeLocations[oldIndex]
+		volumes[newIndex] = vm.Volumes[oldIndex]
+	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	vm.VolumeLocations = volumeLocations
+	vm.Volumes = volumes
+	vm.writeAndSendInfo()
+	return nil
+}
+
 func (m *Manager) scanVmRoot(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, nil)

@@ -381,6 +381,12 @@ func (m *Manager) RestoreVmUserData(ipAddr net.IP,
 	return m.restoreVmUserData(ipAddr, authInfo)
 }
 
+func (m *Manager) ReorderVmVolumes(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte,
+	volumeIndices []uint) error {
+	return m.reorderVmVolumes(ipAddr, authInfo, accessToken, volumeIndices)
+}
+
 func (m *Manager) ScanVmRoot(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return m.scanVmRoot(ipAddr, authInfo, scanFilter)
