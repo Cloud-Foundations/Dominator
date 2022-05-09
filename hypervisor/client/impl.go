@@ -275,6 +275,20 @@ func registerExternalLeases(client *srpc.Client, addressList proto.AddressList,
 	return errors.New(reply.Error)
 }
 
+func reorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+	volumeIndices []uint) error {
+	request := proto.ReorderVmVolumesRequest{
+		IpAddress:     ipAddr,
+		VolumeIndices: volumeIndices,
+	}
+	var reply proto.ReorderVmVolumesResponse
+	err := client.RequestReply("Hypervisor.ReorderVmVolumes", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func scanVmRoot(client *srpc.Client, ipAddr net.IP,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	request := proto.ScanVmRootRequest{IpAddress: ipAddr, Filter: scanFilter}

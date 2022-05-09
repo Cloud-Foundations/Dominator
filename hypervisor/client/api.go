@@ -78,6 +78,11 @@ func RegisterExternalLeases(client *srpc.Client, addressList proto.AddressList,
 	return registerExternalLeases(client, addressList, hostnames)
 }
 
+func ReorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+	volumeIndices []uint) error {
+	return reorderVmVolumes(client, ipAddr, accessToken, volumeIndices)
+}
+
 func ScanVmRoot(client *srpc.Client, ipAddr net.IP,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return scanVmRoot(client, ipAddr, scanFilter)
