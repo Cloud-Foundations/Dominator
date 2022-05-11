@@ -103,7 +103,8 @@ var (
 		"Name of file to write volume data to")
 	volumeIndex = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
-	volumeSize flagutil.Size
+	volumeIndices flagutil.UintList
+	volumeSize    flagutil.Size
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -122,6 +123,7 @@ func init() {
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
+	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 }
 
@@ -180,6 +182,7 @@ var subcommands = []commands.Command{
 		restoreVmFromSnapshotSubcommand},
 	{"restore-vm-image", "IPaddr", 1, 1, restoreVmImageSubcommand},
 	{"restore-vm-user-data", "IPaddr", 1, 1, restoreVmUserDataSubcommand},
+	{"reorder-vm-volumes", "IPaddr", 1, 1, reorderVmVolumesSubcommand},
 	{"set-vm-migrating", "IPaddr", 1, 1, setVmMigratingSubcommand},
 	{"snapshot-vm", "IPaddr", 1, 1, snapshotVmSubcommand},
 	{"save-vm", "IPaddr destination", 2, 2, saveVmSubcommand},
