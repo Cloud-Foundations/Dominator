@@ -156,6 +156,15 @@ func grow2fs(volume string) error {
 	return resize2fs(partition, 0)
 }
 
+// indexToName will return the volume name for the specified volume index (0
+// is the "root" volume, 1 is "secondary-volume.0" and so on).
+func indexToName(index int) string {
+	if index == 0 {
+		return "root"
+	}
+	return fmt.Sprintf("secondary-volume.%d", index-1)
+}
+
 // resize2fs will resize an ext{2,3,4} file-system to fit the specified size.
 // If size is zero, it will resize to fit the device size.
 func resize2fs(device string, size uint64) error {

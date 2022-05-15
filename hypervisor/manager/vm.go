@@ -302,8 +302,7 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	}()
 	for index, volumeDirectory := range volumeDirectories {
 		dirname := filepath.Join(volumeDirectory, vm.ipAddress)
-		filename := filepath.Join(dirname,
-			fmt.Sprintf("secondary-volume.%d", len(vm.Volumes)-1+index))
+		filename := filepath.Join(dirname, indexToName(len(vm.Volumes)+index))
 		volumeLocation := proto.LocalVolume{
 			DirectoryToCleanup: dirname,
 			Filename:           filename,
@@ -1710,13 +1709,7 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 		if err := os.MkdirAll(dirname, dirPerms); err != nil {
 			return err
 		}
-		var destFilename string
-		if index == 0 {
-			destFilename = filepath.Join(dirname, "root")
-		} else {
-			destFilename = filepath.Join(dirname,
-				fmt.Sprintf("secondary-volume.%d", index-1))
-		}
+		destFilename := filepath.Join(dirname, indexToName(index))
 		if err := os.Link(sourceFilename, destFilename); err != nil {
 			return err
 		}
@@ -1847,16 +1840,9 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		if err := os.MkdirAll(dirname, dirPerms); err != nil {
 			return err
 		}
-		var filename string
-		if index == 0 {
-			filename = filepath.Join(dirname, "root")
-		} else {
-			filename = filepath.Join(dirname,
-				fmt.Sprintf("secondary-volume.%d", index-1))
-		}
 		vm.VolumeLocations = append(vm.VolumeLocations, proto.LocalVolume{
 			DirectoryToCleanup: dirname,
-			Filename:           filename,
+			Filename:           filepath.Join(dirname, indexToName(index)),
 		})
 	}
 	if vmInfo.State == proto.StateStopped {
@@ -2820,6 +2806,15 @@ func (m *Manager) reorderVmVolumes(ipAddr net.IP,
 			"number of volume indices: %d != number of volumes: %d",
 			len(volumeIndices), len(vm.VolumeLocations))
 	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	var pathsToRename []string
+	defer func() {
+		for _, path := range pathsToRename {
+			os.Remove(path + "~")
+		}
+	}()
 	indexMap := make(map[uint]struct{}, len(volumeIndices))
 	volumeLocations := make([]proto.LocalVolume, len(volumeIndices))
 	volumes := make([]proto.Volume, len(volumeIndices))
@@ -2831,12 +2826,23 @@ func (m *Manager) reorderVmVolumes(ipAddr net.IP,
 			return fmt.Errorf("duplicate volume index: %d", oldIndex)
 		}
 		indexMap[oldIndex] = struct{}{}
-		volumeLocations[newIndex] = vm.VolumeLocations[oldIndex]
+		vl := vm.VolumeLocations[oldIndex]
+		if newIndex != int(oldIndex) {
+			newName := filepath.Join(vl.DirectoryToCleanup,
+				indexToName(newIndex))
+			if err := os.Link(vl.Filename, newName+"~"); err != nil {
+				return err
+			}
+			pathsToRename = append(pathsToRename, newName)
+			vl.Filename = newName
+		}
+		volumeLocations[newIndex] = vl
 		volumes[newIndex] = vm.Volumes[oldIndex]
 	}
-	if vm.State != proto.StateStopped {
-		return errors.New("VM is not stopped")
+	for _, path := range pathsToRename {
+		os.Rename(path+"~", path)
 	}
+	pathsToRename = nil
 	vm.VolumeLocations = volumeLocations
 	vm.Volumes = volumes
 	vm.writeAndSendInfo()
@@ -3488,8 +3494,7 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 		if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
 			return err
 		}
-		filename := filepath.Join(volumeDirectory,
-			fmt.Sprintf("secondary-volume.%d", index))
+		filename := filepath.Join(volumeDirectory, indexToName(index+1))
 		vm.VolumeLocations = append(vm.VolumeLocations,
 			proto.LocalVolume{volumeDirectory, filename})
 	}
