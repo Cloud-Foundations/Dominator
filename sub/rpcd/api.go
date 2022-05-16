@@ -68,6 +68,7 @@ type addObjectsHandlerType struct {
 }
 
 type HtmlWriter struct {
+	lastNote                *string
 	lastSuccessfulImageName *string
 }
 
@@ -103,7 +104,10 @@ func Setup(config Config, params Params) *HtmlWriter {
 	} else if note != "" {
 		rpcObj.lastNote = note
 	}
-	return &HtmlWriter{&rpcObj.lastSuccessfulImageName}
+	return &HtmlWriter{
+		lastNote:                &rpcObj.lastNote,
+		lastSuccessfulImageName: &rpcObj.lastSuccessfulImageName,
+	}
 }
 
 func (hw *HtmlWriter) WriteHtml(writer io.Writer) {
