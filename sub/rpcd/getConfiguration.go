@@ -18,6 +18,8 @@ func (t *rpcType) getConfiguration() sub.Configuration {
 	var configuration sub.Configuration
 	configuration.CpuPercent =
 		t.params.ScannerConfiguration.DefaultCpuPercent
+	configuration.OwnerGroups = t.config.SubConfiguration.OwnerGroups
+	configuration.OwnerUsers = t.config.SubConfiguration.OwnerUsers
 	configuration.NetworkSpeedPercent =
 		t.params.ScannerConfiguration.NetworkReaderContext.SpeedPercent()
 	configuration.ScanSpeedPercent =
