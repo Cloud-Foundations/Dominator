@@ -80,7 +80,6 @@ install_service ()
 {
     local -r service="$1"
 
-    get_init_system
     if [ "$init" = 'systemd' ]; then
 	$echo cp -p "init.d/${service}.service" "$destdir" || return
 	$echo systemctl enable "$service" || return
@@ -110,3 +109,6 @@ install_all ()
     $echo cp -p health-check.yml "/etc/health-agent/tests.d/$service.yml" || exit
     install_service $service || exit
 }
+
+# Run get_init_system only once because it defines read-only variables.
+get_init_system
