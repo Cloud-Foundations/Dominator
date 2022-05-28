@@ -88,6 +88,7 @@ func Setup(config Config, params Params) *HtmlWriter {
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
+				"GetConfiguration",
 				"Poll",
 			}})
 	addObjectsHandler := &addObjectsHandlerType{
