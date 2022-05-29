@@ -16,6 +16,7 @@ import (
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/reverseconnection"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -64,14 +65,15 @@ func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
 	return &herd
 }
 
-func (herd *Herd) clearSafetyShutoff(hostname string) error {
+func (herd *Herd) clearSafetyShutoff(hostname string,
+	authInfo *srpc.AuthInformation) error {
 	herd.Lock()
 	sub, ok := herd.subsByName[hostname]
 	herd.Unlock()
 	if !ok {
 		return errors.New("unknown sub: " + hostname)
 	}
-	return sub.clearSafetyShutoff()
+	return sub.clearSafetyShutoff(authInfo)
 }
 
 func (herd *Herd) configureSubs(configuration subproto.Configuration) error {

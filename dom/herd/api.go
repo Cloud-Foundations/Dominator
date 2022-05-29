@@ -156,8 +156,9 @@ func (herd *Herd) AddHtmlWriter(htmlWriter HtmlWriter) {
 	herd.addHtmlWriter(htmlWriter)
 }
 
-func (herd *Herd) ClearSafetyShutoff(hostname string) error {
-	return herd.clearSafetyShutoff(hostname)
+func (herd *Herd) ClearSafetyShutoff(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	return herd.clearSafetyShutoff(hostname, authInfo)
 }
 
 func (herd *Herd) ConfigureSubs(configuration subproto.Configuration) error {

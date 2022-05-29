@@ -54,6 +54,43 @@ func (sub *Sub) address() string {
 	return sub.mdb.Hostname + subPortNumber
 }
 
+// Returns true if the principal described by authInfo has administrative access
+// to the sub.
+func (sub *Sub) checkAdminAccess(authInfo *srpc.AuthInformation) bool {
+	if authInfo == nil {
+		return false
+	}
+	if authInfo.HaveMethodAccess {
+		return true
+	}
+	if sub.clientResource == nil {
+		return false
+	}
+	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
+		sub.herd.dialer)
+	if err != nil {
+		return false
+	}
+	defer srpcClient.Put()
+	conf, err := client.GetConfiguration(srpcClient)
+	if err != nil {
+		return false
+	}
+	for _, group := range conf.OwnerGroups {
+		if _, ok := authInfo.GroupList[group]; ok {
+			return true
+		}
+	}
+	if authInfo.Username != "" {
+		for _, user := range conf.OwnerUsers {
+			if user == authInfo.Username {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (sub *Sub) getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
 	if im == nil {
 		return nil
@@ -710,9 +747,12 @@ func (sub *Sub) checkForEnoughSpace(freeSpace *uint64,
 	return false
 }
 
-func (sub *Sub) clearSafetyShutoff() error {
+func (sub *Sub) clearSafetyShutoff(authInfo *srpc.AuthInformation) error {
 	if sub.status != statusUnsafeUpdate {
 		return errors.New("no pending unsafe update")
+	}
+	if !sub.checkAdminAccess(authInfo) {
+		return errors.New("no access to sub")
 	}
 	sub.pendingSafetyClear = true
 	return nil
