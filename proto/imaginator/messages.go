@@ -24,6 +24,24 @@ type BuildImageResponse struct {
 	ErrorString string
 }
 
+type GetDependenciesRequest struct {
+	MaxAge time.Duration
+}
+
+type GetDependenciesResponse struct {
+	GetDependenciesResult
+	Error string
+}
+
+type GetDependenciesResult struct {
+	FetchLog           []byte
+	GeneratedAt        time.Time
+	LastAttemptAt      time.Time
+	LastAttemptError   string
+	StreamToSource     map[string]string // K: stream name, V: source stream.
+	UnbuildableSources map[string]struct{}
+}
+
 type GetDirectedGraphRequest struct {
 	MaxAge time.Duration
 }
