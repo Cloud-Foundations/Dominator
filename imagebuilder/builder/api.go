@@ -199,6 +199,11 @@ func (b *Builder) GetDirectedGraph(request proto.GetDirectedGraphRequest) (
 	return b.getDirectedGraph(request)
 }
 
+func (b *Builder) GetDependencies(request proto.GetDependenciesRequest) (
+	proto.GetDependenciesResult, error) {
+	return b.getDependencies(request)
+}
+
 func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
 }

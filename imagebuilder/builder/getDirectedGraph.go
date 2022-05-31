@@ -162,6 +162,26 @@ func (b *Builder) generateDependencyData() (
 	}, serialisedFetchTime, nil
 }
 
+func (b *Builder) getDependencies(request proto.GetDependenciesRequest) (
+	proto.GetDependenciesResult, error) {
+	dependencyData, lastAttempt, lastErr := b.getDependencyData(request.MaxAge)
+	if dependencyData == nil {
+		return proto.GetDependenciesResult{
+			LastAttemptAt:    lastAttempt,
+			LastAttemptError: errors.ErrorToString(lastErr),
+		}, nil
+	}
+	return proto.GetDependenciesResult{
+		FetchLog:           dependencyData.fetchLog,
+		GeneratedAt:        dependencyData.generatedAt,
+		LastAttemptAt:      lastAttempt,
+		LastAttemptError:   errors.ErrorToString(lastErr),
+		StreamToSource:     dependencyData.streamToSource,
+		UnbuildableSources: dependencyData.unbuildableSources,
+	}, nil
+
+}
+
 // getDependencyData returns the dependency data (possibly stale or nil), the
 // time of the last attempt to generate and the error result for the last
 // attempt. If maxAge is larger than zero, getDependencyData will wait until
