@@ -34,6 +34,7 @@ func Setup(builder *builder.Builder, logger log.Logger) (*htmlWriter, error) {
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
 				"BuildImage",
+				"GetDependencies",
 				"GetDirectedGraph",
 			}})
 	return (*htmlWriter)(srpcObj), nil
