@@ -46,6 +46,21 @@ func buildImage(client *srpc.Client, request proto.BuildImageRequest,
 	}
 }
 
+func getDependencies(client *srpc.Client,
+	request proto.GetDependenciesRequest) (
+	proto.GetDependenciesResult, error) {
+	var zero proto.GetDependenciesResult
+	var reply proto.GetDependenciesResponse
+	err := client.RequestReply("Imaginator.GetDependencies", request, &reply)
+	if err != nil {
+		return zero, err
+	}
+	if reply.Error != "" {
+		return zero, errors.New(reply.Error)
+	}
+	return reply.GetDependenciesResult, nil
+}
+
 func getDirectedGraph(client *srpc.Client,
 	request proto.GetDirectedGraphRequest) (
 	proto.GetDirectedGraphResult, error) {

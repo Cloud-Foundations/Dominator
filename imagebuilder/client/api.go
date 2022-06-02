@@ -12,6 +12,12 @@ func BuildImage(client *srpc.Client, request proto.BuildImageRequest,
 	return buildImage(client, request, response, logWriter)
 }
 
+func GetDependencies(client *srpc.Client,
+	request proto.GetDependenciesRequest) (
+	proto.GetDependenciesResult, error) {
+	return getDependencies(client, request)
+}
+
 func GetDirectedGraph(client *srpc.Client,
 	request proto.GetDirectedGraphRequest) (
 	proto.GetDirectedGraphResult, error) {
