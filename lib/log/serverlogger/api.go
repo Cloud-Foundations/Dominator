@@ -15,6 +15,8 @@ import (
 var (
 	initialLogDebugLevel = flag.Int("initialLogDebugLevel", -1,
 		"initial debug log level")
+	logAtStartup = flag.Bool("logAtStartup", false,
+		"If true, write a log entry at startup")
 	logSubseconds = flag.Bool("logSubseconds", false,
 		"if true, datestamps will have subsecond resolution")
 )
