@@ -90,6 +90,10 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    Query Hypervisor on this machine")
 	fmt.Fprintln(os.Stderr,
+		"  json: url")
+	fmt.Fprintln(os.Stderr,
+		"    url: URL which yields a JSON-formatted list of machines and tags")
+	fmt.Fprintln(os.Stderr,
 		"  text: url")
 	fmt.Fprintln(os.Stderr,
 		"    url: URL which yields lines. Each line contains:")
@@ -120,6 +124,7 @@ var drivers = []driver{
 	{"ds.host.fqdn", 1, 1, newDsHostFqdnGenerator},
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
+	{"json", 1, 1, newJsonGenerator},
 	{"text", 1, 1, newTextGenerator},
 	{"topology", 1, 2, newTopologyGenerator},
 }
