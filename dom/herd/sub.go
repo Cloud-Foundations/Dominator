@@ -675,6 +675,9 @@ func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	if sub.requiredImage.Filter == nil {
 		return false // Sparse image: no deletions.
 	}
+	if _, ok := sub.mdb.Tags["DisableSafetyCheck"]; ok {
+		return false // This sub doesn't need a safety check.
+	}
 	if len(sub.requiredImage.FileSystem.InodeTable) <
 		len(sub.fileSystem.InodeTable)>>1 {
 		return true
