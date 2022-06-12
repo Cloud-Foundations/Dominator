@@ -109,6 +109,10 @@ func mount(source string, target string, fstype string, flags uintptr,
 	return syscall.ENOTSUP
 }
 
+func reboot() error {
+	return syscall.ENOTSUP
+}
+
 func setAllGid(gid int) error {
 	return syscall.Setregid(gid, gid)
 }
@@ -132,6 +136,10 @@ func stat(path string, statbuf *Stat_t) error {
 	}
 	convertStat(statbuf, &rawStatbuf)
 	return nil
+}
+
+func sync() error {
+	return syscall.Sync()
 }
 
 func unshareNetNamespace() (int, int, error) {

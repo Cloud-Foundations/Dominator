@@ -130,6 +130,10 @@ func mount(source string, target string, fstype string, flags uintptr,
 	return syscall.Mount(source, target, fstype, linuxFlags, data)
 }
 
+func reboot() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART)
+}
+
 func setAllGid(gid int) error {
 	return syscall.Setresgid(gid, gid, gid)
 }
@@ -199,6 +203,11 @@ func unshareMountNamespace() error {
 	if err != nil {
 		return errors.New("error making mounts private: " + err.Error())
 	}
+	return nil
+}
+
+func sync() error {
+	syscall.Sync()
 	return nil
 }
 

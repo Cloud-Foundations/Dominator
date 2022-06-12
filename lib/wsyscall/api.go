@@ -72,6 +72,10 @@ func Getrusage(who int, rusage *Rusage) error {
 	return getrusage(who, rusage)
 }
 
+func Reboot() error {
+	return reboot()
+}
+
 func SetAllGid(gid int) error {
 	return setAllGid(gid)
 }
@@ -97,6 +101,10 @@ func SetNetNamespace(fd int) error {
 
 func Stat(path string, statbuf *Stat_t) error {
 	return stat(path, statbuf)
+}
+
+func Sync() error {
+	return sync()
 }
 
 // UnshareMountNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNS)

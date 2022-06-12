@@ -51,6 +51,10 @@ func mount(source string, target string, fstype string, flags uintptr,
 	return syscall.ENOTSUP
 }
 
+func reboot() error {
+	return syscall.ENOTSUP
+}
+
 func setAllGid(gid int) error {
 	return syscall.ENOTSUP
 }
@@ -68,6 +72,10 @@ func setNetNamespace(namespaceFd int) error {
 }
 
 func stat(path string, statbuf *Stat_t) error {
+	return syscall.ENOTSUP
+}
+
+func sync() error {
 	return syscall.ENOTSUP
 }
 
