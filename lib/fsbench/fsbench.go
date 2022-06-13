@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
@@ -114,8 +113,9 @@ func GetReadSpeed(name string) (uint64, uint64, error) {
 	defer file.Close()
 	var tread uint = 0
 	buffer := make([]byte, BUFLEN)
-	var rusage_start, rusage_stop syscall.Rusage
-	if err = syscall.Getrusage(syscall.RUSAGE_SELF, &rusage_start); err != nil {
+	var rusage_start, rusage_stop wsyscall.Rusage
+	err = wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage_start)
+	if err != nil {
 		return 0, 0, fmt.Errorf("error getting resource usage: %s", err)
 	}
 	time_start := time.Now()
@@ -132,7 +132,8 @@ func GetReadSpeed(name string) (uint64, uint64, error) {
 	}
 	elapsed := time.Since(time_start)
 	bytesPerSecond := uint64(float64(tread) / elapsed.Seconds())
-	if err = syscall.Getrusage(syscall.RUSAGE_SELF, &rusage_stop); err != nil {
+	err = wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage_stop)
+	if err != nil {
 		return 0, 0, fmt.Errorf("error getting resource usage: %s", err)
 	}
 	var blocksPerSecond uint64
