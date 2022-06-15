@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type cpuStats struct {
@@ -114,8 +114,8 @@ func getCpuStats() *cpuStats {
 }
 
 func getRusage() (time.Time, time.Time) {
-	var rusage syscall.Rusage
-	syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
+	var rusage wsyscall.Rusage
+	wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage)
 	return time.Unix(int64(rusage.Utime.Sec), int64(rusage.Utime.Usec)*1000),
 		time.Unix(int64(rusage.Stime.Sec), int64(rusage.Stime.Usec)*1000)
 }
