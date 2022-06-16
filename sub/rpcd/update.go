@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/lib"
 )
@@ -226,7 +227,25 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 			logger.Flush()
 		}
 		time.Sleep(time.Second)
-		return !runCommand(logger, "reboot", "-f")
+		if runCommand(logger, "reboot", "-f") {
+			time.Sleep(30 * time.Second)
+			logger.Printf(
+				"%sStill alive after 30 seconds, rebooting even harder\n",
+				logPrefix)
+		} else {
+			logger.Printf("%sReboot failed, trying even harder\n", logPrefix)
+		}
+		if logger, ok := logger.(flusher); ok {
+			logger.Flush()
+		}
+		time.Sleep(time.Second)
+		if err := hardReboot(logger); err != nil {
+			logger.Printf("%sHard reboot failed: %s\n", logPrefix, err)
+		} else {
+			logger.Printf("%sStill alive after hard reboot. I'm at a loss\n",
+				logPrefix)
+		}
+		return true
 	}
 	if needRestart {
 		logger.Printf("%sAction: service subd restart\n", logPrefix)
@@ -246,9 +265,30 @@ func runCommand(logger log.Logger, name string, args ...string) bool {
 			errMsg += " " + arg
 		}
 		errMsg += ": " + err.Error()
-		logger.Printf("error running: %s\n", errMsg)
+		logger.Println(errMsg)
 		logger.Println(string(logs))
 		return false
 	}
 	return true
+}
+
+// hardReboot will try to sync file-system data and then issues a reboot system
+// call. It doesn't depend on a working "reboot" programme.
+func hardReboot(logger log.Logger) error {
+	syncAndWait(logger)
+	syncAndWait(logger)
+	syncAndWait(logger)
+	logger.Println("Calling reboot() system call and wait")
+	if logger, ok := logger.(flusher); ok {
+		logger.Flush()
+	}
+	time.Sleep(time.Second)
+	return wsyscall.Reboot()
+}
+
+// syncAndWait will try to sync file-system data and then waits 5 seconds.
+func syncAndWait(logger log.Logger) {
+	logger.Println("Calling sync() system call and wait")
+	go wsyscall.Sync()
+	time.Sleep(5 * time.Second)
 }
