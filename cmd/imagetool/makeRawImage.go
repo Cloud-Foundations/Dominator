@@ -26,6 +26,15 @@ func makeRawImage(objectClient *objectclient.ObjectClient, name,
 	if err != nil {
 		return err
 	}
-	return util.WriteRaw(fs, objectsGetter, rawFilename, filePerms, tableType,
-		*minFreeBytes, *roundupPower, *makeBootable, *allocateBlocks, logger)
+	return util.WriteRawWithOptions(fs, objectsGetter, rawFilename, filePerms,
+		tableType,
+		util.WriteRawOptions{
+			AllocateBlocks:    *allocateBlocks,
+			InitialImageName:  name,
+			InstallBootloader: *makeBootable,
+			MinimumFreeBytes:  *minFreeBytes,
+			WriteFstab:        *makeBootable,
+			RoundupPower:      *roundupPower,
+		},
+		logger)
 }
