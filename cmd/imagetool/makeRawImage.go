@@ -34,6 +34,7 @@ func makeRawImage(objectClient *objectclient.ObjectClient, name,
 			InstallBootloader: *makeBootable,
 			MinimumFreeBytes:  *minFreeBytes,
 			WriteFstab:        *makeBootable,
+			RootLabel:         *rootLabel,
 			RoundupPower:      *roundupPower,
 		},
 		logger)

@@ -62,7 +62,9 @@ var (
 	releaseNotes = flag.String("releaseNotes", "",
 		"Filename or URL containing release notes")
 	requiredPaths = flagutil.StringToRuneMap(constants.RequiredPaths)
-	roundupPower  = flag.Uint64("roundupPower", 24,
+	rootLabel     = flag.String("rootLabel", "",
+		"Label to write for root file-system when making raw image")
+	roundupPower = flag.Uint64("roundupPower", 24,
 		"power of 2 to round up raw image size")
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
 	skipFields                          = flag.String("skipFields", "",
