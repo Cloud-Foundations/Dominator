@@ -59,6 +59,8 @@ var (
 		"If true, make raw image bootable by installing GRUB")
 	minFreeBytes = flag.Uint64("minFreeBytes", 4<<20,
 		"minimum number of free bytes in raw image")
+	overlayDirectory = flag.String("overlayDirectory", "",
+		"Directory tree of files to overlay on top of the image when making raw image")
 	releaseNotes = flag.String("releaseNotes", "",
 		"Filename or URL containing release notes")
 	requiredPaths = flagutil.StringToRuneMap(constants.RequiredPaths)
