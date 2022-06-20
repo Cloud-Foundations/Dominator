@@ -69,6 +69,7 @@ type PollResponse struct {
 	ScanCount                    uint64
 	DurationOfLastScan           time.Duration
 	GenerationCount              uint64
+	SystemUptime                 *time.Duration
 	FileSystemFollows            bool
 	FileSystem                   *filesystem.FileSystem  // Streamed separately.
 	ObjectCache                  objectcache.ObjectCache // Streamed separately.
