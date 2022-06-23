@@ -36,6 +36,15 @@ type GetSubsConfigurationRequest struct{}
 
 type GetSubsConfigurationResponse sub.Configuration
 
+type ListSubsRequest struct {
+	StatusToMatch string
+}
+
+type ListSubsResponse struct {
+	Error     string
+	Hostnames []string
+}
+
 type SetDefaultImageRequest struct {
 	ImageName string
 }
