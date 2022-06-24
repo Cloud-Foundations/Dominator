@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	filegenproto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -179,6 +180,10 @@ func (herd *Herd) GetDefaultImage() string {
 
 func (herd *Herd) GetSubsConfiguration() subproto.Configuration {
 	return herd.getSubsConfiguration()
+}
+
+func (herd *Herd) ListSubs(request domproto.ListSubsRequest) ([]string, error) {
+	return herd.listSubs(request)
 }
 
 func (herd *Herd) LockWithTimeout(timeout time.Duration) {
