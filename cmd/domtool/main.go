@@ -28,6 +28,8 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
+	statusToMatch = flag.String("statusToMatch", "",
+		"Sub status to match when listing")
 
 	dominatorSrpcClient *srpc.Client
 )
@@ -53,6 +55,7 @@ var subcommands = []commands.Command{
 	{"enable-updates", "reason", 1, 1, enableUpdatesSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
+	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"set-default-image", "", 1, 1, setDefaultImageSubcommand},
 }
 
