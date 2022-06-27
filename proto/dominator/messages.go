@@ -1,6 +1,8 @@
 package dominator
 
 import (
+	"time"
+
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -36,8 +38,18 @@ type GetSubsConfigurationRequest struct{}
 
 type GetSubsConfigurationResponse sub.Configuration
 
+type GetInfoForSubsRequest struct {
+	Hostnames     []string // Empty: match all hostnames.
+	StatusToMatch string   // Empty: match all statuses.
+}
+
+type GetInfoForSubsResponse struct {
+	Error string
+	Subs  []SubInfo
+}
+
 type ListSubsRequest struct {
-	StatusToMatch string
+	StatusToMatch string // Empty: match all statuses.
 }
 
 type ListSubsResponse struct {
@@ -50,3 +62,17 @@ type SetDefaultImageRequest struct {
 }
 
 type SetDefaultImageResponse struct{}
+
+type SubInfo struct {
+	Hostname            string
+	LastNote            string        `json:",omitempty"`
+	LastScanDuration    time.Duration `json:",omitempty"`
+	LastSuccessfulImage string        `json:",omitempty"`
+	LastSyncTime        time.Time     `json:",omitempty"`
+	LastUpdateTime      time.Time     `json:",omitempty"`
+	PlannedImage        string        `json:",omitempty"`
+	RequiredImage       string        `json:",omitempty"`
+	StartTime           time.Time     `json:",omitempty"`
+	Status              string
+	SystemUptime        *time.Duration `json:",omitempty"`
+}
