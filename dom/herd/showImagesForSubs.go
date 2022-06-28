@@ -13,15 +13,37 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
-type imageSubType struct {
-	Hostname            string
-	LastNote            string `json:",omitempty"`
-	LastSuccessfulImage string `json:",omitempty"`
-	PlannedImage        string `json:",omitempty"`
-	RequiredImage       string `json:",omitempty"`
-	Status              string
+func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
+	[]proto.SubInfo, error) {
+	if len(request.Hostnames) < 1 {
+		herd.RLock()
+		defer herd.RUnlock()
+		subInfos := make([]proto.SubInfo, 0, len(herd.subsByIndex))
+		for _, sub := range herd.subsByIndex {
+			if request.StatusToMatch != "" &&
+				sub.status.String() != request.StatusToMatch {
+				continue
+			}
+			subInfos = append(subInfos, sub.makeInfo())
+		}
+		return subInfos, nil
+	}
+	subInfos := make([]proto.SubInfo, 0, len(request.Hostnames))
+	herd.RLock()
+	defer herd.RUnlock()
+	for _, hostname := range request.Hostnames {
+		if sub, ok := herd.subsByName[hostname]; ok {
+			if request.StatusToMatch != "" &&
+				sub.status.String() != request.StatusToMatch {
+				continue
+			}
+			subInfos = append(subInfos, sub.makeInfo())
+		}
+	}
+	return subInfos, nil
 }
 
 func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
@@ -101,18 +123,27 @@ func (herd *Herd) showImagesForSubsCSV(writer io.Writer) {
 
 func (herd *Herd) showImagesForSubsJSON(writer io.Writer) {
 	subs := herd.getSelectedSubs(selectAliveSub)
-	output := make([]imageSubType, 0, len(subs))
+	output := make([]proto.SubInfo, 0, len(subs))
 	for _, sub := range subs {
-		output = append(output, imageSubType{
-			Hostname:            sub.mdb.Hostname,
-			LastNote:            sub.lastNote,
-			LastSuccessfulImage: sub.lastSuccessfulImageName,
-			PlannedImage:        sub.mdb.PlannedImage,
-			RequiredImage:       sub.mdb.RequiredImage,
-			Status:              sub.publishedStatus.String(),
-		})
+		output = append(output, sub.makeInfo())
 	}
 	json.WriteWithIndent(writer, "   ", output)
+}
+
+func (sub *Sub) makeInfo() proto.SubInfo {
+	return proto.SubInfo{
+		Hostname:            sub.mdb.Hostname,
+		LastNote:            sub.lastNote,
+		LastScanDuration:    sub.lastScanDuration,
+		LastSuccessfulImage: sub.lastSuccessfulImageName,
+		LastSyncTime:        sub.lastSyncTime,
+		LastUpdateTime:      sub.lastUpdateTime,
+		PlannedImage:        sub.mdb.PlannedImage,
+		RequiredImage:       sub.mdb.RequiredImage,
+		StartTime:           sub.startTime,
+		Status:              sub.publishedStatus.String(),
+		SystemUptime:        sub.systemUptime,
+	}
 }
 
 func showImagesForSub(tw *html.TableWriter, sub *Sub) {

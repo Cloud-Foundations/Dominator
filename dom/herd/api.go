@@ -115,6 +115,7 @@ type Sub struct {
 	lastSyncTime                 time.Time
 	lastSuccessfulImageName      string
 	lastNote                     string
+	systemUptime                 *time.Duration
 }
 
 func (sub *Sub) String() string {
@@ -180,6 +181,11 @@ func (herd *Herd) GetDefaultImage() string {
 
 func (herd *Herd) GetSubsConfiguration() subproto.Configuration {
 	return herd.getSubsConfiguration()
+}
+
+func (herd *Herd) GetInfoForSubs(request domproto.GetInfoForSubsRequest) (
+	[]domproto.SubInfo, error) {
+	return herd.getInfoForSubs(request)
 }
 
 func (herd *Herd) ListSubs(request domproto.ListSubsRequest) ([]string, error) {
