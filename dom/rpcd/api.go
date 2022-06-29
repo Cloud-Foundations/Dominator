@@ -20,6 +20,7 @@ func Setup(herd *herd.Herd, logger log.Logger) {
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"ClearSafetyShutoff": 1,
+				"GetInfoForSubs":     1,
 				"ListSubs":           1,
 			}),
 	}
@@ -27,6 +28,7 @@ func Setup(herd *herd.Herd, logger log.Logger) {
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
 				"ClearSafetyShutoff",
+				"GetInfoForSubs",
 				"ListSubs",
 			}})
 }
