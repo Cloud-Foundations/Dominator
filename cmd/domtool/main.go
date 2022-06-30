@@ -30,6 +30,8 @@ var (
 		"Port number of dominator")
 	statusToMatch = flag.String("statusToMatch", "",
 		"Sub status to match when listing")
+	subsList = flag.String("subsList", "",
+		"Name of file containing list of subs")
 
 	dominatorSrpcClient *srpc.Client
 )
@@ -54,6 +56,7 @@ var subcommands = []commands.Command{
 	{"disable-updates", "reason", 1, 1, disableUpdatesSubcommand},
 	{"enable-updates", "reason", 1, 1, enableUpdatesSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
+	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
 	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"set-default-image", "", 1, 1, setDefaultImageSubcommand},
