@@ -9,6 +9,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 )
 
+const (
+	DisruptionStateAnytime   = 0 // Not implemented or configured.
+	DisruptionStatePermitted = 1
+	DisruptionStateRequested = 2
+	DisruptionStateDenied    = 3
+
+	ErrorDisruptionPending = "disruption pending"
+	ErrorDisruptionDenied  = "disruption denied"
+)
+
 type BoostCpuLimitRequest struct{}
 
 type BoostCpuLimitResponse struct{}
@@ -18,6 +28,8 @@ type CleanupRequest struct {
 }
 
 type CleanupResponse struct{}
+
+type DisruptionState uint
 
 type FetchRequest struct {
 	LockFor       time.Duration // Duration to lock other clients from mutating.
@@ -70,6 +82,7 @@ type PollResponse struct {
 	DurationOfLastScan           time.Duration
 	GenerationCount              uint64
 	SystemUptime                 *time.Duration
+	DisruptionState              DisruptionState
 	FileSystemFollows            bool
 	FileSystem                   *filesystem.FileSystem  // Streamed separately.
 	ObjectCache                  objectcache.ObjectCache // Streamed separately.
