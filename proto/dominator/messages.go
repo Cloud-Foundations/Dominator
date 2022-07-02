@@ -65,14 +65,15 @@ type SetDefaultImageResponse struct{}
 
 type SubInfo struct {
 	Hostname            string
-	LastNote            string        `json:",omitempty"`
-	LastScanDuration    time.Duration `json:",omitempty"`
-	LastSuccessfulImage string        `json:",omitempty"`
-	LastSyncTime        time.Time     `json:",omitempty"`
-	LastUpdateTime      time.Time     `json:",omitempty"`
-	PlannedImage        string        `json:",omitempty"`
-	RequiredImage       string        `json:",omitempty"`
-	StartTime           time.Time     `json:",omitempty"`
+	LastNote            string              `json:",omitempty"`
+	LastDisruptionState sub.DisruptionState `json:",omitempty"`
+	LastScanDuration    time.Duration       `json:",omitempty"`
+	LastSuccessfulImage string              `json:",omitempty"`
+	LastSyncTime        time.Time           `json:",omitempty"`
+	LastUpdateTime      time.Time           `json:",omitempty"`
+	PlannedImage        string              `json:",omitempty"`
+	RequiredImage       string              `json:",omitempty"`
+	StartTime           time.Time           `json:",omitempty"`
 	Status              string
 	SystemUptime        *time.Duration `json:",omitempty"`
 }
