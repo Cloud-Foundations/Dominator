@@ -59,6 +59,8 @@ const (
 	statusMissingComputedFile
 	statusUpdatesDisabled
 	statusUnsafeUpdate
+	statusDisruptionRequested
+	statusDisruptionDenied
 	statusUpdating
 	statusUpdateDenied
 	statusFailedToUpdate
@@ -104,6 +106,7 @@ type Sub struct {
 	lastReachableTime            time.Time
 	lastConnectionSucceededTime  time.Time
 	lastConnectDuration          time.Duration
+	lastDisruptionState          subproto.DisruptionState
 	lastPollStartTime            time.Time
 	lastPollSucceededTime        time.Time
 	lastShortPollDuration        time.Duration

@@ -366,6 +366,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		logger.Printf("Error calling %s.Poll(): %s\n", sub, err)
 		return
 	}
+	sub.lastDisruptionState = reply.DisruptionState
 	sub.lastPollSucceededTime = time.Now()
 	sub.lastSuccessfulImageName = reply.LastSuccessfulImageName
 	sub.lastNote = reply.LastNote
@@ -434,12 +435,17 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if previousStatus == statusUpdating {
 		// Transition from updating to update ended (may be partial/failed).
-		if reply.LastUpdateError != "" {
+		switch reply.LastUpdateError {
+		case "":
+			sub.status = statusWaitingForNextFullPoll
+		case subproto.ErrorDisruptionPending:
+			sub.status = statusDisruptionRequested
+		case subproto.ErrorDisruptionDenied:
+			sub.status = statusDisruptionDenied
+		default:
 			logger.Printf("Update failure for: %s: %s\n",
 				sub, reply.LastUpdateError)
 			sub.status = statusFailedToUpdate
-		} else {
-			sub.status = statusWaitingForNextFullPoll
 		}
 		sub.scanCountAtLastUpdateEnd = reply.ScanCount
 		sub.reclaim()
@@ -474,6 +480,19 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 			sub.generationCount = 0
 			sub.status = previousStatus
 			return
+		}
+	}
+	if previousStatus == statusDisruptionRequested ||
+		previousStatus == statusDisruptionDenied {
+		switch reply.DisruptionState {
+		case subproto.DisruptionStateAnytime:
+			sub.generationCount = 0
+		case subproto.DisruptionStatePermitted:
+			sub.generationCount = 0
+		case subproto.DisruptionStateRequested:
+			previousStatus = statusDisruptionRequested
+		case subproto.DisruptionStateDenied:
+			previousStatus = statusDisruptionDenied
 		}
 	}
 	if sub.fileSystem == nil {
@@ -689,6 +708,8 @@ func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	return false
 }
 
+// cleanup will tell the Sub to remove unused objects and that and disruptive
+// updates have completed.
 func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 	logger := sub.herd.logger
 	unusedObjects := make(map[hash.Hash]bool)
@@ -716,7 +737,8 @@ func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 			}
 		}
 	}
-	if len(unusedObjects) < 1 {
+	if len(unusedObjects) < 1 &&
+		sub.lastDisruptionState == subproto.DisruptionStateAnytime {
 		return
 	}
 	hashes := make([]hash.Hash, 0, len(unusedObjects))

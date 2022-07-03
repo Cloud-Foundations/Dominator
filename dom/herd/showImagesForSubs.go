@@ -133,6 +133,7 @@ func (herd *Herd) showImagesForSubsJSON(writer io.Writer) {
 func (sub *Sub) makeInfo() proto.SubInfo {
 	return proto.SubInfo{
 		Hostname:            sub.mdb.Hostname,
+		LastDisruptionState: sub.lastDisruptionState,
 		LastNote:            sub.lastNote,
 		LastScanDuration:    sub.lastScanDuration,
 		LastSuccessfulImage: sub.lastSuccessfulImageName,
