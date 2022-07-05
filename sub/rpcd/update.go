@@ -110,12 +110,20 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 	var hadTriggerFailures bool
 	var fsChangeDuration time.Duration
 	var lastUpdateError error
+	options := lib.UpdateOptions{
+		Logger:            t.params.Logger,
+		ObjectsDir:        t.config.ObjectsDirectoryName,
+		OldTriggers:       oldTriggers.ExportTriggers(),
+		RootDirectoryName: rootDirectoryName,
+		RunTriggers:       t.runTriggers,
+		SkipFilter:        t.params.ScannerConfiguration.ScanFilter,
+	}
+	if t.config.DisruptionManager != "" {
+		options.DisruptionRequest = t.disruptionRequest
+	}
 	t.params.WorkdirGoroutine.Run(func() {
-		hadTriggerFailures, fsChangeDuration, lastUpdateError = lib.Update(
-			request, rootDirectoryName, t.config.ObjectsDirectoryName,
-			oldTriggers.ExportTriggers(),
-			t.params.ScannerConfiguration.ScanFilter, t.runTriggers,
-			t.params.Logger)
+		hadTriggerFailures, fsChangeDuration, lastUpdateError =
+			lib.UpdateWithOptions(request, options)
 	})
 	t.lastUpdateHadTriggerFailures = hadTriggerFailures
 	t.lastUpdateError = lastUpdateError

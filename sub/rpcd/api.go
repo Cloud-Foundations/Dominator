@@ -1,13 +1,10 @@
 package rpcd
 
 import (
-	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
@@ -20,7 +17,14 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+const (
+	disruptionManagerCancel  = "cancel"
+	disruptionManagerCheck   = "check"
+	disruptionManagerRequest = "request"
+)
+
 type Config struct {
+	DisruptionManager        string
 	NetworkBenchmarkFilename string
 	NoteGeneratorCommand     string
 	ObjectsDirectoryName     string
@@ -44,8 +48,10 @@ type rpcType struct {
 	params          Params
 	systemGoroutine *goroutine.Goroutine
 	*serverutil.PerUserMethodLimiter
+	disruptionManagerCommand     chan<- string
 	ownerUsers                   map[string]struct{}
 	rwLock                       sync.RWMutex // Protect everything below.
+	disruptionState              proto.DisruptionState
 	getFilesLock                 sync.Mutex
 	fetchInProgress              bool // Fetch() & Update() mutually exclusive.
 	updateInProgress             bool
@@ -83,6 +89,7 @@ func Setup(config Config, params Params) *HtmlWriter {
 				"Poll": 1,
 			}),
 	}
+	rpcObj.startDisruptionManager()
 	rpcObj.ownerUsers = stringutil.ConvertListToMap(
 		config.SubConfiguration.OwnerUsers, false)
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
@@ -113,18 +120,4 @@ func Setup(config Config, params Params) *HtmlWriter {
 
 func (hw *HtmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
-}
-
-func readPatchedImageFile() string {
-	if file, err := os.Open(constants.PatchedImageNameFile); err != nil {
-		return ""
-	} else {
-		defer file.Close()
-		var imageName string
-		num, err := fmt.Fscanf(file, "%s", &imageName)
-		if err == nil && num == 1 {
-			return imageName
-		}
-		return ""
-	}
 }

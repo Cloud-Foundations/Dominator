@@ -50,6 +50,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 		t.getClientLock(conn, request.LockFor) != nil
 	response.LockedUntil = t.lockedUntil
 	response.FreeSpace = t.getFreeSpace()
+	response.DisruptionState = t.disruptionState
 	t.rwLock.RUnlock()
 	response.StartTime = startTime
 	response.PollTime = time.Now()
