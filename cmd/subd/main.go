@@ -46,6 +46,8 @@ var (
 		"Network speed as percentage of capacity (default 10)")
 	defaultScanSpeedPercent = flag.Uint("defaultScanSpeedPercent", 0,
 		"Scan speed as percentage of capacity (default 2)")
+	disruptionManager = flag.String("disruptionManager", "",
+		"Path to DisruptionManager tool")
 	maxThreads = flag.Uint("maxThreads", 1,
 		"Maximum number of parallel OS threads to use")
 	noteGenerator = flag.String("noteGenerator", "",
@@ -364,6 +366,7 @@ func main() {
 		}
 		rpcdHtmlWriter := rpcd.Setup(
 			rpcd.Config{
+				DisruptionManager:        *disruptionManager,
 				NetworkBenchmarkFilename: netbenchFilename,
 				NoteGeneratorCommand:     *noteGenerator,
 				ObjectsDirectoryName:     objectsDir,
@@ -435,8 +438,19 @@ func main() {
 					})
 					invalidateNextScanObjectCache = false
 				}
+				oldGenerationCount := fsh.GenerationCount()
+				oldScanCount := fsh.ScanCount()
 				fsh.Update(fs)
 				iter++
+				generationCount := fsh.GenerationCount()
+				scanCount := fsh.ScanCount()
+				if generationCount != oldGenerationCount {
+					logger.Printf("Generation count: %d, scan count: %d\n",
+						generationCount, scanCount)
+				} else if scanCount != oldScanCount {
+					logger.Debugf(0, "Generation count: %d, scan count: %d\n",
+						generationCount, scanCount)
+				}
 				runtime.GC() // An opportune time to take out the garbage.
 				if *showStats {
 					fmt.Print(&fsh) // Use pointer to silence go vet.
