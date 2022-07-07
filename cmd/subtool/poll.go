@@ -87,6 +87,9 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 			fmt.Printf("System uptime: %s\n",
 				format.Duration(*reply.SystemUptime))
 		}
+		if reply.DisruptionState != sub.DisruptionStateAnytime {
+			fmt.Printf("Disruption state: %s\n", reply.DisruptionState)
+		}
 	}
 	time.Sleep(time.Duration(*wait) * time.Second)
 	return nil
