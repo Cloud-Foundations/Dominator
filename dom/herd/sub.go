@@ -425,6 +425,12 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.reclaim()
 		return
 	}
+	if previousStatus == statusLocked { // Not locked anymore, but was locked.
+		if sub.fileSystem == nil {
+			sub.generationCount = 0 // Force a full poll next cycle.
+			return
+		}
+	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
 		logger.Printf("Fetch failure for: %s: %s\n", sub, reply.LastFetchError)
 		sub.status = statusFailedToFetch
