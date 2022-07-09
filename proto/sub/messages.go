@@ -93,8 +93,9 @@ type SetConfigurationRequest Configuration
 type SetConfigurationResponse struct{}
 
 type UpdateRequest struct {
-	ImageName string
-	Wait      bool
+	ForceDisruption bool
+	ImageName       string
+	Wait            bool
 	// The ordering here reflects the ordering that the sub is expected to use.
 	FilesToCopyToCache  []FileToCopyToCache
 	DirectoriesToMake   []Inode
