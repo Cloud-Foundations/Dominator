@@ -43,8 +43,10 @@ func (t *uType) update(request sub.UpdateRequest) error {
 		t.doDeletes(request.PathsToDelete, t.OldTriggers, false)
 		t.changeInodes(request.InodesToChange, t.OldTriggers, false)
 		matchedOldTriggers := t.OldTriggers.GetMatchedTriggers()
-		if err := t.checkDisruption(matchedOldTriggers); err != nil {
-			return err
+		if !request.ForceDisruption {
+			if err := t.checkDisruption(matchedOldTriggers); err != nil {
+				return err
+			}
 		}
 		if t.RunTriggers(matchedOldTriggers, "stop", t.Logger) {
 			t.hadTriggerFailures = true
