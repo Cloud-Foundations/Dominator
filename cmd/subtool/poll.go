@@ -90,6 +90,13 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 		if reply.DisruptionState != sub.DisruptionStateAnytime {
 			fmt.Printf("Disruption state: %s\n", reply.DisruptionState)
 		}
+		if reply.LockedByAnotherClient {
+			fmt.Printf("Locked by another client\n")
+		}
+		if lockedFor := time.Until(reply.LockedUntil); lockedFor > 0 {
+			fmt.Printf("Locked for: %s\n", format.Duration(lockedFor))
+		}
+
 	}
 	time.Sleep(time.Duration(*wait) * time.Second)
 	return nil
