@@ -107,7 +107,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	if err := srpcClient.SetKeepAlivePeriod(time.Second); err != nil {
 		return fmt.Errorf("error setting keep-alive period: %s", err)
 	}
-	var updateRequest sub.UpdateRequest
+	updateRequest := sub.UpdateRequest{
+		ForceDisruption: *forceDisruption,
+	}
 	var updateReply sub.UpdateResponse
 	startTime = showStart("lib.BuildUpdateRequest()")
 	if lib.BuildUpdateRequest(subObj, img, &updateRequest,
