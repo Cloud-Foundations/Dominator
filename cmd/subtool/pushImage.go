@@ -136,7 +136,7 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 		logger.Println("Subd.Update() complete")
 	}
 	showTimeTaken(startTime)
-	return nil
+	return client.Cleanup(srpcClient, nil)
 }
 
 func getImageChannel(clientName, imageName string,
