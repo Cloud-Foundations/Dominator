@@ -12,19 +12,19 @@ import (
 func cleanupSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
-	if err := cleanup(srpcClient); err != nil {
+	if err := cleanup(srpcClient, false); err != nil {
 		return fmt.Errorf("error cleaning up: %s", err)
 	}
 	return nil
 }
 
-func cleanup(srpcClient *srpc.Client) error {
+func cleanup(srpcClient *srpc.Client, alwaysCleanup bool) error {
 	var request sub.PollRequest
 	var reply sub.PollResponse
 	if err := client.CallPoll(srpcClient, request, &reply); err != nil {
 		return err
 	}
-	if len(reply.ObjectCache) < 1 {
+	if len(reply.ObjectCache) < 1 && !alwaysCleanup {
 		return nil
 	}
 	logger.Printf("Deleting: %d objects\n", len(reply.ObjectCache))
