@@ -680,6 +680,9 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 			return false, statusUnsafeUpdate
 		}
 	}
+	if _, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
+		request.ForceDisruption = true
+	}
 	sub.status = statusSendingUpdate
 	sub.lastUpdateTime = time.Now()
 	logger.Printf("Calling %s:Subd.Update() for image: %s\n",
