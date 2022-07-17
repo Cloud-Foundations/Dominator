@@ -60,8 +60,9 @@ func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 		herd.showImagesForSubsJSON(writer)
 	case url.OutputTypeText:
 		fmt.Fprintln(writer, "Text output not supported")
+	default:
+		fmt.Fprintln(writer, "Unknown output type")
 	}
-	fmt.Fprintln(writer, "Unknown output type")
 }
 
 func (herd *Herd) showImagesForSubsHandler(w io.Writer, req *http.Request) {
