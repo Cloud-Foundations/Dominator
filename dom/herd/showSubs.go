@@ -205,6 +205,10 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 	showDuration(tw, sub.lastComputeUpdateCpuDuration, false)
 	newRow(w, "Last disruption state", false)
 	tw.WriteData("", sub.lastDisruptionState.String())
+	if sub.systemUptime != nil {
+		newRow(w, "System uptime", false)
+		showDuration(tw, *sub.systemUptime, false)
+	}
 	fmt.Fprint(w, "  </tr>\n")
 	fmt.Fprint(w, "</table>\n")
 	fmt.Fprintln(w, "MDB Data:")
