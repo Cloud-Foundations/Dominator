@@ -1,6 +1,7 @@
 package herd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,9 +13,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
+
+type subInfoType struct {
+	Info proto.SubInfo
+	MDB  mdb.Machine
+}
 
 func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
 	herd.showSubs(w, "alive ", selectAliveSub)
@@ -142,8 +150,25 @@ func (herd *Herd) showImage(tw *html.TableWriter, name string,
 	}
 }
 
-func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
-	subName := req.URL.RawQuery
+func (herd *Herd) showSubHandler(writer http.ResponseWriter,
+	req *http.Request) {
+	w := bufio.NewWriter(writer)
+	defer w.Flush()
+	subName := strings.Split(req.URL.RawQuery, "&")[0]
+	parsedQuery := url.ParseQuery(req.URL)
+	sub := herd.getSub(subName)
+	if sub == nil {
+		http.NotFound(writer, req)
+		return
+	}
+	if parsedQuery.OutputType() == url.OutputTypeJson {
+		subInfo := subInfoType{
+			Info: sub.makeInfo(),
+			MDB:  sub.mdb,
+		}
+		json.WriteWithIndent(w, "    ", subInfo)
+		return
+	}
 	fmt.Fprintf(w, "<title>sub %s</title>", subName)
 	if srpc.CheckTlsRequired() {
 		fmt.Fprintln(w, "<body>")
@@ -158,16 +183,12 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 		fmt.Fprintln(w, "</center>")
 	}
 	fmt.Fprintln(w, "<h3>")
-	sub := herd.getSub(subName)
-	if sub == nil {
-		fmt.Fprintf(w, "Sub: %s UNKNOWN!\n", subName)
-		return
-	}
 	timeNow := time.Now()
 	subURL := fmt.Sprintf("http://%s:%d/",
 		strings.SplitN(sub.String(), "*", 2)[0], constants.SubPortNumber)
-	fmt.Fprintf(w, "Information for sub: <a href=\"%s\">%s</a><br>\n",
-		subURL, subName)
+	fmt.Fprintf(w,
+		"Information for sub: <a href=\"%s\">%s</a> (<a href=\"%s?%s&output=json\">JSON</a>)<br>\n",
+		subURL, subName, req.URL.Path, subName)
 	fmt.Fprintln(w, "</h3>")
 	fmt.Fprint(w, "<table border=\"0\">\n")
 	tw, _ := html.NewTableWriter(w, false)

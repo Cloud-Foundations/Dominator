@@ -31,7 +31,7 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
 	html.HandleFunc("/showReachableSubs",
 		html.BenchmarkedHandler(herd.showReachableSubsHandler))
-	html.HandleFunc("/showSub", html.BenchmarkedHandler(herd.showSubHandler))
+	html.HandleFunc("/showSub", herd.showSubHandler)
 	if daemon {
 		go http.Serve(listener, nil)
 	} else {
