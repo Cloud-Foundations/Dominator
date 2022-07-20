@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	net_url "net/url"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
@@ -29,15 +29,12 @@ func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
 }
 
 func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
-	var statusToMatch string
-	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
-		statusToMatch = uesc
-	}
+	statusesToMatch := stringutil.ConvertListToMap(req.URL.Query()["status"],
+		false)
 	var selectFunc func(*Sub) bool
-	if statusToMatch != "" {
+	if len(statusesToMatch) > 0 {
 		selectFunc = func(sub *Sub) bool {
-			if sub.status.String() == statusToMatch {
+			if _, ok := statusesToMatch[sub.status.String()]; ok {
 				return true
 			}
 			return false
