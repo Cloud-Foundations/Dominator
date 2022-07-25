@@ -25,7 +25,23 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		herd.writeDisableStatus(writer)
 		fmt.Fprintln(writer, "<br>")
 	}
-	numSubs := herd.countSelectedSubs(nil)
+	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
+	var numLikelyCompliantSubs uint64
+	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
+	var reachableDaySubs, reachableWeekSubs, reachableMonthSubs uint64
+	subCounters := []subCounter{
+		{&numAliveSubs, selectAliveSub},
+		{&numCompliantSubs, selectCompliantSub},
+		{&numDeviantSubs, selectDeviantSub},
+		{&numLikelyCompliantSubs, selectLikelyCompliantSub},
+		{&reachableMinuteSubs, rDuration(time.Minute).selector},
+		{&reachable10MinuteSubs, rDuration(10 * time.Minute).selector},
+		{&reachableHourSubs, rDuration(time.Hour).selector},
+		{&reachableDaySubs, rDuration(24 * time.Hour).selector},
+		{&reachableWeekSubs, rDuration(7 * 24 * time.Hour).selector},
+		{&reachableMonthSubs, rDuration(730 * time.Hour).selector},
+	}
+	numSubs := herd.countSelectedSubs(subCounters)
 	fmt.Fprintf(writer, "Time since current cycle start: %s<br>\n",
 		time.Since(herd.currentScanStartTime))
 	if numSubs < 1 {
@@ -46,28 +62,29 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		"Number of <a href=\"listSubs\">subs</a>: <a href=\"showAllSubs\">%d</a><br>\n",
 		numSubs)
-	numSubs = herd.countSelectedSubs(selectAliveSub)
 	fmt.Fprintf(writer,
 		"Number of alive subs: <a href=\"showAliveSubs\">%d</a><br>\n",
-		numSubs)
+		numAliveSubs)
 	fmt.Fprint(writer, "Number of reachable subs in last: ")
-	herd.writeReachableSubsLink(writer, time.Minute, "1 min", "1m", true)
-	herd.writeReachableSubsLink(writer, time.Minute*10, "10 min", "10m", true)
-	herd.writeReachableSubsLink(writer, time.Hour, "1 hour", "1h", true)
-	herd.writeReachableSubsLink(writer, time.Hour*24, "1 day", "1d", true)
-	herd.writeReachableSubsLink(writer, time.Hour*24*7, "1 week", "1w", false)
-	numSubs = herd.countSelectedSubs(selectDeviantSub)
+	herd.writeReachableSubsLink(writer, reachableMinuteSubs, "1 min", "1m",
+		true)
+	herd.writeReachableSubsLink(writer, reachable10MinuteSubs, "10 min", "10m",
+		true)
+	herd.writeReachableSubsLink(writer, reachableHourSubs, "1 hour", "1h", true)
+	herd.writeReachableSubsLink(writer, reachableDaySubs, "1 day", "1d", true)
+	herd.writeReachableSubsLink(writer, reachableWeekSubs, "1 week", "1w",
+		true)
+	herd.writeReachableSubsLink(writer, reachableMonthSubs, "1 month", "1M",
+		false)
 	fmt.Fprintf(writer,
 		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a><br>\n",
-		numSubs)
-	numSubs = herd.countSelectedSubs(selectCompliantSub)
+		numDeviantSubs)
 	fmt.Fprintf(writer,
 		"Number of compliant subs: <a href=\"showCompliantSubs\">%d</a>(verified)",
-		numSubs)
-	numSubs = herd.countSelectedSubs(selectLikelyCompliantSub)
+		numCompliantSubs)
 	fmt.Fprintf(writer,
 		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
-		numSubs)
+		numLikelyCompliantSubs)
 	fmt.Fprintf(writer,
 		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a>")
 	fmt.Fprintf(writer,
@@ -114,9 +131,7 @@ func (herd *Herd) writeDisableStatus(writer io.Writer) {
 }
 
 func (herd *Herd) writeReachableSubsLink(writer io.Writer,
-	duration time.Duration, durationString string, query string,
-	moreToCome bool) {
-	numSubs := herd.countSelectedSubs(rDuration(duration).selector)
+	numSubs uint64, durationString string, query string, moreToCome bool) {
 	fmt.Fprintf(writer, "<a href=\"showReachableSubs?last=%s\">%s</a>",
 		query, durationString)
 	fmt.Fprintf(writer, "(<a href=\"listReachableSubs?last=%s\">%d</a>)",

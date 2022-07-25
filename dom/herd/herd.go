@@ -132,19 +132,20 @@ func (herd *Herd) pollNextSub() bool {
 	return false
 }
 
-func (herd *Herd) countSelectedSubs(selectFunc func(*Sub) bool) uint64 {
+func (herd *Herd) countSelectedSubs(subCounters []subCounter) uint64 {
 	herd.RLock()
 	defer herd.RUnlock()
-	if selectFunc == nil {
+	if len(subCounters) < 1 {
 		return uint64(len(herd.subsByIndex))
 	}
-	count := 0
 	for _, sub := range herd.subsByIndex {
-		if selectFunc(sub) {
-			count++
+		for _, subCounter := range subCounters {
+			if subCounter.selectFunc(sub) {
+				*subCounter.counter++
+			}
 		}
 	}
-	return uint64(count)
+	return uint64(len(herd.subsByIndex))
 }
 
 func (herd *Herd) getSelectedSubs(selectFunc func(*Sub) bool) []*Sub {

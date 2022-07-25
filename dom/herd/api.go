@@ -152,6 +152,11 @@ type Herd struct {
 	subdInstallerQueueErase  chan<- string
 }
 
+type subCounter struct {
+	counter    *uint64
+	selectFunc func(*Sub) bool
+}
+
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
 	metricsDir *tricorder.DirectorySpec, logger log.DebugLogger) *Herd {
 	return newHerd(imageServerAddress, objectServer, metricsDir, logger)
