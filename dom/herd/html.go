@@ -26,7 +26,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		fmt.Fprintln(writer, "<br>")
 	}
 	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
-	var numLikelyCompliantSubs uint64
+	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
 	var reachableDaySubs, reachableWeekSubs, reachableMonthSubs uint64
 	subCounters := []subCounter{
@@ -34,6 +34,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		{&numCompliantSubs, selectCompliantSub},
 		{&numDeviantSubs, selectDeviantSub},
 		{&numLikelyCompliantSubs, selectLikelyCompliantSub},
+		{&numDisruptionWaitingSubs, selectDisruptionWaitingSub},
 		{&reachableMinuteSubs, rDuration(time.Minute).selector},
 		{&reachable10MinuteSubs, rDuration(10 * time.Minute).selector},
 		{&reachableHourSubs, rDuration(time.Hour).selector},
@@ -85,6 +86,11 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
 		numLikelyCompliantSubs)
+	if numDisruptionWaitingSubs > 0 {
+		fmt.Fprintf(writer,
+			"Number of subs waiting to disrupt: <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied\">%d</a><br>\n",
+			numDisruptionWaitingSubs)
+	}
 	fmt.Fprintf(writer,
 		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a>")
 	fmt.Fprintf(writer,
@@ -197,6 +203,16 @@ func selectDeviantSub(sub *Sub) bool {
 
 func selectCompliantSub(sub *Sub) bool {
 	if sub.publishedStatus == statusSynced {
+		return true
+	}
+	return false
+}
+
+func selectDisruptionWaitingSub(sub *Sub) bool {
+	switch sub.publishedStatus {
+	case statusDisruptionRequested:
+		return true
+	case statusDisruptionDenied:
 		return true
 	}
 	return false
