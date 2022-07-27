@@ -28,6 +28,12 @@ type EnableUpdatesRequest struct {
 
 type EnableUpdatesResponse struct{}
 
+type ForceDisruptiveUpdateRequest struct {
+	Hostname string
+}
+
+type ForceDisruptiveUpdateResponse struct{}
+
 type GetDefaultImageRequest struct{}
 
 type GetDefaultImageResponse struct {
