@@ -98,6 +98,17 @@ func (herd *Herd) enableUpdates() error {
 	return nil
 }
 
+func (herd *Herd) forceDisruptiveUpdate(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	herd.Lock()
+	sub, ok := herd.subsByName[hostname]
+	herd.Unlock()
+	if !ok {
+		return errors.New("unknown sub: " + hostname)
+	}
+	return sub.forceDisruptiveUpdate(authInfo)
+}
+
 func (herd *Herd) getSubsConfiguration() subproto.Configuration {
 	herd.RLockWithTimeout(time.Minute)
 	defer herd.RUnlock()

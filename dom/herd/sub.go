@@ -336,6 +336,13 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	if previousStatus == statusUnsafeUpdate && sub.pendingSafetyClear {
 		sub.generationCount = 0 // Force a full poll.
 	}
+	// If the last update failed because disruption was not permitted and there
+	// is a pending ForceDisruption, force a full poll to re-compute the update.
+	if (previousStatus == statusDisruptionRequested ||
+		previousStatus == statusDisruptionDenied) &&
+		sub.pendingForceDisruptiveUpdate {
+		sub.generationCount = 0 // Force a full poll.
+	}
 	var request subproto.PollRequest
 	request.HaveGeneration = sub.generationCount
 	var reply subproto.PollResponse
@@ -683,6 +690,9 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 	if _, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
 		request.ForceDisruption = true
 	}
+	if sub.pendingForceDisruptiveUpdate {
+		request.ForceDisruption = true
+	}
 	sub.status = statusSendingUpdate
 	sub.lastUpdateTime = time.Now()
 	logger.Printf("Calling %s:Subd.Update() for image: %s\n",
@@ -696,6 +706,7 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 		return false, statusFailedToUpdate
 	}
 	sub.pendingSafetyClear = false
+	sub.pendingForceDisruptiveUpdate = false
 	return false, statusUpdating
 }
 
@@ -800,6 +811,20 @@ func (sub *Sub) checkCancel() bool {
 	default:
 		return false
 	}
+}
+
+func (sub *Sub) forceDisruptiveUpdate(authInfo *srpc.AuthInformation) error {
+	switch sub.status {
+	case statusDisruptionRequested:
+	case statusDisruptionDenied:
+	default:
+		return errors.New("not waiting for disruptive update permission")
+	}
+	if !sub.checkAdminAccess(authInfo) {
+		return errors.New("no access to sub")
+	}
+	sub.pendingForceDisruptiveUpdate = true
+	return nil
 }
 
 func (sub *Sub) sendCancel() {

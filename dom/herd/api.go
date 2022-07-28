@@ -101,6 +101,7 @@ type Sub struct {
 	isInsecure                   bool
 	status                       subStatus
 	publishedStatus              subStatus
+	pendingForceDisruptiveUpdate bool
 	pendingSafetyClear           bool
 	lastConnectionStartTime      time.Time
 	lastReachableTime            time.Time
@@ -181,6 +182,11 @@ func (herd *Herd) DisableUpdates(username, reason string) error {
 
 func (herd *Herd) EnableUpdates() error {
 	return herd.enableUpdates()
+}
+
+func (herd *Herd) ForceDisruptiveUpdate(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	return herd.forceDisruptiveUpdate(hostname, authInfo)
 }
 
 func (herd *Herd) GetDefaultImage() string {
