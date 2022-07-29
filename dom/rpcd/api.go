@@ -19,15 +19,17 @@ func Setup(herd *herd.Herd, logger log.Logger) {
 		logger: logger,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
-				"ClearSafetyShutoff": 1,
-				"GetInfoForSubs":     1,
-				"ListSubs":           1,
+				"ClearSafetyShutoff":    1,
+				"ForceDisruptiveUpdate": 1,
+				"GetInfoForSubs":        1,
+				"ListSubs":              1,
 			}),
 	}
 	srpc.RegisterNameWithOptions("Dominator", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
 				"ClearSafetyShutoff",
+				"ForceDisruptiveUpdate",
 				"GetInfoForSubs",
 				"ListSubs",
 			}})
