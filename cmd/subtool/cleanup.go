@@ -12,14 +12,17 @@ import (
 func cleanupSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
-	if err := cleanup(srpcClient, false); err != nil {
+	if err := cleanup(srpcClient, 0, false); err != nil {
 		return fmt.Errorf("error cleaning up: %s", err)
 	}
 	return nil
 }
 
-func cleanup(srpcClient *srpc.Client, alwaysCleanup bool) error {
-	var request sub.PollRequest
+func cleanup(srpcClient *srpc.Client, haveGeneration uint64,
+	alwaysCleanup bool) error {
+	request := sub.PollRequest{
+		HaveGeneration: haveGeneration,
+	}
 	var reply sub.PollResponse
 	if err := client.CallPoll(srpcClient, request, &reply); err != nil {
 		return err

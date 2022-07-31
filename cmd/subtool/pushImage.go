@@ -136,7 +136,12 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 		logger.Println("Subd.Update() complete")
 	}
 	showTimeTaken(startTime)
-	return cleanup(srpcClient, true)
+	pollRequest := sub.PollRequest{ShortPollOnly: true}
+	var pollReply sub.PollResponse
+	if err := client.CallPoll(srpcClient, pollRequest, &pollReply); err != nil {
+		return err
+	}
+	return cleanup(srpcClient, pollReply.GenerationCount, true)
 }
 
 func getImageChannel(clientName, imageName string,
