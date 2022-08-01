@@ -31,10 +31,7 @@ func (t *rpcType) disruptionCancel() {
 	if t.config.DisruptionManager == "" {
 		return
 	}
-	switch t.disruptionState {
-	case proto.DisruptionStatePermitted, proto.DisruptionStateRequested:
-		t.disruptionManagerCommand <- disruptionManagerCancel
-	}
+	t.disruptionManagerCommand <- disruptionManagerCancel
 }
 
 // This will grab the lock.
@@ -95,7 +92,7 @@ func (t *rpcType) disruptionManagerLoop() {
 	clearTimer(reRequestTimer)
 	var runningCommand string
 	runResultChannel := make(chan runResultType, 1)
-	var wantToDisrupt bool
+	var haveCancelled, wantToDisrupt bool
 	for {
 		var command string
 		select {
@@ -104,12 +101,16 @@ func (t *rpcType) disruptionManagerLoop() {
 			case disruptionManagerCancel:
 				clearTimer(reRequestTimer)
 				wantToDisrupt = false
+				if haveCancelled {
+					command = ""
+				}
 			case disruptionManagerRequest:
 				if disruptionState == proto.DisruptionStateDenied {
 					resetTimer(reRequestTimer, time.Minute)
 				} else {
 					resetTimer(reRequestTimer, 15*time.Minute)
 				}
+				haveCancelled = false
 				wantToDisrupt = true
 			}
 		case <-checkTimer.C:
@@ -159,6 +160,9 @@ func (t *rpcType) disruptionManagerLoop() {
 						runningCommand, runResult.state)
 				}
 				disruptionState = runResult.state
+				if runningCommand == disruptionManagerCancel {
+					haveCancelled = true
+				}
 			}
 			runningCommand = ""
 		}
