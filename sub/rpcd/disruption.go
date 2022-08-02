@@ -3,6 +3,7 @@ package rpcd
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	proto "github.com/Cloud-Foundations/Dominator/proto/sub"
@@ -55,13 +56,19 @@ func (t *rpcType) runDisruptionManager(command string) (
 		t.params.Logger.Printf("Running: %s %s\n",
 			t.config.DisruptionManager, command)
 	}
-	err := exec.Command(t.config.DisruptionManager, command).Run()
+	_output, err := exec.Command(t.config.DisruptionManager,
+		command).CombinedOutput()
 	if err == nil {
 		return proto.DisruptionStatePermitted, nil
 	}
+	output := strings.TrimSpace(string(_output))
 	e, ok := err.(*exec.ExitError)
 	if !ok {
-		return 0, err
+		if len(output) > 0 {
+			return 0, fmt.Errorf("%s: %s", err, output)
+		} else {
+			return 0, fmt.Errorf("%s", err)
+		}
 	}
 	switch e.ExitCode() {
 	case 0:
@@ -71,7 +78,12 @@ func (t *rpcType) runDisruptionManager(command string) (
 	case 2:
 		return proto.DisruptionStateDenied, nil
 	default:
-		return 0, fmt.Errorf("invalid exit code: %d", e.ExitCode())
+		if len(output) > 0 {
+			return 0,
+				fmt.Errorf("invalid exit code: %d: %s", e.ExitCode(), output)
+		} else {
+			return 0, fmt.Errorf("invalid exit code: %d", e.ExitCode())
+		}
 	}
 }
 
