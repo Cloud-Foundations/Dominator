@@ -100,6 +100,7 @@ func (t *rpcType) disruptionManagerLoop() {
 	checkInterval := time.Minute
 	checkTimer := time.NewTimer(0)
 	var disruptionState proto.DisruptionState
+	reCancelTimer := time.NewTimer(time.Hour)
 	reRequestTimer := time.NewTimer(time.Hour)
 	clearTimer(reRequestTimer)
 	var runningCommand string
@@ -109,6 +110,7 @@ func (t *rpcType) disruptionManagerLoop() {
 		var command string
 		select {
 		case command = <-commandChannel:
+			clearTimer(reCancelTimer)
 			switch command {
 			case disruptionManagerCancel:
 				clearTimer(reRequestTimer)
@@ -137,6 +139,13 @@ func (t *rpcType) disruptionManagerLoop() {
 				}
 			}
 			command = disruptionManagerCheck
+		case <-reCancelTimer.C:
+			if !wantToDisrupt {
+				command = disruptionManagerCancel
+				if runningCommand != "" {
+					resetTimer(reCancelTimer, time.Minute)
+				}
+			}
 		case <-reRequestTimer.C:
 			if wantToDisrupt {
 				command = disruptionManagerRequest
@@ -152,6 +161,9 @@ func (t *rpcType) disruptionManagerLoop() {
 			}
 		case runResult := <-runResultChannel:
 			if runResult.err != nil {
+				if runningCommand == disruptionManagerCancel {
+					resetTimer(reCancelTimer, time.Minute)
+				}
 				t.params.Logger.Printf("Error running DisruptionManager: %s\n",
 					runResult.err)
 			} else {
