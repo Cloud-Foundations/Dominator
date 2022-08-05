@@ -94,7 +94,7 @@ func (rc *CachedReadCloser) saveCache() error {
 
 func watchUrlWithCache(rawurl string, checkInterval time.Duration,
 	cacheFilename string, initialTimeout time.Duration,
-	logger log.Logger) (<-chan *CachedReadCloser, error) {
+	logger log.DebugLogger) (<-chan *CachedReadCloser, error) {
 	readCloserChannel, err := watchUrl(rawurl, checkInterval, logger)
 	if err != nil {
 		return nil, err
