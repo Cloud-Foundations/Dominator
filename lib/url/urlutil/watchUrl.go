@@ -16,34 +16,89 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-func watchUrl(rawurl string, checkInterval time.Duration,
-	logger log.DebugLogger) (<-chan io.ReadCloser, error) {
-	if strings.HasPrefix(rawurl, "git@") {
-		pos := strings.Index(rawurl, ".git/")
+const (
+	driverFile = iota
+	driverGit
+	driverHttp
+)
+
+type driverDataType struct {
+	driverType uint
+	gitUrl     string
+	pathname   string
+	rawUrl     string
+}
+
+func parseUrl(rawUrl string) (*driverDataType, error) {
+	if strings.HasPrefix(rawUrl, "git@") {
+		pos := strings.Index(rawUrl, ".git/")
 		if pos < 5 {
 			return nil, errors.New("missing .git/ in Git URL")
 		}
-		if pos+5 >= len(rawurl) {
+		if pos+5 >= len(rawUrl) {
 			return nil, errors.New("missing path in repository")
 		}
-		ch := make(chan io.ReadCloser, 1)
-		go watchGitLoop(rawurl[:pos+4], rawurl[pos+5:], checkInterval, ch,
-			logger)
-		return ch, nil
+		return &driverDataType{
+			driverType: driverGit,
+			gitUrl:     rawUrl[:pos+4],
+			pathname:   rawUrl[pos+5:],
+		}, nil
 	}
-	u, err := url.Parse(rawurl)
+	if rawUrl[0] == '/' {
+		return &driverDataType{
+			driverType: driverFile,
+			pathname:   rawUrl,
+		}, nil
+	}
+	u, err := url.Parse(rawUrl)
 	if err != nil {
 		return nil, err
 	}
 	if u.Scheme == "file" {
-		return fsutil.WatchFile(u.Path, logger), nil
+		return &driverDataType{
+			driverType: driverFile,
+			pathname:   u.Path,
+		}, nil
 	}
 	if u.Scheme == "http" || u.Scheme == "https" {
-		ch := make(chan io.ReadCloser, 1)
-		go watchUrlLoop(rawurl, checkInterval, ch, logger)
-		return ch, nil
+		if strings.HasSuffix(u.Path, ".git") {
+			if len(u.RawQuery) < 1 {
+				return nil, errors.New("missing path in repository")
+			}
+			return &driverDataType{
+				driverType: driverGit,
+				gitUrl:     u.Scheme + "://" + u.Host + u.Path,
+				pathname:   u.RawQuery,
+			}, nil
+		}
+		return &driverDataType{
+			driverType: driverHttp,
+			rawUrl:     rawUrl,
+		}, nil
 	}
 	return nil, errors.New("unknown scheme: " + u.Scheme)
+}
+
+func watchUrl(rawUrl string, checkInterval time.Duration,
+	logger log.DebugLogger) (<-chan io.ReadCloser, error) {
+	driverData, err := parseUrl(rawUrl)
+	if err != nil {
+		return nil, err
+	}
+	switch driverData.driverType {
+	case driverFile:
+		return fsutil.WatchFile(driverData.pathname, logger), nil
+	case driverGit:
+		ch := make(chan io.ReadCloser, 1)
+		go watchGitLoop(driverData.gitUrl, driverData.pathname, checkInterval,
+			ch, logger)
+		return ch, nil
+	case driverHttp:
+		ch := make(chan io.ReadCloser, 1)
+		go watchUrlLoop(driverData.rawUrl, checkInterval, ch, logger)
+		return ch, nil
+	}
+	return nil, errors.New("unknown driver")
 }
 
 func watchGitLoop(gitUrl, pathInRepo string, checkInterval time.Duration,
@@ -81,18 +136,18 @@ func watchGitOnce(gitUrl, pathInRepo string, ch chan<- io.ReadCloser,
 	}
 }
 
-func watchUrlLoop(rawurl string, checkInterval time.Duration,
+func watchUrlLoop(rawUrl string, checkInterval time.Duration,
 	ch chan<- io.ReadCloser, logger log.Logger) {
 	for ; ; time.Sleep(checkInterval) {
-		watchUrlOnce(rawurl, ch, logger)
+		watchUrlOnce(rawUrl, ch, logger)
 		if checkInterval <= 0 {
 			return
 		}
 	}
 }
 
-func watchUrlOnce(rawurl string, ch chan<- io.ReadCloser, logger log.Logger) {
-	resp, err := http.Get(rawurl)
+func watchUrlOnce(rawUrl string, ch chan<- io.ReadCloser, logger log.Logger) {
+	resp, err := http.Get(rawUrl)
 	if err != nil {
 		logger.Println(err)
 		return
