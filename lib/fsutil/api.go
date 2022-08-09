@@ -102,6 +102,11 @@ func ForceRename(oldpath, newpath string) error {
 // sacrificing some file-system consistency.
 func FsyncFile(file *os.File) error { return fsyncFile(file) }
 
+// GetTreeSize will walk a directory tree and count the size of the files.
+func GetTreeSize(dirname string) (uint64, error) {
+	return getTreeSize(dirname)
+}
+
 // LoadLines will open a file and read lines from it. Comment lines (i.e. lines
 // beginning with '#') are skipped.
 func LoadLines(filename string) ([]string, error) {
