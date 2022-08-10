@@ -11,24 +11,9 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
-
-func getTreeSize(dirname string) (uint64, error) {
-	var size uint64
-	err := filepath.Walk(dirname,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			size += uint64(info.Size())
-			return nil
-		})
-	if err != nil {
-		return 0, err
-	}
-	return size, nil
-}
 
 func runCommand(logger log.DebugLogger, cwd string, args ...string) error {
 	cmd := exec.Command(args[0], args[1:]...)
@@ -102,7 +87,7 @@ func shallowClone(topdir string, params ShallowCloneParams,
 		}
 	}
 	loadTime := time.Since(startTime)
-	repoSize, err := getTreeSize(topdir)
+	repoSize, err := fsutil.GetTreeSize(topdir)
 	if err != nil {
 		return err
 	}
