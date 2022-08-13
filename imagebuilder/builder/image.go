@@ -30,6 +30,7 @@ import (
 type gitInfoType struct {
 	branch   string
 	commitId string
+	gitUrl   string
 }
 
 func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
@@ -138,6 +139,7 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		gitInfo = &gitInfoType{
 			branch:   gitBranch,
 			commitId: strings.TrimSpace(lines[0]),
+			gitUrl:   manifestLocation.url,
 		}
 	}
 	if err := os.RemoveAll(gitDirectory); err != nil {
@@ -308,6 +310,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	if gitInfo != nil {
 		img.BuildBranch = gitInfo.branch
 		img.BuildCommitId = gitInfo.commitId
+		img.BuildGitUrl = gitInfo.gitUrl
 	}
 	img.SourceImage = manifest.sourceImageInfo.imageName
 	return img, nil
