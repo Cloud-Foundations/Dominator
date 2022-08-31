@@ -168,6 +168,7 @@ var subcommands = []commands.Command{
 	{"show", "                name", 1, 1, showImageSubcommand},
 	{"show-filter", "         name", 1, 1, showImageFilterSubcommand},
 	{"show-inode", "          name inodePath", 2, 2, showImageInodeSubcommand},
+	{"show-metadata", "       name", 1, 1, showImageMetadataSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},
