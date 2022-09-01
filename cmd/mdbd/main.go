@@ -100,9 +100,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
 	fmt.Fprintln(os.Stderr,
-		"  topology: url [dir]")
+		"  topology: url [location]")
 	fmt.Fprintln(os.Stderr,
-		"    Load Topology")
+		"    Load Topology (only one permitted)")
 	fmt.Fprintln(os.Stderr,
 		"    url: directory or Git URL containing the Topology")
 	fmt.Fprintln(os.Stderr,

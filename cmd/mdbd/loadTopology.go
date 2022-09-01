@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+var setupTopology bool
+
 type topologyGeneratorType struct {
 	eventChannel chan<- struct{}
 	logger       log.DebugLogger
@@ -21,6 +24,9 @@ type topologyGeneratorType struct {
 
 func newTopologyGenerator(args []string,
 	logger log.DebugLogger) (generator, error) {
+	if setupTopology {
+		return nil, errors.New("only one Topology driver permitted")
+	}
 	var topologyUrl, localRepositoryDir, topologyDir string
 	interval := time.Duration(*fetchInterval) * time.Second
 	if fi, err := os.Stat(args[0]); err == nil && fi.IsDir() {
@@ -46,11 +52,13 @@ func newTopologyGenerator(args []string,
 		logger: logger,
 	}
 	go g.daemon(topoChannel)
+	setupTopology = true
 	return g, nil
 }
 
 func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology) {
 	for topo := range topoChannel {
+		g.logger.Println("Received new topology")
 		g.mutex.Lock()
 		g.topology = topo
 		g.mutex.Unlock()
