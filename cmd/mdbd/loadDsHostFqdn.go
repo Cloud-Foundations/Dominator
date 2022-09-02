@@ -9,9 +9,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-func newDsHostFqdnGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
-	return sourceGenerator{loadDsHostFqdn, args[0]}, nil
+func newDsHostFqdnGenerator(params makeGeneratorParams) (generator, error) {
+	return sourceGenerator{loadDsHostFqdn, params.args[0]}, nil
 }
 
 func loadDsHostFqdn(reader io.Reader, datacentre string, logger log.Logger) (

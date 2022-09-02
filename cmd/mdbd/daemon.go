@@ -43,7 +43,8 @@ func init() {
 	}
 }
 
-func runDaemon(generators []generator, mdbFileName, hostnameRegex string,
+func runDaemon(generators []generator, eventChannel <-chan struct{},
+	mdbFileName string, hostnameRegex string,
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
 	logger log.DebugLogger, debug bool) {
 	var prevMdb *mdb.Mdb
@@ -58,12 +59,6 @@ func runDaemon(generators []generator, mdbFileName, hostnameRegex string,
 	}
 	var cycleStopTime time.Time
 	fetchIntervalDuration := time.Duration(fetchInterval) * time.Second
-	eventChannel := make(chan struct{}, 1)
-	for _, gen := range generators {
-		if eGen, ok := gen.(eventGenerator); ok {
-			eGen.RegisterEventChannel(eventChannel)
-		}
-	}
 	intervalTimer := time.NewTimer(fetchIntervalDuration)
 	for ; ; sleepUntil(eventChannel, intervalTimer, cycleStopTime) {
 		cycleStopTime = time.Now().Add(fetchIntervalDuration)

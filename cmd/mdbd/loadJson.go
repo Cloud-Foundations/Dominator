@@ -8,9 +8,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-func newJsonGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
-	return sourceGenerator{loadJson, args[0]}, nil
+func newJsonGenerator(params makeGeneratorParams) (generator, error) {
+	return sourceGenerator{loadJson, params.args[0]}, nil
 }
 
 func loadJson(reader io.Reader, datacentre string, logger log.Logger) (

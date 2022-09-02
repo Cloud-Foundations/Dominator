@@ -12,7 +12,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-type makeGeneratorFunc func([]string, log.DebugLogger) (generator, error)
+type makeGeneratorParams struct {
+	args         []string
+	eventChannel chan<- struct{}
+	logger       log.DebugLogger
+}
+
+type makeGeneratorFunc func(makeGeneratorParams) (generator, error)
 
 type sourceDriverFunc func(reader io.Reader, datacentre string,
 	logger log.Logger) (*mdb.Mdb, error)
@@ -22,15 +28,8 @@ type generator interface {
 	Generate(datacentre string, logger log.DebugLogger) (*mdb.Mdb, error)
 }
 
-// The eventGenerator interface generates an mdb from a source which has update
-// events.
-type eventGenerator interface {
-	generator
-	RegisterEventChannel(events chan<- struct{})
-}
-
 func setupGenerators(reader io.Reader, drivers []driver,
-	logger log.DebugLogger) ([]generator, error) {
+	eventChannel chan<- struct{}, logger log.DebugLogger) ([]generator, error) {
 	var generators []generator
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -56,7 +55,11 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		if drv.maxArgs >= 0 && len(args) > drv.maxArgs {
 			return nil, errors.New("too mant arguments for: " + driverName)
 		}
-		gen, err := drv.setupFunc(args, logger)
+		gen, err := drv.setupFunc(makeGeneratorParams{
+			args:         args,
+			eventChannel: eventChannel,
+			logger:       logger,
+		})
 		if err != nil {
 			return nil, err
 		}

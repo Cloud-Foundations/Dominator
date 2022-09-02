@@ -14,26 +14,26 @@ import (
 )
 
 type fleetManagerGeneratorType struct {
+	eventChannel chan<- struct{}
 	fleetManager string
 	location     string
 	logger       log.DebugLogger
-	eventChannel chan<- struct{}
 	mutex        sync.Mutex
 	machines     map[string]*fm_proto.Machine
 	vms          map[string]*hyper_proto.VmInfo
 }
 
-func newFleetManagerGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newFleetManagerGenerator(params makeGeneratorParams) (generator, error) {
 	g := &fleetManagerGeneratorType{
+		eventChannel: params.eventChannel,
 		fleetManager: fmt.Sprintf("%s:%d",
-			args[0], constants.FleetManagerPortNumber),
-		logger:   logger,
+			params.args[0], constants.FleetManagerPortNumber),
+		logger:   params.logger,
 		machines: make(map[string]*fm_proto.Machine),
 		vms:      make(map[string]*hyper_proto.VmInfo),
 	}
-	if len(args) > 1 {
-		g.location = args[1]
+	if len(params.args) > 1 {
+		g.location = params.args[1]
 	}
 	go g.daemon()
 	return g, nil
@@ -128,11 +128,6 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 		}
 	}
 	return &newMdb, nil
-}
-
-func (g *fleetManagerGeneratorType) RegisterEventChannel(
-	events chan<- struct{}) {
-	g.eventChannel = events
 }
 
 func (g *fleetManagerGeneratorType) update(update fm_proto.Update,

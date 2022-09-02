@@ -22,17 +22,16 @@ type topologyGeneratorType struct {
 	topology     *topology.Topology
 }
 
-func newTopologyGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newTopologyGenerator(params makeGeneratorParams) (generator, error) {
 	if setupTopology {
 		return nil, errors.New("only one Topology driver permitted")
 	}
 	var topologyUrl, localRepositoryDir, topologyDir string
 	interval := time.Duration(*fetchInterval) * time.Second
-	if fi, err := os.Stat(args[0]); err == nil && fi.IsDir() {
-		localRepositoryDir = args[0]
+	if fi, err := os.Stat(params.args[0]); err == nil && fi.IsDir() {
+		localRepositoryDir = params.args[0]
 	} else {
-		topologyUrl = args[0]
+		topologyUrl = params.args[0]
 		localRepositoryDir = filepath.Join(*stateDir, "topology")
 		if strings.HasPrefix(topologyUrl, "git@") {
 			if interval < 59*time.Second {
@@ -40,16 +39,17 @@ func newTopologyGenerator(args []string,
 			}
 		}
 	}
-	if len(args) > 1 {
-		topologyDir = args[1]
+	if len(params.args) > 1 {
+		topologyDir = params.args[1]
 	}
 	topoChannel, err := topology.Watch(topologyUrl, localRepositoryDir,
-		topologyDir, interval, logger)
+		topologyDir, interval, params.logger)
 	if err != nil {
 		return nil, err
 	}
 	g := &topologyGeneratorType{
-		logger: logger,
+		eventChannel: params.eventChannel,
+		logger:       params.logger,
 	}
 	go g.daemon(topoChannel)
 	setupTopology = true
@@ -102,9 +102,4 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 		})
 	}
 	return &newMdb, nil
-}
-
-func (g *topologyGeneratorType) RegisterEventChannel(
-	events chan<- struct{}) {
-	g.eventChannel = events
 }

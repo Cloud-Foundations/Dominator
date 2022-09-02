@@ -193,7 +193,8 @@ func main() {
 		showErrorAndDie(err)
 	}
 	(<-readerChannel).Close()
-	generators, err := setupGenerators(file, drivers, logger)
+	eventChannel := make(chan struct{}, 1)
+	generators, err := setupGenerators(file, drivers, eventChannel, logger)
 	file.Close()
 	if err != nil {
 		showErrorAndDie(err)
@@ -204,8 +205,8 @@ func main() {
 	}
 	httpSrv.AddHtmlWriter(logger)
 	rpcd := startRpcd(logger)
-	go runDaemon(generators, *mdbFile, *hostnameRegex, *datacentre,
-		*fetchInterval, func(old, new *mdb.Mdb) {
+	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
+		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {
 			rpcd.pushUpdateToAll(old, new)
 			httpSrv.UpdateMdb(new)
 		},

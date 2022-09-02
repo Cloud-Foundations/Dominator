@@ -15,17 +15,17 @@ import (
 var emptyTags = make(map[string]string)
 
 type hypervisorGeneratorType struct {
-	logger       log.DebugLogger
 	eventChannel chan<- struct{}
+	logger       log.DebugLogger
 	mutex        sync.Mutex
 	vms          map[string]*proto.VmInfo
 }
 
-func newHypervisorGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newHypervisorGenerator(params makeGeneratorParams) (generator, error) {
 	g := &hypervisorGeneratorType{
-		logger: logger,
-		vms:    make(map[string]*proto.VmInfo),
+		eventChannel: params.eventChannel,
+		logger:       params.logger,
+		vms:          make(map[string]*proto.VmInfo),
 	}
 	go g.daemon()
 	return g, nil
@@ -95,10 +95,6 @@ func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 		}
 	}
 	return &newMdb, nil
-}
-
-func (g *hypervisorGeneratorType) RegisterEventChannel(events chan<- struct{}) {
-	g.eventChannel = events
 }
 
 func (g *hypervisorGeneratorType) updateVMs(vms map[string]*proto.VmInfo,
