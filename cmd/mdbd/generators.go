@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
@@ -16,6 +17,7 @@ type makeGeneratorParams struct {
 	args         []string
 	eventChannel chan<- struct{}
 	logger       log.DebugLogger
+	waitGroup    *sync.WaitGroup
 }
 
 type makeGeneratorFunc func(makeGeneratorParams) (generator, error)
@@ -29,7 +31,8 @@ type generator interface {
 }
 
 func setupGenerators(reader io.Reader, drivers []driver,
-	eventChannel chan<- struct{}, logger log.DebugLogger) ([]generator, error) {
+	eventChannel chan<- struct{}, waitGroup *sync.WaitGroup,
+	logger log.DebugLogger) ([]generator, error) {
 	var generators []generator
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -59,6 +62,7 @@ func setupGenerators(reader io.Reader, drivers []driver,
 			args:         args,
 			eventChannel: eventChannel,
 			logger:       logger,
+			waitGroup:    waitGroup,
 		})
 		if err != nil {
 			return nil, err

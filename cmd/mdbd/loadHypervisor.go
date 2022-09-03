@@ -27,21 +27,24 @@ func newHypervisorGenerator(params makeGeneratorParams) (generator, error) {
 		logger:       params.logger,
 		vms:          make(map[string]*proto.VmInfo),
 	}
-	go g.daemon()
+	params.waitGroup.Add(1)
+	go g.daemon(params.waitGroup)
 	return g, nil
 }
 
-func (g *hypervisorGeneratorType) daemon() {
+func (g *hypervisorGeneratorType) daemon(waitGroup *sync.WaitGroup) {
 	address := fmt.Sprintf(":%d", constants.HypervisorPortNumber)
 	for {
-		if err := g.getUpdates(address); err != nil {
+		if err := g.getUpdates(address, waitGroup); err != nil {
 			g.logger.Println(err)
 			time.Sleep(time.Second)
 		}
+		waitGroup = nil
 	}
 }
 
-func (g *hypervisorGeneratorType) getUpdates(hypervisor string) error {
+func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
+	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", hypervisor, 0)
 	if err != nil {
 		return err
@@ -60,6 +63,10 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string) error {
 		}
 		g.updateVMs(update.VMs, initialUpdate)
 		initialUpdate = false
+		if waitGroup != nil {
+			waitGroup.Done()
+			waitGroup = nil
+		}
 		select {
 		case g.eventChannel <- struct{}{}:
 		default:

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
@@ -194,7 +196,9 @@ func main() {
 	}
 	(<-readerChannel).Close()
 	eventChannel := make(chan struct{}, 1)
-	generators, err := setupGenerators(file, drivers, eventChannel, logger)
+	waitGroup := &sync.WaitGroup{}
+	generators, err := setupGenerators(file, drivers, eventChannel, waitGroup,
+		logger)
 	file.Close()
 	if err != nil {
 		showErrorAndDie(err)
@@ -204,6 +208,19 @@ func main() {
 		showErrorAndDie(err)
 	}
 	httpSrv.AddHtmlWriter(logger)
+	// Wait a minute for any asynronous generators to yield first data.
+	waitTimer := time.NewTimer(time.Minute)
+	waitChannel := make(chan struct{}, 1)
+	go func() {
+		waitGroup.Wait()
+		waitChannel <- struct{}{}
+	}()
+	select {
+	case <-waitChannel:
+		logger.Println("Asynchronous generators completed initial generation")
+	case <-waitTimer.C:
+		logger.Println("Timed out waiting for initial data")
+	}
 	rpcd := startRpcd(logger)
 	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
 		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {

@@ -51,12 +51,23 @@ func newTopologyGenerator(params makeGeneratorParams) (generator, error) {
 		eventChannel: params.eventChannel,
 		logger:       params.logger,
 	}
-	go g.daemon(topoChannel)
+	params.waitGroup.Add(1)
+	go g.daemon(topoChannel, params.waitGroup)
 	setupTopology = true
 	return g, nil
 }
 
-func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology) {
+func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology,
+	waitGroup *sync.WaitGroup) {
+	firstTopo := <-topoChannel
+	g.mutex.Lock()
+	g.topology = firstTopo
+	g.mutex.Unlock()
+	waitGroup.Done()
+	select {
+	case g.eventChannel <- struct{}{}:
+	default:
+	}
 	for topo := range topoChannel {
 		g.logger.Println("Received new topology")
 		g.mutex.Lock()

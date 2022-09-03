@@ -35,20 +35,23 @@ func newFleetManagerGenerator(params makeGeneratorParams) (generator, error) {
 	if len(params.args) > 1 {
 		g.location = params.args[1]
 	}
-	go g.daemon()
+	params.waitGroup.Add(1)
+	go g.daemon(params.waitGroup)
 	return g, nil
 }
 
-func (g *fleetManagerGeneratorType) daemon() {
+func (g *fleetManagerGeneratorType) daemon(waitGroup *sync.WaitGroup) {
 	for {
-		if err := g.getUpdates(g.fleetManager); err != nil {
+		if err := g.getUpdates(g.fleetManager, waitGroup); err != nil {
 			g.logger.Println(err)
 			time.Sleep(time.Second)
 		}
+		waitGroup = nil
 	}
 }
 
-func (g *fleetManagerGeneratorType) getUpdates(fleetManager string) error {
+func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
+	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", g.fleetManager, 0)
 	if err != nil {
 		return err
@@ -74,6 +77,10 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string) error {
 		}
 		g.update(update, initialUpdate)
 		initialUpdate = false
+		if waitGroup != nil {
+			waitGroup.Done()
+			waitGroup = nil
+		}
 		select {
 		case g.eventChannel <- struct{}{}:
 		default:
