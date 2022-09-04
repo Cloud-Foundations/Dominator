@@ -197,8 +197,12 @@ func main() {
 	(<-readerChannel).Close()
 	eventChannel := make(chan struct{}, 1)
 	waitGroup := &sync.WaitGroup{}
-	generators, err := setupGenerators(file, drivers, eventChannel, waitGroup,
-		logger)
+	generatorParams := makeGeneratorParams{
+		eventChannel: eventChannel,
+		logger:       logger,
+		waitGroup:    waitGroup,
+	}
+	generators, err := setupGenerators(file, drivers, generatorParams)
 	file.Close()
 	if err != nil {
 		showErrorAndDie(err)

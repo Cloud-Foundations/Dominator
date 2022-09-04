@@ -31,8 +31,7 @@ type generator interface {
 }
 
 func setupGenerators(reader io.Reader, drivers []driver,
-	eventChannel chan<- struct{}, waitGroup *sync.WaitGroup,
-	logger log.DebugLogger) ([]generator, error) {
+	params makeGeneratorParams) ([]generator, error) {
 	var generators []generator
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -58,12 +57,8 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		if drv.maxArgs >= 0 && len(args) > drv.maxArgs {
 			return nil, errors.New("too mant arguments for: " + driverName)
 		}
-		gen, err := drv.setupFunc(makeGeneratorParams{
-			args:         args,
-			eventChannel: eventChannel,
-			logger:       logger,
-			waitGroup:    waitGroup,
-		})
+		params.args = args
+		gen, err := drv.setupFunc(params)
 		if err != nil {
 			return nil, err
 		}
