@@ -2,41 +2,36 @@ package topology
 
 import (
 	"path/filepath"
-	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/repowatch"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func watch(topologyRepository, localRepositoryDir, topologyDir string,
-	checkInterval time.Duration,
-	logger log.DebugLogger) (<-chan *Topology, error) {
-	directoryChannel, err := repowatch.Watch(topologyRepository,
-		localRepositoryDir, checkInterval, "fleet-manager/topology-watcher",
-		logger)
+func watch(params WatchParams) (<-chan *Topology, error) {
+	if params.MetricsDirectory == "" {
+		params.MetricsDirectory = "fleet-manager/topology-watcher"
+	}
+	directoryChannel, err := repowatch.Watch(params.TopologyRepository,
+		params.LocalRepositoryDir, params.CheckInterval,
+		params.MetricsDirectory, params.Logger)
 	if err != nil {
 		return nil, err
 	}
 	topologyChannel := make(chan *Topology, 1)
-	go handleNotifications(directoryChannel, topologyChannel, topologyDir,
-		logger)
+	go handleNotifications(directoryChannel, topologyChannel, params.Params)
 	return topologyChannel, nil
 }
 
 func handleNotifications(directoryChannel <-chan string,
-	topologyChannel chan<- *Topology, topologyDir string,
-	logger log.DebugLogger) {
+	topologyChannel chan<- *Topology, params Params) {
 	var prevTopology *Topology
 	for dir := range directoryChannel {
-		params := Params{
-			Logger:      logger,
-			TopologyDir: filepath.Join(dir, topologyDir),
-		}
-		if topology, err := load(params); err != nil {
-			logger.Println(err)
+		loadParams := params
+		loadParams.TopologyDir = filepath.Join(dir, params.TopologyDir)
+		if topology, err := load(loadParams); err != nil {
+			params.Logger.Println(err)
 		} else if prevTopology.equal(topology) {
-			logger.Debugln(1, "Ignoring unchanged configuration")
+			params.Logger.Debugln(1, "Ignoring unchanged configuration")
 		} else {
 			topologyChannel <- topology
 			prevTopology = topology

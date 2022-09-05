@@ -39,7 +39,7 @@ type ownersType struct {
 
 type Params struct {
 	Logger      log.DebugLogger
-	TopologyDir string
+	TopologyDir string // Directory containing topology data.
 }
 
 type Subnet struct {
@@ -48,6 +48,14 @@ type Subnet struct {
 	LastAutoIP      net.IP              `json:",omitempty"`
 	ReservedIPs     []net.IP            `json:",omitempty"`
 	reservedIpAddrs map[string]struct{} // Key: IP address.
+}
+
+type WatchParams struct {
+	Params
+	CheckInterval      time.Duration
+	LocalRepositoryDir string // Local directory.
+	MetricsDirectory   string // Metrics namespace directory.
+	TopologyRepository string // Remote Git repository.
 }
 
 func (s *Subnet) CheckIfIpIsReserved(ipAddr string) bool {
@@ -77,8 +85,19 @@ func LoadWithParams(params Params) (*Topology, error) {
 func Watch(topologyRepository, localRepositoryDir, topologyDir string,
 	checkInterval time.Duration,
 	logger log.DebugLogger) (<-chan *Topology, error) {
-	return watch(topologyRepository, localRepositoryDir, topologyDir,
-		checkInterval, logger)
+	return watch(WatchParams{
+		Params: Params{
+			Logger:      logger,
+			TopologyDir: topologyDir,
+		},
+		CheckInterval:      checkInterval,
+		LocalRepositoryDir: localRepositoryDir,
+		TopologyRepository: topologyRepository,
+	})
+}
+
+func WatchWithParams(params WatchParams) (<-chan *Topology, error) {
+	return watch(params)
 }
 
 func (t *Topology) CheckIfIpIsReserved(ipAddr string) bool {
