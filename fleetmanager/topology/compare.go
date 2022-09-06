@@ -4,6 +4,15 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+func compareMaps(left, right map[string]string) bool {
+	for key, leftValue := range left {
+		if right[key] != leftValue {
+			return false
+		}
+	}
+	return true
+}
+
 func (left *Topology) equal(right *Topology) bool {
 	if left == nil || right == nil {
 		return false
@@ -11,7 +20,16 @@ func (left *Topology) equal(right *Topology) bool {
 	if len(left.machineParents) != len(right.machineParents) {
 		return false
 	}
-	return left.Root.equal(right.Root)
+	if len(left.Variables) != len(right.Variables) {
+		return false
+	}
+	if !left.Root.equal(right.Root) {
+		return false
+	}
+	if !compareMaps(left.Variables, right.Variables) {
+		return false
+	}
+	return true
 }
 
 func (left *Directory) equal(right *Directory) bool {

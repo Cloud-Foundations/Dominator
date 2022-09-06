@@ -38,8 +38,9 @@ type ownersType struct {
 }
 
 type Params struct {
-	Logger      log.DebugLogger
-	TopologyDir string // Directory containing topology data.
+	Logger       log.DebugLogger
+	TopologyDir  string // Directory containing topology data.
+	VariablesDir string // Directory containing variables.
 }
 
 type Subnet struct {
@@ -69,6 +70,7 @@ func (subnet *Subnet) Shrink() {
 
 type Topology struct {
 	Root            *Directory
+	Variables       map[string]string
 	logger          log.DebugLogger
 	machineParents  map[string]*Directory // Key: machine name.
 	reservedIpAddrs map[string]struct{}   // Key: IP address.

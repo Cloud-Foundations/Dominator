@@ -28,6 +28,7 @@ func handleNotifications(directoryChannel <-chan string,
 	for dir := range directoryChannel {
 		loadParams := params
 		loadParams.TopologyDir = filepath.Join(dir, params.TopologyDir)
+		loadParams.VariablesDir = filepath.Join(dir, params.VariablesDir)
 		if topology, err := load(loadParams); err != nil {
 			params.Logger.Println(err)
 		} else if prevTopology.equal(topology) {
