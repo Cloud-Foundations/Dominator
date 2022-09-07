@@ -145,3 +145,31 @@ func TestCompareLastAuto(t *testing.T) {
 		t.Errorf("equal(%v, %v) = %v", left, right, got)
 	}
 }
+
+func TestCompareVariablesEqual(t *testing.T) {
+	left := map[string]string{
+		"key0": "value0",
+		"key1": "value1",
+	}
+	right := map[string]string{
+		"key0": "value0",
+		"key1": "value1",
+	}
+	if got := compareMaps(left, right); got != true {
+		t.Errorf("different(%v, %v) = %v", left, right, got)
+	}
+}
+
+func TestCompareVariablesNotEqual(t *testing.T) {
+	left := map[string]string{
+		"key0": "value0",
+		"key1": "value1",
+	}
+	right := map[string]string{
+		"key0": "value0",
+		"key1": "value2",
+	}
+	if got := compareMaps(left, right); got != false {
+		t.Errorf("equal(%v, %v) = %v", left, right, got)
+	}
+}
