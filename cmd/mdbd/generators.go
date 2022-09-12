@@ -30,6 +30,11 @@ type generator interface {
 	Generate(datacentre string, logger log.DebugLogger) (*mdb.Mdb, error)
 }
 
+// The variablesGetter interface gets variables from some source.
+type variablesGetter interface {
+	GetVariables() (map[string]string, error)
+}
+
 func setupGenerators(reader io.Reader, drivers []driver,
 	params makeGeneratorParams) ([]generator, error) {
 	var generators []generator

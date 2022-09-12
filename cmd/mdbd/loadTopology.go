@@ -114,3 +114,10 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 	}
 	return &newMdb, nil
 }
+
+func (g *topologyGeneratorType) GetVariables() (map[string]string, error) {
+	g.mutex.Lock()
+	topo := g.topology
+	g.mutex.Unlock()
+	return topo.Variables, nil
+}

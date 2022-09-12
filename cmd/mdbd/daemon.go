@@ -104,6 +104,7 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 func loadFromAll(generators []generator, datacentre string,
 	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
+	var variables map[string]string
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
@@ -120,9 +121,17 @@ func loadFromAll(generators []generator, datacentre string,
 				machineMap[machine.Hostname] = machine
 			}
 		}
+		if vGen, ok := gen.(variablesGetter); ok {
+			if _variables, err := vGen.GetVariables(); err != nil {
+				return nil, err
+			} else {
+				variables = _variables
+			}
+		}
 	}
 	var newMdb mdb.Mdb
 	for _, machine := range machineMap {
+		processMachine(&machine, variables)
 		newMdb.Machines = append(newMdb.Machines, machine)
 	}
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStop)
@@ -133,6 +142,30 @@ func loadFromAll(generators []generator, datacentre string,
 		time.Duration(rusageStart.Utime.Sec)*time.Second -
 		time.Duration(rusageStart.Utime.Usec)*time.Microsecond)
 	return &newMdb, nil
+}
+
+func processMachine(machine *mdb.Machine, variables map[string]string) {
+	if len(variables) < 1 {
+		return
+	}
+	machine.RequiredImage = processValue(machine.RequiredImage, variables)
+	machine.PlannedImage = processValue(machine.PlannedImage, variables)
+	machine.Tags = machine.Tags.Copy()
+	for key, value := range machine.Tags {
+		machine.Tags[key] = processValue(value, variables)
+	}
+}
+
+func processValue(value string, variables map[string]string) string {
+	if len(value) < 2 {
+		return value
+	}
+	if value[0] == '$' {
+		if newValue, ok := variables[value[1:]]; ok {
+			return newValue
+		}
+	}
+	return value
 }
 
 func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp) *mdb.Mdb {
