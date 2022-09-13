@@ -9,12 +9,14 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
+type DisruptionCancelor func()
 type DisruptionRequestor func() sub.DisruptionState
 
 type TriggersRunner func(triggers []*triggers.Trigger, action string,
 	logger log.Logger) bool
 
 type UpdateOptions struct {
+	DisruptionCancel  DisruptionCancelor
 	DisruptionRequest DisruptionRequestor
 	Logger            log.Logger
 	ObjectsDir        string

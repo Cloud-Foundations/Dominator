@@ -43,10 +43,9 @@ func (t *uType) update(request sub.UpdateRequest) error {
 		t.doDeletes(request.PathsToDelete, t.OldTriggers, false)
 		t.changeInodes(request.InodesToChange, t.OldTriggers, false)
 		matchedOldTriggers := t.OldTriggers.GetMatchedTriggers()
-		if !request.ForceDisruption {
-			if err := t.checkDisruption(matchedOldTriggers); err != nil {
-				return err
-			}
+		err := t.checkDisruption(matchedOldTriggers, request.ForceDisruption)
+		if err != nil {
+			return err
 		}
 		if t.RunTriggers(matchedOldTriggers, "stop", t.Logger) {
 			t.hadTriggerFailures = true
@@ -71,21 +70,21 @@ func (t *uType) update(request sub.UpdateRequest) error {
 	return t.lastError
 }
 
-func (t *uType) checkDisruption(matchedTriggers []*triggers.Trigger) error {
-	if t.DisruptionRequest == nil {
+func (t *uType) checkDisruption(matchedTriggers []*triggers.Trigger,
+	force bool) error {
+	if t.DisruptionRequest == nil && t.DisruptionCancel == nil {
 		return nil
 	}
-	if len(matchedTriggers) < 1 {
-		return nil
-	}
-	var highImpact bool
-	for _, trigger := range matchedTriggers {
-		if trigger.HighImpact {
-			highImpact = true
-			break
+	if !isHighImpact(matchedTriggers) {
+		if t.DisruptionCancel != nil {
+			t.DisruptionCancel()
 		}
+		return nil
 	}
-	if !highImpact {
+	if force {
+		return nil
+	}
+	if t.DisruptionRequest == nil {
 		return nil
 	}
 	switch t.DisruptionRequest() {
@@ -100,6 +99,18 @@ func (t *uType) checkDisruption(matchedTriggers []*triggers.Trigger) error {
 	default:
 		return nil
 	}
+}
+
+func isHighImpact(matchedTriggers []*triggers.Trigger) bool {
+	if len(matchedTriggers) < 1 {
+		return false
+	}
+	for _, trigger := range matchedTriggers {
+		if trigger.HighImpact {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *uType) copyFilesToCache(filesToCopyToCache []sub.FileToCopyToCache) {
