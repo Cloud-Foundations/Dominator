@@ -119,6 +119,7 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 		SkipFilter:        t.params.ScannerConfiguration.ScanFilter,
 	}
 	if t.config.DisruptionManager != "" {
+		options.DisruptionCancel = t.disruptionCancel
 		options.DisruptionRequest = t.disruptionRequest
 	}
 	t.params.WorkdirGoroutine.Run(func() {
