@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	net_url "net/url"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
@@ -39,12 +39,15 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 }
 
 func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
+	statusesToMatch := stringutil.ConvertListToMap(request.StatusesToMatch,
+		false)
 	herd.RLock()
 	subNames := make([]string, 0, len(herd.subsByIndex))
 	for _, sub := range herd.subsByIndex {
-		if request.StatusToMatch != "" &&
-			sub.status.String() != request.StatusToMatch {
-			continue
+		if len(statusesToMatch) > 0 {
+			if _, ok := statusesToMatch[sub.status.String()]; !ok {
+				continue
+			}
 		}
 		subNames = append(subNames, sub.mdb.Hostname)
 	}
@@ -56,12 +59,8 @@ func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
-	var statusToMatch string
-	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
-		statusToMatch = uesc
-	}
 	subNames, _ := herd.listSubs(proto.ListSubsRequest{
-		StatusToMatch: statusToMatch,
+		StatusesToMatch: req.URL.Query()["status"],
 	})
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeText:

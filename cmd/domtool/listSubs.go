@@ -18,7 +18,7 @@ func listSubsSubcommand(args []string, logger log.DebugLogger) error {
 
 func listSubs(client *srpc.Client) error {
 	request := dominator.ListSubsRequest{
-		StatusToMatch: *statusToMatch,
+		StatusesToMatch: statusesToMatch,
 	}
 	var reply dominator.ListSubsResponse
 	if err := client.RequestReply("Dominator.ListSubs", request,

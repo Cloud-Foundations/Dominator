@@ -12,20 +12,24 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
 func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	[]proto.SubInfo, error) {
+	statusesToMatch := stringutil.ConvertListToMap(request.StatusesToMatch,
+		false)
 	if len(request.Hostnames) < 1 {
 		herd.RLock()
 		defer herd.RUnlock()
 		subInfos := make([]proto.SubInfo, 0, len(herd.subsByIndex))
 		for _, sub := range herd.subsByIndex {
-			if request.StatusToMatch != "" &&
-				sub.status.String() != request.StatusToMatch {
-				continue
+			if len(statusesToMatch) > 0 {
+				if _, ok := statusesToMatch[sub.status.String()]; !ok {
+					continue
+				}
 			}
 			subInfos = append(subInfos, sub.makeInfo())
 		}
@@ -36,9 +40,10 @@ func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	defer herd.RUnlock()
 	for _, hostname := range request.Hostnames {
 		if sub, ok := herd.subsByName[hostname]; ok {
-			if request.StatusToMatch != "" &&
-				sub.status.String() != request.StatusToMatch {
-				continue
+			if len(statusesToMatch) > 0 {
+				if _, ok := statusesToMatch[sub.status.String()]; !ok {
+					continue
+				}
 			}
 			subInfos = append(subInfos, sub.makeInfo())
 		}

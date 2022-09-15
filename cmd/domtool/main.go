@@ -28,9 +28,8 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
-	statusToMatch = flag.String("statusToMatch", "",
-		"Sub status to match when listing")
-	subsList = flag.String("subsList", "",
+	statusesToMatch flagutil.StringList
+	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
 
 	dominatorSrpcClient *srpc.Client
@@ -39,6 +38,8 @@ var (
 func init() {
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		"Comma separated list of patterns to exclude from scanning")
+	flag.Var(&statusesToMatch, "statusesToMatch",
+		"Sub statuses to match when listing")
 }
 
 func printUsage() {
