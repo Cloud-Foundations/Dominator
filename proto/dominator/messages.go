@@ -55,6 +55,7 @@ type GetInfoForSubsResponse struct {
 }
 
 type ListSubsRequest struct {
+	Hostnames       []string // Empty: match all hostnames.
 	StatusesToMatch []string // Empty: match all statuses.
 }
 
