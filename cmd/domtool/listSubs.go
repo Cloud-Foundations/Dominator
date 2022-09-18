@@ -17,7 +17,12 @@ func listSubsSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func listSubs(client *srpc.Client) error {
+	hostnames, err := getSubsFromFile()
+	if err != nil {
+		return err
+	}
 	request := dominator.ListSubsRequest{
+		Hostnames:       hostnames,
 		StatusesToMatch: statusesToMatch,
 	}
 	var reply dominator.ListSubsResponse
