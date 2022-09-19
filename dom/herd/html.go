@@ -53,6 +53,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 			herd.previousScanDuration,
 			herd.previousScanDuration/time.Duration(numSubs))
 	}
+	fmt.Fprintf(writer, "Cycle count: %d<br>\n", herd.scanCounter)
 	fmt.Fprintf(writer, "Image server: <a href=\"http://%s/\">%s</a><br>\n",
 		herd.imageManager, herd.imageManager)
 	if herd.defaultImageName != "" {

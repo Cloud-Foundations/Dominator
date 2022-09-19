@@ -123,6 +123,7 @@ func (herd *Herd) pollNextSub() bool {
 	if herd.nextSubToPoll >= uint(len(herd.subsByIndex)) {
 		herd.nextSubToPoll = 0
 		herd.previousScanDuration = time.Since(herd.currentScanStartTime)
+		herd.scanCounter++
 		return true
 	}
 	if herd.nextSubToPoll == 0 {

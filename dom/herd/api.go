@@ -148,6 +148,7 @@ type Herd struct {
 	dialer                   net.Dialer
 	currentScanStartTime     time.Time
 	previousScanDuration     time.Duration
+	scanCounter              uint64
 	subdInstallerQueueAdd    chan<- string
 	subdInstallerQueueDelete chan<- string
 	subdInstallerQueueErase  chan<- string
