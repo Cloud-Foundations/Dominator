@@ -152,6 +152,7 @@ type Herd struct {
 	subdInstallerQueueAdd    chan<- string
 	subdInstallerQueueDelete chan<- string
 	subdInstallerQueueErase  chan<- string
+	totalScanDuration        time.Duration
 }
 
 type subCounter struct {

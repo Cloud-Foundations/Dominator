@@ -124,6 +124,7 @@ func (herd *Herd) pollNextSub() bool {
 		herd.nextSubToPoll = 0
 		herd.previousScanDuration = time.Since(herd.currentScanStartTime)
 		herd.scanCounter++
+		herd.totalScanDuration += herd.previousScanDuration
 		return true
 	}
 	if herd.nextSubToPoll == 0 {
