@@ -69,11 +69,12 @@ type PollResponse struct {
 	FetchInProgress              bool // Fetch() and Update() mutually exclusive
 	UpdateInProgress             bool
 	LastFetchError               string
+	LastNote                     string // Updated after successful Update().
+	LastSuccessfulImageName      string
 	LastUpdateError              string
 	LastUpdateHadTriggerFailures bool
-	LastSuccessfulImageName      string
-	LastNote                     string // Updated after successful Update().
-	LockedByAnotherClient        bool   // Fetch() and Update() restricted.
+	LastWriteError               string
+	LockedByAnotherClient        bool // Fetch() and Update() restricted.
 	LockedUntil                  time.Time
 	FreeSpace                    *uint64
 	StartTime                    time.Time
