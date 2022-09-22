@@ -40,6 +40,7 @@ type Params struct {
 	NetworkReaderContext      *rateio.ReaderContext
 	RescanObjectCacheFunction func()
 	ScannerConfiguration      *scanner.Configuration
+	SubdDirectory             string
 	WorkdirGoroutine          *goroutine.Goroutine
 }
 
@@ -59,9 +60,10 @@ type rpcType struct {
 	startTimeSeconds             int64
 	lastFetchError               error
 	lastNote                     string
+	lastSuccessfulImageName      string
 	lastUpdateError              error
 	lastUpdateHadTriggerFailures bool
-	lastSuccessfulImageName      string
+	lastWriteError               string
 	lockedBy                     *srpc.Conn
 	lockedUntil                  time.Time
 }
@@ -112,6 +114,7 @@ func Setup(config Config, params Params) *HtmlWriter {
 	} else if note != "" {
 		rpcObj.lastNote = note
 	}
+	go rpcObj.startWriteProber()
 	return &HtmlWriter{
 		lastNote:                &rpcObj.lastNote,
 		lastSuccessfulImageName: &rpcObj.lastSuccessfulImageName,

@@ -46,6 +46,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 	}
 	response.LastSuccessfulImageName = t.lastSuccessfulImageName
 	response.LastNote = t.lastNote
+	response.LastWriteError = t.lastWriteError
 	response.LockedByAnotherClient =
 		t.getClientLock(conn, request.LockFor) != nil
 	response.LockedUntil = t.lockedUntil
