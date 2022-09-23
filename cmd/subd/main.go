@@ -381,6 +381,7 @@ func main() {
 				NetworkReaderContext:      networkReaderContext,
 				RescanObjectCacheFunction: rescanFunc,
 				ScannerConfiguration:      &configuration,
+				SubdDirectory:             subdDirPathname,
 				WorkdirGoroutine:          workdirGoroutine,
 			})
 		configMetricsDir, err := tricorder.RegisterDirectory("/config")
