@@ -80,6 +80,9 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 		if reply.LastNote != "" {
 			fmt.Printf("Last note: \"%s\"\n", reply.LastNote)
 		}
+		if reply.LastWriteError != "" {
+			fmt.Printf("Last write error: %s\n", reply.LastWriteError)
+		}
 		if reply.FreeSpace != nil {
 			fmt.Printf("Free space: %s\n", format.FormatBytes(*reply.FreeSpace))
 		}
