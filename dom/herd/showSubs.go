@@ -203,6 +203,10 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 	sub.showBusy(tw)
 	newRow(w, "Status", false)
 	tw.WriteData("", sub.publishedStatus.html())
+	if sub.lastWriteError != "" {
+		newRow(w, "Last write error", false)
+		tw.WriteData("", sub.lastWriteError)
+	}
 	newRow(w, "Uptime", false)
 	showSince(tw, sub.pollTime, sub.startTime)
 	newRow(w, "Last scan duration", false)

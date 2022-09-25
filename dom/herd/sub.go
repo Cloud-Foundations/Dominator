@@ -377,6 +377,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	sub.lastPollSucceededTime = time.Now()
 	sub.lastSuccessfulImageName = reply.LastSuccessfulImageName
 	sub.lastNote = reply.LastNote
+	sub.lastWriteError = reply.LastWriteError
 	sub.systemUptime = reply.SystemUptime
 	if reply.GenerationCount == 0 {
 		sub.reclaim()
@@ -421,6 +422,11 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if reply.UpdateInProgress {
 		sub.status = statusUpdating
+		return
+	}
+	if reply.LastWriteError != "" {
+		sub.status = statusUnwritable
+		sub.reclaim()
 		return
 	}
 	if reply.GenerationCount < 1 {

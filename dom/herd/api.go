@@ -42,6 +42,7 @@ const (
 	statusPolling
 	statusPollDenied
 	statusFailedToPoll
+	statusUnwritable
 	statusSubNotReady
 	statusImageUndefined
 	statusImageNotReady
@@ -119,6 +120,7 @@ type Sub struct {
 	lastSyncTime                 time.Time
 	lastSuccessfulImageName      string
 	lastNote                     string
+	lastWriteError               string
 	systemUptime                 *time.Duration
 }
 
