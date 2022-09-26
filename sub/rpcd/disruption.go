@@ -176,6 +176,11 @@ func (t *rpcType) disruptionManagerLoop() {
 					} else {
 						checkInterval = 5 * time.Second
 					}
+					if runningCommand == disruptionManagerCheck &&
+						disruptionState == proto.DisruptionStateDenied &&
+						haveCancelled && command == "" {
+						command = disruptionManagerCancel
+					}
 					t.params.Logger.Printf(
 						"Ran DisruptionManager(%s): %s->%s\n",
 						runningCommand, disruptionState, runResult.state)
