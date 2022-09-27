@@ -9,9 +9,27 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
+const (
+	intervalCheckChangeToDisrupt    = time.Second
+	intervalCheckChangeToNonDisrupt = 5 * time.Second
+	intervalCheckDisrupt            = 15 * time.Second
+	intervalCheckNonDisrupt         = 5 * time.Minute
+	intervalCheckStartup            = 10 * time.Second
+	intervalCancelWhenPermitted     = time.Hour
+	intervalCancelWhenRequested     = 15 * time.Minute
+	intervalRequestWhenDenied       = time.Minute
+	intervalRequestWhenRequested    = 15 * time.Minute
+)
+
+type runInfoType struct {
+	command string
+	state   proto.DisruptionState
+}
+
 type runResultType struct {
-	err   error
-	state proto.DisruptionState
+	command string
+	err     error
+	state   proto.DisruptionState
 }
 
 func clearTimer(timer *time.Timer) {
@@ -32,7 +50,7 @@ func (t *rpcType) disruptionCancel() {
 	if t.config.DisruptionManager == "" {
 		return
 	}
-	t.disruptionManagerCommand <- disruptionManagerCancel
+	t.disruptionManagerControl <- false
 }
 
 // This will grab the lock.
@@ -43,9 +61,7 @@ func (t *rpcType) disruptionRequest() proto.DisruptionState {
 	t.rwLock.RLock()
 	disruptionState := t.disruptionState
 	t.rwLock.RUnlock()
-	if disruptionState == proto.DisruptionStateDenied {
-		t.disruptionManagerCommand <- disruptionManagerRequest
-	}
+	t.disruptionManagerControl <- true
 	return disruptionState
 }
 
@@ -54,6 +70,9 @@ func (t *rpcType) runDisruptionManager(command string) (
 	switch command {
 	case disruptionManagerCancel, disruptionManagerRequest:
 		t.params.Logger.Printf("Running: %s %s\n",
+			t.config.DisruptionManager, command)
+	default:
+		t.params.Logger.Debugf(0, "Running: %s %s\n",
 			t.config.DisruptionManager, command)
 	}
 	_output, err := exec.Command(t.config.DisruptionManager,
@@ -91,123 +110,143 @@ func (t *rpcType) startDisruptionManager() {
 	if t.config.DisruptionManager == "" {
 		return
 	}
-	go t.disruptionManagerLoop()
+	commandChannel := make(chan string, 1)
+	controlChannel := make(chan bool, 1)
+	resultChannel := make(chan runInfoType, 1)
+	t.disruptionManagerControl = controlChannel
+	go t.disruptionManagerLoop(controlChannel, commandChannel, resultChannel)
+	go t.disruptionManagerQueue(commandChannel, resultChannel)
 }
 
-func (t *rpcType) disruptionManagerLoop() {
-	commandChannel := make(chan string, 1)
-	t.disruptionManagerCommand = commandChannel
-	checkInterval := time.Minute
+func (t *rpcType) disruptionManagerLoop(controlChannel <-chan bool,
+	commandChannel chan<- string, resultChannel <-chan runInfoType) {
+	checkInterval := intervalCheckStartup
 	checkTimer := time.NewTimer(0)
-	var disruptionState proto.DisruptionState
-	reCancelTimer := time.NewTimer(time.Hour)
-	reRequestTimer := time.NewTimer(time.Hour)
-	clearTimer(reRequestTimer)
-	var runningCommand string
-	runResultChannel := make(chan runResultType, 1)
-	var haveCancelled, wantToDisrupt bool
+	var currentState proto.DisruptionState
+	initialCancelTimer := time.NewTimer(intervalCancelWhenPermitted)
+	var lastCommandTime time.Time
+	var allowCancels, wantToDisrupt bool
 	for {
-		var command string
+		var resetCheckInterval bool
 		select {
-		case command = <-commandChannel:
-			clearTimer(reCancelTimer)
-			switch command {
-			case disruptionManagerCancel:
-				clearTimer(reRequestTimer)
-				wantToDisrupt = false
-				if haveCancelled {
-					command = ""
-				}
-			case disruptionManagerRequest:
-				if disruptionState == proto.DisruptionStateDenied {
-					resetTimer(reRequestTimer, time.Minute)
-				} else {
-					resetTimer(reRequestTimer, 15*time.Minute)
-				}
-				haveCancelled = false
-				wantToDisrupt = true
+		case newWantToDisrupt := <-controlChannel:
+			allowCancels = true
+			clearTimer(initialCancelTimer)
+			if newWantToDisrupt != wantToDisrupt {
+				lastCommandTime = time.Time{}
+				resetCheckInterval = true
 			}
+			wantToDisrupt = newWantToDisrupt
 		case <-checkTimer.C:
 			checkInterval += checkInterval >> 1
 			if wantToDisrupt {
-				if checkInterval > 15*time.Second {
-					checkInterval = 15 * time.Second
+				if checkInterval > intervalCheckDisrupt {
+					checkInterval = intervalCheckDisrupt
 				}
 			} else {
-				if checkInterval > 5*time.Minute {
-					checkInterval = 5 * time.Minute
+				if checkInterval > intervalCheckNonDisrupt {
+					checkInterval = intervalCheckNonDisrupt
 				}
 			}
-			command = disruptionManagerCheck
-		case <-reCancelTimer.C:
-			if !wantToDisrupt {
-				command = disruptionManagerCancel
-				if runningCommand != "" {
-					resetTimer(reCancelTimer, time.Minute)
+			commandChannel <- disruptionManagerCheck
+			checkTimer.Reset(checkInterval)
+		case <-initialCancelTimer.C:
+			if !allowCancels {
+				allowCancels = true
+				lastCommandTime = time.Time{}
+				resetCheckInterval = true
+			}
+		case result := <-resultChannel:
+			if result.state != currentState {
+				t.rwLock.Lock()
+				t.disruptionState = result.state
+				t.rwLock.Unlock()
+				t.params.Logger.Printf(
+					"Ran DisruptionManager(%s): %s->%s\n",
+					result.command, currentState, result.state)
+				currentState = result.state
+				lastCommandTime = time.Time{}
+				resetCheckInterval = true
+			} else {
+				t.params.Logger.Debugf(0, "Ran DisruptionManager(%s): %s\n",
+					result.command, result.state)
+			}
+		}
+		if wantToDisrupt {
+			switch currentState {
+			case proto.DisruptionStateRequested:
+				if time.Since(lastCommandTime) > intervalRequestWhenRequested {
+					commandChannel <- disruptionManagerRequest
+					lastCommandTime = time.Now()
+				}
+			case proto.DisruptionStateDenied:
+				if time.Since(lastCommandTime) > intervalRequestWhenDenied {
+					commandChannel <- disruptionManagerRequest
+					lastCommandTime = time.Now()
 				}
 			}
-		case <-reRequestTimer.C:
-			if wantToDisrupt {
-				command = disruptionManagerRequest
-				if runningCommand == "" {
-					if disruptionState == proto.DisruptionStateDenied {
-						resetTimer(reRequestTimer, time.Minute)
-					} else {
-						resetTimer(reRequestTimer, 15*time.Minute)
-					}
-				} else {
-					resetTimer(reRequestTimer, 5*time.Second)
+			if resetCheckInterval {
+				checkInterval = intervalCheckChangeToDisrupt
+				resetTimer(checkTimer, checkInterval)
+			}
+		} else if allowCancels {
+			switch currentState {
+			case proto.DisruptionStatePermitted:
+				if time.Since(lastCommandTime) > intervalCancelWhenPermitted {
+					commandChannel <- disruptionManagerCancel
+					lastCommandTime = time.Now()
 				}
+			case proto.DisruptionStateRequested:
+				if time.Since(lastCommandTime) > intervalCancelWhenRequested {
+					commandChannel <- disruptionManagerCancel
+					lastCommandTime = time.Now()
+				}
+			}
+			if resetCheckInterval {
+				checkInterval = intervalCheckChangeToNonDisrupt
+				resetTimer(checkTimer, checkInterval)
+			}
+		}
+	}
+}
+
+func (t *rpcType) disruptionManagerQueue(commandChannel <-chan string,
+	resultChannel chan<- runInfoType) {
+	commandIsRunning := false
+	delayTimer := time.NewTimer(0)
+	var lastCommandTime time.Time
+	var nextCommand string
+	runResultChannel := make(chan runResultType, 1)
+	for {
+		select {
+		case <-delayTimer.C:
+			if !commandIsRunning && nextCommand != "" {
+				commandIsRunning = true
+				go func(command string) {
+					state, err := t.runDisruptionManager(command)
+					runResultChannel <- runResultType{command, err, state}
+				}(nextCommand)
+				nextCommand = ""
+			}
+		case command := <-commandChannel:
+			resetTimer(delayTimer, time.Second-time.Since(lastCommandTime))
+			if command != disruptionManagerCheck || nextCommand == "" {
+				nextCommand = command
 			}
 		case runResult := <-runResultChannel:
+			commandIsRunning = false
+			lastCommandTime = time.Now()
 			if runResult.err != nil {
-				if runningCommand == disruptionManagerCancel {
-					resetTimer(reCancelTimer, time.Minute)
+				if runResult.command != disruptionManagerCheck &&
+					nextCommand == "" {
+					nextCommand = runResult.command
+					resetTimer(delayTimer, time.Minute)
 				}
 				t.params.Logger.Printf("Error running DisruptionManager: %s\n",
 					runResult.err)
 			} else {
-				t.rwLock.Lock()
-				t.disruptionState = runResult.state
-				t.rwLock.Unlock()
-				if runResult.state != disruptionState {
-					if wantToDisrupt {
-						checkInterval = time.Second
-					} else {
-						checkInterval = 5 * time.Second
-					}
-					if runningCommand == disruptionManagerCheck &&
-						disruptionState == proto.DisruptionStateDenied &&
-						haveCancelled && command == "" {
-						command = disruptionManagerCancel
-					}
-					t.params.Logger.Printf(
-						"Ran DisruptionManager(%s): %s->%s\n",
-						runningCommand, disruptionState, runResult.state)
-				} else {
-					t.params.Logger.Debugf(0, "Ran DisruptionManager(%s): %s\n",
-						runningCommand, runResult.state)
-				}
-				disruptionState = runResult.state
-				if runningCommand == disruptionManagerCancel {
-					haveCancelled = true
-				}
+				resultChannel <- runInfoType{runResult.command, runResult.state}
 			}
-			runningCommand = ""
 		}
-		if runningCommand == "" && command != "" {
-			go func(command string) {
-				state, err := t.runDisruptionManager(command)
-				runResultChannel <- runResultType{err, state}
-			}(command)
-			runningCommand = command
-		}
-		switch command {
-		case disruptionManagerCancel:
-			checkInterval = 5 * time.Second
-		case disruptionManagerRequest:
-			checkInterval = time.Second
-		}
-		resetTimer(checkTimer, checkInterval)
 	}
 }

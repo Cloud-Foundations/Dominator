@@ -49,7 +49,7 @@ type rpcType struct {
 	params          Params
 	systemGoroutine *goroutine.Goroutine
 	*serverutil.PerUserMethodLimiter
-	disruptionManagerCommand     chan<- string
+	disruptionManagerControl     chan<- bool // True: request; false: cancel.
 	ownerUsers                   map[string]struct{}
 	rwLock                       sync.RWMutex // Protect everything below.
 	disruptionState              proto.DisruptionState
