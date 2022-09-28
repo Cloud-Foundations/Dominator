@@ -69,8 +69,15 @@ arguments:
 Regardless of the argument provided, the tool must return one of the following
 exit codes:
 - **0**: disruption is permitted
-- **1**: disruption has been requested but not yet permitted
+- **1**: disruption has been requested (and acknowledged) but not yet permitted
 - **2**: disruption is denied (not currently permitted)
+
+Any other exit code is considered an error, and *subd* may retry again soon.
+
+After a **request** to perform a disruptive upgrade, if the exit code is **1**
+(disruption requested and acknowledged), the **request** will be re-issued
+periodically. If however the exit code is **2** (upgrade is not permitted), the
+**request** will be re-issued more frequently.
 
 Once a machine enters the `disruption is permitted state`, it must remain in
 that state until a `cancel` command is made, or more than one hour has passed
