@@ -15,10 +15,12 @@ const (
 	intervalCheckDisrupt            = 15 * time.Second
 	intervalCheckNonDisrupt         = 5 * time.Minute
 	intervalCheckStartup            = 10 * time.Second
-	intervalCancelWhenPermitted     = time.Hour
+	intervalCancelWhenPermitted     = 31 * time.Minute
 	intervalCancelWhenRequested     = 15 * time.Minute
 	intervalRequestWhenDenied       = time.Minute
 	intervalRequestWhenRequested    = 15 * time.Minute
+	intervalResendMinimum           = time.Second
+	intervalResendSameMutation      = time.Minute
 )
 
 type runInfoType struct {
@@ -214,8 +216,8 @@ func (t *rpcType) disruptionManagerQueue(commandChannel <-chan string,
 	resultChannel chan<- runInfoType) {
 	commandIsRunning := false
 	delayTimer := time.NewTimer(0)
-	var lastCommandTime time.Time
-	var nextCommand string
+	var lastCommandTime, lastMutatingCommandTime time.Time
+	var lastMutatingCommand, nextCommand string
 	runResultChannel := make(chan runResultType, 1)
 	for {
 		select {
@@ -229,7 +231,14 @@ func (t *rpcType) disruptionManagerQueue(commandChannel <-chan string,
 				nextCommand = ""
 			}
 		case command := <-commandChannel:
-			resetTimer(delayTimer, time.Second-time.Since(lastCommandTime))
+			if command != disruptionManagerCheck &&
+				command == lastMutatingCommand &&
+				time.Since(lastMutatingCommandTime) <
+					intervalResendSameMutation {
+				continue
+			}
+			resetTimer(delayTimer,
+				intervalResendMinimum-time.Since(lastCommandTime))
 			if command != disruptionManagerCheck || nextCommand == "" {
 				nextCommand = command
 			}
@@ -245,6 +254,10 @@ func (t *rpcType) disruptionManagerQueue(commandChannel <-chan string,
 				t.params.Logger.Printf("Error running DisruptionManager: %s\n",
 					runResult.err)
 			} else {
+				if runResult.command != disruptionManagerCheck {
+					lastMutatingCommand = runResult.command
+					lastMutatingCommandTime = lastCommandTime
+				}
 				resultChannel <- runInfoType{runResult.command, runResult.state}
 			}
 		}
