@@ -7,6 +7,8 @@ import (
 	"flag"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 
 	jsonlib "github.com/Cloud-Foundations/Dominator/lib/json"
@@ -164,6 +166,15 @@ func (t *rpcType) runTriggers(triggers []*triggers.Trigger, action string,
 	return retval
 }
 
+func handleSignals(signals <-chan os.Signal, logger log.Logger) {
+	for sig := range signals {
+		logger.Printf("Caught %s: ignoring\n", sig)
+		if logger, ok := logger.(flusher); ok {
+			logger.Flush()
+		}
+	}
+}
+
 // Returns true if there were failures.
 func runTriggers(triggerList []*triggers.Trigger, action string,
 	logger log.Logger) bool {
@@ -224,8 +235,15 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		if logger, ok := logger.(flusher); ok {
 			logger.Flush()
 		}
+		// Catch and log some signals to try and handle cases where the init
+		// system signals subd but doesn't reboot, so we want to reach the hard
+		// reboot fallback.
+		signal.Reset(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+		signals := make(chan os.Signal, 1)
+		go handleSignals(signals, logger)
+		signal.Notify(signals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 		time.Sleep(time.Second)
-		if runCommand(logger, "reboot") {
+		if runCommand(logger, "reboot", "-f") {
 			time.Sleep(30 * time.Second)
 			logger.Printf("%sStill alive after 30 seconds, rebooting harder\n",
 				logPrefix)
@@ -236,21 +254,10 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 			logger.Flush()
 		}
 		time.Sleep(time.Second)
-		if runCommand(logger, "reboot", "-f") {
-			time.Sleep(30 * time.Second)
-			logger.Printf(
-				"%sStill alive after 30 seconds, rebooting even harder\n",
-				logPrefix)
-		} else {
-			logger.Printf("%sReboot failed, trying even harder\n", logPrefix)
-		}
-		if logger, ok := logger.(flusher); ok {
-			logger.Flush()
-		}
-		time.Sleep(time.Second)
 		if err := hardReboot(logger); err != nil {
 			logger.Printf("%sHard reboot failed: %s\n", logPrefix, err)
 		} else {
+			time.Sleep(time.Second)
 			logger.Printf("%sStill alive after hard reboot. I'm at a loss\n",
 				logPrefix)
 		}
