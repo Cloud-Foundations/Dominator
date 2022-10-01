@@ -175,6 +175,49 @@ func handleSignals(signals <-chan os.Signal, logger log.Logger) {
 	}
 }
 
+// hardReboot will try to sync file-system data and then issues a reboot system
+// call. It doesn't depend on a working "reboot" programme.
+func hardReboot(logger log.Logger) error {
+	syncAndWait(logger)
+	syncAndWait(logger)
+	syncAndWait(logger)
+	logger.Println("Calling reboot() system call and wait")
+	if logger, ok := logger.(flusher); ok {
+		logger.Flush()
+	}
+	time.Sleep(time.Second)
+	return wsyscall.Reboot()
+}
+
+// Returns true on success, else false.
+func runCommand(logger log.Logger, name string, args ...string) bool {
+	cmd := exec.Command(name, args...)
+	if logs, err := cmd.CombinedOutput(); err != nil {
+		errMsg := "error running: " + name
+		for _, arg := range args {
+			errMsg += " " + arg
+		}
+		errMsg += ": " + err.Error()
+		logger.Println(errMsg)
+		logger.Println(string(logs))
+		return false
+	}
+	return true
+}
+
+// runCommandBackground returns a channel that receives a message if the command
+// fails.
+func runCommandBackground(logger log.Logger, name string,
+	args ...string) <-chan struct{} {
+	failureChannel := make(chan struct{}, 1)
+	go func() {
+		if !runCommand(logger, name, args...) {
+			failureChannel <- struct{}{}
+		}
+	}()
+	return failureChannel
+}
+
 // Returns true if there were failures.
 func runTriggers(triggerList []*triggers.Trigger, action string,
 	logger log.Logger) bool {
@@ -243,12 +286,14 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		go handleSignals(signals, logger)
 		signal.Notify(signals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 		time.Sleep(time.Second)
-		if runCommand(logger, "reboot", "-f") {
-			time.Sleep(30 * time.Second)
+		failureChannel := runCommandBackground(logger, "reboot", "-f")
+		timer := time.NewTimer(30 * time.Second)
+		select {
+		case <-failureChannel:
+			logger.Printf("%sReboot failed, trying harder\n", logPrefix)
+		case <-timer.C:
 			logger.Printf("%sStill alive after 30 seconds, rebooting harder\n",
 				logPrefix)
-		} else {
-			logger.Printf("%sReboot failed, trying harder\n", logPrefix)
 		}
 		if logger, ok := logger.(flusher); ok {
 			logger.Flush()
@@ -270,36 +315,6 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		}
 	}
 	return hadFailures
-}
-
-// Returns true on success, else false.
-func runCommand(logger log.Logger, name string, args ...string) bool {
-	cmd := exec.Command(name, args...)
-	if logs, err := cmd.CombinedOutput(); err != nil {
-		errMsg := "error running: " + name
-		for _, arg := range args {
-			errMsg += " " + arg
-		}
-		errMsg += ": " + err.Error()
-		logger.Println(errMsg)
-		logger.Println(string(logs))
-		return false
-	}
-	return true
-}
-
-// hardReboot will try to sync file-system data and then issues a reboot system
-// call. It doesn't depend on a working "reboot" programme.
-func hardReboot(logger log.Logger) error {
-	syncAndWait(logger)
-	syncAndWait(logger)
-	syncAndWait(logger)
-	logger.Println("Calling reboot() system call and wait")
-	if logger, ok := logger.(flusher); ok {
-		logger.Flush()
-	}
-	time.Sleep(time.Second)
-	return wsyscall.Reboot()
 }
 
 // syncAndWait will try to sync file-system data and then waits 5 seconds.
