@@ -24,23 +24,49 @@ type subInfoType struct {
 	MDB  mdb.Machine
 }
 
+func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
+	if len(queryValues) < 1 {
+		return selectAll
+	}
+	statusesToMatch := stringutil.ConvertListToMap(queryValues["status"], false)
+	tagsToMatch := make(map[string][]string)
+	for _, queryTag := range queryValues["tag"] {
+		split := strings.Split(queryTag, "=")
+		if len(split) != 2 {
+			continue
+		}
+		key := split[0]
+		value := split[1]
+		tagsToMatch[key] = append(tagsToMatch[key], value)
+	}
+	if len(statusesToMatch) < 1 && len(tagsToMatch) < 1 {
+		return selectAll
+	}
+	return func(sub *Sub) bool {
+		if _, ok := statusesToMatch[sub.status.String()]; ok {
+			return true
+		}
+		for key, values := range tagsToMatch {
+			for _, value := range values {
+				if value == sub.mdb.Tags[key] {
+					return true
+				}
+			}
+		}
+		return false
+	}
+}
+
+func selectAll(sub *Sub) bool {
+	return true
+}
+
 func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
 	herd.showSubs(w, "alive ", selectAliveSub)
 }
 
 func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	statusesToMatch := stringutil.ConvertListToMap(req.URL.Query()["status"],
-		false)
-	var selectFunc func(*Sub) bool
-	if len(statusesToMatch) > 0 {
-		selectFunc = func(sub *Sub) bool {
-			if _, ok := statusesToMatch[sub.status.String()]; ok {
-				return true
-			}
-			return false
-		}
-	}
-	herd.showSubs(w, "", selectFunc)
+	herd.showSubs(w, "", makeUrlQuerySelector(req.URL.Query()))
 }
 
 func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {

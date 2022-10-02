@@ -75,9 +75,7 @@ func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
-	subNames, _ := herd.listSubs(proto.ListSubsRequest{
-		StatusesToMatch: req.URL.Query()["status"],
-	})
+	subNames := herd.selectSubs(makeUrlQuerySelector(req.URL.Query()))
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeText:
 	case url.OutputTypeHtml:
@@ -88,4 +86,16 @@ func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 		json.WriteWithIndent(writer, "  ", subNames)
 		fmt.Fprintln(writer)
 	}
+}
+
+func (herd *Herd) selectSubs(selectFunc func(sub *Sub) bool) []string {
+	herd.RLock()
+	defer herd.RUnlock()
+	subNames := make([]string, 0, len(herd.subsByIndex))
+	for _, sub := range herd.subsByIndex {
+		if selectFunc(sub) {
+			subNames = append(subNames, sub.mdb.Hostname)
+		}
+	}
+	return subNames
 }
