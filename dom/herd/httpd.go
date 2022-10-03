@@ -18,19 +18,18 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 	html.HandleFunc("/listReachableSubs", herd.listReachableSubsHandler)
 	html.HandleFunc("/listSubs", herd.listSubsHandler)
 	html.HandleFunc("/showAliveSubs",
-		html.BenchmarkedHandler(herd.showAliveSubsHandler))
+		herd.makeShowSubsHandler(selectAliveSub, "alive"))
 	html.HandleFunc("/showAllSubs",
-		html.BenchmarkedHandler(herd.showAllSubsHandler))
+		herd.makeShowSubsHandler(selectAll, ""))
 	html.HandleFunc("/showCompliantSubs",
-		html.BenchmarkedHandler(herd.showCompliantSubsHandler))
+		herd.makeShowSubsHandler(selectCompliantSub, "compliant "))
 	html.HandleFunc("/showLikelyCompliantSubs",
-		html.BenchmarkedHandler(herd.showLikelyCompliantSubsHandler))
+		herd.makeShowSubsHandler(selectLikelyCompliantSub, "likely compliant "))
 	html.HandleFunc("/showDeviantSubs",
-		html.BenchmarkedHandler(herd.showDeviantSubsHandler))
+		herd.makeShowSubsHandler(selectDeviantSub, "deviant "))
 	html.HandleFunc("/showImagesForSubs",
 		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
-	html.HandleFunc("/showReachableSubs",
-		html.BenchmarkedHandler(herd.showReachableSubsHandler))
+	html.HandleFunc("/showReachableSubs", herd.showReachableSubsHandler)
 	html.HandleFunc("/showSub", herd.showSubHandler)
 	if daemon {
 		go http.Serve(listener, nil)

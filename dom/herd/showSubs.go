@@ -61,38 +61,27 @@ func selectAll(sub *Sub) bool {
 	return true
 }
 
-func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "alive ", selectAliveSub)
-}
-
-func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "", makeUrlQuerySelector(req.URL.Query()))
-}
-
-func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "compliant ", selectCompliantSub)
-}
-
-func (herd *Herd) showLikelyCompliantSubsHandler(w io.Writer,
-	req *http.Request) {
-	herd.showSubs(w, "likely compliant ", selectLikelyCompliantSub)
-}
-
-func (herd *Herd) showDeviantSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "deviant ", selectDeviantSub)
-}
-
-func (herd *Herd) showReachableSubsHandler(w io.Writer, req *http.Request) {
-	selector, err := herd.getReachableSelector(url.ParseQuery(req.URL))
-	if err != nil {
-		fmt.Fprintln(w, err)
-		return
+func (herd *Herd) makeShowSubsHandler(selectFunc func(*Sub) bool,
+	subType string) func(http.ResponseWriter, *http.Request) {
+	return func(writer http.ResponseWriter, req *http.Request) {
+		herd.showSubsHandler(writer, req, selectFunc, subType)
 	}
-	herd.showSubs(w, "reachable ", selector)
 }
 
-func (herd *Herd) showSubs(writer io.Writer, subType string,
-	selectFunc func(*Sub) bool) {
+func (herd *Herd) showReachableSubsHandler(writer http.ResponseWriter,
+	req *http.Request) {
+	selectFunc, _ := herd.getReachableSelector(url.ParseQuery(req.URL))
+	herd.showSubsHandler(writer, req, selectFunc, "reachable ")
+}
+
+func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
+	req *http.Request, selectFunc func(*Sub) bool,
+	subType string) {
+	bd, _ := html.CreateBenchmarkData()
+	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
+	writer := bufio.NewWriter(rWriter)
+	defer writer.Flush()
+	defer fmt.Fprintln(writer, "</body>")
 	fmt.Fprintf(writer, "<title>Dominator %s subs</title>", subType)
 	fmt.Fprintln(writer, `<style>
                           table, th, td {
@@ -116,11 +105,14 @@ func (herd *Herd) showSubs(writer io.Writer, subType string,
 		"Planned Image", "Busy", "Status", "Uptime", "Last Scan Duration",
 		"Staleness", "Last Update", "Last Sync", "Connect", "Short Poll",
 		"Full Poll", "Update Compute")
-	subs := herd.getSelectedSubs(selectFunc)
+	subs := herd.getSelectedSubs(func(sub *Sub) bool {
+		return selectFunc(sub) && querySelectFunc(sub)
+	})
 	for _, sub := range subs {
 		showSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
+	bd.Write(writer)
 }
 
 func showSub(tw *html.TableWriter, sub *Sub) {
