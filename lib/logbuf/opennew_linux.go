@@ -9,6 +9,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
 )
 
+const (
+	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
+		syscall.S_IROTH | syscall.S_IXOTH
+	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
+		syscall.S_IROTH
+)
+
 // This should be called with the lock held.
 func (lb *LogBuffer) openNewFile() error {
 	lb.fileSize = 0

@@ -1,12 +1,17 @@
 package logbuf
 
 import (
+	"fmt"
 	"os"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
+)
+
+const (
+	dirPerms  = os.ModeDir | os.ModePerm
+	filePerms = os.ModePerm
 )
 
 // This should be called with the lock held.
@@ -19,8 +24,7 @@ func (lb *LogBuffer) openNewFile() error {
 		return err
 	}
 	if lb.options.RedirectStderr {
-		syscall.Dup2(int(file.Fd()), int(os.Stdout.Fd()))
-		syscall.Dup2(int(file.Fd()), int(os.Stderr.Fd()))
+		return fmt.Errorf("redirectot to stderr not supported on windows")
 	}
 	lb.file = file
 	lb.writer = bufwriter.NewWriter(file, time.Second)
