@@ -53,16 +53,20 @@ func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 
 func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 	req *http.Request) {
+	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
+	selectFunc := func(sub *Sub) bool {
+		return selectAliveSub(sub) && querySelectFunc(sub)
+	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeCsv:
-		herd.showImagesForSubsCSV(writer)
+		herd.showImagesForSubsCSV(writer, selectFunc)
 	case url.OutputTypeHtml: // Want the benchmarking endpoint instead.
 		fmt.Fprintln(writer, "HTML output not supported")
 	case url.OutputTypeJson:
-		herd.showImagesForSubsJSON(writer)
+		herd.showImagesForSubsJSON(writer, selectFunc)
 	case url.OutputTypeText:
 		fmt.Fprintln(writer, "Text output not supported")
 	default:
@@ -71,10 +75,14 @@ func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 }
 
 func (herd *Herd) showImagesForSubsHandler(w io.Writer, req *http.Request) {
-	herd.showImagesForSubsHTML(w)
+	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
+	herd.showImagesForSubsHTML(w, func(sub *Sub) bool {
+		return selectAliveSub(sub) && querySelectFunc(sub)
+	})
 }
 
-func (herd *Herd) showImagesForSubsHTML(writer io.Writer) {
+func (herd *Herd) showImagesForSubsHTML(writer io.Writer,
+	selectFunc func(*Sub) bool) {
 	fmt.Fprintf(writer, "<title>Dominator images for subs</title>")
 	fmt.Fprintln(writer, `<style>
                           table, th, td {
@@ -96,15 +104,16 @@ func (herd *Herd) showImagesForSubsHTML(writer io.Writer) {
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true, "Name", "Required Image",
 		"Planned Image", "Status", "Last Image Update", "Last Note")
-	subs := herd.getSelectedSubs(selectAliveSub)
+	subs := herd.getSelectedSubs(selectFunc)
 	for _, sub := range subs {
 		showImagesForSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
 }
 
-func (herd *Herd) showImagesForSubsCSV(writer io.Writer) {
-	subs := herd.getSelectedSubs(selectAliveSub)
+func (herd *Herd) showImagesForSubsCSV(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
 	w := csv.NewWriter(writer)
 	defer w.Flush()
 	w.Write([]string{
@@ -127,8 +136,9 @@ func (herd *Herd) showImagesForSubsCSV(writer io.Writer) {
 	}
 }
 
-func (herd *Herd) showImagesForSubsJSON(writer io.Writer) {
-	subs := herd.getSelectedSubs(selectAliveSub)
+func (herd *Herd) showImagesForSubsJSON(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
 	output := make([]proto.SubInfo, 0, len(subs))
 	for _, sub := range subs {
 		output = append(output, sub.makeInfo())
