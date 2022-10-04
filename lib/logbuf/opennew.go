@@ -1,3 +1,5 @@
+//go:build !windows
+
 package logbuf
 
 import (
@@ -26,8 +28,8 @@ func (lb *LogBuffer) openNewFile() error {
 		return err
 	}
 	if lb.options.RedirectStderr {
-		syscall.Dup3(int(file.Fd()), int(os.Stdout.Fd()), 0)
-		syscall.Dup3(int(file.Fd()), int(os.Stderr.Fd()), 0)
+		localDup(int(file.Fd()), int(os.Stdout.Fd()))
+		localDup(int(file.Fd()), int(os.Stderr.Fd()))
 	}
 	lb.file = file
 	lb.writer = bufwriter.NewWriter(file, time.Second)
