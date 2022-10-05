@@ -2,6 +2,7 @@ package herd
 
 import (
 	"bufio"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,17 +44,24 @@ func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
 		return selectAll
 	}
 	return func(sub *Sub) bool {
-		if _, ok := statusesToMatch[sub.status.String()]; ok {
-			return true
-		}
-		for key, values := range tagsToMatch {
-			for _, value := range values {
-				if value == sub.mdb.Tags[key] {
-					return true
-				}
+		if len(statusesToMatch) > 0 {
+			if _, ok := statusesToMatch[sub.status.String()]; !ok {
+				return false
 			}
 		}
-		return false
+		for key, values := range tagsToMatch {
+			var matchedTag bool
+			for _, value := range values {
+				if value == sub.mdb.Tags[key] {
+					matchedTag = true
+					break
+				}
+			}
+			if !matchedTag {
+				return false
+			}
+		}
+		return true
 	}
 }
 
@@ -74,13 +82,58 @@ func (herd *Herd) showReachableSubsHandler(writer http.ResponseWriter,
 	herd.showSubsHandler(writer, req, selectFunc, "reachable ")
 }
 
+func (herd *Herd) showSubsCSV(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
+	w := csv.NewWriter(writer)
+	defer w.Flush()
+	w.Write([]string{
+		"Hostname",
+		"Required Image",
+		"Planned Image",
+		"Status",
+		"Last Image Update",
+		"Last Note",
+	})
+	for _, sub := range subs {
+		w.Write([]string{
+			sub.mdb.Hostname,
+			sub.mdb.RequiredImage,
+			sub.mdb.PlannedImage,
+			sub.publishedStatus.String(),
+			sub.lastSuccessfulImageName,
+			sub.lastNote,
+		})
+	}
+}
+
 func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
-	req *http.Request, selectFunc func(*Sub) bool,
+	req *http.Request, _selectFunc func(*Sub) bool,
 	subType string) {
-	bd, _ := html.CreateBenchmarkData()
 	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
+	selectFunc := func(sub *Sub) bool {
+		return _selectFunc(sub) && querySelectFunc(sub)
+	}
 	writer := bufio.NewWriter(rWriter)
 	defer writer.Flush()
+	parsedQuery := url.ParseQuery(req.URL)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeCsv:
+		herd.showSubsCSV(writer, selectFunc)
+	case url.OutputTypeHtml:
+		herd.showSubsHTML(writer, selectFunc, subType)
+	case url.OutputTypeJson:
+		herd.showSubsJSON(writer, selectFunc)
+	case url.OutputTypeText:
+		fmt.Fprintln(writer, "Text output not supported")
+	default:
+		fmt.Fprintln(writer, "Unknown output type")
+	}
+}
+
+func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
+	subType string) {
+	bd, _ := html.CreateBenchmarkData()
 	defer fmt.Fprintln(writer, "</body>")
 	fmt.Fprintf(writer, "<title>Dominator %s subs</title>", subType)
 	fmt.Fprintln(writer, `<style>
@@ -105,14 +158,39 @@ func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
 		"Planned Image", "Busy", "Status", "Uptime", "Last Scan Duration",
 		"Staleness", "Last Update", "Last Sync", "Connect", "Short Poll",
 		"Full Poll", "Update Compute")
-	subs := herd.getSelectedSubs(func(sub *Sub) bool {
-		return selectFunc(sub) && querySelectFunc(sub)
-	})
+	subs := herd.getSelectedSubs(selectFunc)
 	for _, sub := range subs {
 		showSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
 	bd.Write(writer)
+}
+
+func (herd *Herd) showSubsJSON(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
+	output := make([]proto.SubInfo, 0, len(subs))
+	for _, sub := range subs {
+		output = append(output, sub.makeInfo())
+	}
+	json.WriteWithIndent(writer, "   ", output)
+}
+
+func (sub *Sub) makeInfo() proto.SubInfo {
+	return proto.SubInfo{
+		Hostname:            sub.mdb.Hostname,
+		LastDisruptionState: sub.lastDisruptionState,
+		LastNote:            sub.lastNote,
+		LastScanDuration:    sub.lastScanDuration,
+		LastSuccessfulImage: sub.lastSuccessfulImageName,
+		LastSyncTime:        sub.lastSyncTime,
+		LastUpdateTime:      sub.lastUpdateTime,
+		PlannedImage:        sub.mdb.PlannedImage,
+		RequiredImage:       sub.mdb.RequiredImage,
+		StartTime:           sub.startTime,
+		Status:              sub.publishedStatus.String(),
+		SystemUptime:        sub.systemUptime,
+	}
 }
 
 func showSub(tw *html.TableWriter, sub *Sub) {

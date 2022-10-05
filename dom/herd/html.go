@@ -64,11 +64,19 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 			herd.imageManager, herd.defaultImageName, herd.defaultImageName)
 	}
 	fmt.Fprintf(writer,
-		"Number of <a href=\"listSubs\">subs</a>: <a href=\"showAllSubs\">%d</a><br>\n",
+		"Number of <a href=\"listSubs\">subs</a>: <a href=\"showAllSubs\">%d</a>",
 		numSubs)
 	fmt.Fprintf(writer,
-		"Number of alive subs: <a href=\"showAliveSubs\">%d</a><br>\n",
+		" (<a href=\"showAllSubs?output=json\">JSON</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showAllSubs?output=csv\">CSV</a>)<br>\n")
+	fmt.Fprintf(writer,
+		"Number of alive subs: <a href=\"showAliveSubs\">%d</a>",
 		numAliveSubs)
+	fmt.Fprintf(writer,
+		" (<a href=\"showAliveSubs?output=json\">JSON</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showAliveSubs?output=csv\">CSV</a>)<br>\n")
 	fmt.Fprint(writer, "Number of reachable subs in last: ")
 	herd.writeReachableSubsLink(writer, reachableMinuteSubs, "1 min", "1m",
 		true)
@@ -81,8 +89,12 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	herd.writeReachableSubsLink(writer, reachableMonthSubs, "1 month", "1M",
 		false)
 	fmt.Fprintf(writer,
-		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a><br>\n",
+		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a>",
 		numDeviantSubs)
+	fmt.Fprintf(writer,
+		" (<a href=\"showDeviantSubs?output=json\">JSON</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showDeviantSubs?output=csv\">CSV</a>)<br>\n")
 	fmt.Fprintf(writer,
 		"Number of compliant subs: <a href=\"showCompliantSubs\">%d</a>(verified)",
 		numCompliantSubs)
@@ -91,8 +103,12 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		numLikelyCompliantSubs)
 	if numDisruptionWaitingSubs > 0 {
 		fmt.Fprintf(writer,
-			"Number of subs waiting to disrupt: <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied\">%d</a><br>\n",
+			"Number of subs waiting to disrupt: <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied\">%d</a>",
 			numDisruptionWaitingSubs)
+		fmt.Fprintf(writer,
+			" (<a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied&output=json\">JSON</a>")
+		fmt.Fprintf(writer,
+			", <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied&output=csv\">CSV</a>)<br>\n")
 	}
 	fmt.Fprintf(writer,
 		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a>")

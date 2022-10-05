@@ -2,7 +2,6 @@ package herd
 
 import (
 	"bufio"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
-	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
@@ -62,11 +60,11 @@ func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 	parsedQuery := url.ParseQuery(req.URL)
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeCsv:
-		herd.showImagesForSubsCSV(writer, selectFunc)
+		herd.showSubsCSV(writer, selectFunc)
 	case url.OutputTypeHtml: // Want the benchmarking endpoint instead.
 		fmt.Fprintln(writer, "HTML output not supported")
 	case url.OutputTypeJson:
-		herd.showImagesForSubsJSON(writer, selectFunc)
+		herd.showSubsJSON(writer, selectFunc)
 	case url.OutputTypeText:
 		fmt.Fprintln(writer, "Text output not supported")
 	default:
@@ -109,58 +107,6 @@ func (herd *Herd) showImagesForSubsHTML(writer io.Writer,
 		showImagesForSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
-}
-
-func (herd *Herd) showImagesForSubsCSV(writer io.Writer,
-	selectFunc func(*Sub) bool) {
-	subs := herd.getSelectedSubs(selectFunc)
-	w := csv.NewWriter(writer)
-	defer w.Flush()
-	w.Write([]string{
-		"Hostname",
-		"Required Image",
-		"Planned Image",
-		"Status",
-		"Last Image Update",
-		"Last Note",
-	})
-	for _, sub := range subs {
-		w.Write([]string{
-			sub.mdb.Hostname,
-			sub.mdb.RequiredImage,
-			sub.mdb.PlannedImage,
-			sub.publishedStatus.String(),
-			sub.lastSuccessfulImageName,
-			sub.lastNote,
-		})
-	}
-}
-
-func (herd *Herd) showImagesForSubsJSON(writer io.Writer,
-	selectFunc func(*Sub) bool) {
-	subs := herd.getSelectedSubs(selectFunc)
-	output := make([]proto.SubInfo, 0, len(subs))
-	for _, sub := range subs {
-		output = append(output, sub.makeInfo())
-	}
-	json.WriteWithIndent(writer, "   ", output)
-}
-
-func (sub *Sub) makeInfo() proto.SubInfo {
-	return proto.SubInfo{
-		Hostname:            sub.mdb.Hostname,
-		LastDisruptionState: sub.lastDisruptionState,
-		LastNote:            sub.lastNote,
-		LastScanDuration:    sub.lastScanDuration,
-		LastSuccessfulImage: sub.lastSuccessfulImageName,
-		LastSyncTime:        sub.lastSyncTime,
-		LastUpdateTime:      sub.lastUpdateTime,
-		PlannedImage:        sub.mdb.PlannedImage,
-		RequiredImage:       sub.mdb.RequiredImage,
-		StartTime:           sub.startTime,
-		Status:              sub.publishedStatus.String(),
-		SystemUptime:        sub.systemUptime,
-	}
 }
 
 func showImagesForSub(tw *html.TableWriter, sub *Sub) {
