@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"gopkg.in/fsnotify/fsnotify.v0"
+	"github.com/fsnotify/fsnotify"
 )
 
 var (
@@ -27,7 +27,7 @@ func watchFileWithFsNotify(pathname string, channel chan<- io.ReadCloser,
 	watchers = append(watchers, watcher)
 	pathname = path.Clean(pathname)
 	dirname := path.Dir(pathname)
-	if err := watcher.WatchFlags(dirname, fsnotify.FSN_CREATE); err != nil {
+	if err := watcher.Add(dirname); err != nil {
 		logger.Println("Error adding watch:", err)
 		return false
 	}
@@ -45,7 +45,7 @@ func watchFileStopWithFsNotify() bool {
 	// Wait for cleanup of each watcher.
 	for _, watcher := range watchers {
 		for {
-			if _, ok := <-watcher.Event; !ok {
+			if _, ok := <-watcher.Events; !ok {
 				break
 			}
 		}
@@ -61,7 +61,7 @@ func waitForNotifyEvents(watcher *fsnotify.Watcher, pathname string,
 	}
 	for {
 		select {
-		case event, ok := <-watcher.Event:
+		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
@@ -78,7 +78,7 @@ func waitForNotifyEvents(watcher *fsnotify.Watcher, pathname string,
 			} else {
 				channel <- file
 			}
-		case err, ok := <-watcher.Error:
+		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
