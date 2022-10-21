@@ -45,8 +45,9 @@ type GetSubsConfigurationRequest struct{}
 type GetSubsConfigurationResponse sub.Configuration
 
 type GetInfoForSubsRequest struct {
-	Hostnames       []string // Empty: match all hostnames.
-	StatusesToMatch []string // Empty: match all statuses.
+	Hostnames       []string            // Empty: match all hostnames.
+	StatusesToMatch []string            // Empty: match all statuses.
+	TagsToMatch     map[string][]string // Empty: match all tags.
 }
 
 type GetInfoForSubsResponse struct {
@@ -55,8 +56,9 @@ type GetInfoForSubsResponse struct {
 }
 
 type ListSubsRequest struct {
-	Hostnames       []string // Empty: match all hostnames.
-	StatusesToMatch []string // Empty: match all statuses.
+	Hostnames       []string            // Empty: match all hostnames.
+	StatusesToMatch []string            // Empty: match all statuses.
+	TagsToMatch     map[string][]string // Empty: match all tags.
 }
 
 type ListSubsResponse struct {
