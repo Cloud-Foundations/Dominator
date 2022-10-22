@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
-	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
@@ -39,33 +38,18 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 }
 
 func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
-	statusesToMatch := stringutil.ConvertListToMap(request.StatusesToMatch,
-		false)
+	selectFunc := makeSelector(request.StatusesToMatch, request.TagsToMatch)
 	if len(request.Hostnames) < 1 {
-		herd.RLock()
-		defer herd.RUnlock()
-		subNames := make([]string, 0, len(herd.subsByIndex))
-		for _, sub := range herd.subsByIndex {
-			if len(statusesToMatch) > 0 {
-				if _, ok := statusesToMatch[sub.status.String()]; !ok {
-					continue
-				}
-			}
-			subNames = append(subNames, sub.mdb.Hostname)
-		}
-		return subNames, nil
+		return herd.selectSubs(selectFunc), nil
 	}
 	subNames := make([]string, 0, len(request.Hostnames))
 	herd.RLock()
 	defer herd.RUnlock()
 	for _, hostname := range request.Hostnames {
 		if sub, ok := herd.subsByName[hostname]; ok {
-			if len(statusesToMatch) > 0 {
-				if _, ok := statusesToMatch[sub.status.String()]; !ok {
-					continue
-				}
+			if selectFunc(sub) {
+				subNames = append(subNames, hostname)
 			}
-			subNames = append(subNames, hostname)
 		}
 	}
 	return subNames, nil

@@ -25,27 +25,15 @@ type subInfoType struct {
 	MDB  mdb.Machine
 }
 
-func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
-	if len(queryValues) < 1 {
-		return selectAll
-	}
-	statusesToMatch := stringutil.ConvertListToMap(queryValues["status"], false)
-	tagsToMatch := make(map[string][]string)
-	for _, queryTag := range queryValues["tag"] {
-		split := strings.Split(queryTag, "=")
-		if len(split) != 2 {
-			continue
-		}
-		key := split[0]
-		value := split[1]
-		tagsToMatch[key] = append(tagsToMatch[key], value)
-	}
+func makeSelector(statusesToMatch []string,
+	tagsToMatch map[string][]string) func(sub *Sub) bool {
 	if len(statusesToMatch) < 1 && len(tagsToMatch) < 1 {
 		return selectAll
 	}
+	statusesToMatchMap := stringutil.ConvertListToMap(statusesToMatch, false)
 	return func(sub *Sub) bool {
 		if len(statusesToMatch) > 0 {
-			if _, ok := statusesToMatch[sub.status.String()]; !ok {
+			if _, ok := statusesToMatchMap[sub.status.String()]; !ok {
 				return false
 			}
 		}
@@ -63,6 +51,23 @@ func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
 		}
 		return true
 	}
+}
+
+func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
+	if len(queryValues) < 1 {
+		return selectAll
+	}
+	tagsToMatch := make(map[string][]string)
+	for _, queryTag := range queryValues["tag"] {
+		split := strings.Split(queryTag, "=")
+		if len(split) != 2 {
+			continue
+		}
+		key := split[0]
+		value := split[1]
+		tagsToMatch[key] = append(tagsToMatch[key], value)
+	}
+	return makeSelector(queryValues["status"], tagsToMatch)
 }
 
 func selectAll(sub *Sub) bool {
