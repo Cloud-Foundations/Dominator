@@ -30,6 +30,7 @@ func getInfoForSubs(client *srpc.Client) error {
 	request := dominator.GetInfoForSubsRequest{
 		Hostnames:       hostnames,
 		StatusesToMatch: statusesToMatch,
+		TagsToMatch:     tagsToMatch,
 	}
 	var reply dominator.GetInfoForSubsResponse
 	if err := client.RequestReply("Dominator.GetInfoForSubs", request,

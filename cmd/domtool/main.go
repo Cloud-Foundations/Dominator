@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 var (
@@ -31,6 +32,7 @@ var (
 	statusesToMatch flagutil.StringList
 	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
+	tagsToMatch tags.MatchTags
 
 	dominatorSrpcClient *srpc.Client
 )
@@ -40,6 +42,7 @@ func init() {
 		"Comma separated list of patterns to exclude from scanning")
 	flag.Var(&statusesToMatch, "statusesToMatch",
 		"Sub statuses to match when listing")
+	flag.Var(&tagsToMatch, "tagsToMatch", "Tags to match when listing")
 }
 
 func printUsage() {
