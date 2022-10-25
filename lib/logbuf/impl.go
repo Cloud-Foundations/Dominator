@@ -12,7 +12,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
@@ -21,11 +20,6 @@ import (
 )
 
 const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
-		syscall.S_IROTH
-
 	reopenMessage = "Closing and will open new logfile"
 	timeLayout    = "2006-01-02:15:04:05.999"
 )
@@ -198,8 +192,8 @@ func (lb *LogBuffer) openNewFile() error {
 		return err
 	}
 	if lb.options.RedirectStderr {
-		syscall.Dup2(int(file.Fd()), int(os.Stdout.Fd()))
-		syscall.Dup2(int(file.Fd()), int(os.Stderr.Fd()))
+		localDup(int(file.Fd()), int(os.Stdout.Fd()))
+		localDup(int(file.Fd()), int(os.Stderr.Fd()))
 	}
 	lb.file = file
 	lb.writer = bufwriter.NewWriter(file, time.Second)
