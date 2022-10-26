@@ -49,6 +49,14 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctimespec
 }
 
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	var rlim syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+		return 0, 0, err
+	}
+	return rlim.Cur, rlim.Max, nil
+}
+
 func getrusage(who int, rusage *Rusage) error {
 	switch who {
 	case RUSAGE_CHILDREN:

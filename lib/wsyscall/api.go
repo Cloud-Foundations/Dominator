@@ -55,6 +55,12 @@ func Fallocate(fd int, mode uint32, off int64, len int64) error {
 	return fallocate(fd, mode, off, len)
 }
 
+// GetFileDescriptorLimit returns the current limit and maximum limit on number
+// of open file descriptors.
+func GetFileDescriptorLimit() (uint64, uint64, error) {
+	return getFileDescriptorLimit()
+}
+
 func Ioctl(fd int, request, argp uintptr) error {
 	return ioctl(fd, request, argp)
 }

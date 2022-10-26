@@ -34,6 +34,10 @@ func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
 }
 
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	return 0, 0, syscall.ENOTSUP
+}
+
 func getrusage(who int, rusage *Rusage) error {
 	return syscall.ENOTSUP
 }

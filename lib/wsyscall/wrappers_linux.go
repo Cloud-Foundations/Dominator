@@ -1,3 +1,4 @@
+//go:build go1.11.6 || go1.12
 // +build go1.11.6 go1.12
 
 // Go versions prior to 1.10 would re-use a thread that was locked to a
@@ -63,6 +64,14 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.Fallocate(fd, mode, off, len)
+}
+
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	var rlim syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+		return 0, 0, err
+	}
+	return rlim.Cur, rlim.Max, nil
 }
 
 func getrusage(who int, rusage *Rusage) error {
