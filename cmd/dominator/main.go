@@ -20,6 +20,7 @@ import (
 	objectserver "github.com/Cloud-Foundations/Dominator/lib/objectserver/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -56,11 +57,11 @@ func showMdb(mdb *mdb.Mdb) {
 }
 
 func getFdLimit() uint64 {
-	var rlim syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+	_, maxFD, err := wsyscall.GetFileDescriptorLimit()
+	if err != nil {
 		panic(err)
 	}
-	return rlim.Max
+	return maxFD
 }
 
 func pathJoin(first, second string) string {
