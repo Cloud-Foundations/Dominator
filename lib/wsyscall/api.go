@@ -51,6 +51,18 @@ type Timeval struct {
 	Usec int64
 }
 
+func Dup(oldfd int) (int, error) {
+	return dup(oldfd)
+}
+
+func Dup2(oldfd int, newfd int) error {
+	return dup2(oldfd, newfd)
+}
+
+func Dup3(oldfd int, newfd int, flags int) error {
+	return dup3(oldfd, newfd, flags)
+}
+
 func Fallocate(fd int, mode uint32, off int64, len int64) error {
 	return fallocate(fd, mode, off, len)
 }

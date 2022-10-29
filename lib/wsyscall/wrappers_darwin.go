@@ -49,6 +49,21 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctimespec
 }
 
+func dup(oldfd int) (int, error) {
+	return syscall.Dup(oldfd)
+}
+
+func dup2(oldfd int, newfd int) error {
+	return syscall.Dup2(oldfd, newfd)
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	if flags == 0 {
+		return syscall.Dup2(oldfd, newfd)
+	}
+	return syscall.ENOTSUP
+}
+
 func getFileDescriptorLimit() (uint64, uint64, error) {
 	var rlim syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {

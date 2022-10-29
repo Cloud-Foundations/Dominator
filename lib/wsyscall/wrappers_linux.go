@@ -62,6 +62,21 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctim
 }
 
+func dup(oldfd int) (int, error) {
+	return syscall.Dup(oldfd)
+}
+
+// Arm64 linux does NOT support the Dup2 syscall
+// https://marcin.juszkiewicz.com.pl/download/tables/syscalls.html
+// and dup3 is more supported so doing it here:
+func dup2(oldfd int, newfd int) error {
+	return syscall.Dup3(oldfd, newfd, 0)
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	return syscall.Dup3(oldfd, newfd, flags)
+}
+
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.Fallocate(fd, mode, off, len)
 }

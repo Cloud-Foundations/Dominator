@@ -30,6 +30,18 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 )
 
+func dup(oldfd int) (int, error) {
+	return 0, syscall.ENOTSUP
+}
+
+func dup2(oldfd int, newfd int) error {
+	return syscall.ENOTSUP
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	return syscall.ENOTSUP
+}
+
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
 }
