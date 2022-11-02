@@ -14,6 +14,7 @@ import (
 const (
 	DirPerms = wsyscall.S_IRWXU | wsyscall.S_IRGRP | wsyscall.S_IXGRP |
 		wsyscall.S_IROTH | wsyscall.S_IXOTH
+	PrivateDirPerms  = wsyscall.S_IRWXU
 	PrivateFilePerms = wsyscall.S_IRUSR | wsyscall.S_IWUSR
 	PublicFilePerms  = PrivateFilePerms | wsyscall.S_IRGRP | wsyscall.S_IROTH
 )
