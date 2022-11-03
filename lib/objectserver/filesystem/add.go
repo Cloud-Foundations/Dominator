@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -17,8 +16,7 @@ import (
 )
 
 const (
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP
-	buflen    = 65536
+	buflen = 65536
 )
 
 func (objSrv *ObjectServer) addObject(reader io.Reader, length uint64,
@@ -57,11 +55,13 @@ func (objSrv *ObjectServer) addOrCompare(hashVal hash.Hash, data []byte,
 		return false, nil
 	}
 	objSrv.garbageCollector()
-	if err = os.MkdirAll(path.Dir(filename), syscall.S_IRWXU); err != nil {
+	err = os.MkdirAll(path.Dir(filename), fsutil.PrivateDirPerms)
+	if err != nil {
 		return false, err
 	}
-	if err := fsutil.CopyToFile(filename, filePerms, bytes.NewReader(data),
-		uint64(len(data))); err != nil {
+	err = fsutil.CopyToFile(filename, fsutil.PrivateFilePerms,
+		bytes.NewReader(data), uint64(len(data)))
+	if err != nil {
 		return false, err
 	}
 	return true, nil
