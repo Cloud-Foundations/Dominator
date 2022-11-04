@@ -49,6 +49,11 @@ func (filter *Filter) Compile() error {
 	return filter.compile()
 }
 
+// Equal will return true if two filters contain the same filter lines.
+func (left *Filter) Equal(right *Filter) bool {
+	return left.equal(right)
+}
+
 // Match will return true if pathname matches one of the regular expressions.
 // The Compile method will be automatically called if it has not been called
 // yet.
