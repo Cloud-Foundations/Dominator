@@ -42,6 +42,8 @@ func diffTypedImages(tool string, lName string, rName string) error {
 		filt = lFilter
 	} else if lFilter == nil && rFilter != nil {
 		filt = rFilter
+	} else if lFilter.Equal(rFilter) {
+		filt = lFilter
 	}
 	if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
 		return fmt.Errorf("error filtering left image: %s", err)
