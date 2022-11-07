@@ -39,7 +39,7 @@ type typedImage struct {
 }
 
 func getTypedFileSystem(typedName string) (*filesystem.FileSystem, error) {
-	ti, err := getTypedImage(typedName)
+	ti, err := getTypedImageType(typedName)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func getTypedFileSystem(typedName string) (*filesystem.FileSystem, error) {
 
 func getTypedFileSystemAndFilter(typedName string) (
 	*filesystem.FileSystem, *filter.Filter, error) {
-	ti, err := getTypedImage(typedName)
+	ti, err := getTypedImageType(typedName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,7 +63,19 @@ func getTypedFileSystemAndFilter(typedName string) (
 	return fs, ti.filter, nil
 }
 
-func getTypedImage(typedName string) (*typedImage, error) {
+func getTypedImage(typedName string) (*image.Image, error) {
+	ti, err := getTypedImageType(typedName)
+	if err != nil {
+		return nil, err
+	}
+	img, err := ti.getImage()
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+func getTypedImageType(typedName string) (*typedImage, error) {
 	ti, err := makeTypedImage(typedName)
 	if err != nil {
 		return nil, err
@@ -116,6 +128,14 @@ func (ti *typedImage) getFilter() (*filter.Filter, error) {
 	}
 }
 
+func (ti *typedImage) getImage() (*image.Image, error) {
+	if img := ti.image; img == nil {
+		return nil, errors.New("Image data not available")
+	} else {
+		return img, nil
+	}
+}
+
 func (ti *typedImage) load() error {
 	switch ti.imageType {
 	case imageTypeDirectory:
@@ -138,6 +158,7 @@ func (ti *typedImage) load() error {
 		}
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
+		ti.image = img
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
 		img, err := getLatestImage(imageSClient, ti.specifier)
@@ -146,6 +167,7 @@ func (ti *typedImage) load() error {
 		}
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
+		ti.image = img
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
 		if err != nil {
@@ -153,6 +175,7 @@ func (ti *typedImage) load() error {
 		}
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
+		ti.image = img
 	case imageTypeSub:
 		fs, err := pollImage(ti.specifier)
 		if err != nil {
