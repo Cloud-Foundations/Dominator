@@ -77,17 +77,6 @@ var (
 
 	logger            log.DebugLogger
 	minimumExpiration = 15 * time.Minute
-
-	diffArgs = `  tool left right
-         left & right are image sources. Format:
-         type:name where type is one of:
-           d: name of directory tree to scan
-           f: name of file containing a FileSystem
-           i: name of an image on the imageserver
-           I: name of an image stream on the imageserver
-           l: name of file containing an Image
-           s: name of sub to poll
-           v: hostname/IP of SmallStack VM to scan`
 )
 
 func init() {
@@ -106,7 +95,15 @@ func printUsage() {
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
 	commands.PrintCommands(w, subcommands)
-	fmt.Fprintln(w, "Fields:")
+	fmt.Fprintln(w, "Images can be specified as name:type. Supported types:")
+	fmt.Fprintln(w, "  d: name of directory tree to scan")
+	fmt.Fprintln(w, "  f: name of file containing a FileSystem")
+	fmt.Fprintln(w, "  i: name of an image on the imageserver")
+	fmt.Fprintln(w, "  I: name of an image stream on the imageserver (latest)")
+	fmt.Fprintln(w, "  l: name of file containing an Image")
+	fmt.Fprintln(w, "  s: name of sub to poll")
+	fmt.Fprintln(w, "  v: hostname/IP of SmallStack VM to scan")
+	fmt.Fprintln(w, "SkipFields:")
 	fmt.Fprintln(w, "  m: mode")
 	fmt.Fprintln(w, "  l: number of hardlinks")
 	fmt.Fprintln(w, "  u: UID")
@@ -137,7 +134,7 @@ var subcommands = []commands.Command{
 	{"delete", "name", 1, 1, deleteImageSubcommand},
 	{"delunrefobj", "percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},
-	{"diff", diffArgs, 3, 3, diffSubcommand},
+	{"diff", "tool left right", 3, 3, diffSubcommand},
 	{"diff-package-lists", " tool left right", 3, 3,
 		diffImagePackageListsSubcommand},
 	{"estimate-usage", "     name", 1, 1, estimateImageUsageSubcommand},
