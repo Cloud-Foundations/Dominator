@@ -31,7 +31,7 @@ func getInodeInImage(img *image.Image, inodePath string) (
 
 func traceInodeHistory(imageName, inodePath string) error {
 	imageSClient, _ := getClients()
-	img, err := getImage(imageSClient, imageName)
+	img, err := getTypedImage(imageName)
 	if err != nil {
 		return err
 	}
