@@ -86,6 +86,14 @@ func getTypedImageType(typedName string) (*typedImage, error) {
 	return ti, nil
 }
 
+func getTypedPackageList(typedName string) ([]image.Package, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	return ti.loadPackages()
+}
+
 func makeTypedImage(typedName string) (*typedImage, error) {
 	if len(typedName) < 3 || typedName[1] != ':' {
 		typedName = "i:" + typedName
@@ -192,6 +200,33 @@ func (ti *typedImage) load() error {
 		panic("unsupported typedImage in load()")
 	}
 	return nil
+}
+
+func (ti *typedImage) loadPackages() ([]image.Package, error) {
+	switch ti.imageType {
+	case imageTypeImage:
+		imageSClient, _ := getClients()
+		img, err := getImage(imageSClient, ti.specifier)
+		if err != nil {
+			return nil, err
+		}
+		return img.Packages, nil
+	case imageTypeLatestImage:
+		imageSClient, _ := getClients()
+		img, err := getLatestImage(imageSClient, ti.specifier)
+		if err != nil {
+			return nil, err
+		}
+		return img.Packages, nil
+	case imageTypeImageFile:
+		img, err := readImage(ti.specifier)
+		if err != nil {
+			return nil, err
+		}
+		return img.Packages, nil
+	default:
+		return nil, errors.New("package data not available")
+	}
 }
 
 func findHypervisor(vmIpAddr net.IP) (string, error) {

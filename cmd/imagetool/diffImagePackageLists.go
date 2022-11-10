@@ -22,30 +22,30 @@ func diffImagePackageListsSubcommand(args []string,
 }
 
 func diffImagePackageLists(tool, leftName, rightName string) error {
-	leftImage, err := getImageMetadata(leftName)
+	leftPackages, err := getTypedPackageList(leftName)
 	if err != nil {
 		return err
 	}
-	if len(leftImage.Packages) < 1 {
+	if len(leftPackages) < 1 {
 		return errors.New("no left image package data")
 	}
-	rightImage, err := getImageMetadata(rightName)
+	rightPackages, err := getTypedPackageList(rightName)
 	if err != nil {
 		return err
 	}
-	if len(rightImage.Packages) < 1 {
+	if len(rightPackages) < 1 {
 		return errors.New("no right image package data")
 	}
 	var nameWidth, versionWidth int
-	getWidthsForPackages(leftImage.Packages, &nameWidth, &versionWidth)
-	getWidthsForPackages(rightImage.Packages, &nameWidth, &versionWidth)
-	leftFile, err := writePackageListToTempfile(leftImage.Packages,
+	getWidthsForPackages(leftPackages, &nameWidth, &versionWidth)
+	getWidthsForPackages(rightPackages, &nameWidth, &versionWidth)
+	leftFile, err := writePackageListToTempfile(leftPackages,
 		nameWidth, versionWidth)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(leftFile)
-	rightFile, err := writePackageListToTempfile(rightImage.Packages,
+	rightFile, err := writePackageListToTempfile(rightPackages,
 		nameWidth, versionWidth)
 	if err != nil {
 		return err
