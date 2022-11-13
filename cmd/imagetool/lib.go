@@ -4,8 +4,10 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -14,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
@@ -204,6 +207,12 @@ func (ti *typedImage) load() error {
 
 func (ti *typedImage) loadPackages() ([]image.Package, error) {
 	switch ti.imageType {
+	case imageTypeDirectory:
+		return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
+			command := exec.Command("/bin/generic-packager", cmd)
+			command.Stdout = w
+			return command.Run()
+		})
 	case imageTypeImage:
 		imageSClient, _ := getClients()
 		img, err := getImage(imageSClient, ti.specifier)
