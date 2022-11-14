@@ -172,7 +172,7 @@ func (ti *typedImage) load() error {
 		ti.image = img
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, err := getLatestImage(imageSClient, ti.specifier)
+		img, err := getLatestImage(imageSClient, ti.specifier, false)
 		if err != nil {
 			return err
 		}
@@ -214,15 +214,14 @@ func (ti *typedImage) loadPackages() ([]image.Package, error) {
 			return command.Run()
 		})
 	case imageTypeImage:
-		imageSClient, _ := getClients()
-		img, err := getImage(imageSClient, ti.specifier)
+		img, err := getImageMetadata(ti.specifier)
 		if err != nil {
 			return nil, err
 		}
 		return img.Packages, nil
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, err := getLatestImage(imageSClient, ti.specifier)
+		img, err := getLatestImage(imageSClient, ti.specifier, true)
 		if err != nil {
 			return nil, err
 		}
@@ -284,10 +283,14 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 	return img, nil
 }
 
-func getLatestImage(client *srpc.Client, name string) (*image.Image, error) {
+func getLatestImage(client *srpc.Client, name string,
+	ignoreFilesystem bool) (*image.Image, error) {
 	imageName, err := imgclient.FindLatestImage(client, name, *ignoreExpiring)
 	if err != nil {
 		return nil, err
+	}
+	if ignoreFilesystem {
+		return getImageMetadata(imageName)
 	}
 	return getImage(client, imageName)
 }
