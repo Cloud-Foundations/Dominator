@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -39,6 +41,14 @@ type typedImage struct {
 	image      *image.Image
 	imageType  uint
 	specifier  string
+}
+
+func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	return ti.openFile(filename)
 }
 
 func getTypedFileSystem(typedName string) (*filesystem.FileSystem, error) {
@@ -237,6 +247,44 @@ func (ti *typedImage) loadPackages() ([]image.Package, error) {
 	}
 }
 
+func (ti *typedImage) openFile(filename string) (io.ReadCloser, error) {
+	switch ti.imageType {
+	case imageTypeDirectory:
+		return os.Open(filepath.Join(ti.specifier, filename))
+	case imageTypeFileSystem, imageTypeImage, imageTypeLatestImage, imageTypeImageFile:
+		if err := ti.load(); err != nil {
+			return nil, err
+		}
+	case imageTypeSub:
+		data, err := readFileFromSub(ti.specifier, filename)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(data)), nil
+	default:
+		return nil, errors.New("unsupported typedImage in openFile()")
+	}
+	fs, err := ti.getFileSystem()
+	if err != nil {
+		return nil, err
+	}
+	filenameToInodeTable := fs.FilenameToInodeTable()
+	if inum, ok := filenameToInodeTable[filename]; !ok {
+		return nil, fmt.Errorf("file: \"%s\" not present in image", filename)
+	} else if inode, ok := fs.InodeTable[inum]; !ok {
+		return nil, fmt.Errorf("inode: %d not present in image", inum)
+	} else if inode, ok := inode.(*filesystem.RegularInode); !ok {
+		return nil, fmt.Errorf("file: \"%s\" is not a regular file", filename)
+	} else {
+		_, objectClient := getClients()
+		_, reader, err := objectClient.GetObject(inode.Hash)
+		if err != nil {
+			return nil, err
+		}
+		return reader, nil
+	}
+}
+
 func findHypervisor(vmIpAddr net.IP) (string, error) {
 	if *hypervisorHostname != "" {
 		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
@@ -338,6 +386,25 @@ func pollImage(name string) (*filesystem.FileSystem, error) {
 	}
 	reply.FileSystem.RebuildInodePointers()
 	return reply.FileSystem, nil
+}
+
+func readFileFromSub(subHostname, filename string) ([]byte, error) {
+	clientName := fmt.Sprintf("%s:%d", subHostname, constants.SubPortNumber)
+	srpcClient, err := srpc.DialHTTP("tcp", clientName, 0)
+	if err != nil {
+		return nil, fmt.Errorf("error dialing %s", err)
+	}
+	defer srpcClient.Close()
+	buffer := &bytes.Buffer{}
+	err = subclient.GetFiles(srpcClient, []string{filename},
+		func(reader io.Reader, size uint64) error {
+			_, err := io.Copy(buffer, reader)
+			return err
+		})
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 func readFileSystem(name string) (*filesystem.FileSystem, error) {
