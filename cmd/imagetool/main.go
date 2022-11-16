@@ -135,6 +135,8 @@ var subcommands = []commands.Command{
 	{"delunrefobj", "percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},
 	{"diff", "tool left right", 3, 3, diffSubcommand},
+	{"diff-files", "tool left right filename", 4, 4,
+		diffFileInImagesSubcommand},
 	{"diff-package-lists", " tool left right", 3, 3,
 		diffImagePackageListsSubcommand},
 	{"estimate-usage", "     name", 1, 1, estimateImageUsageSubcommand},

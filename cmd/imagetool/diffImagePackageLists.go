@@ -58,7 +58,7 @@ func diffImagePackageLists(tool, leftName, rightName string) error {
 
 func writePackageListToTempfile(packages []image.Package,
 	nameWidth, versionWidth int) (string, error) {
-	file, err := ioutil.TempFile("", "imagetool-left")
+	file, err := ioutil.TempFile("", "imagetool-diff")
 	if err != nil {
 		return "", err
 	}
