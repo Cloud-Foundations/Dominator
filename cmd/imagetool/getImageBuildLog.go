@@ -27,7 +27,7 @@ func getImageBuildLogSubcommand(args []string, logger log.DebugLogger) error {
 
 func getImageBuildLog(objectClient *objectclient.ObjectClient,
 	imageName, outFileName string) error {
-	img, err := getImageMetadata(imageName)
+	img, err := getTypedImageMetadata(imageName)
 	if err != nil {
 		return err
 	}

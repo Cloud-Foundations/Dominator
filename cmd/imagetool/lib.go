@@ -88,6 +88,21 @@ func getTypedImage(typedName string) (*image.Image, error) {
 	return img, nil
 }
 
+func getTypedImageMetadata(typedName string) (*image.Image, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	if err := ti.loadMetadata(); err != nil {
+		return nil, err
+	}
+	img, err := ti.getImage()
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
 func getTypedImageType(typedName string) (*typedImage, error) {
 	ti, err := makeTypedImage(typedName)
 	if err != nil {
@@ -215,6 +230,33 @@ func (ti *typedImage) load() error {
 	return nil
 }
 
+func (ti *typedImage) loadMetadata() error {
+	switch ti.imageType {
+	case imageTypeImage:
+		img, err := getImageMetadata(ti.specifier)
+		if err != nil {
+			return err
+		}
+		ti.image = img
+	case imageTypeLatestImage:
+		imageSClient, _ := getClients()
+		img, err := getLatestImage(imageSClient, ti.specifier, true)
+		if err != nil {
+			return err
+		}
+		ti.image = img
+	case imageTypeImageFile:
+		img, err := readImage(ti.specifier)
+		if err != nil {
+			return err
+		}
+		ti.image = img
+	default:
+		return errors.New("package data not available")
+	}
+	return nil
+}
+
 func (ti *typedImage) loadPackages() ([]image.Package, error) {
 	switch ti.imageType {
 	case imageTypeDirectory:
@@ -223,25 +265,11 @@ func (ti *typedImage) loadPackages() ([]image.Package, error) {
 			command.Stdout = w
 			return command.Run()
 		})
-	case imageTypeImage:
-		img, err := getImageMetadata(ti.specifier)
-		if err != nil {
+	case imageTypeImage, imageTypeLatestImage, imageTypeImageFile:
+		if err := ti.loadMetadata(); err != nil {
 			return nil, err
 		}
-		return img.Packages, nil
-	case imageTypeLatestImage:
-		imageSClient, _ := getClients()
-		img, err := getLatestImage(imageSClient, ti.specifier, true)
-		if err != nil {
-			return nil, err
-		}
-		return img.Packages, nil
-	case imageTypeImageFile:
-		img, err := readImage(ti.specifier)
-		if err != nil {
-			return nil, err
-		}
-		return img.Packages, nil
+		return ti.image.Packages, nil
 	default:
 		return nil, errors.New("package data not available")
 	}
