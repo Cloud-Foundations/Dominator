@@ -76,3 +76,8 @@ func (mf *MergeableFilter) ExportFilter() *Filter {
 func (mf *MergeableFilter) Merge(filter *Filter) {
 	mf.merge(filter)
 }
+
+// Write will write the filter as newline separated regular expressions.
+func (filter *Filter) Write(writer io.Writer) error {
+	return filter.write(writer)
+}
