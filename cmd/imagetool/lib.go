@@ -88,6 +88,21 @@ func getTypedImage(typedName string) (*image.Image, error) {
 	return img, nil
 }
 
+func getTypedImageFilter(typedName string) (*filter.Filter, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	if err := ti.loadMetadata(); err != nil {
+		return nil, err
+	}
+	filt, err := ti.getFilter()
+	if err != nil {
+		return nil, err
+	}
+	return filt, nil
+}
+
 func getTypedImageMetadata(typedName string) (*image.Image, error) {
 	ti, err := makeTypedImage(typedName)
 	if err != nil {
@@ -237,6 +252,7 @@ func (ti *typedImage) loadMetadata() error {
 		if err != nil {
 			return err
 		}
+		ti.filter = img.Filter
 		ti.image = img
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
@@ -244,12 +260,14 @@ func (ti *typedImage) loadMetadata() error {
 		if err != nil {
 			return err
 		}
+		ti.filter = img.Filter
 		ti.image = img
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
 		if err != nil {
 			return err
 		}
+		ti.filter = img.Filter
 		ti.image = img
 	default:
 		return errors.New("package data not available")
