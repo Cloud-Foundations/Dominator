@@ -21,9 +21,7 @@ func (s state) listFilterHandler(w http.ResponseWriter, req *http.Request) {
 	} else {
 		fmt.Fprintf(writer, "Filter lines for image: %s\n", imageName)
 		fmt.Fprintln(writer, "<pre>")
-		for _, line := range image.Filter.FilterLines {
-			fmt.Fprintln(writer, line)
-		}
+		image.Filter.Write(writer)
 		fmt.Fprintln(writer, "</pre>")
 	}
 	fmt.Fprintln(writer, "</body>")
