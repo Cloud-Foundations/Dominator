@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	subclient "github.com/Cloud-Foundations/Dominator/sub/client"
@@ -41,6 +42,7 @@ type typedImage struct {
 	image      *image.Image
 	imageType  uint
 	specifier  string
+	triggers   *triggers.Triggers
 }
 
 func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {
@@ -116,6 +118,21 @@ func getTypedImageMetadata(typedName string) (*image.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+func getTypedImageTriggers(typedName string) (*triggers.Triggers, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	if err := ti.loadMetadata(); err != nil {
+		return nil, err
+	}
+	trig, err := ti.getTriggers()
+	if err != nil {
+		return nil, err
+	}
+	return trig, nil
 }
 
 func getTypedImageType(typedName string) (*typedImage, error) {
@@ -210,6 +227,7 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
 		img, err := getLatestImage(imageSClient, ti.specifier, false)
@@ -219,6 +237,7 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
 		if err != nil {
@@ -227,6 +246,7 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	case imageTypeSub:
 		fs, err := pollImage(ti.specifier)
 		if err != nil {
@@ -254,6 +274,7 @@ func (ti *typedImage) loadMetadata() error {
 		}
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
 		img, err := getLatestImage(imageSClient, ti.specifier, true)
@@ -262,6 +283,7 @@ func (ti *typedImage) loadMetadata() error {
 		}
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
 		if err != nil {
@@ -269,6 +291,7 @@ func (ti *typedImage) loadMetadata() error {
 		}
 		ti.filter = img.Filter
 		ti.image = img
+		ti.triggers = img.Triggers
 	default:
 		return errors.New("package data not available")
 	}
@@ -328,6 +351,14 @@ func (ti *typedImage) openFile(filename string) (io.ReadCloser, error) {
 			return nil, err
 		}
 		return reader, nil
+	}
+}
+
+func (ti *typedImage) getTriggers() (*triggers.Triggers, error) {
+	if trig := ti.triggers; trig == nil {
+		return nil, errors.New("Triggers not available")
+	} else {
+		return trig, nil
 	}
 }
 
