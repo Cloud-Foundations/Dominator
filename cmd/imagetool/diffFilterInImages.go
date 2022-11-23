@@ -15,7 +15,7 @@ func diffFilterInImagesSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := diffFilterInImages(args[0], args[1], args[2])
 	if err != nil {
-		return fmt.Errorf("error diffing files: %s", err)
+		return fmt.Errorf("error diffing filters: %s", err)
 	}
 	return nil
 }
