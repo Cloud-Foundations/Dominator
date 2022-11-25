@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,12 +38,18 @@ const (
 )
 
 type typedImage struct {
+	buildLog   *image.Annotation
 	fileSystem *filesystem.FileSystem
 	filter     *filter.Filter
 	image      *image.Image
 	imageType  uint
 	specifier  string
 	triggers   *triggers.Triggers
+}
+
+type readCloser struct {
+	closer io.Closer
+	reader io.Reader
 }
 
 func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {
@@ -88,6 +95,53 @@ func getTypedImage(typedName string) (*image.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+func getTypedImageBuildLog(typedName string) (*image.Annotation, error) {
+	ti, err := makeTypedImage(typedName)
+	if err != nil {
+		return nil, err
+	}
+	if err := ti.loadMetadata(); err != nil {
+		return nil, err
+	}
+	buildLog, err := ti.getBuildLog()
+	if err != nil {
+		return nil, err
+	}
+	return buildLog, nil
+}
+
+// getTypedImageBuildLogReader returns a build log reader. The reader must be
+// closed before the next call to getTypedImageBuildLogReader.
+func getTypedImageBuildLogReader(typedName string) (io.ReadCloser, error) {
+	buildLog, err := getTypedImageBuildLog(typedName)
+	if err != nil {
+		return nil, err
+	}
+	if hashPtr := buildLog.Object; hashPtr != nil {
+		_, objectClient := getClients()
+		_, r, err := objectClient.GetObject(*hashPtr)
+		if err != nil {
+			return nil, err
+		}
+		return r, nil
+	} else if buildLog.URL != "" {
+		resp, err := http.Get(buildLog.URL)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, errors.New(resp.Status)
+		}
+		if resp.ContentLength > 0 {
+			return &readCloser{resp.Body,
+				&io.LimitedReader{resp.Body, resp.ContentLength}}, nil
+		}
+		return resp.Body, nil
+	} else {
+		return nil, errors.New("no build log data")
+	}
 }
 
 func getTypedImageFilter(typedName string) (*filter.Filter, error) {
@@ -180,6 +234,22 @@ func makeTypedImage(typedName string) (*typedImage, error) {
 	return retval, nil
 }
 
+func (rc *readCloser) Close() error {
+	return rc.closer.Close()
+}
+
+func (rc *readCloser) Read(p []byte) (int, error) {
+	return rc.reader.Read(p)
+}
+
+func (ti *typedImage) getBuildLog() (*image.Annotation, error) {
+	if buildLog := ti.buildLog; buildLog == nil {
+		return nil, errors.New("BuildLog data not available")
+	} else {
+		return buildLog, nil
+	}
+}
+
 func (ti *typedImage) getFileSystem() (*filesystem.FileSystem, error) {
 	if fs := ti.fileSystem; fs == nil {
 		return nil, errors.New("FileSystem data not available")
@@ -224,6 +294,7 @@ func (ti *typedImage) load() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
@@ -234,6 +305,7 @@ func (ti *typedImage) load() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
@@ -243,6 +315,7 @@ func (ti *typedImage) load() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
@@ -272,6 +345,7 @@ func (ti *typedImage) loadMetadata() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.filter = img.Filter
 		ti.image = img
 		ti.triggers = img.Triggers
@@ -281,6 +355,7 @@ func (ti *typedImage) loadMetadata() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.filter = img.Filter
 		ti.image = img
 		ti.triggers = img.Triggers
@@ -289,6 +364,7 @@ func (ti *typedImage) loadMetadata() error {
 		if err != nil {
 			return err
 		}
+		ti.buildLog = img.BuildLog
 		ti.filter = img.Filter
 		ti.image = img
 		ti.triggers = img.Triggers
