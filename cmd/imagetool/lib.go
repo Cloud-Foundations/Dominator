@@ -52,6 +52,8 @@ type readCloser struct {
 	reader io.Reader
 }
 
+// getTypedFileReader returns a file reader. The reader must be closed before
+// the next call to getTypedFileReader.
 func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {
 	ti, err := makeTypedImage(typedName)
 	if err != nil {

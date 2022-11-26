@@ -24,18 +24,18 @@ func diffFileInImages(tool, leftName, rightName, filename string) error {
 	if err != nil {
 		return err
 	}
-	defer leftReader.Close()
-	rightReader, err := getTypedFileReader(rightName, filename)
-	if err != nil {
-		return err
-	}
-	defer rightReader.Close()
 	leftFile, err := copyToTempfile(leftReader)
+	leftReader.Close()
 	if err != nil {
 		return err
 	}
 	defer os.Remove(leftFile)
+	rightReader, err := getTypedFileReader(rightName, filename)
+	if err != nil {
+		return err
+	}
 	rightFile, err := copyToTempfile(rightReader)
+	rightReader.Close()
 	if err != nil {
 		return err
 	}
