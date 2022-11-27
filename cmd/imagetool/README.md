@@ -41,6 +41,7 @@ Some of the sub-commands available are:
 - **delete**: delete an image
 - **delunrefobj**: delete (garbage collect) unreferenced objects
 - **diff**: compare two images
+- **diff-build-logs**: compare the build logs for two images
 - **diff-files**: compare the specified file in two images
 - **diff-filters**: compare the filters for two images
 - **diff-package-lists**: compare the package lists for two images
