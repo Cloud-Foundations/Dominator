@@ -7,6 +7,9 @@ func (dest *Machine) updateFrom(source Machine) {
 	if source.IpAddress != "" {
 		dest.IpAddress = source.IpAddress
 	}
+	if source.Location != "" {
+		dest.Location = source.Location
+	}
 	if source.RequiredImage != "" {
 		dest.RequiredImage = source.RequiredImage
 		dest.DisableUpdates = source.DisableUpdates
