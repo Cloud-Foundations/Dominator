@@ -105,6 +105,7 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 		_, disableUpdates := tags["DisableUpdates"]
 		newMdb.Machines = append(newMdb.Machines, mdb.Machine{
 			Hostname:       machine.Hostname,
+			Location:       machine.Location,
 			IpAddress:      ipAddr,
 			RequiredImage:  tags["RequiredImage"],
 			PlannedImage:   tags["PlannedImage"],
