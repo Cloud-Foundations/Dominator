@@ -106,6 +106,7 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 		newMdb.Machines = append(newMdb.Machines, mdb.Machine{
 			Hostname:       machine.Hostname,
 			IpAddress:      ipAddr,
+			Location:       machine.Location,
 			RequiredImage:  tags["RequiredImage"],
 			PlannedImage:   tags["PlannedImage"],
 			DisableUpdates: disableUpdates,
