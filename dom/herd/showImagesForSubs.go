@@ -16,7 +16,8 @@ import (
 
 func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	[]proto.SubInfo, error) {
-	selectFunc := makeSelector(request.StatusesToMatch, request.TagsToMatch)
+	selectFunc := makeSelector(request.LocationsToMatch,
+		request.StatusesToMatch, request.TagsToMatch)
 	if len(request.Hostnames) < 1 {
 		herd.RLock()
 		defer herd.RUnlock()

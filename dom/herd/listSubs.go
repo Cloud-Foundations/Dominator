@@ -38,7 +38,8 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 }
 
 func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
-	selectFunc := makeSelector(request.StatusesToMatch, request.TagsToMatch)
+	selectFunc := makeSelector(request.LocationsToMatch,
+		request.StatusesToMatch, request.TagsToMatch)
 	if len(request.Hostnames) < 1 {
 		return herd.selectSubs(selectFunc), nil
 	}

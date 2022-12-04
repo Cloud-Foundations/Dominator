@@ -25,13 +25,37 @@ type subInfoType struct {
 	MDB  mdb.Machine
 }
 
-func makeSelector(statusesToMatch []string,
+func makeSelector(locationsToMatch []string, statusesToMatch []string,
 	tagsToMatch map[string][]string) func(sub *Sub) bool {
-	if len(statusesToMatch) < 1 && len(tagsToMatch) < 1 {
+	if len(locationsToMatch) < 1 &&
+		len(statusesToMatch) < 1 &&
+		len(tagsToMatch) < 1 {
 		return selectAll
 	}
+	locationsToMatchMap := stringutil.ConvertListToMap(locationsToMatch, false)
 	statusesToMatchMap := stringutil.ConvertListToMap(statusesToMatch, false)
 	return func(sub *Sub) bool {
+		if len(locationsToMatch) > 0 {
+			subLocationLength := len(sub.mdb.Location)
+			if subLocationLength < 1 {
+				return false
+			}
+			_, matched := locationsToMatchMap[sub.mdb.Location]
+			if !matched {
+				for _, locationToMatch := range locationsToMatch {
+					index := len(locationToMatch)
+					if index < subLocationLength &&
+						sub.mdb.Location[index] == '/' &&
+						strings.HasPrefix(sub.mdb.Location, locationToMatch) {
+						matched = true
+						break
+					}
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
 		if len(statusesToMatch) > 0 {
 			if _, ok := statusesToMatchMap[sub.status.String()]; !ok {
 				return false
@@ -67,7 +91,8 @@ func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
 		value := split[1]
 		tagsToMatch[key] = append(tagsToMatch[key], value)
 	}
-	return makeSelector(queryValues["status"], tagsToMatch)
+	return makeSelector(queryValues["location"], queryValues["status"],
+		tagsToMatch)
 }
 
 func selectAll(sub *Sub) bool {
@@ -312,6 +337,10 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 	showSince(tw, sub.pollTime, sub.startTime)
 	newRow(w, "Last scan duration", false)
 	showDuration(tw, sub.lastScanDuration, false)
+	if sub.mdb.Location != "" {
+		newRow(w, "Location", false)
+		tw.WriteData("", sub.mdb.Location)
+	}
 	newRow(w, "Time since last successful poll", false)
 	showSince(tw, timeNow, sub.lastPollSucceededTime)
 	newRow(w, "Time since last update", false)
