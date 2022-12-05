@@ -29,8 +29,9 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
-	statusesToMatch flagutil.StringList
-	subsList        = flag.String("subsList", "",
+	locationsToMatch flagutil.StringList
+	statusesToMatch  flagutil.StringList
+	subsList         = flag.String("subsList", "",
 		"Name of file containing list of subs")
 	tagsToMatch tags.MatchTags
 
@@ -38,6 +39,8 @@ var (
 )
 
 func init() {
+	flag.Var(&locationsToMatch, "locationsToMatch",
+		"Sub locations to match when listing")
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		"Comma separated list of patterns to exclude from scanning")
 	flag.Var(&statusesToMatch, "statusesToMatch",

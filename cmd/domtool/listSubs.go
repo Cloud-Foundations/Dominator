@@ -22,9 +22,10 @@ func listSubs(client *srpc.Client) error {
 		return err
 	}
 	request := dominator.ListSubsRequest{
-		Hostnames:       hostnames,
-		StatusesToMatch: statusesToMatch,
-		TagsToMatch:     tagsToMatch,
+		Hostnames:        hostnames,
+		LocationsToMatch: locationsToMatch,
+		StatusesToMatch:  statusesToMatch,
+		TagsToMatch:      tagsToMatch,
 	}
 	var reply dominator.ListSubsResponse
 	if err := client.RequestReply("Dominator.ListSubs", request,
