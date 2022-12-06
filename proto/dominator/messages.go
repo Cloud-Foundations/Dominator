@@ -3,6 +3,7 @@ package dominator
 import (
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -75,15 +76,13 @@ type SetDefaultImageRequest struct {
 type SetDefaultImageResponse struct{}
 
 type SubInfo struct {
-	Hostname            string
+	mdb.Machine
 	LastNote            string              `json:",omitempty"`
 	LastDisruptionState sub.DisruptionState `json:",omitempty"`
 	LastScanDuration    time.Duration       `json:",omitempty"`
 	LastSuccessfulImage string              `json:",omitempty"`
 	LastSyncTime        time.Time           `json:",omitempty"`
 	LastUpdateTime      time.Time           `json:",omitempty"`
-	PlannedImage        string              `json:",omitempty"`
-	RequiredImage       string              `json:",omitempty"`
 	StartTime           time.Time           `json:",omitempty"`
 	Status              string
 	SystemUptime        *time.Duration `json:",omitempty"`

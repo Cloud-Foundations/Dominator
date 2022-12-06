@@ -13,17 +13,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
-	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
-
-type subInfoType struct {
-	Info proto.SubInfo
-	MDB  mdb.Machine
-}
 
 func makeSelector(locationsToMatch []string, statusesToMatch []string,
 	tagsToMatch map[string][]string) func(sub *Sub) bool {
@@ -208,15 +202,13 @@ func (herd *Herd) showSubsJSON(writer io.Writer,
 
 func (sub *Sub) makeInfo() proto.SubInfo {
 	return proto.SubInfo{
-		Hostname:            sub.mdb.Hostname,
+		Machine:             sub.mdb,
 		LastDisruptionState: sub.lastDisruptionState,
 		LastNote:            sub.lastNote,
 		LastScanDuration:    sub.lastScanDuration,
 		LastSuccessfulImage: sub.lastSuccessfulImageName,
 		LastSyncTime:        sub.lastSyncTime,
 		LastUpdateTime:      sub.lastUpdateTime,
-		PlannedImage:        sub.mdb.PlannedImage,
-		RequiredImage:       sub.mdb.RequiredImage,
 		StartTime:           sub.startTime,
 		Status:              sub.publishedStatus.String(),
 		SystemUptime:        sub.systemUptime,
@@ -285,11 +277,7 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 		return
 	}
 	if parsedQuery.OutputType() == url.OutputTypeJson {
-		subInfo := subInfoType{
-			Info: sub.makeInfo(),
-			MDB:  sub.mdb,
-		}
-		json.WriteWithIndent(w, "    ", subInfo)
+		json.WriteWithIndent(w, "    ", sub.makeInfo())
 		return
 	}
 	fmt.Fprintf(w, "<title>sub %s</title>", subName)
