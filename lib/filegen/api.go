@@ -1,11 +1,11 @@
 /*
-	Package filegen manages the generation of computed files.
+Package filegen manages the generation of computed files.
 
-	Package filegen may be used to implement a computed file server. It
-	registers a FileGenerator server with the lib/srpc package. The application
-	may register multiple file generators.
+Package filegen may be used to implement a computed file server. It
+registers a FileGenerator server with the lib/srpc package. The application
+may register multiple file generators.
 
-	A generator for the /etc/mdb.json pathname is automatically registered.
+A generator for the /etc/mdb.json pathname is automatically registered.
 */
 package filegen
 
@@ -86,6 +86,16 @@ func (m *Manager) RegisterFileForPath(pathname string, sourceFile string) {
 func (m *Manager) RegisterGeneratorForPath(pathname string,
 	gen FileGenerator) chan<- string {
 	return m.registerDataGeneratorForPath(pathname, gen)
+}
+
+// RegisterMdbFieldDirectoryForPath registers a generator for pathname which
+// yields data from files under the specified directory where the filenames
+// are taken from the specified field of the MDB data for a machine. The data
+// are periodically reloaded every specified interval (if greater than zero).
+func (m *Manager) RegisterMdbFieldDirectoryForPath(pathname string,
+	field, directory string, interval time.Duration) error {
+	return m.registerMdbFieldDirectoryForPath(pathname, field, directory,
+		interval)
 }
 
 // RegisterMdbGeneratorForPath registers a generator for pathname which yields
