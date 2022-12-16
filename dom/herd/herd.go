@@ -188,6 +188,15 @@ func (herd *Herd) getReachableSelector(parsedQuery url.ParsedQuery) (
 	return rDuration(duration).selector, nil
 }
 
+func (herd *Herd) getUnreachableSelector(parsedQuery url.ParsedQuery) (
+	func(*Sub) bool, error) {
+	duration, err := parsedQuery.Last()
+	if err != nil {
+		return nil, err
+	}
+	return uDuration(duration).selector, nil
+}
+
 func (herd *Herd) rLockWithTimeout(timeout time.Duration) {
 	timeoutFunction(herd.RLock, timeout)
 }

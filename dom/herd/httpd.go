@@ -16,6 +16,7 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 	html.HandleFunc("/", herd.statusHandler)
 	html.HandleFunc("/listImagesForSubs", herd.listImagesForSubsHandler)
 	html.HandleFunc("/listReachableSubs", herd.listReachableSubsHandler)
+	html.HandleFunc("/listUnreachableSubs", herd.listUnreachableSubsHandler)
 	html.HandleFunc("/listSubs", herd.listSubsHandler)
 	html.HandleFunc("/showAliveSubs",
 		herd.makeShowSubsHandler(selectAliveSub, "alive"))
@@ -30,6 +31,7 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 	html.HandleFunc("/showImagesForSubs",
 		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
 	html.HandleFunc("/showReachableSubs", herd.showReachableSubsHandler)
+	html.HandleFunc("/showUnreachableSubs", herd.showUnreachableSubsHandler)
 	html.HandleFunc("/showSub", herd.showSubHandler)
 	if daemon {
 		go http.Serve(listener, nil)

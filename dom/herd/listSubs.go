@@ -10,17 +10,11 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
-func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
-	req *http.Request) {
+func (herd *Herd) listSubsHandlerWithSelector(w http.ResponseWriter,
+	selectFunc func(*Sub) bool, parsedQuery url.ParsedQuery) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	parsedQuery := url.ParseQuery(req.URL)
-	selector, err := herd.getReachableSelector(parsedQuery)
-	if err != nil {
-		fmt.Fprintln(writer, err)
-		return
-	}
-	subs := herd.getSelectedSubs(selector)
+	subs := herd.getSelectedSubs(selectFunc)
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeText:
 	case url.OutputTypeHtml:
@@ -35,6 +29,28 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 		json.WriteWithIndent(writer, "  ", subNames)
 		fmt.Fprintln(writer)
 	}
+}
+
+func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
+	req *http.Request) {
+	parsedQuery := url.ParseQuery(req.URL)
+	selector, err := herd.getReachableSelector(parsedQuery)
+	if err != nil {
+		fmt.Fprintln(w, err)
+		return
+	}
+	herd.listSubsHandlerWithSelector(w, selector, parsedQuery)
+}
+
+func (herd *Herd) listUnreachableSubsHandler(w http.ResponseWriter,
+	req *http.Request) {
+	parsedQuery := url.ParseQuery(req.URL)
+	selector, err := herd.getUnreachableSelector(parsedQuery)
+	if err != nil {
+		fmt.Fprintln(w, err)
+		return
+	}
+	herd.listSubsHandlerWithSelector(w, selector, parsedQuery)
 }
 
 func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {

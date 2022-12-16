@@ -12,9 +12,17 @@ import (
 var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
 
 type rDuration time.Duration
+type uDuration time.Duration
 
 func (d rDuration) selector(sub *Sub) bool {
 	if time.Since(sub.lastReachableTime) <= time.Duration(d) {
+		return true
+	}
+	return false
+}
+
+func (d uDuration) selector(sub *Sub) bool {
+	if time.Since(sub.lastReachableTime) > time.Duration(d) {
 		return true
 	}
 	return false
@@ -29,6 +37,9 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
 	var reachableDaySubs, reachableWeekSubs, reachableMonthSubs uint64
+	var unreachableMinuteSubs, unreachable10MinuteSubs uint64
+	var unreachableHourSubs, unreachableDaySubs, unreachableWeekSubs uint64
+	var unreachableMonthSubs uint64
 	subCounters := []subCounter{
 		{&numAliveSubs, selectAliveSub},
 		{&numCompliantSubs, selectCompliantSub},
@@ -41,6 +52,12 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		{&reachableDaySubs, rDuration(24 * time.Hour).selector},
 		{&reachableWeekSubs, rDuration(7 * 24 * time.Hour).selector},
 		{&reachableMonthSubs, rDuration(730 * time.Hour).selector},
+		{&unreachableMinuteSubs, uDuration(time.Minute).selector},
+		{&unreachable10MinuteSubs, uDuration(10 * time.Minute).selector},
+		{&unreachableHourSubs, uDuration(time.Hour).selector},
+		{&unreachableDaySubs, uDuration(24 * time.Hour).selector},
+		{&unreachableWeekSubs, uDuration(7 * 24 * time.Hour).selector},
+		{&unreachableMonthSubs, uDuration(730 * time.Hour).selector},
 	}
 	numSubs := herd.countSelectedSubs(subCounters)
 	fmt.Fprintf(writer, "Time since current cycle start: %s<br>\n",
@@ -90,6 +107,19 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	herd.writeReachableSubsLink(writer, reachableWeekSubs, "1 week", "1w",
 		true)
 	herd.writeReachableSubsLink(writer, reachableMonthSubs, "1 month", "1M",
+		false)
+	fmt.Fprint(writer, "Number of unreachable subs in last: ")
+	herd.writeUnreachableSubsLink(writer, unreachableMinuteSubs, "1 min", "1m",
+		true)
+	herd.writeUnreachableSubsLink(writer, unreachable10MinuteSubs, "10 min",
+		"10m", true)
+	herd.writeUnreachableSubsLink(writer, unreachableHourSubs, "1 hour", "1h",
+		true)
+	herd.writeUnreachableSubsLink(writer, unreachableDaySubs, "1 day", "1d",
+		true)
+	herd.writeUnreachableSubsLink(writer, unreachableWeekSubs, "1 week", "1w",
+		true)
+	herd.writeUnreachableSubsLink(writer, unreachableMonthSubs, "1 month", "1M",
 		false)
 	fmt.Fprintf(writer,
 		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a>",
@@ -163,6 +193,19 @@ func (herd *Herd) writeReachableSubsLink(writer io.Writer,
 	fmt.Fprintf(writer, "<a href=\"showReachableSubs?last=%s\">%s</a>",
 		query, durationString)
 	fmt.Fprintf(writer, "(<a href=\"listReachableSubs?last=%s\">%d</a>)",
+		query, numSubs)
+	if moreToCome {
+		fmt.Fprint(writer, ", ")
+	} else {
+		fmt.Fprintln(writer, "<br>")
+	}
+}
+
+func (herd *Herd) writeUnreachableSubsLink(writer io.Writer,
+	numSubs uint64, durationString string, query string, moreToCome bool) {
+	fmt.Fprintf(writer, "<a href=\"showUnreachableSubs?last=%s\">%s</a>",
+		query, durationString)
+	fmt.Fprintf(writer, "(<a href=\"listUnreachableSubs?last=%s\">%d</a>)",
 		query, numSubs)
 	if moreToCome {
 		fmt.Fprint(writer, ", ")
