@@ -115,6 +115,15 @@ func (inode *DirectoryInode) buildEntryMap() {
 	}
 }
 
+func (inode *DirectoryInode) registerStrings(registerFunc func(string)) {
+	for _, dirent := range inode.EntryList {
+		registerFunc(dirent.Name)
+		if inode, ok := dirent.inode.(*DirectoryInode); ok {
+			inode.registerStrings(registerFunc)
+		}
+	}
+}
+
 func (inode *DirectoryInode) replaceStrings(replaceFunc func(string) string) {
 	if inode.EntriesByName != nil {
 		inode.EntriesByName = make(map[string]*DirectoryEntry,
