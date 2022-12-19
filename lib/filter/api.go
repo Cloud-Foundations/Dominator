@@ -61,6 +61,12 @@ func (filter *Filter) Match(pathname string) bool {
 	return filter.match(pathname)
 }
 
+// RegisterStrings may be used to register the regular expression strings with
+// a string de-duper. This can be used for garbage collection.
+func (filter *Filter) RegisterStrings(registerFunc func(string)) {
+	filter.registerStrings(registerFunc)
+}
+
 // ReplaceStrings may be used to replace the regular expression strings with
 // de-duplicated copies.
 func (filter *Filter) ReplaceStrings(replaceFunc func(string) string) {
