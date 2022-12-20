@@ -23,6 +23,10 @@ type Trigger struct {
 	HighImpact   bool `json:",omitempty"`
 }
 
+func (trigger *Trigger) RegisterStrings(registerFunc func(string)) {
+	trigger.registerStrings(registerFunc)
+}
+
 func (trigger *Trigger) ReplaceStrings(replaceFunc func(string) string) {
 	trigger.replaceStrings(replaceFunc)
 }
@@ -56,6 +60,10 @@ func (triggers *Triggers) Len() int {
 
 func (triggers *Triggers) Less(left, right int) bool {
 	return triggers.Triggers[left].Service < triggers.Triggers[right].Service
+}
+
+func (triggers *Triggers) RegisterStrings(registerFunc func(string)) {
+	triggers.registerStrings(registerFunc)
 }
 
 func (triggers *Triggers) ReplaceStrings(replaceFunc func(string) string) {
