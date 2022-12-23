@@ -39,9 +39,11 @@ func (image *Image) replaceStrings(replaceFunc func(string) string) {
 }
 
 func (pkg *Package) registerStrings(registerFunc func(string)) {
+	registerFunc(pkg.Name)
 	registerFunc(pkg.Version)
 }
 
 func (pkg *Package) replaceStrings(replaceFunc func(string) string) {
+	pkg.Name = replaceFunc(pkg.Name)
 	pkg.Version = replaceFunc(pkg.Version)
 }
