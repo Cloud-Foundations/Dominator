@@ -1,6 +1,7 @@
 package srpc
 
 import (
+	"os"
 	"testing"
 )
 
@@ -51,5 +52,36 @@ func TestGetCallPutCall(t *testing.T) {
 	}()
 	if err := testDoCallPlain(t, client, "get+put+plain0"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGetCloseClose(t *testing.T) {
+	addr, err := makeListener(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origNumOpenClients := numOpenClientConnections
+	cr := NewClientResource("tcp", addr.String())
+	client, err := cr.GetHTTP(nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if numOpenClientConnections != origNumOpenClients+1 {
+		t.Fatalf("numOpenClientConnections: %d != %d",
+			numOpenClientConnections, origNumOpenClients+1)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if numOpenClientConnections != origNumOpenClients {
+		t.Fatalf("numOpenClientConnections: %d != %d",
+			numOpenClientConnections, origNumOpenClients)
+	}
+	if err := client.Close(); err != nil && err != os.ErrClosed {
+		t.Fatal(err)
+	}
+	if numOpenClientConnections != origNumOpenClients {
+		t.Fatalf("numOpenClientConnections: %d != %d",
+			numOpenClientConnections, origNumOpenClients)
 	}
 }
