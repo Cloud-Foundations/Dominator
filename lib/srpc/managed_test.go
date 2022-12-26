@@ -66,6 +66,9 @@ func TestGetCloseClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !client.IsFromClientResource() {
+		t.Fatal("IsFromClientResource() returned false, should be true")
+	}
 	if numOpenClientConnections != origNumOpenClients+1 {
 		t.Fatalf("numOpenClientConnections: %d != %d",
 			numOpenClientConnections, origNumOpenClients+1)
