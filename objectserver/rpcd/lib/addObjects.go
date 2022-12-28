@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -19,14 +20,15 @@ func addObjects(conn *srpc.Conn, decoder srpc.Decoder, encoder srpc.Encoder,
 	numObj := 0
 	startTime := time.Now()
 	var bytesAdded, bytesReceived uint64
-	for ; ; numObj++ {
+	for {
 		var request objectserver.AddObjectRequest
 		var response objectserver.AddObjectResponse
 		if err := decoder.Decode(&request); err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
 			}
-			return errors.New("error decoding: " + err.Error())
+			return fmt.Errorf("error decoding after %d objects: %s",
+				numObj, err)
 		}
 		if request.Length < 1 {
 			break
@@ -38,11 +40,15 @@ func addObjects(conn *srpc.Conn, decoder srpc.Decoder, encoder srpc.Encoder,
 		if err := encoder.Encode(response); err != nil {
 			return errors.New("error encoding: " + err.Error())
 		}
+		numObj++
 		if response.ErrorString != "" {
 			logger.Printf(
 				"AddObjects(): failed, %d of %d so far are new objects: %s",
 				numAdded, numObj+1, response.ErrorString)
-			return nil
+			if err := conn.Flush(); err != nil { // Report error quickly.
+				return err
+			}
+			continue
 		}
 		bytesReceived += request.Length
 		if response.Added {
