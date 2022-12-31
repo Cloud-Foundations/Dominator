@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,7 +14,48 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
+
+func gitGrab(topdir string, gitBranch string, logger log.DebugLogger) error {
+	if gitBranch == "" {
+		return runCommand(logger, topdir, "git", "pull", "--depth=1", "origin",
+			"")
+	}
+	err := runCommand(logger, topdir, "git", "fetch", "--depth=1", "origin")
+	if err != nil {
+		return err
+	}
+	branchList, err := fsutil.ReadDirnames(filepath.Join(topdir, ".git", "refs",
+		"remotes", "origin"), false)
+	if err != nil {
+		return err
+	}
+	branchMap := stringutil.ConvertListToMap(branchList, false)
+	var branchToMerge string
+	if _, ok := branchMap[gitBranch]; ok {
+		branchToMerge = gitBranch
+	} else {
+		branchToMerge = branchList[0]
+	}
+	err = runCommand(logger, topdir, "git", "merge",
+		path.Join("origin", branchToMerge))
+	if err != nil {
+		return err
+	}
+	if gitBranch != "" && branchToMerge != gitBranch {
+		err := runCommand(logger, topdir, "git", "fetch", "--unshallow",
+			"origin")
+		if err != nil {
+			return err
+		}
+		err = runCommand(logger, topdir, "git", "checkout", gitBranch)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func runCommand(logger log.DebugLogger, cwd string, args ...string) error {
 	cmd := exec.Command(args[0], args[1:]...)
@@ -26,9 +68,10 @@ func runCommand(logger log.DebugLogger, cwd string, args ...string) error {
 	if _output, err := cmd.CombinedOutput(); err != nil {
 		output := strings.TrimSpace(string(_output))
 		if len(output) < 1 {
-			return fmt.Errorf("error running: %s: %s", args[0], err)
+			return fmt.Errorf("error running: %s %s: %s", args[0], args[1], err)
 		}
-		return fmt.Errorf("error running: %s: %s: %s", args[0], err, output)
+		return fmt.Errorf("error running: %s %s: %s: %s",
+			args[0], args[1], err, output)
 	}
 	return nil
 }
@@ -75,16 +118,8 @@ func shallowClone(topdir string, params ShallowCloneParams,
 			return err
 		}
 	}
-	err = runCommand(logger, topdir, "git", "pull", "--depth=1",
-		"origin", params.GitBranch)
-	if err != nil {
+	if err := gitGrab(topdir, params.GitBranch, logger); err != nil {
 		return err
-	}
-	if params.GitBranch != "" {
-		err = runCommand(logger, topdir, "git", "checkout", params.GitBranch)
-		if err != nil {
-			return err
-		}
 	}
 	loadTime := time.Since(startTime)
 	repoSize, err := fsutil.GetTreeSize(topdir)
