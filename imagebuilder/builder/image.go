@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/gitutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -130,15 +131,13 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	}
 	gitDirectory := filepath.Join(manifestRoot, ".git")
 	var gitInfo *gitInfoType
-	filename := filepath.Join(gitDirectory, "refs", "heads", gitBranch)
-	if lines, err := fsutil.LoadLines(filename); err != nil {
+	commitId, err := gitutil.GetCommitIdOfRef(manifestRoot, gitBranch)
+	if err != nil {
 		return "", nil, err
-	} else if len(lines) != 1 {
-		return "", nil, fmt.Errorf("%s does not have only one line", filename)
 	} else {
 		gitInfo = &gitInfoType{
 			branch:   gitBranch,
-			commitId: strings.TrimSpace(lines[0]),
+			commitId: commitId,
 			gitUrl:   manifestLocation.url,
 		}
 	}
