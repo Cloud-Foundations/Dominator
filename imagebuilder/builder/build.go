@@ -52,7 +52,7 @@ func getClient(cr *srpc.ClientResource,
 	if err != nil {
 		return nil, err
 	}
-	if err := client.Ping(); err == nil {
+	if err = client.Ping(); err == nil { // Keep err: used below to log.
 		return client, nil
 	}
 	client.Put()
