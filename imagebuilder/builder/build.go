@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -46,19 +47,28 @@ func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
 	return errors.New("no permission to build: " + request.StreamName)
 }
 
-func getClient(cr *srpc.ClientResource,
-	logger log.Logger) (*srpc.Client, error) {
+func getClient(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
+	for ; ; time.Sleep(5 * time.Second) {
+		if client := getClientOnce(cr, logger); client != nil {
+			return client
+		}
+		logger = nulllogger.New()
+	}
+}
+
+func getClientOnce(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
 	client, err := cr.GetHTTP(nil, 0)
 	if err != nil {
-		return nil, err
+		logger.Printf("Get failure, will retry connection: %s\n", err)
+		return nil
 	}
-	if err = client.Ping(); err == nil { // Keep err: used below to log.
-		return client, nil
+	if err := client.Ping(); err != nil {
+		client.Put()
+		client.Close()
+		logger.Printf("Ping failure, will retry connection: %s\n", err)
+		return nil
 	}
-	client.Put()
-	client.Close()
-	logger.Printf("Ping failure, will retry connection: %s\n", err)
-	return cr.GetHTTP(nil, 0)
+	return client
 }
 
 func needSourceImage(err error) (bool, string) {
@@ -325,13 +335,9 @@ func (b *Builder) getLatestBuildLog(streamName string) ([]byte, error) {
 
 func (b *Builder) rebuildImage(cr *srpc.ClientResource, streamName string,
 	expiresIn time.Duration) {
-	client, err := getClient(cr, b.logger)
-	if err != nil {
-		b.logger.Printf("%s: %s\n", b.imageServerAddress, err)
-		return
-	}
+	client := getClient(cr, b.logger)
 	defer client.Put()
-	_, _, err = b.build(client, proto.BuildImageRequest{
+	_, _, err := b.build(client, proto.BuildImageRequest{
 		StreamName: streamName,
 		ExpiresIn:  expiresIn,
 	},
