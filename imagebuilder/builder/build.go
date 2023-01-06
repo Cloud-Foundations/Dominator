@@ -10,6 +10,7 @@ import (
 
 	buildclient "github.com/Cloud-Foundations/Dominator/imagebuilder/client"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -48,7 +49,8 @@ func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
 }
 
 func getClient(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
-	for ; ; time.Sleep(5 * time.Second) {
+	sleeper := backoffdelay.NewExponential(0, 0, 1)
+	for ; ; sleeper.Sleep() {
 		if client := getClientOnce(cr, logger); client != nil {
 			return client
 		}
