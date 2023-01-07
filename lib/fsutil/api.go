@@ -140,6 +140,14 @@ func ReadDirnames(dirname string, ignoreMissing bool) ([]string, error) {
 	return readDirnames(dirname, ignoreMissing)
 }
 
+// ReadFileTree will traverse the specified directory tree rooted at topdir and
+// reads the content of each file. The data are returned in a map with the keys
+// being the filename (excluding the topdir and the specified prefix) and the
+// data being the corresponding file contents.
+func ReadFileTree(topdir, prefix string) (map[string][]byte, error) {
+	return readFileTree(topdir, prefix)
+}
+
 // ReadLines will read lines from a reader. Comment lines (i.e. lines beginning
 // with '#') are skipped.
 func ReadLines(reader io.Reader) ([]string, error) {
