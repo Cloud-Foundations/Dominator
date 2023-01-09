@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
@@ -19,6 +20,8 @@ type slaveDriverConfiguration struct {
 	ImageIdentifier   string
 	MemoryInMiB       uint64
 	MilliCPUs         uint
+	OverlayDirectory  string
+	VirtualCPUs       uint
 }
 
 func createSlaveDriver(logger log.DebugLogger) (
@@ -31,7 +34,7 @@ func createSlaveDriver(logger log.DebugLogger) (
 	if err != nil {
 		return nil, err
 	}
-	slaveTrader, err := smallstack.NewSlaveTrader(hypervisor.CreateVmRequest{
+	createVmRequest := hypervisor.CreateVmRequest{
 		DhcpTimeout:      time.Minute,
 		MinimumFreeBytes: 256 << 20,
 		SkipBootloader:   true,
@@ -39,8 +42,18 @@ func createSlaveDriver(logger log.DebugLogger) (
 			ImageName:   configuration.ImageIdentifier,
 			MemoryInMiB: configuration.MemoryInMiB,
 			MilliCPUs:   configuration.MilliCPUs,
+			VirtualCPUs: configuration.VirtualCPUs,
 		},
-	}, logger)
+	}
+	if configuration.OverlayDirectory != "" {
+		overlayFiles, err := fsutil.ReadFileTree(configuration.OverlayDirectory,
+			"/")
+		if err != nil {
+			return nil, err
+		}
+		createVmRequest.OverlayFiles = overlayFiles
+	}
+	slaveTrader, err := smallstack.NewSlaveTrader(createVmRequest, logger)
 	if err != nil {
 		return nil, err
 	}
