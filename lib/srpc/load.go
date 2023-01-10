@@ -55,11 +55,24 @@ func loadCertificates(directory string) ([]tls.Certificate, error) {
 	if len(certs) < 1 {
 		return nil, nil
 	}
-	// Sort list so that certificates with the most permitted methods are listed
-	// first and in turn should be tried first when doing the TLS handshake.
+	// The first entries are tried first when doing the TLS handshake, so sort
+	// the list of certificates to prefer "better" ones.
+	// First pass: sort list so that certificates with the longest remaining
+	// lifetime are listed first.
 	sort.Slice(certs, func(leftIndex, rightIndex int) bool {
+		return certs[leftIndex].Leaf.NotAfter.After(
+			certs[rightIndex].Leaf.NotAfter)
+	})
+	// Second pass: sort list so that certificates with the most permitted
+	// methods are listed first.
+	sort.SliceStable(certs, func(leftIndex, rightIndex int) bool {
 		leftMethods, _ := x509util.GetPermittedMethods(certs[leftIndex].Leaf)
 		rightMethods, _ := x509util.GetPermittedMethods(certs[rightIndex].Leaf)
+		if _, leftIsAdmin := leftMethods["*.*"]; leftIsAdmin {
+			if _, rightIsAdmin := rightMethods["*.*"]; !rightIsAdmin {
+				return true
+			}
+		}
 		return len(leftMethods) > len(rightMethods)
 	})
 	return certs, nil
