@@ -156,7 +156,9 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
-	defer deleteDirectories(directoriesToDelete)
+	defer func() { // Need to evaluate directoriesToDelete in deferred func.
+		deleteDirectories(directoriesToDelete)
+	}()
 	g, err := newNamespaceTargetWithMounts(rootDir, bindMounts)
 	if err != nil {
 		return err
@@ -210,7 +212,16 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
-	return deleteDirectories(directoriesToDelete)
+	if err := deleteDirectories(directoriesToDelete); err != nil {
+		return err
+	}
+	directoriesToDelete = nil
+	err = runScripts(nil, manifestDir, "post-cleanup-scripts", rootDir,
+		envGetter, buildLog)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func copyFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error {
@@ -311,6 +322,13 @@ func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
 		if err != nil {
 			return err
 		}
+	}
+	if g == nil {
+		g, err = newNamespaceTargetWithMounts(rootDir, nil)
+		if err != nil {
+			return err
+		}
+		defer g.Quit()
 	}
 	for _, name := range names {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
