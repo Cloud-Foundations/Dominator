@@ -78,6 +78,12 @@ If present, any files and symbolic links in this directory tree will be
 copied verbatim into the image (after the `scripts` are run), preserving the
 directory structure.
 
+### `post-cleanup-scripts` directory
+An optional directory containing scripts to run after cleanup operations (such
+as after cleaning up downloaded packages and bind mounts). These are processed
+in lexical order. The scripts are run in a contained environment where the root
+directory is the root directory of the image being built.
+
 ### `computed-files` file
 An optional file listing the *computed files*. This is relevant only for images
 which will be lived patched onto machines with the
