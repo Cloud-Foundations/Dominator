@@ -68,6 +68,10 @@ func (slave *Slave) GetClient() *srpc.Client {
 	return slave.getClient()
 }
 
+func (slave *Slave) GetClientAddress() string {
+	return slave.clientAddress
+}
+
 func (slave *Slave) Release() {
 	slave.release()
 }
