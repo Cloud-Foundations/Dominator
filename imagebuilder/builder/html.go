@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"sort"
@@ -93,12 +94,14 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		"Image server: <a href=\"http://%s/\">%s</a><p>\n",
 		b.imageServerAddress, b.imageServerAddress)
 	currentBuildNames := make([]string, 0)
+	currentBuildSlaves := make([]string, 0)
 	currentBuildTimes := make([]time.Time, 0)
 	goodBuilds := make(map[string]buildResultType)
 	failedBuilds := make(map[string]buildResultType)
 	b.buildResultsLock.RLock()
 	for name, info := range b.currentBuildInfos {
 		currentBuildNames = append(currentBuildNames, name)
+		currentBuildSlaves = append(currentBuildSlaves, info.slaveAddress)
 		currentBuildTimes = append(currentBuildTimes, info.startedAt)
 	}
 	for name, result := range b.lastBuildResults {
@@ -113,15 +116,31 @@ func (b *Builder) writeHtml(writer io.Writer) {
 	if len(currentBuildNames) > 0 {
 		fmt.Fprintln(writer, "Current image builds:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
-		tw, _ := html.NewTableWriter(writer, true, "Image Stream", "Build log",
-			"Duration")
+		columnNames := []string{"Image Stream", "Build log", "Duration"}
+		if b.slaveDriver != nil {
+			columnNames = append(columnNames, "Slave")
+		}
+		tw, _ := html.NewTableWriter(writer, true, columnNames...)
 		for index, streamName := range currentBuildNames {
-			tw.WriteRow("", "",
+			columns := []string{
 				streamName,
 				fmt.Sprintf("<a href=\"showCurrentBuildLog?%s#bottom\">log</a>",
 					streamName),
 				format.Duration(time.Since(currentBuildTimes[index])),
-			)
+			}
+			if b.slaveDriver != nil {
+				var slaveColumn string
+				if address := currentBuildSlaves[index]; address != "" {
+					host, _, err := net.SplitHostPort(address)
+					if err != nil {
+						host = address
+					}
+					slaveColumn = fmt.Sprintf("<a href=\"http://%s/\">%s</a>",
+						address, host)
+				}
+				columns = append(columns, slaveColumn)
+			}
+			tw.WriteRow("", "", columns...)
 		}
 		fmt.Fprintln(writer, "</table><br>")
 	}

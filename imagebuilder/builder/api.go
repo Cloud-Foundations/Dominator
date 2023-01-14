@@ -59,8 +59,9 @@ type buildResultType struct {
 }
 
 type currentBuildInfo struct {
-	buffer    *bytes.Buffer
-	startedAt time.Time
+	buffer       *bytes.Buffer
+	slaveAddress string
+	startedAt    time.Time
 }
 
 type dependencyDataType struct {
