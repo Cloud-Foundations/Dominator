@@ -165,6 +165,29 @@ func (driver *SlaveDriver) loadSlaves() error {
 	return nil
 }
 
+func (driver *SlaveDriver) replaceIdle(immediateGetNew bool) {
+	driver.mutex.Lock()
+	defer driver.mutex.Unlock()
+	if len(driver.idleSlaves) < 1 {
+		return
+	}
+	for slave := range driver.idleSlaves {
+		driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
+		if err := slave.client.Close(); err != nil {
+			driver.logger.Println(err)
+		}
+		err := slave.driver.slaveTrader.DestroySlave(slave.info.Identifier)
+		delete(driver.idleSlaves, slave)
+		if err != nil {
+			driver.logger.Println(err)
+			driver.zombies[slave] = struct{}{}
+		}
+	}
+	if immediateGetNew {
+		driver.scheduleRollCall()
+	}
+}
+
 // rollCall can take a while. It should be called from a goroutine.
 func (driver *SlaveDriver) rollCall(writeState bool) {
 	var numToCreate int
@@ -301,7 +324,6 @@ func (slave *Slave) destroyAndUnlock() {
 	if err != nil {
 		driver.logger.Println(err)
 		driver.zombies[slave] = struct{}{}
-	} else {
 	}
 	driver.scheduleRollCall()
 }

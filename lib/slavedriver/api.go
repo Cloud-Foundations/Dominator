@@ -56,6 +56,10 @@ func (driver *SlaveDriver) GetSlave() (*Slave, error) {
 	return driver.getSlave()
 }
 
+func (driver *SlaveDriver) ReplaceIdle(immediateGetNew bool) {
+	driver.replaceIdle(immediateGetNew)
+}
+
 func (driver *SlaveDriver) WriteHtml(writer io.Writer) {
 	driver.writeHtml(writer)
 }
