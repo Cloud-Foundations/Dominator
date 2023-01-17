@@ -209,6 +209,10 @@ func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
 }
 
+func (b *Builder) ReplaceIdleSlaves(immediateGetNew bool) error {
+	return b.replaceIdleSlaves(immediateGetNew)
+}
+
 func (b *Builder) ShowImageStream(writer io.Writer, streamName string) {
 	b.showImageStream(writer, streamName)
 }
