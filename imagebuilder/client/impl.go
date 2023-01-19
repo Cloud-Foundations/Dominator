@@ -75,3 +75,15 @@ func getDirectedGraph(client *srpc.Client,
 	}
 	return reply.GetDirectedGraphResult, nil
 }
+
+func replaceIdleSlaves(client *srpc.Client, immediateGetNew bool) error {
+	var reply proto.ReplaceIdleSlavesResponse
+	err := client.RequestReply("Imaginator.ReplaceIdleSlaves",
+		proto.ReplaceIdleSlavesRequest{
+			ImmediateGetNew: immediateGetNew,
+		}, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}

@@ -23,3 +23,7 @@ func GetDirectedGraph(client *srpc.Client,
 	proto.GetDirectedGraphResult, error) {
 	return getDirectedGraph(client, request)
 }
+
+func ReplaceIdleSlaves(client *srpc.Client, immediateGetNew bool) error {
+	return replaceIdleSlaves(client, immediateGetNew)
+}
