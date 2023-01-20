@@ -68,6 +68,7 @@ var subcommands = []commands.Command{
 	{"get-dependencies", "", 0, 0, getDependenciesSubcommand},
 	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
 	{"process-manifest", "rootDir", 2, 2, processManifestSubcommand},
+	{"replace-idle-slaves", "", 0, 0, replaceIdleSlavesSubcommand},
 }
 
 var imaginatorSrpcClient *srpc.Client
