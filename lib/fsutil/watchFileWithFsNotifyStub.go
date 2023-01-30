@@ -3,14 +3,11 @@
 package fsutil
 
 import (
-	"io"
-
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-func watchFileWithFsNotify(pathname string, channel chan<- io.ReadCloser,
-	logger log.Logger) bool {
-	return false
+func watchFileWithFsNotify(pathname string, logger log.Logger) <-chan struct{} {
+	return nil
 }
 
 func watchFileStopWithFsNotify() bool { return false }
