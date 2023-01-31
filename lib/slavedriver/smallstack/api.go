@@ -10,15 +10,26 @@ import (
 )
 
 type SlaveTrader struct {
-	createRequest hyper_proto.CreateVmRequest
-	logger        log.DebugLogger
-	mutex         sync.Mutex // Lock everything below (those can change).
-	hypervisor    *srpc.Client
+	logger     log.DebugLogger
+	options    SlaveTraderOptions
+	mutex      sync.Mutex // Lock everything below (those can change).
+	hypervisor *srpc.Client
+}
+
+type SlaveTraderOptions struct {
+	CreateRequest     hyper_proto.CreateVmRequest
+	HypervisorAddress string // Default: local Hypervisor.
 }
 
 func NewSlaveTrader(createRequest hyper_proto.CreateVmRequest,
 	logger log.DebugLogger) (*SlaveTrader, error) {
-	return newSlaveTrader(createRequest, logger)
+	return newSlaveTrader(SlaveTraderOptions{CreateRequest: createRequest},
+		logger)
+}
+
+func NewSlaveTraderWithOptions(options SlaveTraderOptions,
+	logger log.DebugLogger) (*SlaveTrader, error) {
+	return newSlaveTrader(options, logger)
 }
 
 func (trader *SlaveTrader) Close() error {

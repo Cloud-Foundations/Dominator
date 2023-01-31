@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -23,16 +24,21 @@ const (
 )
 
 var (
-	hypervisorAddress = fmt.Sprintf("%s:%d",
-		linklocalAddress, constants.HypervisorPortNumber)
 	myVmInfo hyper_proto.VmInfo
 )
 
-func newSlaveTrader(createRequest hyper_proto.CreateVmRequest,
+func newSlaveTrader(options SlaveTraderOptions,
 	logger log.DebugLogger) (*SlaveTrader, error) {
+	if options.HypervisorAddress == "" {
+		options.HypervisorAddress = fmt.Sprintf("%s:%d",
+			linklocalAddress, constants.HypervisorPortNumber)
+	} else if !strings.Contains(options.HypervisorAddress, ":") {
+		options.HypervisorAddress += fmt.Sprintf(":%d",
+			constants.HypervisorPortNumber)
+	}
 	trader := &SlaveTrader{
-		createRequest: createRequest,
-		logger:        logger,
+		logger:  logger,
+		options: options,
 	}
 	var err error
 	trader.hypervisor, err = trader.getHypervisor()
@@ -43,30 +49,30 @@ func newSlaveTrader(createRequest hyper_proto.CreateVmRequest,
 		trader.close()
 		return nil, err
 	}
-	if trader.createRequest.Hostname == "" {
-		trader.createRequest.Hostname = myVmInfo.Hostname + "-slave"
+	if trader.options.CreateRequest.Hostname == "" {
+		trader.options.CreateRequest.Hostname = myVmInfo.Hostname + "-slave"
 	}
-	if trader.createRequest.ImageName == "" {
-		trader.createRequest.ImageName = myVmInfo.ImageName
+	if trader.options.CreateRequest.ImageName == "" {
+		trader.options.CreateRequest.ImageName = myVmInfo.ImageName
 	}
-	if trader.createRequest.MemoryInMiB < 1 {
-		trader.createRequest.MemoryInMiB = myVmInfo.MemoryInMiB
+	if trader.options.CreateRequest.MemoryInMiB < 1 {
+		trader.options.CreateRequest.MemoryInMiB = myVmInfo.MemoryInMiB
 	}
-	if trader.createRequest.MilliCPUs < 1 {
-		trader.createRequest.MilliCPUs = myVmInfo.MilliCPUs
+	if trader.options.CreateRequest.MilliCPUs < 1 {
+		trader.options.CreateRequest.MilliCPUs = myVmInfo.MilliCPUs
 	}
-	if trader.createRequest.MinimumFreeBytes < 1 {
-		trader.createRequest.MinimumFreeBytes = 256 << 20
+	if trader.options.CreateRequest.MinimumFreeBytes < 1 {
+		trader.options.CreateRequest.MinimumFreeBytes = 256 << 20
 	}
-	if trader.createRequest.RoundupPower < 1 {
-		trader.createRequest.RoundupPower = 26
+	if trader.options.CreateRequest.RoundupPower < 1 {
+		trader.options.CreateRequest.RoundupPower = 26
 	}
-	if trader.createRequest.SubnetId == "" {
-		trader.createRequest.SubnetId = myVmInfo.SubnetId
+	if trader.options.CreateRequest.SubnetId == "" {
+		trader.options.CreateRequest.SubnetId = myVmInfo.SubnetId
 	}
-	if trader.createRequest.Tags["Name"] == "" {
-		trader.createRequest.Tags = tags.Tags{
-			"Name": trader.createRequest.Hostname}
+	if trader.options.CreateRequest.Tags["Name"] == "" {
+		trader.options.CreateRequest.Tags = tags.Tags{
+			"Name": trader.options.CreateRequest.Hostname}
 	}
 	return trader, nil
 }
@@ -110,7 +116,8 @@ func (trader *SlaveTrader) getHypervisor() (*srpc.Client, error) {
 			return trader.hypervisor, nil
 		}
 	}
-	hyperClient, err := srpc.DialHTTP("tcp", hypervisorAddress, time.Second*5)
+	hyperClient, err := srpc.DialHTTP("tcp", trader.options.HypervisorAddress,
+		time.Second*5)
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +130,8 @@ func (trader *SlaveTrader) createSlave() (slavedriver.SlaveInfo, error) {
 		return slavedriver.SlaveInfo{}, err
 	} else {
 		var reply hyper_proto.CreateVmResponse
-		err := client.CreateVm(hyperClient, trader.createRequest, &reply,
-			trader.logger)
+		err := client.CreateVm(hyperClient, trader.options.CreateRequest,
+			&reply, trader.logger)
 		if err != nil {
 			return slavedriver.SlaveInfo{},
 				fmt.Errorf("error creating VM: %s", err)
