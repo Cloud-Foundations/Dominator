@@ -15,6 +15,7 @@ import (
 )
 
 type slaveDriverConfiguration struct {
+	HypervisorAddress string
 	MaximumIdleSlaves uint
 	MinimumIdleSlaves uint
 	ImageIdentifier   string
@@ -53,7 +54,12 @@ func createSlaveDriver(logger log.DebugLogger) (
 		}
 		createVmRequest.OverlayFiles = overlayFiles
 	}
-	slaveTrader, err := smallstack.NewSlaveTrader(createVmRequest, logger)
+	slaveTrader, err := smallstack.NewSlaveTraderWithOptions(
+		smallstack.SlaveTraderOptions{
+			CreateRequest:     createVmRequest,
+			HypervisorAddress: configuration.HypervisorAddress,
+		},
+		logger)
 	if err != nil {
 		return nil, err
 	}
