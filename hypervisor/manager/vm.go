@@ -3501,7 +3501,9 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 	return nil
 }
 
-// This may grab the VM lock.
+// This may grab and release the VM lock.
+// It returns true if there was a timeout waiting for the DHCP request, else
+// false.
 func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	enableNetboot, haveManagerLock bool) (bool, error) {
 	vm.monitorSockname = filepath.Join(vm.dirname, "monitor.sock")
@@ -3535,6 +3537,10 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
 		return false, nil
+	}
+	if err := vm.checkVolumes(true); err != nil {
+		vm.setState(proto.StateFailedToStart)
+		return false, err
 	}
 	if dhcpTimeout >= 0 {
 		err := vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)
