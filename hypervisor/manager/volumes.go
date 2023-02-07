@@ -11,10 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -108,7 +110,7 @@ func getMounts(mountTable *mounts.MountTable) (
 
 // grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size,
 // expanding the partition first if appropriate.
-func grow2fs(volume string) error {
+func grow2fs(volume string, logger log.DebugLogger) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
 		return resize2fs(volume, 0)
@@ -144,7 +146,8 @@ func grow2fs(volume string) error {
 			volume, err, string(output))
 	}
 	// Try and resize the file-system in the partition (need a loop device).
-	device, err := fsutil.LoopbackSetup(volume)
+	device, err := fsutil.LoopbackSetupAndWaitForPartition(volume, "p1",
+		time.Minute, logger)
 	if err != nil {
 		return err
 	}
@@ -193,7 +196,7 @@ func resize2fs(device string, size uint64) error {
 
 // shrink2fs will try and shrink an ext{2,3,4} file-system on a volume,
 // shrinking the partition afterwards if appropriate.
-func shrink2fs(volume string, size uint64) error {
+func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
 		return resize2fs(volume, size)
@@ -228,7 +231,8 @@ func shrink2fs(volume string, size uint64) error {
 		return err
 	}
 	// Try and resize the file-system in the partition (need a loop device).
-	device, err := fsutil.LoopbackSetup(volume)
+	device, err := fsutil.LoopbackSetupAndWaitForPartition(volume, "p1",
+		time.Minute, logger)
 	if err != nil {
 		return err
 	}

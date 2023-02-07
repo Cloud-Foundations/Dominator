@@ -626,7 +626,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 		return errors.New("VM is not stopped")
 	}
 	if size < volume.Size {
-		if err := shrink2fs(localVolume.Filename, size); err != nil {
+		if err := shrink2fs(localVolume.Filename, size, vm.logger); err != nil {
 			return err
 		}
 		if err := setVolumeSize(localVolume.Filename, size); err != nil {
@@ -651,7 +651,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	// Try and grow an ext{2,3,4} file-system. If this fails, return the error
 	// to the caller, but the volume will have been expanded. Someone else can
 	// deal with adjusting partitions and growing file-systems.
-	return grow2fs(localVolume.Filename)
+	return grow2fs(localVolume.Filename, vm.logger)
 }
 
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {
@@ -2240,13 +2240,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer os.Remove(rootDir)
-	loopDevice, err := fsutil.LoopbackSetup(tmpRootFilename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpRootFilename,
+		partition, time.Minute, vm.logger)
 	if err != nil {
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", loopDevice, rootDir)
-	err = wsyscall.Mount(loopDevice+"p1", rootDir, "ext4", 0, "")
+	err = wsyscall.Mount(loopDevice+partition, rootDir, "ext4", 0, "")
 	if err != nil {
 		return err
 	}
@@ -2869,12 +2871,14 @@ func (vm *vmInfoType) scanVmRoot(scanFilter *filter.Filter) (
 		return nil, err
 	}
 	defer os.Remove(rootDir)
-	loopDevice, err := fsutil.LoopbackSetup(vm.VolumeLocations[0].Filename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(
+		vm.VolumeLocations[0].Filename, partition, time.Minute, vm.logger)
 	if err != nil {
 		return nil, err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	blockDevice := loopDevice + "p1"
+	blockDevice := loopDevice + partition
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", blockDevice, rootDir)
 	err = wsyscall.Mount(blockDevice, rootDir, "ext4", 0, "")
 	if err != nil {
