@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
@@ -156,6 +157,7 @@ func newServer(interfaceNames []string, dynamicLeasesFile string,
 		}
 	}()
 	go dhcpServer.cleanupDynamicLeasesLoop(cleanupTriggerChannel)
+	html.HandleFunc("/showDhcpStatus", dhcpServer.showDhcpStatusHandler)
 	return dhcpServer, nil
 }
 
@@ -333,6 +335,14 @@ func (s *DhcpServer) findDynamicLease(macAddr, iface string) (
 	if !ok {
 		return nil, nil
 	}
+	if macAddr != lease.MacAddress {
+		s.logger.Printf("discarding {%s %s}: bad MAC in lease for: %s\n",
+			lease.IpAddress, lease.MacAddress, macAddr)
+		delete(s.ipAddrToMacAddr, lease.IpAddress.String())
+		delete(s.dynamicLeases, lease.MacAddress)
+		delete(s.dynamicLeases, macAddr)
+		return nil, nil
+	}
 	if lease.subnet == nil {
 		if subnet := s.findMatchingSubnet(lease.IpAddress); subnet == nil {
 			s.logger.Printf("discarding {%s %s}: no subnet\n",
@@ -432,7 +442,7 @@ func (s *DhcpServer) makeDynamicLease(macAddr string, subnet *subnetType,
 			util.DecrementIP(lowIP)
 			if util.CompareIPs(lowIP, reqIP) && util.CompareIPs(reqIP, stopIP) {
 				lease := leaseType{Address: proto.Address{
-					IpAddress:  reqIP,
+					IpAddress:  util.CopyIP(reqIP),
 					MacAddress: macAddr,
 				},
 					expires: time.Now().Add(time.Second * 10),
@@ -558,8 +568,9 @@ func (s *DhcpServer) readDynamicLeases() error {
 	for _, lease := range leases {
 		if time.Until(lease.Expires) > 0 {
 			s.dynamicLeases[lease.Address.MacAddress] = &leaseType{
-				Address: lease.Address,
-				expires: lease.Expires,
+				Address:        lease.Address,
+				clientHostname: lease.ClientHostName,
+				expires:        lease.Expires,
 			}
 			s.ipAddrToMacAddr[lease.Address.IpAddress.String()] =
 				lease.Address.MacAddress

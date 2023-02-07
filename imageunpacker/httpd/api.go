@@ -29,6 +29,7 @@ func StartServer(portNum uint, unpackerObj *unpacker.Unpacker,
 	myState := state{unpackerObj}
 	html.HandleFunc("/", myState.statusHandler)
 	html.HandleFunc("/showFileSystem", myState.showFileSystemHandler)
+	html.HandleFunc("/showStreamDashboard", myState.showStreamDashboardHandler)
 	if daemon {
 		go http.Serve(listener, nil)
 	} else {

@@ -157,6 +157,14 @@ func TestInjectAccept(t *testing.T) {
 	}
 }
 
+func TestClose(t *testing.T) {
+	logger := testlogger.New(t)
+	listener, _ := createTestListener(logger)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestListen(t *testing.T) {
 	logger := testlogger.New(t)
 	listener, portNumber := createTestListener(logger)

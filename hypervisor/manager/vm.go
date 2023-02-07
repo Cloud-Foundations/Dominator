@@ -444,6 +444,38 @@ func (m *Manager) changeVmConsoleType(ipAddr net.IP,
 	return nil
 }
 
+// changeVmCPUs returns true if the number of CPUs was changed.
+func (m *Manager) changeVmCPUs(vm *vmInfoType, milliCPUs uint) (bool, error) {
+	if milliCPUs == vm.MilliCPUs {
+		return false, nil
+	}
+	changed := false
+	if milliCPUs < vm.MilliCPUs {
+		if vm.State != proto.StateStopped &&
+			milliCPUs/1000 != vm.MilliCPUs/1000 {
+			return false, errors.New("VM is not stopped")
+		}
+		vm.MilliCPUs = milliCPUs
+		changed = true
+	} else if milliCPUs > vm.MilliCPUs {
+		if vm.State != proto.StateStopped &&
+			milliCPUs/1000 != vm.MilliCPUs/1000 {
+			return false, errors.New("VM is not stopped")
+		}
+		m.mutex.Lock()
+		err := m.checkSufficientCPUWithLock(milliCPUs - vm.MilliCPUs)
+		if err == nil {
+			vm.MilliCPUs = milliCPUs
+			changed = true
+		}
+		m.mutex.Unlock()
+		if err != nil {
+			return changed, err
+		}
+	}
+	return changed, nil
+}
+
 func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, destroyProtection bool) error {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
@@ -454,6 +486,34 @@ func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
 	vm.DestroyProtection = destroyProtection
 	vm.writeAndSendInfo()
 	return nil
+}
+
+// changeVmMemory returns true if the memory size was changed.
+func (m *Manager) changeVmMemory(vm *vmInfoType,
+	memoryInMiB uint64) (bool, error) {
+	if memoryInMiB == vm.MemoryInMiB {
+		return false, nil
+	}
+	if vm.State != proto.StateStopped {
+		return false, errors.New("VM is not stopped")
+	}
+	changed := false
+	if memoryInMiB < vm.MemoryInMiB {
+		vm.MemoryInMiB = memoryInMiB
+		changed = true
+	} else if memoryInMiB > vm.MemoryInMiB {
+		m.mutex.Lock()
+		err := m.checkSufficientMemoryWithLock(memoryInMiB - vm.MemoryInMiB)
+		if err == nil {
+			vm.MemoryInMiB = memoryInMiB
+			changed = true
+		}
+		m.mutex.Unlock()
+		if err != nil {
+			return changed, err
+		}
+	}
+	return changed, nil
 }
 
 func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
@@ -484,48 +544,25 @@ func (m *Manager) changeVmSize(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	if vm.State != proto.StateStopped {
-		return errors.New("VM is not stopped")
-	}
 	changed := false
 	if memoryInMiB > 0 {
-		if memoryInMiB < vm.MemoryInMiB {
-			vm.MemoryInMiB = memoryInMiB
+		if _changed, _err := m.changeVmMemory(vm, memoryInMiB); _err != nil {
+			err = _err
+		} else if _changed {
 			changed = true
-		} else if memoryInMiB > vm.MemoryInMiB {
-			m.mutex.Lock()
-			err := m.checkSufficientMemoryWithLock(memoryInMiB - vm.MemoryInMiB)
-			if err == nil {
-				vm.MemoryInMiB = memoryInMiB
-				changed = true
-			}
-			m.mutex.Unlock()
-			if err != nil {
-				return err
-			}
 		}
 	}
-	if milliCPUs > 0 {
-		if milliCPUs < vm.MilliCPUs {
-			vm.MilliCPUs = milliCPUs
+	if milliCPUs > 0 && err == nil {
+		if _changed, _err := m.changeVmCPUs(vm, milliCPUs); _err != nil {
+			err = _err
+		} else if _changed {
 			changed = true
-		} else if milliCPUs > vm.MilliCPUs {
-			m.mutex.Lock()
-			err := m.checkSufficientCPUWithLock(milliCPUs - vm.MilliCPUs)
-			if err == nil {
-				vm.MilliCPUs = milliCPUs
-				changed = true
-			}
-			m.mutex.Unlock()
-			if err != nil {
-				return err
-			}
 		}
 	}
 	if changed {
 		vm.writeAndSendInfo()
 	}
-	return nil
+	return err
 }
 
 func (m *Manager) changeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
@@ -1001,7 +1038,7 @@ func (m *Manager) destroyVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	case proto.StateStopping:
 		return errors.New("VM is stopping")
 	case proto.StateStopped, proto.StateFailedToStart, proto.StateMigrating,
-		proto.StateExporting:
+		proto.StateExporting, proto.StateCrashed:
 		vm.delete()
 	case proto.StateDestroying:
 		return errors.New("VM is already destroying")
@@ -1832,7 +1869,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	client, img, imageName, err := m.getImage(request.ImageName,
 		request.ImageTimeout)
 	if err != nil {
-		return nil
+		return err
 	}
 	if img.Filter == nil {
 		return fmt.Errorf("%s contains no filter", imageName)
@@ -2510,7 +2547,8 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return false, errors.New("VM is running")
 	case proto.StateStopping:
 		return false, errors.New("VM is stopping")
-	case proto.StateStopped, proto.StateFailedToStart, proto.StateExporting:
+	case proto.StateStopped, proto.StateFailedToStart, proto.StateExporting,
+		proto.StateCrashed:
 		vm.setState(proto.StateStarting)
 		vm.mutex.Unlock()
 		doUnlock = false
@@ -2563,6 +2601,8 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		return errors.New("VM is migrating")
 	case proto.StateExporting:
 		return errors.New("VM is exporting")
+	case proto.StateCrashed:
+		vm.setState(proto.StateStopped)
 	default:
 		return errors.New("unknown state: " + vm.State.String())
 	}
@@ -2872,6 +2912,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 		}
 		return
 	case proto.StateRunning:
+		vm.setState(proto.StateCrashed)
 		select {
 		case vm.stoppedNotifier <- struct{}{}:
 		default:
@@ -2893,6 +2934,9 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 	case proto.StateMigrating:
 		return
 	case proto.StateExporting:
+		return
+	case proto.StateCrashed:
+		vm.logger.Println("monitor socket closed on already crashed VM")
 		return
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
@@ -3008,6 +3052,9 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 			go vm.monitor(monitorSock, commandChannel)
 			commandChannel <- "qmp_capabilities"
 			vm.kill()
+		} else {
+			vm.setState(proto.StateStopped)
+			vm.logger.Println(err)
 		}
 		return false, nil
 	case proto.StateStopped:
@@ -3017,6 +3064,7 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		return false, nil
 	case proto.StateMigrating:
 		return false, nil
+	case proto.StateCrashed:
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
 		return false, nil
@@ -3186,7 +3234,9 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		case proto.ConsoleVNC:
 			cmd.Args = append(cmd.Args,
 				"-display", "vnc=unix:"+filepath.Join(vm.dirname, "vnc"),
-				"-vga", "std")
+				"-vga", "std",
+				"-usb", "-device", "usb-tablet",
+			)
 		}
 	}
 	var interfaceDriver string

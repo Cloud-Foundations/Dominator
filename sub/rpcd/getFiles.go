@@ -25,7 +25,7 @@ func (t *rpcType) GetFiles(conn *srpc.Conn) error {
 			break
 		}
 		filename = path.Join(t.rootDir, filename)
-		if err := processFilename(conn, filename); err != nil {
+		if err := t.getFile(conn, filename); err != nil {
 			return err
 		}
 	}
@@ -37,15 +37,17 @@ func (t *rpcType) GetFiles(conn *srpc.Conn) error {
 	return nil
 }
 
-func processFilename(conn *srpc.Conn, filename string) error {
-	file, err := os.Open(filename)
+func (t *rpcType) getFile(conn *srpc.Conn, filename string) error {
+	var file *os.File
+	var err error
+	t.workdirGoroutine.Run(func() { file, err = os.Open(filename) })
 	var response sub.GetFileResponse
 	if err != nil {
-		response.Error = err
+		response.Error = err.Error()
 	} else {
 		defer file.Close()
 		if fi, err := file.Stat(); err != nil {
-			response.Error = err
+			response.Error = err.Error()
 		} else {
 			response.Size = uint64(fi.Size())
 		}
@@ -53,7 +55,7 @@ func processFilename(conn *srpc.Conn, filename string) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
-	if response.Error != nil {
+	if response.Error != "" {
 		return nil
 	}
 	_, err = io.Copy(conn, bufio.NewReader(file))

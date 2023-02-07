@@ -15,7 +15,7 @@ import (
 func addImagefileSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, objectClient := getClients()
 	err := addImagefile(imageSClient, objectClient, args[0], args[1], args[2],
-		args[3])
+		args[3], logger)
 	if err != nil {
 		return fmt.Errorf("Error adding image: \"%s\": %s", args[0], err)
 	}
@@ -24,7 +24,8 @@ func addImagefileSubcommand(args []string, logger log.DebugLogger) error {
 
 func addImagefile(imageSClient *srpc.Client,
 	objectClient *objectclient.ObjectClient,
-	name, imageFilename, filterFilename, triggersFilename string) error {
+	name, imageFilename, filterFilename, triggersFilename string,
+	logger log.DebugLogger) error {
 	imageExists, err := client.CheckImage(imageSClient, name)
 	if err != nil {
 		return errors.New("error checking for image existence: " + err.Error())
@@ -38,7 +39,7 @@ func addImagefile(imageSClient *srpc.Client,
 		return err
 	}
 	newImage.FileSystem, err = buildImage(imageSClient, newImage.Filter,
-		imageFilename)
+		imageFilename, logger)
 	if err != nil {
 		return errors.New("error building image: " + err.Error())
 	}
@@ -48,7 +49,7 @@ func addImagefile(imageSClient *srpc.Client,
 	if err := copyMtimes(imageSClient, newImage, *copyMtimesFrom); err != nil {
 		return err
 	}
-	return addImage(imageSClient, name, newImage)
+	return addImage(imageSClient, name, newImage, logger)
 }
 
 func copyMtimes(imageSClient *srpc.Client, img *image.Image,

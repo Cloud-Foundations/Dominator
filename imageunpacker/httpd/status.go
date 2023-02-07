@@ -9,7 +9,29 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageunpacker"
 )
+
+func getStreamDashboardLink(streamName string, ok bool) string {
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("<a href=\"showStreamDashboard?%s\">%s</a>",
+		streamName, streamName)
+}
+
+func (s state) getStreamStatusLink(streamName string,
+	stream proto.ImageStreamInfo, ok bool) string {
+	if !ok {
+		return stream.Status.String()
+	}
+	fs, _ := s.unpacker.GetFileSystem(streamName)
+	if fs == nil {
+		return stream.Status.String()
+	}
+	return fmt.Sprintf("<a href=\"showFileSystem?%s\">%s</a>",
+		streamName, stream.Status.String())
+}
 
 func (s state) statusHandler(w http.ResponseWriter, req *http.Request) {
 	if req.URL.Path != "/" {
@@ -54,8 +76,7 @@ func (s state) writeDashboard(writer io.Writer) {
 	for _, streamName := range streamNames {
 		stream := status.ImageStreams[streamName]
 		tw.WriteRow("", "",
-			fmt.Sprintf("<a href=\"showFileSystem?%s\">%s</a>",
-				streamName, streamName),
+			getStreamDashboardLink(streamName, true),
 			stream.DeviceId,
 			status.Devices[stream.DeviceId].DeviceName,
 			func() string {
@@ -65,7 +86,7 @@ func (s state) writeDashboard(writer io.Writer) {
 				}
 				return format.FormatBytes(size)
 			}(),
-			stream.Status.String(),
+			s.getStreamStatusLink(streamName, stream, true),
 		)
 	}
 	fmt.Fprintln(writer, "</table><br>")
@@ -85,19 +106,8 @@ func (s state) writeDashboard(writer io.Writer) {
 			deviceId,
 			deviceInfo.DeviceName,
 			format.FormatBytes(deviceInfo.Size),
-			func() string {
-				if ok {
-					return fmt.Sprintf("<a href=\"showFileSystem?%s\">%s</a>",
-						deviceInfo.StreamName, deviceInfo.StreamName)
-				}
-				return ""
-			}(),
-			func() string {
-				if ok {
-					return stream.Status.String()
-				}
-				return ""
-			}(),
+			getStreamDashboardLink(deviceInfo.StreamName, ok),
+			s.getStreamStatusLink(deviceInfo.StreamName, stream, ok),
 		)
 	}
 	fmt.Fprintln(writer, "</table><br>")

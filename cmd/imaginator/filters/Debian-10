@@ -18,6 +18,7 @@
 /var/lib/patched-image
 /var/lib/logrotate/status
 /var/lib/systemd/random-seed
+/var/lib/systemd/timers(|/.*)$
 /var/lib/urandom/.*
 /var/log/.*
 /var/mail/.*

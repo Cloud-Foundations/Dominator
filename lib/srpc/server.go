@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -34,6 +35,8 @@ const (
 	methodTypeCoder
 	methodTypeRequestReply
 )
+
+type builtinReceiver struct{}
 
 type methodWrapper struct {
 	methodType                    int
@@ -84,6 +87,9 @@ func init() {
 	http.HandleFunc(jsonTlsRpcPath, jsonTlsHttpHandler)
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
 	registerServerMetrics()
+	if err := RegisterName("", &builtinReceiver{}); err != nil {
+		panic(err)
+	}
 }
 
 func registerServerMetrics() {
@@ -123,6 +129,9 @@ func defaultMethodGranter(serviceMethod string,
 
 func registerName(name string, rcvr interface{},
 	options ReceiverOptions) error {
+	if _, ok := receivers[name]; ok {
+		return fmt.Errorf("SRPC receiver already registered: %s", name)
+	}
 	receiver := receiverType{methods: make(map[string]*methodWrapper)}
 	typeOfReceiver := reflect.TypeOf(rcvr)
 	valueOfReceiver := reflect.ValueOf(rcvr)
@@ -314,9 +323,13 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		log.Println("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
 		return
 	}
-	connToClose := unsecuredConn
+	myConn := &Conn{
+		conn:       unsecuredConn,
+		localAddr:  unsecuredConn.LocalAddr().String(),
+		remoteAddr: unsecuredConn.RemoteAddr().String(),
+	}
 	defer func() {
-		connToClose.Close()
+		myConn.conn.Close()
 	}()
 	if tcpConn, ok := unsecuredConn.(net.TCPConn); ok {
 		if err := tcpConn.SetKeepAlive(true); err != nil {
@@ -338,12 +351,11 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		log.Println("error writing connect message: ", err.Error())
 		return
 	}
-	myConn := &Conn{remoteAddr: req.RemoteAddr}
 	if doTls {
 		var tlsConn *tls.Conn
 		if req.TLS == nil {
 			tlsConn = tls.Server(unsecuredConn, serverTlsConfig)
-			connToClose = tlsConn
+			myConn.conn = tlsConn
 			if err := tlsConn.Handshake(); err != nil {
 				serverMetricsMutex.Lock()
 				numRejectedServerConnections++

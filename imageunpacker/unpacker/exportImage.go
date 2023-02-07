@@ -1,7 +1,6 @@
 package unpacker
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -60,38 +59,8 @@ func (stream *streamManagerState) export(exportType string,
 	stream.unpacker.rwMutex.RLock()
 	device := stream.unpacker.pState.Devices[stream.streamInfo.DeviceId]
 	stream.unpacker.rwMutex.RUnlock()
-	doUnmount := false
-	streamInfo := stream.streamInfo
-	switch streamInfo.status {
-	case proto.StatusStreamNoDevice:
-		return errors.New("no device")
-	case proto.StatusStreamNotMounted:
-		// Nothing to do.
-	case proto.StatusStreamMounted:
-		doUnmount = true
-	case proto.StatusStreamScanning:
-		return errors.New("stream scan in progress")
-	case proto.StatusStreamScanned:
-		doUnmount = true
-	case proto.StatusStreamFetching:
-		return errors.New("fetch in progress")
-	case proto.StatusStreamUpdating:
-		return errors.New("update in progress")
-	case proto.StatusStreamPreparing:
-		return errors.New("preparing to capture")
-	case proto.StatusStreamExporting:
-		return errors.New("export in progress")
-	case proto.StatusStreamNoFileSystem:
-		return errors.New("no file-system")
-	default:
-		panic("invalid status")
-	}
-	if doUnmount {
-		mountPoint := path.Join(stream.unpacker.baseDir, "mnt")
-		if err := syscall.Unmount(mountPoint, 0); err != nil {
-			return err
-		}
-		stream.streamInfo.status = proto.StatusStreamNotMounted
+	if err := stream.unmount(); err != nil {
+		return err
 	}
 	stream.streamInfo.status = proto.StatusStreamExporting
 	defer func() {
@@ -99,7 +68,7 @@ func (stream *streamManagerState) export(exportType string,
 	}()
 	deviceFile, err := os.Open(path.Join("/dev", device.DeviceName))
 	if err != nil {
-		stream.unpacker.logger.Println("Error exporting: %s", err)
+		stream.streamInfo.dualLogger.Println("Error exporting: %s", err)
 		return fmt.Errorf("error exporting: %s", err)
 	}
 	defer deviceFile.Close()
@@ -130,11 +99,12 @@ func (stream *streamManagerState) export(exportType string,
 	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		stream.unpacker.logger.Printf("Error exporting: %s: %s\n",
+		stream.streamInfo.dualLogger.Printf("Error exporting: %s: %s\n",
 			err, string(output))
 		return fmt.Errorf("error exporting: %s: %s", err, output)
 	}
-	stream.unpacker.logger.Printf("Exported(%s) type: %s dest: %s in %s\n",
+	stream.streamInfo.dualLogger.Printf(
+		"Exported(%s) type: %s dest: %s in %s\n",
 		stream.streamName, exportType, exportDestination,
 		format.Duration(time.Since(startTime)))
 	return nil

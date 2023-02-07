@@ -1,6 +1,7 @@
 package dhcpd
 
 import (
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -82,4 +83,8 @@ func (s *DhcpServer) RemoveSubnet(subnetId string) {
 func (s *DhcpServer) SetNetworkBootImage(nbiName string) error {
 	s.networkBootImage = []byte(nbiName)
 	return nil
+}
+
+func (s *DhcpServer) WriteHtml(writer io.Writer) {
+	s.writeHtml(writer)
 }

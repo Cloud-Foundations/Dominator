@@ -39,6 +39,7 @@ const (
 )
 
 type hypervisorType struct {
+	alreadyUpdated            bool
 	healthAgentClientResource *rpcclientpool.ClientResource
 	hostname                  string
 	hypervisorClientResource  *srpc.ClientResource
@@ -150,8 +151,13 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 			}(hostname)
 		}
 	}
+	numAlreadyUpdated := 0
 	for range hypervisorAddresses {
 		if hypervisor := <-hypervisorsChannel; hypervisor != nil {
+			if hypervisor.alreadyUpdated {
+				numAlreadyUpdated++
+				continue
+			}
 			err := hypervisor.updateTagForHypervisor(
 				fleetManagerClientResource, "PlannedImage", imageName)
 			if err != nil {
@@ -160,6 +166,10 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 			}
 			hypervisors = append(hypervisors, hypervisor)
 		}
+	}
+	if numAlreadyUpdated == len(hypervisorAddresses) {
+		return releaseImage(imageServerClientResource, imageName, expiresAt,
+			logger)
 	}
 	if len(hypervisors) < 1 {
 		return errors.New("no hypervisors to update")
@@ -379,6 +389,7 @@ func markUnusedHypervisors(hypervisors []*hypervisorType,
 func releaseImage(imageServerClientResource *srpc.ClientResource,
 	imageName string, expiresAt time.Time, logger log.DebugLogger) error {
 	if expiresAt.IsZero() {
+		logger.Debugln(1, "image already released")
 		return nil
 	}
 	logger.Debugln(0, "releasing image")
@@ -420,7 +431,8 @@ func setupHypervisor(hostname string, imageName string, tgs tags.Tags,
 		return nil
 	} else if lastImage == imageName {
 		logger.Println("already updated, skipping")
-		return nil
+		h.alreadyUpdated = true
+		return h
 	} else {
 		return h
 	}

@@ -31,6 +31,10 @@ func setAllUid(uid int) error {
 	return syscall.ENOTSUP
 }
 
+func setMyPriority(priority int) error {
+	return syscall.ENOTSUP
+}
+
 func setNetNamespace(namespaceFd int) error {
 	return syscall.ENOTSUP
 }

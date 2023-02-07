@@ -110,6 +110,7 @@ type Builder struct {
 	imageServerAddress        string
 	logger                    log.Logger
 	imageStreamsUrl           string
+	initialNamespace          string // For catching golang bugs.
 	streamsLock               sync.RWMutex
 	bootstrapStreams          map[string]*bootstrapStream
 	imageStreams              map[string]*imageStreamType

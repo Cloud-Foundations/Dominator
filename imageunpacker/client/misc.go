@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io"
 	"path"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -18,6 +19,15 @@ func associateStreamWithDevice(srpcClient *srpc.Client, streamName string,
 		request, &reply)
 }
 
+func claimDevice(srpcClient *srpc.Client, deviceId, deviceName string) error {
+	request := proto.ClaimDeviceRequest{
+		DeviceId:   deviceId,
+		DeviceName: deviceName,
+	}
+	var reply proto.ClaimDeviceResponse
+	return srpcClient.RequestReply("ImageUnpacker.ClaimDevice", request, &reply)
+}
+
 func exportImage(srpcClient *srpc.Client, streamName,
 	exportType, exportDestination string) error {
 	request := proto.ExportImageRequest{
@@ -27,6 +37,40 @@ func exportImage(srpcClient *srpc.Client, streamName,
 	}
 	var reply proto.ExportImageResponse
 	return srpcClient.RequestReply("ImageUnpacker.ExportImage", request, &reply)
+}
+
+func forgetStream(srpcClient *srpc.Client, streamName string) error {
+	request := proto.ForgetStreamRequest{StreamName: streamName}
+	var reply proto.ForgetStreamResponse
+	return srpcClient.RequestReply("ImageUnpacker.ForgetStream",
+		request, &reply)
+}
+
+func getRaw(srpcClient *srpc.Client, streamName string) (
+	io.ReadCloser, uint64, error) {
+	conn, err := srpcClient.Call("ImageUnpacker.GetRaw")
+	if err != nil {
+		return nil, 0, err
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
+	request := proto.GetRawRequest{StreamName: path.Clean(streamName)}
+	if err := conn.Encode(request); err != nil {
+		return nil, 0, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, 0, err
+	}
+	var reply proto.GetRawResponse
+	if err := conn.Decode(&reply); err != nil {
+		return nil, 0, err
+	}
+	doClose = false
+	return conn, reply.Size, nil
 }
 
 func getStatus(srpcClient *srpc.Client) (proto.GetStatusResponse, error) {

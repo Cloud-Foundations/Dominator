@@ -92,7 +92,7 @@ func (stream *streamManagerState) prepareForCapture() error {
 		return err
 	}
 	stream.streamInfo.status = proto.StatusStreamNotMounted
-	stream.unpacker.logger.Printf("Prepared for capture(%s) in %s\n",
+	streamInfo.dualLogger.Printf("Prepared for capture(%s) in %s\n",
 		stream.streamName, format.Duration(time.Since(startTime)))
 	return nil
 }
@@ -102,8 +102,8 @@ func (stream *streamManagerState) capture() error {
 	device := stream.unpacker.pState.Devices[stream.streamInfo.DeviceId]
 	stream.unpacker.rwMutex.RUnlock()
 	deviceNode := filepath.Join("/dev", device.DeviceName)
-	stream.unpacker.logger.Printf(
-		"Preparing for capture(%s) on %s with label: %s\n",
+	logger := stream.streamInfo.dualLogger
+	logger.Printf("Preparing for capture(%s) on %s with label: %s\n",
 		stream.streamName, deviceNode, stream.rootLabel)
 	// First clean out debris.
 	mountPoint := filepath.Join(stream.unpacker.baseDir, "mnt")
@@ -113,14 +113,13 @@ func (stream *streamManagerState) capture() error {
 	}
 	fs, err := scanBootDirectory(mountPoint)
 	if err != nil {
-		stream.unpacker.logger.Printf("Error scanning boot directory: %s\n",
-			err)
+		logger.Printf("Error scanning boot directory: %s\n", err)
 		return fmt.Errorf("error getting scanning boot directory: %s", err)
 	}
 	err = util.MakeBootable(fs, deviceNode, stream.rootLabel, mountPoint,
-		"net.ifnames=0", false, stream.unpacker.logger)
+		"net.ifnames=0", false, logger)
 	if err != nil {
-		stream.unpacker.logger.Printf("Error preparing: %s", err)
+		logger.Printf("Error preparing: %s", err)
 		return fmt.Errorf("error preparing: %s", err)
 	}
 	if err := syscall.Unmount(mountPoint, 0); err != nil {

@@ -13,6 +13,7 @@ const (
 	StatusStreamPreparing    = 7
 	StatusStreamExporting    = 8
 	StatusStreamNoFileSystem = 9
+	StatusStreamTransferring = 10
 )
 
 type DeviceInfo struct {
@@ -35,6 +36,13 @@ type AssociateStreamWithDeviceRequest struct {
 
 type AssociateStreamWithDeviceResponse struct{}
 
+type ClaimDeviceRequest struct {
+	DeviceId   string
+	DeviceName string // Relative to "/dev" directory.
+}
+
+type ClaimDeviceResponse struct{}
+
 type ExportImageRequest struct {
 	StreamName  string
 	Type        string
@@ -42,6 +50,21 @@ type ExportImageRequest struct {
 }
 
 type ExportImageResponse struct{}
+
+type ForgetStreamRequest struct {
+	StreamName string
+}
+
+type ForgetStreamResponse struct{}
+
+type GetRawRequest struct {
+	StreamName string
+}
+
+type GetRawResponse struct {
+	Error string
+	Size  uint64
+} // Image data are streamed afterwards.
 
 type GetStatusRequest struct{}
 

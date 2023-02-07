@@ -41,7 +41,7 @@ func (d *TlsDialer) dial(network, address string) (*tls.Conn, error) {
 }
 
 func newTestCertificate() (tls.Certificate, *x509.Certificate, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}

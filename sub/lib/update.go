@@ -351,6 +351,14 @@ func (t *uType) skipPath(pathname string) bool {
 func (t *uType) writePatchedImageName(imageName string) error {
 	pathname := filepath.Join(t.rootDirectoryName,
 		constants.PatchedImageNameFile)
+	if imageName == "" {
+		if err := os.Remove(pathname); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(pathname), fsutil.DirPerms); err != nil {
 		return err
 	}

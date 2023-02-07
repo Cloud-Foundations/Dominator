@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"io"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -20,8 +21,8 @@ func getFiles(client *srpc.Client, filenames []string,
 		if err := conn.Decode(&reply); err != nil {
 			return err
 		}
-		if reply.Error != nil {
-			return reply.Error
+		if reply.Error != "" {
+			return errors.New(reply.Error)
 		}
 		if err := readerFunc(&io.LimitedReader{R: conn, N: int64(reply.Size)},
 			reply.Size); err != nil {

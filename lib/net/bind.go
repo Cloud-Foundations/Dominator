@@ -89,12 +89,15 @@ func listenWithReuse(network, address string) (net.Listener, error) {
 		}
 	}()
 	if tcpListener, ok := listener.(*net.TCPListener); ok {
-		file, err := tcpListener.File()
+		rawConn, err := tcpListener.SyscallConn()
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
-		if err := setReuse(int(file.Fd())); err != nil {
+		e := rawConn.Control(func(fd uintptr) { err = setReuse(int(fd)) })
+		if e != nil {
+			return nil, e
+		}
+		if err != nil {
 			return nil, err
 		}
 	} else {

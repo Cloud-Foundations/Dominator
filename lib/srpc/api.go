@@ -278,9 +278,11 @@ type Client struct {
 	callLock    sync.Mutex
 	conn        net.Conn
 	isEncrypted bool
+	localAddr   string
 	makeCoder   coderMaker
+	remoteAddr  string
 	resource    *ClientResource
-	tcpConn     libnet.TCPConn // The underlying raw connection.
+	tcpConn     libnet.TCPConn // The underlying raw TCP connection (if TCP).
 }
 
 // DialHTTP connects to an HTTP SRPC server at the specified network address
@@ -358,12 +360,12 @@ func (client *Client) Put() {
 // SetKeepAlive sets whether the operating system should send keepalive messages
 // on the connection.
 func (client *Client) SetKeepAlive(keepalive bool) error {
-	return client.tcpConn.SetKeepAlive(keepalive)
+	return client.setKeepAlive(keepalive)
 }
 
 // SetKeepAlivePeriod sets the period between keepalive messages.
 func (client *Client) SetKeepAlivePeriod(d time.Duration) error {
-	return client.tcpConn.SetKeepAlivePeriod(d)
+	return client.setKeepAlivePeriod(d)
 }
 
 // RequestReply sends a request message to the named Service.Method function,
@@ -378,15 +380,17 @@ func (client *Client) RequestReply(serviceMethod string, request interface{},
 type Conn struct {
 	Decoder
 	Encoder
-	parent      *Client // nil: server-side connection.
-	isEncrypted bool
 	*bufio.ReadWriter
-	remoteAddr       string
+	conn             net.Conn
 	groupList        map[string]struct{}
 	haveMethodAccess bool
-	username         string              // Empty string for unauthenticated.
+	isEncrypted      bool
+	localAddr        string
+	parent           *Client             // nil: server-side connection.
 	permittedMethods map[string]struct{} // nil: all, empty: none permitted.
 	releaseNotifier  func()
+	remoteAddr       string
+	username         string // Empty string for unauthenticated.
 }
 
 // Close will close the connection to the Sevice.Method function, releasing the
@@ -415,8 +419,7 @@ func (conn *Conn) IsEncrypted() bool {
 	return conn.isEncrypted
 }
 
-// RemoteAddr returns the remote network address. This is currently only
-// implemented for server-side connections.
+// RemoteAddr returns the remote network address.
 func (conn *Conn) RemoteAddr() string {
 	return conn.remoteAddr
 }

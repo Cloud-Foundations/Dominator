@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageunpacker"
 )
@@ -18,6 +19,8 @@ const (
 	requestPrepareForCapture
 	requestPrepareForCopy
 	requestExport
+	requestGetRaw
+	requestForget
 )
 
 var (
@@ -40,18 +43,29 @@ type requestType struct {
 	exportType        string
 	exportDestination string
 	errorChannel      chan<- error
+	readerChannel     chan<- *sizedReader
 }
 
 type imageStreamInfo struct {
 	DeviceId       string
-	status         proto.StreamStatus
+	dualLogger     log.DebugLogger
 	requestChannel chan<- requestType
 	scannedFS      *filesystem.FileSystem
+	status         proto.StreamStatus
+	streamLogger   *serverlogger.Logger
 }
 
 type persistentState struct {
 	Devices      map[string]deviceInfo       // Key: DeviceId.
 	ImageStreams map[string]*imageStreamInfo // Key: StreamName.
+}
+
+type sizedReader struct {
+	closeNotifier chan<- struct{}
+	err           error
+	nRead         uint64
+	reader        io.Reader
+	size          uint64
 }
 
 type streamManagerState struct {
@@ -87,14 +101,26 @@ func (u *Unpacker) AssociateStreamWithDevice(streamName string,
 	return u.associateStreamWithDevice(streamName, deviceId)
 }
 
+func (u *Unpacker) ClaimDevice(deviceId, deviceName string) error {
+	return u.claimDevice(deviceId, deviceName)
+}
+
 func (u *Unpacker) ExportImage(streamName string, exportType string,
 	exportDestination string) error {
 	return u.exportImage(streamName, exportType, exportDestination)
 }
 
+func (u *Unpacker) ForgetStream(streamName string) error {
+	return u.forgetStream(streamName)
+}
+
 func (u *Unpacker) GetFileSystem(streamName string) (
 	*filesystem.FileSystem, error) {
 	return u.getFileSystem(streamName)
+}
+
+func (u *Unpacker) GetRaw(streamName string) (io.ReadCloser, uint64, error) {
+	return u.getRaw(streamName)
 }
 
 func (u *Unpacker) GetStatus() proto.GetStatusResponse {
@@ -128,4 +154,8 @@ func (u *Unpacker) UnpackImage(streamName string, imageLeafName string) error {
 
 func (u *Unpacker) WriteHtml(writer io.Writer) {
 	u.writeHtml(writer)
+}
+
+func (u *Unpacker) WriteStreamHtml(writer io.Writer, streamName string) {
+	u.writeStreamHtml(writer, streamName)
 }

@@ -47,7 +47,8 @@ func (image *Image) getMissingObjects(objectServer objectserver.ObjectServer,
 	}
 	timeTaken := time.Since(startTime)
 	logger.Printf("downloaded %d objects, %s in %s (%s/s)\n",
-		len(missingObjects), format.FormatBytes(totalBytes), timeTaken,
+		len(missingObjects), format.FormatBytes(totalBytes),
+		format.Duration(timeTaken),
 		format.FormatBytes(uint64(float64(totalBytes)/timeTaken.Seconds())))
 	return nil
 }

@@ -22,7 +22,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	config := &tls.Config{Certificates: []tls.Certificate{tlsCertificate}}
+	config := &tls.Config{
+		Certificates: []tls.Certificate{tlsCertificate},
+		MinVersion:   tls.VersionTLS12,
+	}
 	listener, err := tls.Listen("tcp", "localhost:", config)
 	if err != nil {
 		panic(err)
@@ -38,7 +41,7 @@ func init() {
 func accept(listener net.Listener) {
 	conn, err := listener.Accept()
 	if err != nil {
-		return
+		panic(err)
 	}
 	defer conn.Close()
 	conn.(*tls.Conn).Handshake()
@@ -47,7 +50,7 @@ func accept(listener net.Listener) {
 func TestDialSkipVerify(t *testing.T) {
 	dialer := NewDialer(nil, &tls.Config{InsecureSkipVerify: true})
 	if conn, err := dialer.Dial("tcp", serverAddress); err != nil {
-		t.Fatal(err)
+		t.Fatalf("error dialing: %s: %s", serverAddress, err)
 	} else {
 		conn.Close()
 	}

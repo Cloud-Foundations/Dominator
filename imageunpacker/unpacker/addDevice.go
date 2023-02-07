@@ -34,6 +34,11 @@ func (u *Unpacker) addDevice(deviceId string) error {
 	for d := range scannedDevices {
 		deviceName = d
 	}
+	return u.addSpecfiedDevice(deviceId, deviceName)
+}
+
+// This must be called with the lock held.
+func (u *Unpacker) addSpecfiedDevice(deviceId, deviceName string) error {
 	device := deviceInfo{DeviceName: deviceName}
 	if err := updateDeviceSize(&device); err != nil {
 		return err

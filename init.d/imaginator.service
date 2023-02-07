@@ -1,6 +1,6 @@
 [Unit]
 Description=Imaginator image builder service
-After=network.target
+After=remote-fs.target network.target
 
 [Service]
 ExecStart=/usr/local/sbin/imaginator

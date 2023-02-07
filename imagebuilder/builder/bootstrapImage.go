@@ -1,5 +1,3 @@
-// +build go1.10
-
 package builder
 
 import (
@@ -9,17 +7,15 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
@@ -43,16 +39,24 @@ var environmentToSet = map[string]string{
 	"USER":    "root",
 }
 
-func cleanPackages(rootDir string, buildLog io.Writer) error {
+func cleanPackages(g *goroutine.Goroutine, rootDir string,
+	buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nCleaning packages:")
 	startTime := time.Now()
-	err := runInTarget(nil, buildLog, rootDir, nil, packagerPathname, "clean")
+	err := runInTarget(g, nil, buildLog, rootDir, nil, packagerPathname,
+		"clean")
 	if err != nil {
 		return errors.New("error cleaning: " + err.Error())
 	}
 	fmt.Fprintf(buildLog, "Package clean took: %s\n",
 		format.Duration(time.Since(startTime)))
 	return nil
+}
+
+func clearResolvConf(g *goroutine.Goroutine, writer io.Writer,
+	rootDir string) error {
+	return runInTarget(g, nil, writer, rootDir, nil,
+		"/bin/cp", "/dev/null", "/etc/resolv.conf")
 }
 
 func makeTempDirectory(dir, prefix string) (string, error) {
@@ -85,26 +89,33 @@ func (stream *bootstrapStream) build(b *Builder, client *srpc.Client,
 		}
 		args = append(args, arg)
 	}
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = buildLog
-	cmd.Stderr = buildLog
-	if err := cmd.Run(); err != nil {
+	fmt.Fprintf(buildLog, "Running command: %s with args:\n", args[0])
+	for _, arg := range args[1:] {
+		fmt.Fprintf(buildLog, "    %s\n", arg)
+	}
+	g, err := newNamespaceTarget()
+	if err != nil {
+		return nil, err
+	}
+	defer g.Quit()
+	err = runInTarget(g, nil, buildLog, "", nil, args[0], args[1:]...)
+	if err != nil {
 		return nil, err
 	} else {
 		packager := b.packagerTypes[stream.PackagerType]
 		if err := packager.writePackageInstaller(rootDir); err != nil {
 			return nil, err
 		}
-		if err := clearResolvConf(buildLog, rootDir); err != nil {
+		if err := clearResolvConf(g, buildLog, rootDir); err != nil {
 			return nil, err
 		}
 		buildDuration := time.Since(startTime)
 		fmt.Fprintf(buildLog, "\nBuild time: %s\n",
 			format.Duration(buildDuration))
-		if err := cleanPackages(rootDir, buildLog); err != nil {
+		if err := cleanPackages(g, rootDir, buildLog); err != nil {
 			return nil, err
 		}
-		return packImage(client, request, rootDir,
+		return packImage(g, client, request, rootDir,
 			stream.Filter, nil, stream.imageFilter, stream.imageTriggers,
 			buildLog)
 	}
@@ -126,8 +137,6 @@ func (packager *packagerType) writePackageInstaller(rootDir string) error {
 func (packager *packagerType) writePackageInstallerContents(writer io.Writer) {
 	fmt.Fprintln(writer, "#! /bin/sh")
 	fmt.Fprintln(writer, "# Created by imaginator.")
-	fmt.Fprintln(writer, "mount -n none -t proc /proc")
-	fmt.Fprintln(writer, "mount -n none -t sysfs /sys")
 	for _, line := range packager.Verbatim {
 		fmt.Fprintln(writer, line)
 	}
@@ -172,78 +181,4 @@ func writeArgument(writer io.Writer, arg string) {
 		}
 		fmt.Fprintf(writer, " '%s'", arg)
 	}
-}
-
-func clearResolvConf(writer io.Writer, rootDir string) error {
-	return runInTarget(nil, writer, rootDir, nil,
-		"cp", "/dev/null", "/etc/resolv.conf")
-}
-
-func runInTarget(input io.Reader, output io.Writer, rootDir string,
-	envGetter environmentGetter, prog string, args ...string) error {
-	var environmentToInject map[string]string
-	if envGetter != nil {
-		environmentToInject = envGetter.getenv()
-	}
-	cmd := exec.Command(prog, args...)
-	cmd.Env = stripVariables(os.Environ(), environmentToCopy, environmentToSet,
-		environmentToInject)
-	cmd.Dir = "/"
-	cmd.Stdin = input
-	cmd.Stdout = output
-	cmd.Stderr = output
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Chroot:     rootDir,
-		Setsid:     true,
-		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
-	}
-	return cmd.Run()
-}
-
-func runInTargetWithBindMounts(input io.Reader, output io.Writer,
-	rootDir string, bindMounts []string, envGetter environmentGetter,
-	prog string, args ...string) error {
-	if len(bindMounts) < 1 {
-		return runInTarget(input, output, rootDir, envGetter, prog, args...)
-	}
-	errChannel := make(chan error)
-	go func() {
-		err := func() error {
-			if err := wsyscall.UnshareMountNamespace(); err != nil {
-				return err
-			}
-			for _, bindMount := range bindMounts {
-				err := wsyscall.Mount(bindMount,
-					filepath.Join(rootDir, bindMount), "",
-					wsyscall.MS_BIND|wsyscall.MS_RDONLY, "")
-				if err != nil {
-					return fmt.Errorf("error bind mounting: %s: %s",
-						bindMount, err)
-				}
-			}
-			return runInTarget(input, output, rootDir, envGetter, prog, args...)
-		}()
-		errChannel <- err
-	}()
-	return <-errChannel
-}
-
-func stripVariables(input []string, varsToCopy map[string]struct{},
-	varsToSet ...map[string]string) []string {
-	output := make([]string, 0)
-	for _, nameValue := range os.Environ() {
-		split := strings.SplitN(nameValue, "=", 2)
-		if len(split) == 2 {
-			if _, ok := varsToCopy[split[0]]; ok {
-				output = append(output, nameValue)
-			}
-		}
-	}
-	for _, varTable := range varsToSet {
-		for name, value := range varTable {
-			output = append(output, name+"="+value)
-		}
-	}
-	sort.Strings(output)
-	return output
 }

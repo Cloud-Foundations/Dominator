@@ -89,6 +89,10 @@ func setAllUid(uid int) error {
 	return syscall.Setreuid(uid, uid)
 }
 
+func setMyPriority(priority int) error {
+	syscall.Setpriority(syscall.PRIO_PROCESS, 0, priority)
+}
+
 func setNetNamespace(namespaceFd int) error {
 	return syscall.ENOTSUP
 }

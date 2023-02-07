@@ -28,6 +28,10 @@ func (stream *streamManagerState) prepareForCopy() error {
 	if err := stream.getDevice(); err != nil {
 		return err
 	}
+	return stream.unmount()
+}
+
+func (stream *streamManagerState) unmount() error {
 	streamInfo := stream.streamInfo
 	switch streamInfo.status {
 	case proto.StatusStreamNoDevice:
@@ -56,6 +60,6 @@ func (stream *streamManagerState) prepareForCopy() error {
 		return err
 	}
 	stream.streamInfo.status = proto.StatusStreamNotMounted
-	stream.unpacker.logger.Printf("Unmounted(%s)\n", stream.streamName)
+	streamInfo.dualLogger.Printf("Unmounted(%s)\n", stream.streamName)
 	return nil
 }

@@ -20,11 +20,12 @@ const (
 
 type objectServer struct {
 	baseDir string
+	rpcObj  *rpcType
 }
 
 func (t *addObjectsHandlerType) AddObjects(conn *srpc.Conn) error {
 	defer t.scannerConfiguration.BoostCpuLimit(t.logger)
-	objSrv := &objectServer{t.objectsDir}
+	objSrv := &objectServer{t.objectsDir, t.rpcObj}
 	return lib.AddObjects(conn, conn, conn, objSrv, t.logger)
 }
 
@@ -35,11 +36,15 @@ func (objSrv *objectServer) AddObject(reader io.Reader, length uint64,
 		return hashVal, false, err
 	}
 	filename := path.Join(objSrv.baseDir, objectcache.HashToFilename(hashVal))
-	if err = os.MkdirAll(path.Dir(filename), dirPerms); err != nil {
-		return hashVal, false, err
-	}
-	if err := fsutil.CopyToFile(filename, filePerms, bytes.NewReader(data),
-		length); err != nil {
+	objSrv.rpcObj.workdirGoroutine.Run(func() {
+		err = os.MkdirAll(path.Dir(filename), dirPerms)
+		if err != nil {
+			return
+		}
+		err = fsutil.CopyToFile(filename, filePerms, bytes.NewReader(data),
+			length)
+	})
+	if err != nil {
 		return hashVal, false, err
 	}
 	return hashVal, true, nil

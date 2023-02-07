@@ -78,8 +78,7 @@ fi
 # Now generate the signed certificate.
 openssl genpkey -algorithm RSA -out "$newkey.key.pem" \
 		-pkeyopt rsa_keygen_bits:2048
-openssl req -new -key "$newkey.key.pem" -days "$KEY_LIFETIME" \
-	    -extensions v3_ca \
+openssl req -new -key "$newkey.key.pem" -extensions v3_ca \
 	    -batch -out "$newkey.csr" -utf8 -subj "/CN=$username"
 openssl x509 -req -sha256 -days "$KEY_LIFETIME" -in "$newkey.csr" \
 	     -extfile "$tmpfile" $methods_args \

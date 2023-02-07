@@ -22,6 +22,8 @@ func (status StreamStatus) string() string {
 		return "exporting"
 	case StatusStreamNoFileSystem:
 		return "no file-system"
+	case StatusStreamTransferring:
+		return "transferring raw image"
 	default:
 		return "UNKNOWN"
 	}

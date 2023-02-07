@@ -92,7 +92,7 @@ func (conn *listenerConn) Close() error {
 }
 
 func (l *Listener) accept() (*listenerConn, error) {
-	if l.closed {
+	if l.isClosed() {
 		return nil, errors.New("listener is closed")
 	}
 	event := <-l.acceptChannel
@@ -100,7 +100,9 @@ func (l *Listener) accept() (*listenerConn, error) {
 }
 
 func (l *Listener) close() error {
+	l.closedLock.Lock()
 	l.closed = true
+	l.closedLock.Unlock()
 	return l.listener.Close()
 }
 
@@ -115,12 +117,23 @@ func (l *Listener) forget(remoteHost string, ip ip4Address) {
 	}
 }
 
+func (l *Listener) isClosed() bool {
+	l.closedLock.Lock()
+	defer l.closedLock.Unlock()
+	return l.closed
+}
+
 func (l *Listener) listen(acceptChannel chan<- acceptEvent) {
 	for {
-		if l.closed {
+		if l.isClosed() {
 			break
 		}
 		conn, err := l.listener.Accept()
+		if err != nil {
+			l.logger.Printf(
+				"error accepting connection on reverse listener: %s\n", err)
+			continue
+		}
 		tcpConn, ok := conn.(libnet.TCPConn)
 		if !ok {
 			conn.Close()

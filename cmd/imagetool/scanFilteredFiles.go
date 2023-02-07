@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -78,7 +77,6 @@ func walkFilteredRoot(scanFilter, imageFilter *filter.Filter,
 	dirName, rootDir string,
 	walkFunc func(path string, fi os.FileInfo) error,
 	logger log.DebugLogger) error {
-	runtime.LockOSThread()
 	if err := wsyscall.UnshareMountNamespace(); err != nil {
 		return fmt.Errorf("unable to unshare mount namesace: %s", err)
 	}

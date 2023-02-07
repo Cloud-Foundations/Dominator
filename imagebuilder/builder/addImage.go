@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
@@ -17,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -92,9 +96,10 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 	return &fs.FileSystem, nil
 }
 
-func listPackages(rootDir string) ([]image.Package, error) {
+func listPackages(g *goroutine.Goroutine, rootDir string) (
+	[]image.Package, error) {
 	output := new(bytes.Buffer)
-	err := runInTarget(nil, output, rootDir, nil, packagerPathname,
+	err := runInTarget(g, nil, output, rootDir, nil, packagerPathname,
 		"show-size-multiplier")
 	if err != nil {
 		return nil, fmt.Errorf("error getting size multiplier: %s", err)
@@ -110,29 +115,36 @@ func listPackages(rootDir string) ([]image.Package, error) {
 		return nil, errors.New("malformed size multiplier")
 	}
 	output.Reset()
-	err = runInTarget(nil, output, rootDir, nil, packagerPathname, "list")
+	err = runInTarget(g, nil, output, rootDir, nil, packagerPathname, "list")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error running package lister: %s", err)
 	}
 	packageMap := make(map[string]image.Package)
-	for {
-		var name, version string
-		var size uint64
-		nScanned, err := fmt.Fscanf(output, "%s %s %d\n",
-			&name, &version, &size)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
+	scanner := bufio.NewScanner(output)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return nil, fmt.Errorf("malformed line: %s", line)
 		}
-		if nScanned != 3 {
-			return nil, errors.New("malformed line")
-		}
-		packageMap[name] = image.Package{
+		name := fields[0]
+		version := fields[1]
+		pkg := image.Package{
 			Name:    name,
-			Size:    size * sizeMultiplier,
 			Version: version,
+		}
+		if len(fields) > 2 {
+			if size, err := strconv.ParseUint(fields[2], 10, 64); err != nil {
+				return nil, fmt.Errorf("malformed size: %s", fields[2])
+			} else {
+				pkg.Size = size * sizeMultiplier
+			}
+		}
+		packageMap[name] = pkg
+	}
+	if err := scanner.Err(); err != nil {
+		if err != io.EOF {
+			fmt.Fprintln(os.Stderr, "reading standard input:", err)
 		}
 	}
 	packageNames := make([]string, 0, len(packageMap))
@@ -147,11 +159,19 @@ func listPackages(rootDir string) ([]image.Package, error) {
 	return packages, nil
 }
 
-func packImage(client *srpc.Client, request proto.BuildImageRequest,
-	dirname string, scanFilter *filter.Filter,
+func packImage(g *goroutine.Goroutine, client *srpc.Client,
+	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	computedFilesList []util.ComputedFile, imageFilter *filter.Filter,
 	trig *triggers.Triggers, buildLog buildLogger) (*image.Image, error) {
-	packages, err := listPackages(dirname)
+	if g == nil {
+		var err error
+		g, err = newNamespaceTarget()
+		if err != nil {
+			return nil, err
+		}
+		defer g.Quit()
+	}
+	packages, err := listPackages(g, dirname)
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)
 	}
@@ -168,7 +188,7 @@ func packImage(client *srpc.Client, request proto.BuildImageRequest,
 	speed := uint64(float64(fs.TotalDataBytes) / duration.Seconds())
 	fmt.Fprintf(buildLog,
 		"Scanned file-system and uploaded %d objects (%s) in %s (%s/s)\n",
-		len(fs.InodeTable), format.FormatBytes(fs.TotalDataBytes),
+		fs.NumRegularInodes, format.FormatBytes(fs.TotalDataBytes),
 		format.Duration(duration), format.FormatBytes(speed))
 	_, oldImage, err := getLatestImage(client, request.StreamName, buildLog)
 	if err != nil {
@@ -179,7 +199,7 @@ func packImage(client *srpc.Client, request proto.BuildImageRequest,
 		fmt.Fprintf(buildLog, "Copied mtimes in %s\n",
 			format.Duration(time.Since(patchStartTime)))
 	}
-	if err := runTests(dirname, buildLog); err != nil {
+	if err := runTests(g, dirname, buildLog); err != nil {
 		return nil, err
 	}
 	objClient := objectclient.AttachObjectClient(client)
@@ -206,7 +226,8 @@ func packImage(client *srpc.Client, request proto.BuildImageRequest,
 	return img, nil
 }
 
-func runTests(rootDir string, buildLog buildLogger) error {
+func runTests(g *goroutine.Goroutine, rootDir string,
+	buildLog buildLogger) error {
 	var testProgrammes []string
 	err := filepath.Walk(filepath.Join(rootDir, "tests"),
 		func(path string, fi os.FileInfo, err error) error {
@@ -226,7 +247,7 @@ func runTests(rootDir string, buildLog buildLogger) error {
 	results := make(chan testResultType, 1)
 	for _, prog := range testProgrammes {
 		go func(prog string) {
-			results <- runTest(rootDir, prog)
+			results <- runTest(g, rootDir, prog)
 		}(prog)
 	}
 	numFailures := 0
@@ -249,7 +270,7 @@ func runTests(rootDir string, buildLog buildLogger) error {
 	return nil
 }
 
-func runTest(rootDir, prog string) testResultType {
+func runTest(g *goroutine.Goroutine, rootDir, prog string) testResultType {
 	startTime := time.Now()
 	result := testResultType{
 		buffer: make(chan byte, 4096),
@@ -258,8 +279,8 @@ func runTest(rootDir, prog string) testResultType {
 	errChannel := make(chan error, 1)
 	timer := time.NewTimer(time.Second * 10)
 	go func() {
-		errChannel <- runInTarget(nil, &result, rootDir, nil, packagerPathname,
-			"run", prog)
+		errChannel <- runInTarget(g, nil, &result, rootDir, nil,
+			packagerPathname, "run", prog)
 	}()
 	select {
 	case result.err = <-errChannel:

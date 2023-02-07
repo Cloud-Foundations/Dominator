@@ -291,7 +291,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		mergeableTriggers.Merge(imageTriggers)
 		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
-	img, err := packImage(client, request, rootDir, manifest.filter,
+	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		computedFilesList, imageFilter, imageTriggers, buildLog)
 	if err != nil {
 		return nil, err

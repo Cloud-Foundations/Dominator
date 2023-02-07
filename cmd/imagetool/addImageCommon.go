@@ -18,8 +18,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/untar"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -32,7 +34,8 @@ type hasher struct {
 	objQ *objectclient.ObjectAdderQueue
 }
 
-func addImage(imageSClient *srpc.Client, name string, img *image.Image) error {
+func addImage(imageSClient *srpc.Client, name string, img *image.Image,
+	logger log.DebugLogger) error {
 	if *expiresIn > 0 {
 		img.ExpiresAt = time.Now().Add(*expiresIn)
 	} else {
@@ -44,9 +47,12 @@ func addImage(imageSClient *srpc.Client, name string, img *image.Image) error {
 	if err := img.VerifyRequiredPaths(requiredPaths); err != nil {
 		return err
 	}
+	startTime := time.Now()
 	if err := client.AddImage(imageSClient, name, img); err != nil {
 		return errors.New("remote error: " + err.Error())
 	}
+	logger.Debugf(0, "Uploaded image: %s in %s\n",
+		name, format.Duration(time.Since(startTime)))
 	return nil
 }
 
@@ -60,13 +66,15 @@ func (h *hasher) Hash(reader io.Reader, length uint64) (
 }
 
 func buildImage(imageSClient *srpc.Client, filter *filter.Filter,
-	imageFilename string) (*filesystem.FileSystem, error) {
+	imageFilename string,
+	logger log.DebugLogger) (*filesystem.FileSystem, error) {
 	var h hasher
 	var err error
 	h.objQ, err = objectclient.NewObjectAdderQueue(imageSClient)
 	if err != nil {
 		return nil, err
 	}
+	startTime := time.Now()
 	fs, err := buildImageWithHasher(imageSClient, filter, imageFilename, &h)
 	if err != nil {
 		h.objQ.Close()
@@ -76,6 +84,12 @@ func buildImage(imageSClient *srpc.Client, filter *filter.Filter,
 	if err != nil {
 		return nil, err
 	}
+	duration := time.Since(startTime)
+	speed := uint64(float64(fs.TotalDataBytes) / duration.Seconds())
+	logger.Debugf(0,
+		"Scanned file-system and uploaded %d objects (%s) in %s (%s/s)\n",
+		fs.NumRegularInodes, format.FormatBytes(fs.TotalDataBytes),
+		format.Duration(duration), format.FormatBytes(speed))
 	return fs, nil
 }
 

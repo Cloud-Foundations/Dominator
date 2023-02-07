@@ -53,78 +53,6 @@ func needSourceImage(err error) (bool, string) {
 	return false, ""
 }
 
-func (bl *dualBuildLogger) Bytes() []byte {
-	return bl.buffer.Bytes()
-}
-
-func (bl *dualBuildLogger) Write(p []byte) (int, error) {
-	return bl.writer.Write(p)
-}
-
-func (b *Builder) rebuildImage(client *srpc.Client, streamName string,
-	expiresIn time.Duration) {
-	_, _, err := b.build(client, proto.BuildImageRequest{
-		StreamName: streamName,
-		ExpiresIn:  expiresIn,
-	},
-		nil, nil)
-	if err == nil {
-		return
-	}
-	imageName, _ := imgclient.FindLatestImage(client, streamName, false)
-	if imageName != "" {
-		e := imgclient.ChangeImageExpiration(client, imageName,
-			time.Now().Add(expiresIn))
-		if e == nil {
-			b.logger.Printf("Error building image: %s: %s, extended: %s\n",
-				streamName, err, imageName)
-			return
-		}
-		b.logger.Printf(
-			"Error building image: %s: %s, failed to extend: %s: %s\n",
-			streamName, err, imageName, e)
-		return
-	}
-	b.logger.Printf("Error building image: %s: %s\n", streamName, err)
-}
-
-func (b *Builder) rebuildImages(minInterval time.Duration) {
-	if minInterval < 1 {
-		return
-	}
-	var sleepUntil time.Time
-	for ; ; time.Sleep(time.Until(sleepUntil)) {
-		sleepUntil = time.Now().Add(minInterval)
-		client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
-		if err != nil {
-			b.logger.Printf("%s: %s\n", b.imageServerAddress, err)
-			continue
-		}
-		for _, streamName := range b.listStreamsToAutoRebuild() {
-			b.rebuildImage(client, streamName, minInterval*2)
-		}
-		client.Close()
-	}
-}
-
-func (b *Builder) buildImage(request proto.BuildImageRequest,
-	authInfo *srpc.AuthInformation,
-	logWriter io.Writer) (*image.Image, string, error) {
-	if request.ExpiresIn < time.Minute*15 {
-		return nil, "", errors.New("minimum expiration time is 15 minutes")
-	}
-	client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
-	if err != nil {
-		return nil, "", err
-	}
-	defer client.Close()
-	img, name, err := b.build(client, request, authInfo, logWriter)
-	if request.ReturnImage {
-		return img, "", err
-	}
-	return nil, name, err
-}
-
 func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
 	logWriter io.Writer) (*image.Image, string, error) {
@@ -164,72 +92,53 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	return img, name, err
 }
 
-func (b *Builder) buildSomewhere(builder imageBuilder, client *srpc.Client,
-	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
-	buildLog buildLogger) (*image.Image, error) {
-	if b.slaveDriver == nil {
-		if authInfo == nil {
-			b.logger.Printf("Auto building image for stream: %s\n",
-				request.StreamName)
-		} else {
-			b.logger.Printf("%s requested building image for stream: %s\n",
-				authInfo.Username, request.StreamName)
-		}
-		img, err := builder.build(b, client, request, buildLog)
-		if err != nil {
-			fmt.Fprintf(buildLog, "Error building image: %s\n", err)
-		}
-		return img, err
-	} else {
-		return b.buildOnSlave(client, request, authInfo, buildLog)
+func (b *Builder) buildImage(request proto.BuildImageRequest,
+	authInfo *srpc.AuthInformation,
+	logWriter io.Writer) (*image.Image, string, error) {
+	if request.ExpiresIn < time.Minute*15 {
+		return nil, "", errors.New("minimum expiration time is 15 minutes")
 	}
+	client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
+	if err != nil {
+		return nil, "", err
+	}
+	defer client.Close()
+	img, name, err := b.build(client, request, authInfo, logWriter)
+	if request.ReturnImage {
+		return img, "", err
+	}
+	return nil, name, err
 }
 
-func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
+func (b *Builder) buildLocal(builder imageBuilder, client *srpc.Client,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
-	startTime time.Time, buildLog buildLogger) (*image.Image, string, error) {
-	img, err := b.buildSomewhere(builder, client, request, authInfo, buildLog)
+	buildLog buildLogger) (*image.Image, error) {
+	// Check the namespace to make sure it hasn't changed. This is to catch
+	// golang bugs.
+	currentNamespace, err := getNamespace()
 	if err != nil {
-		if needSource, sourceImage := needSourceImage(err); needSource {
-			if request.DisableRecursiveBuild {
-				return nil, "", err
-			}
-			// Try to build source image.
-			expiresIn := time.Hour
-			if request.ExpiresIn > 0 {
-				expiresIn = request.ExpiresIn
-			}
-			sourceReq := proto.BuildImageRequest{
-				StreamName:   sourceImage,
-				ExpiresIn:    expiresIn,
-				MaxSourceAge: request.MaxSourceAge,
-				Variables:    request.Variables,
-			}
-			if _, _, e := b.build(client, sourceReq, nil, buildLog); e != nil {
-				return nil, "", e
-			}
-			img, err = b.buildSomewhere(builder, client, request, authInfo,
-				buildLog)
-		}
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	if request.ReturnImage {
-		return img, "", nil
-	}
-	uploadStartTime := time.Now()
-	if name, err := addImage(client, request, img); err != nil {
 		fmt.Fprintln(buildLog, err)
-		return nil, "", err
-	} else {
-		finishTime := time.Now()
-		fmt.Fprintf(buildLog,
-			"Uploaded %s in %s, total build duration: %s\n",
-			name, format.Duration(finishTime.Sub(uploadStartTime)),
-			format.Duration(finishTime.Sub(startTime)))
-		return img, name, nil
+		return nil, err
 	}
+	if currentNamespace != b.initialNamespace {
+		err := fmt.Errorf("namespace changed from: %s to: %s",
+			b.initialNamespace, currentNamespace)
+		fmt.Fprintln(buildLog, err)
+		return nil, err
+	}
+	if authInfo == nil {
+		b.logger.Printf("Auto building image for stream: %s\n",
+			request.StreamName)
+	} else {
+		b.logger.Printf("%s requested building image for stream: %s\n",
+			authInfo.Username, request.StreamName)
+	}
+	img, err := builder.build(b, client, request, buildLog)
+	if err != nil {
+		fmt.Fprintf(buildLog, "Error building image: %s\n", err)
+		return nil, err
+	}
+	return img, nil
 }
 
 func (b *Builder) buildOnSlave(client *srpc.Client,
@@ -286,6 +195,75 @@ func (b *Builder) buildOnSlave(client *srpc.Client,
 	return reply.Image, nil
 }
 
+func (b *Builder) buildSomewhere(builder imageBuilder, client *srpc.Client,
+	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
+	buildLog buildLogger) (*image.Image, error) {
+	if b.slaveDriver == nil {
+		return b.buildLocal(builder, client, request, authInfo, buildLog)
+	} else {
+		return b.buildOnSlave(client, request, authInfo, buildLog)
+	}
+}
+
+func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
+	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
+	startTime time.Time, buildLog buildLogger) (*image.Image, string, error) {
+	img, err := b.buildSomewhere(builder, client, request, authInfo, buildLog)
+	if err != nil {
+		if needSource, sourceImage := needSourceImage(err); needSource {
+			if request.DisableRecursiveBuild {
+				return nil, "", err
+			}
+			// Try to build source image.
+			expiresIn := time.Hour
+			if request.ExpiresIn > 0 {
+				expiresIn = request.ExpiresIn
+			}
+			sourceReq := proto.BuildImageRequest{
+				StreamName:   sourceImage,
+				ExpiresIn:    expiresIn,
+				MaxSourceAge: request.MaxSourceAge,
+				Variables:    request.Variables,
+			}
+			if _, _, e := b.build(client, sourceReq, nil, buildLog); e != nil {
+				return nil, "", e
+			}
+			img, err = b.buildSomewhere(builder, client, request, authInfo,
+				buildLog)
+		}
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if request.ReturnImage {
+		return img, "", nil
+	}
+	uploadStartTime := time.Now()
+	if name, err := addImage(client, request, img); err != nil {
+		fmt.Fprintln(buildLog, err)
+		return nil, "", err
+	} else {
+		finishTime := time.Now()
+		fmt.Fprintf(buildLog,
+			"Uploaded %s in %s, total build duration: %s\n",
+			name, format.Duration(finishTime.Sub(uploadStartTime)),
+			format.Duration(finishTime.Sub(startTime)))
+		return img, name, nil
+	}
+}
+
+func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
+	b.buildResultsLock.RLock()
+	defer b.buildResultsLock.RUnlock()
+	if result, ok := b.currentBuildLogs[streamName]; !ok {
+		return nil, errors.New("unknown image: " + streamName)
+	} else {
+		log := make([]byte, result.Len())
+		copy(log, result.Bytes())
+		return log, nil
+	}
+}
+
 func (b *Builder) getImageBuilder(streamName string) imageBuilder {
 	if stream := b.getBootstrapStream(streamName); stream != nil {
 		return stream
@@ -308,18 +286,6 @@ func (b *Builder) getImageBuilderWithReload(streamName string) imageBuilder {
 	return b.getImageBuilder(streamName)
 }
 
-func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
-	b.buildResultsLock.RLock()
-	defer b.buildResultsLock.RUnlock()
-	if result, ok := b.currentBuildLogs[streamName]; !ok {
-		return nil, errors.New("unknown image: " + streamName)
-	} else {
-		log := make([]byte, result.Len())
-		copy(log, result.Bytes())
-		return log, nil
-	}
-}
-
 func (b *Builder) getLatestBuildLog(streamName string) ([]byte, error) {
 	b.buildResultsLock.RLock()
 	defer b.buildResultsLock.RUnlock()
@@ -330,4 +296,62 @@ func (b *Builder) getLatestBuildLog(streamName string) ([]byte, error) {
 		copy(log, result.buildLog)
 		return log, nil
 	}
+}
+
+func (b *Builder) rebuildImage(client *srpc.Client, streamName string,
+	expiresIn time.Duration) {
+	_, _, err := b.build(client, proto.BuildImageRequest{
+		StreamName: streamName,
+		ExpiresIn:  expiresIn,
+	},
+		nil, nil)
+	if err == nil {
+		return
+	}
+	imageName, _ := imgclient.FindLatestImage(client, streamName, false)
+	if imageName != "" {
+		e := imgclient.ChangeImageExpiration(client, imageName,
+			time.Now().Add(expiresIn))
+		if e == nil {
+			b.logger.Printf("Error building image: %s: %s, extended: %s\n",
+				streamName, err, imageName)
+			return
+		}
+		b.logger.Printf(
+			"Error building image: %s: %s, failed to extend: %s: %s\n",
+			streamName, err, imageName, e)
+		return
+	}
+	b.logger.Printf("Error building image: %s: %s\n", streamName, err)
+}
+
+func (b *Builder) rebuildImages(minInterval time.Duration) {
+	if minInterval < 1 {
+		return
+	}
+	var sleepUntil time.Time
+	for ; ; time.Sleep(time.Until(sleepUntil)) {
+		b.logger.Println("Starting automatic image build cycle")
+		startTime := time.Now()
+		sleepUntil = startTime.Add(minInterval)
+		client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
+		if err != nil {
+			b.logger.Printf("%s: %s\n", b.imageServerAddress, err)
+			continue
+		}
+		for _, streamName := range b.listStreamsToAutoRebuild() {
+			b.rebuildImage(client, streamName, minInterval*2)
+		}
+		client.Close()
+		b.logger.Printf("Completed automatic image build cycle in %s\n",
+			format.Duration(time.Since(startTime)))
+	}
+}
+
+func (bl *dualBuildLogger) Bytes() []byte {
+	return bl.buffer.Bytes()
+}
+
+func (bl *dualBuildLogger) Write(p []byte) (int, error) {
+	return bl.writer.Write(p)
 }
