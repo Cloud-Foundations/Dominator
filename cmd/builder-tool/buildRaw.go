@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -56,12 +57,14 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 	if err := mbr.WriteDefault(tmpFilename, mbr.TABLE_TYPE_MSDOS); err != nil {
 		return err
 	}
-	loopDevice, err := fsutil.LoopbackSetup(tmpFilename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
+		partition, time.Minute, logger)
 	if err != nil {
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	rootDevice := loopDevice + "p1"
+	rootDevice := loopDevice + partition
 	rootLabel := "root@test"
 	err = util.MakeExt4fs(rootDevice, rootLabel, nil, 0, logger)
 	if err != nil {
