@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -21,8 +22,9 @@ type slaveRoll struct {
 func dialWithRetry(network, address string,
 	timeout time.Duration) (*srpc.Client, error) {
 	stopTime := time.Now().Add(timeout)
-	for ; time.Until(stopTime) >= 0; time.Sleep(time.Second) {
-		client, err := srpc.DialHTTP(network, address, time.Second*5)
+	sleeper := backoffdelay.NewExponential(100*time.Millisecond, time.Second, 1)
+	for ; time.Until(stopTime) >= 0; sleeper.Sleep() {
+		client, err := srpc.DialHTTP(network, address, time.Second)
 		if err != nil {
 			continue
 		}
