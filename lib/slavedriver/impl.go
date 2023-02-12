@@ -91,7 +91,7 @@ func (driver *SlaveDriver) createSlave() (*Slave, error) {
 			e := driver.slaveTrader.DestroySlave(slaveInfo.Identifier)
 			if e != nil {
 				driver.logger.Printf("error destroying: %s: %s\n",
-					slaveInfo.IpAddress, e)
+					slaveInfo.Identifier, e)
 			}
 			return nil, fmt.Errorf("error dialing: %s: %s",
 				slave.clientAddress, err)
@@ -214,7 +214,7 @@ func (driver *SlaveDriver) rollCall(writeState bool) {
 		err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
 		if err != nil {
 			driver.logger.Printf("error destroying: %s: %s\n",
-				slave.clientAddress, err)
+				slave.info.Identifier, err)
 		} else {
 			driver.mutex.Lock()
 			delete(driver.zombies, slave)
