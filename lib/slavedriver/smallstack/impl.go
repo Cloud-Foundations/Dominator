@@ -164,7 +164,10 @@ func (trader *SlaveTrader) destroySlave(identifier string) error {
 	}
 	if hyperClient, err := trader.getHypervisor(); err != nil {
 		return err
-	} else {
-		return client.DestroyVm(hyperClient, ipAddr, nil)
+	} else if err := client.DestroyVm(hyperClient, ipAddr, nil); err != nil {
+		if !strings.Contains(err.Error(), "no VM with IP address") {
+			return err
+		}
 	}
+	return nil
 }
