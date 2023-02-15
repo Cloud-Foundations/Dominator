@@ -264,6 +264,10 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 	return client, nil
 }
 
+func newFakeClient(options FakeClientOptions) *Client {
+	return &Client{fakeClientOptions: &options}
+}
+
 func (client *Client) call(serviceMethod string) (*Conn, error) {
 	if client.conn == nil {
 		panic("cannot call Client after Close()")
@@ -309,6 +313,9 @@ func (client *Client) callWithLock(serviceMethod string) (*Conn, error) {
 }
 
 func (client *Client) close() error {
+	if client.fakeClientOptions != nil {
+		return nil
+	}
 	if client.conn == nil {
 		return os.ErrClosed
 	}

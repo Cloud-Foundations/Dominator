@@ -130,6 +130,8 @@ type Encoder interface {
 	Encode(e interface{}) error
 }
 
+type FakeClientOptions struct{}
+
 // MethodBlocker defines an interface to block method calls (after possible
 // authorisation) for a receiver (passed to RegisterName). This may be used to
 // attach rate limiting polcies for method calls.
@@ -294,16 +296,17 @@ func (cr *ClientResource) ScheduleClose() {
 }
 
 type Client struct {
-	bufrw       *bufio.ReadWriter
-	callLock    sync.Mutex
-	conn        net.Conn
-	connType    string // Human-readable.
-	isEncrypted bool
-	localAddr   string
-	makeCoder   coderMaker
-	remoteAddr  string
-	resource    *ClientResource
-	tcpConn     libnet.TCPConn // The underlying raw TCP connection (if TCP).
+	bufrw             *bufio.ReadWriter
+	callLock          sync.Mutex
+	conn              net.Conn
+	connType          string // Human-readable.
+	fakeClientOptions *FakeClientOptions
+	isEncrypted       bool
+	localAddr         string
+	makeCoder         coderMaker
+	remoteAddr        string
+	resource          *ClientResource
+	tcpConn           libnet.TCPConn // The underlying raw TCP connection (if TCP).
 }
 
 // DialHTTP connects to an HTTP SRPC server at the specified network address
@@ -340,6 +343,12 @@ func DialTlsHTTPWithDialer(network, address string, tlsConfig *tls.Config,
 		tlsConfig = clientTlsConfig
 	}
 	return dialHTTP(network, address, tlsConfig, dialer)
+}
+
+// NewFakeClient will return a fake Client which may be used for limited
+// testing. The Client will support the Close method. Other methods may panic.
+func NewFakeClient(options FakeClientOptions) *Client {
+	return newFakeClient(options)
 }
 
 // Close will close a client, immediately releasing the internal connection.
