@@ -10,6 +10,7 @@ import (
 const consoleTypeUnknown = "UNKNOWN ConsoleType"
 const stateUnknown = "UNKNOWN State"
 const volumeFormatUnknown = "UNKNOWN VolumeFormat"
+const volumeTypeUnknown = "UNKNOWN VolumeType"
 
 var (
 	consoleTypeToText = map[ConsoleType]string{
@@ -38,6 +39,12 @@ var (
 		VolumeFormatQCOW2: "qcow2",
 	}
 	textToVolumeFormat map[string]VolumeFormat
+
+	volumeTypeToText = map[VolumeType]string{
+		VolumeTypePersistent: "persistent",
+		VolumeTypeMemory:     "memory",
+	}
+	textToVolumeType map[string]VolumeType
 )
 
 func init() {
@@ -52,6 +59,10 @@ func init() {
 	textToVolumeFormat = make(map[string]VolumeFormat, len(volumeFormatToText))
 	for format, text := range volumeFormatToText {
 		textToVolumeFormat[text] = format
+	}
+	textToVolumeType = make(map[string]VolumeType, len(volumeTypeToText))
+	for vtype, text := range volumeTypeToText {
+		textToVolumeType[text] = vtype
 	}
 }
 
@@ -375,5 +386,40 @@ func (volumeFormat *VolumeFormat) UnmarshalText(text []byte) error {
 		return nil
 	} else {
 		return errors.New("unknown VolumeFormat: " + txt)
+	}
+}
+
+func (volumeType VolumeType) MarshalText() ([]byte, error) {
+	if text := volumeType.String(); text == volumeTypeUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (volumeType *VolumeType) Set(value string) error {
+	if val, ok := textToVolumeType[value]; !ok {
+		return errors.New(volumeTypeUnknown)
+	} else {
+		*volumeType = val
+		return nil
+	}
+}
+
+func (volumeType VolumeType) String() string {
+	if text, ok := volumeTypeToText[volumeType]; ok {
+		return text
+	} else {
+		return volumeTypeUnknown
+	}
+}
+
+func (volumeType *VolumeType) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToVolumeType[txt]; ok {
+		*volumeType = val
+		return nil
+	} else {
+		return errors.New("unknown VolumeType: " + txt)
 	}
 }

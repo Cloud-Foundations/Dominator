@@ -27,6 +27,9 @@ const (
 
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
+
+	VolumeTypePersistent = 0
+	VolumeTypeMemory     = 1
 )
 
 type AcknowledgeVmRequest struct {
@@ -680,8 +683,9 @@ type VmInfo struct {
 }
 
 type Volume struct {
-	Size   uint64
 	Format VolumeFormat
+	Size   uint64
+	Type   VolumeType
 }
 
 type VolumeFormat uint
@@ -691,3 +695,5 @@ type VolumeInitialisationInfo struct {
 	Label                    string
 	ReservedBlocksPercentage uint16
 }
+
+type VolumeType uint
