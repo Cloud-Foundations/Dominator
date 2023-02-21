@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
+	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 var (
@@ -26,6 +27,20 @@ func checkAvailableMemory(memoryInMiB uint64) error {
 		}
 		return nil
 	}
+}
+
+func getVmInfoMemoryInMiB(vmInfo proto.VmInfo) uint64 {
+	var memoryTotal uint64
+	for _, volume := range vmInfo.Volumes {
+		if volume.Type == proto.VolumeTypeMemory {
+			memoryTotal += volume.Size
+		}
+	}
+	memoryInMiB := memoryTotal >> 20
+	if memoryInMiB<<20 < memoryTotal {
+		memoryInMiB += 1
+	}
+	return vmInfo.MemoryInMiB + memoryInMiB
 }
 
 func tryAllocateMemory(memoryInMiB uint64) <-chan error {
@@ -51,16 +66,18 @@ func tryAllocateMemory(memoryInMiB uint64) <-chan error {
 	return channel
 }
 
+// This will grab the Manager lock and the lock for each VM.
 func (m *Manager) getUnallocatedMemoryInMiB() uint64 {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return m.getUnallocatedMemoryInMiBWithLock()
 }
 
+// This will grab the lock for each VM.
 func (m *Manager) getUnallocatedMemoryInMiBWithLock() uint64 {
 	unallocated := int64(m.memTotalInMiB)
 	for _, vm := range m.vms {
-		unallocated -= int64(vm.MemoryInMiB)
+		unallocated -= int64(vm.getMemoryInMiB(true))
 	}
 	if unallocated < 0 {
 		return 0
@@ -73,4 +90,12 @@ func (m *Manager) checkSufficientMemoryWithLock(memoryInMiB uint64) error {
 		return errorInsufficientUnallocatedMemory
 	}
 	return checkAvailableMemory(memoryInMiB)
+}
+
+func (vm *vmInfoType) getMemoryInMiB(grabLock bool) uint64 {
+	if grabLock {
+		vm.mutex.RLock()
+		defer vm.mutex.RUnlock()
+	}
+	return getVmInfoMemoryInMiB(vm.VmInfo)
 }

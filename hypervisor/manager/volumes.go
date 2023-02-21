@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,11 +19,17 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const (
 	sysClassBlock = "/sys/class/block"
+)
+
+var (
+	memoryVolumeDirectory      string
+	memoryVolumeDirectoryMutex sync.Mutex
 )
 
 type mountInfo struct {
@@ -74,6 +81,43 @@ func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	freeSpace := uint64(statbuf.Bfree * uint64(statbuf.Bsize))
 	freeSpaceTable[dirname] = freeSpace
 	return freeSpace, nil
+}
+
+func getMemoryVolumeDirectory(logger log.Logger) (string, error) {
+	memoryVolumeDirectoryMutex.Lock()
+	defer memoryVolumeDirectoryMutex.Unlock()
+	if memoryVolumeDirectory != "" {
+		return memoryVolumeDirectory, nil
+	}
+	dirname := "/tmp/hyper-volumes"
+	var statbuf wsyscall.Stat_t
+	if err := wsyscall.Lstat(dirname, &statbuf); err == nil {
+		if statbuf.Mode&wsyscall.S_IFMT != wsyscall.S_IFDIR {
+			return "", fmt.Errorf("%s is not a directory", dirname)
+		}
+		if statbuf.Uid != 0 {
+			return "", fmt.Errorf("%s is not owned by root, UID=%d",
+				dirname, statbuf.Uid)
+		}
+	} else if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
+		return "", err
+	}
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return "", err
+	}
+	if mountEntry := mountTable.FindEntry(dirname); mountEntry == nil {
+		return "", fmt.Errorf("%s: no match in mount table", dirname)
+	} else if mountEntry.Type == "tmpfs" {
+		memoryVolumeDirectory = dirname
+		return memoryVolumeDirectory, nil
+	}
+	if err := wsyscall.Mount("none", dirname, "tmpfs", 0, ""); err != nil {
+		return "", err
+	}
+	logger.Printf("mounted tmpfs on: %s\n", dirname)
+	memoryVolumeDirectory = dirname
+	return memoryVolumeDirectory, nil
 }
 
 func getMounts(mountTable *mounts.MountTable) (

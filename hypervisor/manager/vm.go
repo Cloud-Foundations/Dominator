@@ -389,7 +389,8 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if err := m.checkSufficientCPUWithLock(req.MilliCPUs); err != nil {
 		return nil, err
 	}
-	if err := m.checkSufficientMemoryWithLock(req.MemoryInMiB); err != nil {
+	totalMemoryInMiB := getVmInfoMemoryInMiB(req.VmInfo)
+	if err := m.checkSufficientMemoryWithLock(totalMemoryInMiB); err != nil {
 		return nil, err
 	}
 	var ipAddress string
@@ -804,8 +805,8 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 			secondaryVolumes = append(secondaryVolumes, volume)
 		}
 	}
-	err = vm.setupVolumes(vmInfo.Volumes[0].Size, secondaryVolumes,
-		vmInfo.SpreadVolumes)
+	err = vm.setupVolumes(vmInfo.Volumes[0].Size, vmInfo.Volumes[0].Type,
+		secondaryVolumes, vmInfo.SpreadVolumes)
 	if err != nil {
 		return err
 	}
@@ -909,7 +910,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}()
 	var memoryError <-chan error
 	if !request.SkipMemoryCheck {
-		memoryError = tryAllocateMemory(request.MemoryInMiB)
+		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
@@ -917,6 +918,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		return sendError(conn, err)
+	}
+	var rootVolumeType proto.VolumeType
+	if len(request.Volumes) > 0 {
+		rootVolumeType = request.Volumes[0].Type
 	}
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
@@ -935,7 +940,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		vm.ImageName = imageName
 		size := computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			fs.EstimateUsage(0))
-		err = vm.setupVolumes(size, request.SecondaryVolumes,
+		err = vm.setupVolumes(size, rootVolumeType, request.SecondaryVolumes,
 			request.SpreadVolumes)
 		if err != nil {
 			return sendError(conn, err)
@@ -962,7 +967,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			vm.Volumes = []proto.Volume{{Size: uint64(fi.Size())}}
 		}
 	} else if request.ImageDataSize > 0 {
-		err := vm.copyRootVolume(request, conn, request.ImageDataSize)
+		err := vm.copyRootVolume(request, conn, request.ImageDataSize,
+			rootVolumeType)
 		if err != nil {
 			return err
 		}
@@ -983,18 +989,20 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = vm.copyRootVolume(request, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), rootVolumeType)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else if request.MinimumFreeBytes > 0 { // Create empty root volume.
-		err = vm.copyRootVolume(request, nil, request.MinimumFreeBytes)
+		err = vm.copyRootVolume(request, nil, request.MinimumFreeBytes,
+			rootVolumeType)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
+	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, "user-data.raw")
 		if err := copyData(filename, conn, request.UserDataSize); err != nil {
@@ -1643,7 +1651,8 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	}
 	request.Volumes = volumes
 	if !request.SkipMemoryCheck {
-		if err := <-tryAllocateMemory(request.MemoryInMiB); err != nil {
+		err := <-tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
+		if err != nil {
 			return err
 		}
 	}
@@ -1991,7 +2000,8 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
 		return err
 	}
 	if !skipMemoryCheck {
-		if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
+		err := <-tryAllocateMemory(getVmInfoMemoryInMiB(vmInfo))
+		if err != nil {
 			return err
 		}
 	}
@@ -3195,8 +3205,8 @@ func (vm *vmInfoType) cleanup() {
 }
 
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
-	reader io.Reader, dataSize uint64) error {
-	err := vm.setupVolumes(dataSize, request.SecondaryVolumes,
+	reader io.Reader, dataSize uint64, volumeType proto.VolumeType) error {
+	err := vm.setupVolumes(dataSize, volumeType, request.SecondaryVolumes,
 		request.SpreadVolumes)
 	if err != nil {
 		return err
@@ -3474,35 +3484,6 @@ func (vm *vmInfoType) setState(state proto.State) {
 	if !vm.doNotWriteOrSend {
 		vm.writeAndSendInfo()
 	}
-}
-
-func (vm *vmInfoType) setupVolumes(rootSize uint64,
-	secondaryVolumes []proto.Volume, spreadVolumes bool) error {
-	volumeDirectories, err := vm.manager.getVolumeDirectories(rootSize,
-		secondaryVolumes, spreadVolumes)
-	if err != nil {
-		return err
-	}
-	volumeDirectory := filepath.Join(volumeDirectories[0], vm.ipAddress)
-	os.RemoveAll(volumeDirectory)
-	if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
-		return err
-	}
-	filename := filepath.Join(volumeDirectory, "root")
-	vm.VolumeLocations = append(vm.VolumeLocations,
-		proto.LocalVolume{volumeDirectory, filename})
-	for index := range secondaryVolumes {
-		volumeDirectory := filepath.Join(volumeDirectories[index+1],
-			vm.ipAddress)
-		os.RemoveAll(volumeDirectory)
-		if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
-			return err
-		}
-		filename := filepath.Join(volumeDirectory, indexToName(index+1))
-		vm.VolumeLocations = append(vm.VolumeLocations,
-			proto.LocalVolume{volumeDirectory, filename})
-	}
-	return nil
 }
 
 // This may grab and release the VM lock.
