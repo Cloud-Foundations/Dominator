@@ -107,6 +107,7 @@ var (
 		"Index of volume to get or delete")
 	volumeIndices flagutil.UintList
 	volumeSize    flagutil.Size
+	volumeTypes   volumeTypeList
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -127,6 +128,8 @@ func init() {
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
+	flag.Var(&volumeTypes, "volumeTypes",
+		"Types for volumes (default persistent)")
 }
 
 func printUsage() {

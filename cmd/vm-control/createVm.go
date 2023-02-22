@@ -111,6 +111,11 @@ func createVm(logger log.DebugLogger) error {
 }
 
 func createVmInfoFromFlags() hyper_proto.VmInfo {
+	var volumes []hyper_proto.Volume
+	if len(volumeTypes) > 0 {
+		// If provided, set for root volume. Secondaries are done later.
+		volumes = append(volumes, hyper_proto.Volume{Type: volumeTypes[0]})
+	}
 	return hyper_proto.VmInfo{
 		ConsoleType:        consoleType,
 		DestroyProtection:  *destroyProtection,
@@ -124,6 +129,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		SecondarySubnetIDs: secondarySubnetIDs,
 		SubnetId:           *subnetId,
 		VirtualCPUs:        *virtualCPUs,
+		Volumes:            volumes,
 	}
 }
 
@@ -180,8 +186,11 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		}
 	}
 	for index, size := range secondaryVolumeSizes {
-		request.SecondaryVolumes = append(request.SecondaryVolumes,
-			hyper_proto.Volume{Size: uint64(size)})
+		volume := hyper_proto.Volume{Size: uint64(size)}
+		if index+1 < len(volumeTypes) {
+			volume.Type = volumeTypes[index+1]
+		}
+		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
 		if *initialiseSecondaryVolumes &&
 			index < len(vinitParams) {
 			vinit := vinitParams[index]
