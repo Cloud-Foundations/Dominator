@@ -15,14 +15,15 @@ import (
 )
 
 type slaveDriverConfiguration struct {
-	HypervisorAddress string
-	MaximumIdleSlaves uint
-	MinimumIdleSlaves uint
-	ImageIdentifier   string
-	MemoryInMiB       uint64
-	MilliCPUs         uint
-	OverlayDirectory  string
-	VirtualCPUs       uint
+	HypervisorAddress  string
+	MaximumIdleSlaves  uint
+	MinimumIdleSlaves  uint
+	ImageIdentifier    string
+	MemoryInMiB        uint64
+	MilliCPUs          uint
+	PreferMemoryVolume bool
+	OverlayDirectory   string
+	VirtualCPUs        uint
 }
 
 func createSlaveDriver(logger log.DebugLogger) (
@@ -45,6 +46,11 @@ func createSlaveDriver(logger log.DebugLogger) (
 			MilliCPUs:   configuration.MilliCPUs,
 			VirtualCPUs: configuration.VirtualCPUs,
 		},
+	}
+	if configuration.PreferMemoryVolume {
+		createVmRequest.VmInfo.Volumes = []hypervisor.Volume{
+			{Type: hypervisor.VolumeTypeMemory},
+		}
 	}
 	if configuration.OverlayDirectory != "" {
 		overlayFiles, err := fsutil.ReadFileTree(configuration.OverlayDirectory,
