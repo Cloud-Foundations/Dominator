@@ -31,20 +31,9 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
 	spreadVolumes bool) error {
 	volumeDirectories, err := vm.manager.getVolumeDirectories(rootSize,
-		secondaryVolumes, spreadVolumes)
+		rootVolumeType, secondaryVolumes, spreadVolumes)
 	if err != nil {
 		return err
-	}
-	for index := range volumeDirectories {
-		if (index == 0 && rootVolumeType == proto.VolumeTypeMemory) ||
-			(index > 0 && index <= len(secondaryVolumes) &&
-				secondaryVolumes[index-1].Type == proto.VolumeTypeMemory) {
-			if dirname, err := getMemoryVolumeDirectory(vm.logger); err != nil {
-				return err
-			} else {
-				volumeDirectories[index] = dirname
-			}
-		}
 	}
 	volumeDirectory := filepath.Join(volumeDirectories[0], vm.ipAddress)
 	os.RemoveAll(volumeDirectory)

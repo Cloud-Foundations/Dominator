@@ -288,7 +288,7 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	for _, size := range volumeSizes {
 		volumes = append(volumes, proto.Volume{Size: size})
 	}
-	volumeDirectories, err := vm.manager.getVolumeDirectories(0, volumes,
+	volumeDirectories, err := vm.manager.getVolumeDirectories(0, 0, volumes,
 		vm.SpreadVolumes)
 	if err != nil {
 		return err
@@ -1811,7 +1811,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		return err
 	}
 	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
-		vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
+		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
 	if err != nil {
 		return err
 	}

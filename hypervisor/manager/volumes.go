@@ -382,12 +382,13 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 }
 
 func (m *Manager) getVolumeDirectories(rootSize uint64,
-	volumes []proto.Volume, spreadVolumes bool) ([]string, error) {
-	sizes := make([]uint64, 0, len(volumes)+1)
+	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
+	spreadVolumes bool) ([]string, error) {
+	sizes := make([]uint64, 0, len(secondaryVolumes)+1)
 	if rootSize > 0 {
 		sizes = append(sizes, rootSize)
 	}
-	for _, volume := range volumes {
+	for _, volume := range secondaryVolumes {
 		if volume.Size > 0 {
 			sizes = append(sizes, volume.Size)
 		} else {
@@ -406,6 +407,17 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 		sizes = sizes[1:]
 		if spreadVolumes {
 			position++
+		}
+	}
+	for index := range directoriesToUse {
+		if (index == 0 && rootVolumeType == proto.VolumeTypeMemory) ||
+			(index > 0 && index <= len(secondaryVolumes) &&
+				secondaryVolumes[index-1].Type == proto.VolumeTypeMemory) {
+			if dirname, err := getMemoryVolumeDirectory(m.Logger); err != nil {
+				return nil, err
+			} else {
+				directoriesToUse[index] = dirname
+			}
 		}
 	}
 	return directoriesToUse, nil
