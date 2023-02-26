@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -15,8 +14,9 @@ type Slave struct {
 	clientAddress string
 	driver        *SlaveDriver
 	info          SlaveInfo
-	mutex         sync.Mutex // Lock everything below (those can change).
 	client        *srpc.Client
+	timeToPing    time.Time
+	pinging       bool
 }
 
 func (slave *Slave) Destroy() {
@@ -102,6 +102,11 @@ type databaseLoadSaver interface {
 	save(slaveRoll) error
 }
 
+type pingResponseMessage struct {
+	error error
+	slave *Slave
+}
+
 type requestSlaveMessage struct {
 	slaveChannel chan<- *Slave
 	timeout      time.Time
@@ -119,6 +124,7 @@ type slaveDriver struct {
 	getterList          *list.List
 	idleSlaves          map[*Slave]struct{}
 	logger              log.DebugLogger
+	pingResponseChannel chan pingResponseMessage
 	publicDriver        *SlaveDriver
 	releaseSlaveChannel <-chan *Slave
 	replaceIdleChannel  <-chan bool

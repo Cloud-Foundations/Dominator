@@ -81,6 +81,7 @@ func newSlaveDriver(options SlaveDriverOptions, slaveTrader SlaveTrader,
 		getSlavesChannel:    getSlavesChannel,
 		getterList:          list.New(),
 		logger:              logger,
+		pingResponseChannel: make(chan pingResponseMessage, 1),
 		publicDriver:        publicDriver,
 		slaveTrader:         slaveTrader,
 		releaseSlaveChannel: releaseSlaveChannel,
@@ -114,6 +115,27 @@ func (slave *Slave) getClient() *srpc.Client {
 	return slave.client
 }
 
+func (slave *Slave) ping(pingResponseChannel chan<- pingResponseMessage) {
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(5 * time.Second)
+	go func() {
+		errorChannel <- slave.client.Ping()
+		slave.driver.logger.Debugf(1, "ping(%s) goroutine returning\n", slave)
+	}()
+	select {
+	case err := <-errorChannel:
+		pingResponseChannel <- pingResponseMessage{
+			error: err,
+			slave: slave,
+		}
+	case <-timer.C:
+		pingResponseChannel <- pingResponseMessage{
+			error: fmt.Errorf("timed out"),
+			slave: slave,
+		}
+	}
+}
+
 func (driver *SlaveDriver) getSlave(timeout time.Duration) (*Slave, error) {
 	driver.logger.Debugln(0, "getSlave() starting")
 	if timeout < 0 {
@@ -143,8 +165,9 @@ func (driver *slaveDriver) createSlave() {
 		slave := &Slave{
 			clientAddress: fmt.Sprintf("%s:%d", slaveInfo.IpAddress,
 				driver.options.PortNumber),
-			info:   slaveInfo,
-			driver: driver.publicDriver,
+			info:       slaveInfo,
+			driver:     driver.publicDriver,
+			timeToPing: time.Now().Add(time.Minute),
 		}
 		slave.client, err = driver.clientDialer("tcp", slave.clientAddress,
 			time.Minute)
@@ -206,6 +229,7 @@ func (driver *slaveDriver) loadSlaves() error {
 				err)
 			driver.zombies[slave] = struct{}{}
 		} else {
+			slave.timeToPing = time.Now().Add(time.Minute)
 			driver.idleSlaves[slave] = struct{}{}
 		}
 	}
@@ -228,6 +252,9 @@ func (driver *slaveDriver) rollCall() {
 			return
 		}
 		for slave := range driver.idleSlaves {
+			if time.Since(slave.timeToPing) >= 0 || slave.pinging {
+				continue
+			}
 			request.slaveChannel <- slave // Consumed by getter.
 			close(request.slaveChannel)
 			delete(driver.idleSlaves, slave)
@@ -257,6 +284,13 @@ func (driver *slaveDriver) rollCall() {
 		}
 	}
 	for slave := range driver.zombies {
+		if slave.client != nil {
+			if err := slave.client.Close(); err != nil {
+				driver.logger.Printf("error closing Client for slave: %s: %s\n",
+					slave, err)
+			}
+			slave.client = nil
+		}
 		driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
 		err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
 		if err != nil {
@@ -274,6 +308,22 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = false
 		}
 	}
+	pingTimeout := time.Hour
+	for slave := range driver.idleSlaves {
+		if slave.pinging {
+			continue
+		}
+		if timeToPing := slave.timeToPing; time.Since(timeToPing) >= 0 {
+			slave.pinging = true
+			go slave.ping(driver.pingResponseChannel)
+		} else if timeout := time.Until(timeToPing); timeout < pingTimeout {
+			pingTimeout = timeout
+		}
+	}
+	if pingTimeout < 0 {
+		pingTimeout = 0
+	}
+	pingTimer := time.NewTimer(pingTimeout)
 	select {
 	case slave := <-driver.createdSlaveChannel:
 		driver.createdSlaveChannel = nil
@@ -297,6 +347,18 @@ func (driver *slaveDriver) rollCall() {
 		driver.getterList.PushBack(slaveChannel)
 	case slavesChannel := <-driver.getSlavesChannel:
 		slavesChannel <- driver.getSlaves()
+	case pingResponse := <-driver.pingResponseChannel:
+		slave := pingResponse.slave
+		slave.pinging = false
+		if err := pingResponse.error; err == nil {
+			slave.timeToPing = time.Now().Add(time.Minute)
+			driver.logger.Debugf(0, "ping: %s succeeded\n", slave)
+		} else {
+			driver.logger.Printf("error pinging: %s: %s\n", slave, err)
+			delete(driver.idleSlaves, slave)
+			driver.zombies[slave] = struct{}{}
+			driver.writeState = true
+		}
 	case slave := <-driver.releaseSlaveChannel:
 		if _, ok := driver.idleSlaves[slave]; ok {
 			panic("releasing idle slave")
@@ -310,6 +372,7 @@ func (driver *slaveDriver) rollCall() {
 		delete(driver.busySlaves, slave)
 		driver.idleSlaves[slave] = struct{}{}
 		driver.writeState = true
+		slave.timeToPing = time.Now().Add(100 * time.Millisecond)
 	case createIfNeeded := <-driver.replaceIdleChannel:
 		for slave := range driver.idleSlaves {
 			delete(driver.idleSlaves, slave)
@@ -320,6 +383,12 @@ func (driver *slaveDriver) rollCall() {
 			driver.createdSlaveChannel = make(chan *Slave, 1)
 			go driver.createSlave()
 		}
+	case <-pingTimer.C:
+	}
+	pingTimer.Stop()
+	select {
+	case <-pingTimer.C:
+	default:
 	}
 }
 
