@@ -1,19 +1,21 @@
 package smallstack
 
 import (
-	"sync"
-
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type closeRequestMessage struct {
+	errorChannel chan<- error
+}
+
 type SlaveTrader struct {
-	logger     log.DebugLogger
-	options    SlaveTraderOptions
-	mutex      sync.Mutex // Lock everything below (those can change).
-	hypervisor *srpc.Client
+	closeChannel      chan<- closeRequestMessage
+	hypervisorChannel <-chan *srpc.Client
+	logger            log.DebugLogger
+	options           SlaveTraderOptions
 }
 
 type SlaveTraderOptions struct {
