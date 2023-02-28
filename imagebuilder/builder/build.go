@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
@@ -46,6 +47,25 @@ func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
 		}
 	}
 	return errors.New("no permission to build: " + request.StreamName)
+}
+
+func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
+	buildLog io.Writer) {
+	fmt.Fprintln(buildLog,
+		"*********************************************************************")
+	fmt.Fprintf(buildLog, "Logs for slave: %s, keepSlave: %v, err: %v\n",
+		clientAddress, keepSlave, buildError)
+	readCloser, err := urlutil.Open(
+		fmt.Sprintf("http://%s/logs/dump?name=latest", clientAddress))
+	if err != nil {
+		fmt.Fprintf(buildLog, "Error opening logs: %s\n", err)
+		return
+	}
+	defer readCloser.Close()
+	io.Copy(buildLog, readCloser)
+	fmt.Fprintln(buildLog, "End logs for slave")
+	fmt.Fprintln(buildLog,
+		"*********************************************************************")
 }
 
 func getClient(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
@@ -222,6 +242,7 @@ func (b *Builder) buildOnSlave(client *srpc.Client,
 	}
 	var reply proto.BuildImageResponse
 	err = buildclient.BuildImage(slave.GetClient(), request, &reply, buildLog)
+	copyClientLogs(slave.GetClientAddress(), keepSlave, err, buildLog)
 	if err != nil {
 		if needSource, _ := needSourceImage(err); needSource {
 			keepSlave = true
