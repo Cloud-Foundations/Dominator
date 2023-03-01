@@ -11,6 +11,10 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
+type flusher interface {
+	flush() error
+}
+
 type logWriterType struct {
 	conn         *srpc.Conn
 	mutex        sync.Mutex // Protect everything below.
@@ -36,6 +40,12 @@ func (t *srpcType) BuildImage(conn *srpc.Conn) error {
 	}
 	image, name, err := t.builder.BuildImage(request, conn.GetAuthInformation(),
 		logWriter)
+	if f, ok := logWriter.(flusher); ok {
+		// Ensure all data are flushed and no background flush will happen.
+		if err := f.flush(); err != nil {
+			return err
+		}
+	}
 	reply := proto.BuildImageResponse{
 		Image:       image,
 		ImageName:   name,
