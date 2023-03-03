@@ -12,13 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
-	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
@@ -52,30 +51,32 @@ func imageStreamsRealDecoder(reader io.Reader) (
 	return &config, nil
 }
 
-func load(confUrl, variablesFile, stateDir, imageServerAddress string,
-	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
-	logger log.DebugLogger) (*Builder, error) {
+func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
 	}
-	logger.Printf("Inode Ctime resolution: %s\n",
+	if params.BuildLogArchiver == nil {
+		params.BuildLogArchiver = logarchiver.NewNullLogger()
+	}
+	params.Logger.Printf("Inode Ctime resolution: %s\n",
 		format.Duration(ctimeResolution))
 	initialNamespace, err := getNamespace()
 	if err != nil {
 		return nil, err
 	}
-	logger.Printf("Initial namespace: %s\n", initialNamespace)
+	params.Logger.Printf("Initial namespace: %s\n", initialNamespace)
 	err = syscall.Mount("none", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, "")
 	if err != nil {
 		return nil, fmt.Errorf("error making mounts private: %s", err)
 	}
-	masterConfiguration, err := loadMasterConfiguration(confUrl)
+	masterConfiguration, err := loadMasterConfiguration(
+		options.ConfigurationURL)
 	if err != nil {
 		return nil, fmt.Errorf("error getting master configuration: %s", err)
 	}
 	if len(masterConfiguration.BootstrapStreams) < 1 {
-		logger.Println(
+		params.Logger.Println(
 			"No bootstrap streams configured: some operations degraded")
 	}
 	imageStreamsToAutoRebuild := make([]string, 0)
@@ -87,8 +88,9 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
 	}
 	var variables map[string]string
-	if variablesFile != "" {
-		if err := libjson.ReadFromFile(variablesFile, &variables); err != nil {
+	if options.VariablesFile != "" {
+		err := libjson.ReadFromFile(options.VariablesFile, &variables)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -97,16 +99,17 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	}
 	generateDependencyTrigger := make(chan struct{}, 0)
 	b := &Builder{
+		buildLogArchiver:          params.BuildLogArchiver,
 		bindMounts:                masterConfiguration.BindMounts,
 		generateDependencyTrigger: generateDependencyTrigger,
-		stateDir:                  stateDir,
-		imageServerAddress:        imageServerAddress,
-		logger:                    logger,
+		stateDir:                  options.StateDirectory,
+		imageServerAddress:        options.ImageServerAddress,
+		logger:                    params.Logger,
 		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
 		initialNamespace:          initialNamespace,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
-		slaveDriver:               slaveDriver,
+		slaveDriver:               params.SlaveDriver,
 		currentBuildInfos:         make(map[string]*currentBuildInfo),
 		lastBuildResults:          make(map[string]buildResultType),
 		packagerTypes:             masterConfiguration.PackagerTypes,
@@ -120,14 +123,14 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 		masterConfiguration.ImageStreamsUrl,
 		time.Second*time.Duration(
 			masterConfiguration.ImageStreamsCheckInterval), imageStreamsDecoder,
-		filepath.Join(stateDir, "image-streams.json"),
-		time.Second*5, logger)
+		filepath.Join(options.StateDirectory, "image-streams.json"),
+		time.Second*5, params.Logger)
 	if err != nil {
 		return nil, err
 	}
 	go b.dependencyGeneratorLoop(generateDependencyTrigger)
 	go b.watchConfigLoop(imageStreamsConfigChannel)
-	go b.rebuildImages(imageRebuildInterval)
+	go b.rebuildImages(options.ImageRebuildInterval)
 	return b, nil
 }
 

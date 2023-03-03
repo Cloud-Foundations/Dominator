@@ -9,6 +9,7 @@ import (
 	"time"
 
 	buildclient "github.com/Cloud-Foundations/Dominator/imagebuilder/client"
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -140,6 +141,21 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	delete(b.currentBuildInfos, request.StreamName)
 	b.lastBuildResults[request.StreamName] = buildResultType{
 		name, startTime, finishTime, buildLog.Bytes(), err}
+	buildLogInfo := logarchiver.BuildInfo{
+		Error:     err,
+		ImageName: name,
+	}
+	if buildLogInfo.ImageName == "" {
+		buildLogInfo.ImageName = makeImageName(request.StreamName)
+	}
+	if authInfo != nil {
+		buildLogInfo.RequestorUsername = authInfo.Username
+	}
+	archiveError := b.buildLogArchiver.AddBuildLog(buildLogInfo,
+		buildLog.Bytes())
+	if archiveError != nil {
+		b.logger.Printf("Error archiving build log: %s\n", archiveError)
+	}
 	if err == nil {
 		b.logger.Printf("Built image for stream: %s in %s\n",
 			request.StreamName, format.Duration(finishTime.Sub(startTime)))

@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
@@ -155,6 +156,7 @@ type treeCache struct {
 }
 
 type Builder struct {
+	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
 	generateDependencyTrigger chan<- struct{}
 	stateDir                  string
@@ -178,11 +180,40 @@ type Builder struct {
 	dependencyDataError       error
 }
 
+type BuilderOptions struct {
+	ConfigurationURL     string
+	ImageRebuildInterval time.Duration
+	ImageServerAddress   string
+	StateDirectory       string
+	VariablesFile        string
+}
+
+type BuilderParams struct {
+	BuildLogArchiver logarchiver.BuildLogArchiver
+	Logger           log.DebugLogger
+	SlaveDriver      *slavedriver.SlaveDriver
+}
+
 func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
-	return load(confUrl, variablesFile, stateDir, imageServerAddress,
-		imageRebuildInterval, slaveDriver, logger)
+	return LoadWithOptionsAndParams(
+		BuilderOptions{
+			ConfigurationURL:     confUrl,
+			ImageRebuildInterval: imageRebuildInterval,
+			ImageServerAddress:   imageServerAddress,
+			StateDirectory:       stateDir,
+			VariablesFile:        variablesFile,
+		},
+		BuilderParams{
+			Logger:      logger,
+			SlaveDriver: slaveDriver,
+		})
+}
+
+func LoadWithOptionsAndParams(options BuilderOptions,
+	params BuilderParams) (*Builder, error) {
+	return load(options, params)
 }
 
 func (b *Builder) BuildImage(request proto.BuildImageRequest,
