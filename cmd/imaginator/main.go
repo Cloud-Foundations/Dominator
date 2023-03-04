@@ -11,6 +11,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/httpd"
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/rpcd"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
@@ -26,6 +27,8 @@ const (
 )
 
 var (
+	buildLogDir = flag.String("buildLogDir", "/var/log/imaginator/builds",
+		"Name of directory to write build logs to")
 	configurationUrl = flag.String("configurationUrl",
 		"file:///etc/imaginator/conf.json", "URL containing configuration")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
@@ -73,10 +76,31 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Error starting slave driver: %s\n", err)
 	}
-	builderObj, err := builder.Load(*configurationUrl, *variablesFile,
-		*stateDir,
-		fmt.Sprintf("%s:%d", *imageServerHostname, *imageServerPortNum),
-		*imageRebuildInterval, slaveDriver, logger)
+	buildLogArchiver, err := logarchiver.New(
+		logarchiver.BuildLogArchiveOptions{
+			Topdir: *buildLogDir,
+		},
+		logarchiver.BuildLogArchiveParams{
+			Logger: logger,
+		},
+	)
+	if err != nil {
+		logger.Fatalf("Error starting build log archiver: %s\n", err)
+	}
+	builderObj, err := builder.LoadWithOptionsAndParams(
+		builder.BuilderOptions{
+			ConfigurationURL:     *configurationUrl,
+			ImageRebuildInterval: *imageRebuildInterval,
+			ImageServerAddress: fmt.Sprintf("%s:%d",
+				*imageServerHostname, *imageServerPortNum),
+			StateDirectory: *stateDir,
+			VariablesFile:  *variablesFile,
+		},
+		builder.BuilderParams{
+			BuildLogArchiver: buildLogArchiver,
+			Logger:           logger,
+			SlaveDriver:      slaveDriver,
+		})
 	if err != nil {
 		logger.Fatalf("Cannot start builder: %s\n", err)
 	}
