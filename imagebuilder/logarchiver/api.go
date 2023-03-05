@@ -15,6 +15,7 @@ type BuildLogArchiver interface {
 }
 
 type BuildLogArchiveOptions struct {
+	Quota  uint64
 	Topdir string
 }
 
