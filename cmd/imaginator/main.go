@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/rpcd"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
@@ -29,6 +30,7 @@ const (
 var (
 	buildLogDir = flag.String("buildLogDir", "/var/log/imaginator/builds",
 		"Name of directory to write build logs to")
+	buildLogQuota    = flagutil.Size(100 << 20)
 	configurationUrl = flag.String("configurationUrl",
 		"file:///etc/imaginator/conf.json", "URL containing configuration")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
@@ -47,6 +49,11 @@ var (
 	variablesFile = flag.String("variablesFile", "",
 		"A JSON encoded file containing special variables (i.e. secrets)")
 )
+
+func init() {
+	flag.Var(&buildLogQuota, "buildLogQuota",
+		"Build log quota. If exceeded, old logs are deleted")
+}
 
 func main() {
 	if err := loadflags.LoadForDaemon("imaginator"); err != nil {
@@ -78,6 +85,7 @@ func main() {
 	}
 	buildLogArchiver, err := logarchiver.New(
 		logarchiver.BuildLogArchiveOptions{
+			Quota:  uint64(buildLogQuota),
 			Topdir: *buildLogDir,
 		},
 		logarchiver.BuildLogArchiveParams{
