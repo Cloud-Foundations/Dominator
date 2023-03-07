@@ -2,6 +2,7 @@ package logarchiver
 
 import (
 	"container/list"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,15 +13,17 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type buildLogArchiver struct {
-	ageList      list.List                   // Oldest first.
-	imageStreams map[string]*imageStreamType // Key: stream name.
-	mutex        sync.Mutex
-	options      BuildLogArchiveOptions
-	params       BuildLogArchiveParams
-	totalSize    uint64
+	options           BuildLogArchiveOptions
+	params            BuildLogArchiveParams
+	fileSizeIncrement uint64
+	mutex             sync.Mutex                  // Lock everything below.
+	ageList           list.List                   // Oldest first.
+	imageStreams      map[string]*imageStreamType // Key: stream name.
+	totalSize         uint64
 }
 
 type imageStreamType struct {
@@ -32,17 +35,17 @@ type imageType struct {
 	ageListElement    *list.Element
 	error             string
 	imageStream       *imageStreamType
-	logSize           uint64
+	logSize           uint64 // Rounded up.
 	modTime           time.Time
 	name              string // Leaf name.
 	requestorUsername string
 }
 
-func makeEntry(errorString string, logSize uint64,
+func (a *buildLogArchiver) makeEntry(errorString string, logSize uint64,
 	modTime time.Time, name string, requestorUsername string) *imageType {
 	image := &imageType{
 		error:             errorString,
-		logSize:           logSize,
+		logSize:           roundUp(logSize, a.fileSizeIncrement),
 		name:              filepath.Base(name),
 		requestorUsername: requestorUsername,
 	}
@@ -65,6 +68,14 @@ func readString(filename string) (string, error) {
 	return string(data), nil
 }
 
+func roundUp(value, increment uint64) uint64 {
+	numBlocks := value / increment
+	if numBlocks*increment == value {
+		return value
+	}
+	return (numBlocks + 1) * increment
+}
+
 // writeString will write the specified string data and a trailing newline to
 // the file specified by filename. If the string is empty, the file is not
 // written.
@@ -81,6 +92,9 @@ func newBuildLogArchive(options BuildLogArchiveOptions,
 		imageStreams: make(map[string]*imageStreamType),
 		options:      options,
 		params:       params,
+	}
+	if err := archive.computeFileSizeIncrement(); err != nil {
+		return nil, fmt.Errorf("error computing file size increment: %s", err)
 	}
 	startTime := time.Now()
 	if err := archive.load(""); err != nil {
@@ -109,20 +123,20 @@ func (a *buildLogArchiver) addEntry(image *imageType, name string) {
 	}
 	image.imageStream = imageStream
 	imageStream.images[image.name] = image
-	a.totalSize += image.totalSize()
+	a.totalSize += a.imageTotalSize(image)
 }
 
 func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	name string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	for image.totalSize()+a.totalSize < a.options.Quota {
+	for a.imageTotalSize(image)+a.totalSize < a.options.Quota {
 		a.addEntry(image, name)
 		return nil
 	}
 	targetSize := a.options.Quota * 95 / 100
-	if image.totalSize()+targetSize > a.options.Quota {
-		targetSize -= image.totalSize()
+	if a.imageTotalSize(image)+targetSize > a.options.Quota {
+		targetSize -= a.imageTotalSize(image)
 	}
 	var deletedLogs uint
 	origTotalSize := a.totalSize
@@ -140,6 +154,31 @@ func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	return nil
 }
 
+func (a *buildLogArchiver) computeFileSizeIncrement() error {
+	file, err := ioutil.TempFile(a.options.Topdir, "******")
+	if err != nil {
+		return err
+	}
+	filename := file.Name()
+	defer os.Remove(filename)
+	if _, err := file.Write([]byte{'\n'}); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	var statbuf wsyscall.Stat_t
+	if err := wsyscall.Stat(filename, &statbuf); err != nil {
+		return err
+	}
+	if statbuf.Blocks < 1 {
+		statbuf.Blocks = 1
+	}
+	a.fileSizeIncrement = uint64(statbuf.Blocks) * 512
+	return nil
+}
+
 func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
 	image := element.Value.(*imageType)
 	imageStream := image.imageStream
@@ -148,7 +187,7 @@ func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
 		return err
 	}
 	delete(imageStream.images, image.name)
-	a.totalSize -= image.totalSize()
+	a.totalSize -= a.imageTotalSize(image)
 	return nil
 }
 
@@ -182,14 +221,14 @@ func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
 	if err != nil {
 		return err
 	}
-	image := makeEntry(errorString, uint64(len(buildLog)), time.Now(),
+	image := a.makeEntry(errorString, uint64(len(buildLog)), time.Now(),
 		buildInfo.ImageName, buildInfo.RequestorUsername)
 	if err := a.addEntryWithCheck(image, buildInfo.ImageName); err != nil {
 		return err
 	}
 	doDelete = false
 	a.params.Logger.Debugf(0, "Archived build log for: %s, %s (%s total)\n",
-		buildInfo.ImageName, format.FormatBytes(image.totalSize()),
+		buildInfo.ImageName, format.FormatBytes(a.imageTotalSize(image)),
 		format.FormatBytes(a.totalSize))
 	return nil
 }
@@ -236,7 +275,7 @@ func (a *buildLogArchiver) load(dirname string) error {
 	if fi, err := os.Stat(buildLogPathname); err != nil {
 		return err
 	} else {
-		image := makeEntry(errorString, uint64(fi.Size()), fi.ModTime(),
+		image := a.makeEntry(errorString, uint64(fi.Size()), fi.ModTime(),
 			dirname, requestorUsername)
 		a.addEntry(image, dirname)
 	}
@@ -259,13 +298,10 @@ func (a *buildLogArchiver) makeAgeList() {
 	}
 }
 
-func (image *imageType) totalSize() uint64 {
+func (a *buildLogArchiver) imageTotalSize(image *imageType) uint64 {
 	size := image.logSize
-	if image.error != "" {
-		size += uint64(len(image.error) + 1)
-	}
-	if image.requestorUsername != "" {
-		size += uint64(len(image.requestorUsername) + 1)
-	}
+	size += roundUp(uint64(len(image.error)), a.fileSizeIncrement)
+	size += roundUp(uint64(len(image.requestorUsername)),
+		a.fileSizeIncrement)
 	return size
 }
