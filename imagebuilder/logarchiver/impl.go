@@ -41,17 +41,6 @@ type imageType struct {
 	requestorUsername string
 }
 
-func (a *buildLogArchiver) makeEntry(errorString string, logSize uint64,
-	modTime time.Time, name string, requestorUsername string) *imageType {
-	image := &imageType{
-		error:             errorString,
-		logSize:           roundUp(logSize, a.fileSizeIncrement),
-		name:              filepath.Base(name),
-		requestorUsername: requestorUsername,
-	}
-	return image
-}
-
 // readString will read a string from the file specified by filename. The
 // trailing newline is stripped if present.
 func readString(filename string) (string, error) {
@@ -154,43 +143,6 @@ func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	return nil
 }
 
-func (a *buildLogArchiver) computeFileSizeIncrement() error {
-	file, err := ioutil.TempFile(a.options.Topdir, "******")
-	if err != nil {
-		return err
-	}
-	filename := file.Name()
-	defer os.Remove(filename)
-	if _, err := file.Write([]byte{'\n'}); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	var statbuf wsyscall.Stat_t
-	if err := wsyscall.Stat(filename, &statbuf); err != nil {
-		return err
-	}
-	if statbuf.Blocks < 1 {
-		statbuf.Blocks = 1
-	}
-	a.fileSizeIncrement = uint64(statbuf.Blocks) * 512
-	return nil
-}
-
-func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
-	image := element.Value.(*imageType)
-	imageStream := image.imageStream
-	dirname := filepath.Join(a.options.Topdir, imageStream.name, image.name)
-	if err := os.RemoveAll(dirname); err != nil {
-		return err
-	}
-	delete(imageStream.images, image.name)
-	a.totalSize -= a.imageTotalSize(image)
-	return nil
-}
-
 func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
 	buildLog []byte) error {
 	dirname := filepath.Join(a.options.Topdir, buildInfo.ImageName)
@@ -231,6 +183,51 @@ func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
 		buildInfo.ImageName, format.FormatBytes(a.imageTotalSize(image)),
 		format.FormatBytes(a.totalSize))
 	return nil
+}
+
+func (a *buildLogArchiver) computeFileSizeIncrement() error {
+	file, err := ioutil.TempFile(a.options.Topdir, "******")
+	if err != nil {
+		return err
+	}
+	filename := file.Name()
+	defer os.Remove(filename)
+	if _, err := file.Write([]byte{'\n'}); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	var statbuf wsyscall.Stat_t
+	if err := wsyscall.Stat(filename, &statbuf); err != nil {
+		return err
+	}
+	if statbuf.Blocks < 1 {
+		statbuf.Blocks = 1
+	}
+	a.fileSizeIncrement = uint64(statbuf.Blocks) * 512
+	return nil
+}
+
+func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
+	image := element.Value.(*imageType)
+	imageStream := image.imageStream
+	dirname := filepath.Join(a.options.Topdir, imageStream.name, image.name)
+	if err := os.RemoveAll(dirname); err != nil {
+		return err
+	}
+	delete(imageStream.images, image.name)
+	a.totalSize -= a.imageTotalSize(image)
+	return nil
+}
+
+func (a *buildLogArchiver) imageTotalSize(image *imageType) uint64 {
+	size := image.logSize
+	size += roundUp(uint64(len(image.error)), a.fileSizeIncrement)
+	size += roundUp(uint64(len(image.requestorUsername)),
+		a.fileSizeIncrement)
+	return size
 }
 
 func (a *buildLogArchiver) load(dirname string) error {
@@ -298,10 +295,13 @@ func (a *buildLogArchiver) makeAgeList() {
 	}
 }
 
-func (a *buildLogArchiver) imageTotalSize(image *imageType) uint64 {
-	size := image.logSize
-	size += roundUp(uint64(len(image.error)), a.fileSizeIncrement)
-	size += roundUp(uint64(len(image.requestorUsername)),
-		a.fileSizeIncrement)
-	return size
+func (a *buildLogArchiver) makeEntry(errorString string, logSize uint64,
+	modTime time.Time, name string, requestorUsername string) *imageType {
+	image := &imageType{
+		error:             errorString,
+		logSize:           roundUp(logSize, a.fileSizeIncrement),
+		name:              filepath.Base(name),
+		requestorUsername: requestorUsername,
+	}
+	return image
 }
