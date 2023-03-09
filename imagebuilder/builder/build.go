@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -142,17 +142,18 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	b.lastBuildResults[request.StreamName] = buildResultType{
 		name, startTime, finishTime, buildLog.Bytes(), err}
 	buildLogInfo := logarchiver.BuildInfo{
-		Error:     err,
-		ImageName: name,
+		Duration: finishTime.Sub(startTime),
+		Error:    errors.ErrorToString(err),
 	}
-	if buildLogInfo.ImageName == "" {
-		buildLogInfo.ImageName = makeImageName(request.StreamName)
+	buildLogImageName := name
+	if buildLogImageName == "" {
+		buildLogImageName = makeImageName(request.StreamName)
 	}
 	if authInfo != nil {
 		buildLogInfo.RequestorUsername = authInfo.Username
 	}
-	archiveError := b.buildLogArchiver.AddBuildLog(buildLogInfo,
-		buildLog.Bytes())
+	archiveError := b.buildLogArchiver.AddBuildLog(buildLogImageName,
+		buildLogInfo, buildLog.Bytes())
 	if archiveError != nil {
 		b.logger.Printf("Error archiving build log: %s\n", archiveError)
 	}

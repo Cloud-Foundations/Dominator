@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
@@ -32,29 +32,12 @@ type imageStreamType struct {
 }
 
 type imageType struct {
-	ageListElement    *list.Element
-	error             string
-	imageStream       *imageStreamType
-	logSize           uint64 // Rounded up.
-	modTime           time.Time
-	name              string // Leaf name.
-	requestorUsername string
-}
-
-// readString will read a string from the file specified by filename. The
-// trailing newline is stripped if present.
-func readString(filename string) (string, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return "", err
-	}
-	if len(data) < 1 {
-		return "", nil
-	}
-	if data[len(data)-1] == '\n' {
-		return string(data[:len(data)-1]), nil
-	}
-	return string(data), nil
+	ageListElement *list.Element
+	buildInfo      BuildInfo
+	imageStream    *imageStreamType
+	logSize        uint64 // Rounded up.
+	modTime        time.Time
+	name           string // Leaf name.
 }
 
 func roundUp(value, increment uint64) uint64 {
@@ -63,16 +46,6 @@ func roundUp(value, increment uint64) uint64 {
 		return value
 	}
 	return (numBlocks + 1) * increment
-}
-
-// writeString will write the specified string data and a trailing newline to
-// the file specified by filename. If the string is empty, the file is not
-// written.
-func writeString(filename, data string) error {
-	if data == "" {
-		return nil
-	}
-	return ioutil.WriteFile(filename, []byte(data+"\n"), fsutil.PublicFilePerms)
 }
 
 func newBuildLogArchive(options BuildLogArchiveOptions,
@@ -143,9 +116,9 @@ func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	return nil
 }
 
-func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
+func (a *buildLogArchiver) AddBuildLog(imageName string, buildInfo BuildInfo,
 	buildLog []byte) error {
-	dirname := filepath.Join(a.options.Topdir, buildInfo.ImageName)
+	dirname := filepath.Join(a.options.Topdir, imageName)
 	if err := os.MkdirAll(filepath.Dir(dirname), fsutil.DirPerms); err != nil {
 		return err
 	}
@@ -158,8 +131,8 @@ func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
 			os.RemoveAll(dirname)
 		}
 	}()
-	errorString := errors.ErrorToString(buildInfo.Error)
-	err := writeString(filepath.Join(dirname, "error"), errorString)
+	err := json.WriteToFile(filepath.Join(dirname, "buildInfo"),
+		fsutil.PublicFilePerms, "    ", buildInfo)
 	if err != nil {
 		return err
 	}
@@ -168,24 +141,22 @@ func (a *buildLogArchiver) AddBuildLog(buildInfo BuildInfo,
 	if err != nil {
 		return err
 	}
-	err = writeString(filepath.Join(dirname, "requestorUsername"),
-		buildInfo.RequestorUsername)
-	if err != nil {
-		return err
-	}
-	image := a.makeEntry(errorString, uint64(len(buildLog)), time.Now(),
-		buildInfo.ImageName, buildInfo.RequestorUsername)
-	if err := a.addEntryWithCheck(image, buildInfo.ImageName); err != nil {
+	image := a.makeEntry(buildInfo, uint64(len(buildLog)), time.Now(),
+		imageName)
+	if err := a.addEntryWithCheck(image, imageName); err != nil {
 		return err
 	}
 	doDelete = false
 	a.params.Logger.Debugf(0, "Archived build log for: %s, %s (%s total)\n",
-		buildInfo.ImageName, format.FormatBytes(a.imageTotalSize(image)),
+		imageName, format.FormatBytes(a.imageTotalSize(image)),
 		format.FormatBytes(a.totalSize))
 	return nil
 }
 
 func (a *buildLogArchiver) computeFileSizeIncrement() error {
+	if err := os.MkdirAll(a.options.Topdir, fsutil.DirPerms); err != nil {
+		return err
+	}
 	file, err := ioutil.TempFile(a.options.Topdir, "******")
 	if err != nil {
 		return err
@@ -223,11 +194,7 @@ func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
 }
 
 func (a *buildLogArchiver) imageTotalSize(image *imageType) uint64 {
-	size := image.logSize
-	size += roundUp(uint64(len(image.error)), a.fileSizeIncrement)
-	size += roundUp(uint64(len(image.requestorUsername)),
-		a.fileSizeIncrement)
-	return size
+	return image.logSize + a.fileSizeIncrement
 }
 
 func (a *buildLogArchiver) load(dirname string) error {
@@ -236,17 +203,14 @@ func (a *buildLogArchiver) load(dirname string) error {
 	if err != nil {
 		return err
 	}
-	var errorPathname, buildLogPathname, requestorUsernamePathname string
+	var buildInfoPathname, buildLogPathname string
 	for _, name := range names {
 		switch name {
-		case "error":
-			errorPathname = filepath.Join(dirpath, name)
+		case "buildInfo":
+			buildInfoPathname = filepath.Join(dirpath, name)
 			continue
 		case "buildLog":
 			buildLogPathname = filepath.Join(dirpath, name)
-			continue
-		case "requestorUsername":
-			requestorUsernamePathname = filepath.Join(dirpath, name)
 			continue
 		}
 		if err := a.load(filepath.Join(dirname, name)); err != nil {
@@ -256,24 +220,17 @@ func (a *buildLogArchiver) load(dirname string) error {
 	if buildLogPathname == "" {
 		return nil
 	}
-	var errorString, requestorUsername string
-	if errorPathname != "" {
-		errorString, err = readString(errorPathname)
-		if err != nil {
-			return err
-		}
-	}
-	if requestorUsernamePathname != "" {
-		requestorUsername, err = readString(requestorUsernamePathname)
-		if err != nil {
+	var buildInfo BuildInfo
+	if buildInfoPathname != "" {
+		if err := json.ReadFromFile(buildInfoPathname, &buildInfo); err != nil {
 			return err
 		}
 	}
 	if fi, err := os.Stat(buildLogPathname); err != nil {
 		return err
 	} else {
-		image := a.makeEntry(errorString, uint64(fi.Size()), fi.ModTime(),
-			dirname, requestorUsername)
+		image := a.makeEntry(buildInfo, uint64(fi.Size()), fi.ModTime(),
+			dirname)
 		a.addEntry(image, dirname)
 	}
 	return nil
@@ -295,13 +252,13 @@ func (a *buildLogArchiver) makeAgeList() {
 	}
 }
 
-func (a *buildLogArchiver) makeEntry(errorString string, logSize uint64,
-	modTime time.Time, name string, requestorUsername string) *imageType {
+func (a *buildLogArchiver) makeEntry(buildInfo BuildInfo, logSize uint64,
+	modTime time.Time, name string) *imageType {
 	image := &imageType{
-		error:             errorString,
-		logSize:           roundUp(logSize, a.fileSizeIncrement),
-		name:              filepath.Base(name),
-		requestorUsername: requestorUsername,
+		buildInfo: buildInfo,
+		logSize:   roundUp(logSize, a.fileSizeIncrement),
+		modTime:   modTime,
+		name:      filepath.Base(name),
 	}
 	return image
 }

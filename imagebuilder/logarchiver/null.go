@@ -8,7 +8,7 @@ func newNullLogger() *nullBuildLogArchiver {
 	return &nullBuildLogArchiver{}
 }
 
-func (a *nullBuildLogArchiver) AddBuildLog(buildInfo BuildInfo,
-	log []byte) error {
+func (a *nullBuildLogArchiver) AddBuildLog(imageName string,
+	buildInfo BuildInfo, log []byte) error {
 	return nil
 }

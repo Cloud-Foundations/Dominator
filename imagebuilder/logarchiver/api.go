@@ -1,17 +1,19 @@
 package logarchiver
 
 import (
+	"time"
+
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
 type BuildInfo struct {
-	Error             error
-	ImageName         string
-	RequestorUsername string
+	Duration          time.Duration `json:",omitempty"`
+	Error             string        `json:",omitempty"`
+	RequestorUsername string        `json:",omitempty"`
 }
 
 type BuildLogArchiver interface {
-	AddBuildLog(BuildInfo, []byte) error
+	AddBuildLog(string, BuildInfo, []byte) error
 }
 
 type BuildLogArchiveOptions struct {
