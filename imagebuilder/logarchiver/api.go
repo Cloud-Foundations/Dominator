@@ -1,6 +1,7 @@
 package logarchiver
 
 import (
+	"io"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -25,8 +26,33 @@ type BuildLogArchiveParams struct {
 	Logger log.DebugLogger
 }
 
+type BuildLogReporter interface {
+	GetBuildInfosForStream(streamName string, incGood, incBad bool) *BuildInfos
+	GetBuildLog(imageName string) (io.ReadCloser, error)
+	GetSummary() *Summary
+}
+
+type BuildLogger interface {
+	BuildLogArchiver
+	BuildLogReporter
+}
+
+type BuildInfos struct {
+	Builds map[string]BuildInfo // Key: image name.
+}
+
+type StreamSummary struct {
+	NumBuilds      uint64
+	NumGoodBuilds  uint64
+	NumErrorBuilds uint64
+}
+
+type Summary struct {
+	Streams map[string]*StreamSummary // Key: stream name.
+}
+
 func New(options BuildLogArchiveOptions,
-	params BuildLogArchiveParams) (BuildLogArchiver, error) {
+	params BuildLogArchiveParams) (BuildLogger, error) {
 	return newBuildLogArchive(options, params)
 }
 
