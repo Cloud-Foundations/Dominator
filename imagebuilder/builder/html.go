@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -191,6 +192,10 @@ func (b *Builder) writeHtml(writer io.Writer) {
 			)
 		}
 		fmt.Fprintln(writer, "</table><br>")
+	}
+	if _, ok := b.buildLogArchiver.(logarchiver.BuildLogReporter); ok {
+		fmt.Fprintln(writer,
+			"Build log <a href=\"showBuildLogArchive\">archive</a><br>")
 	}
 }
 
