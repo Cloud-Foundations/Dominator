@@ -122,7 +122,17 @@ func main() {
 	}
 	httpd.AddHtmlWriter(rpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
-	if err = httpd.StartServer(*portNum, builderObj, false); err != nil {
+	err = httpd.StartServerWithOptionsAndParams(
+		httpd.Options{
+			PortNumber: *portNum,
+		},
+		httpd.Params{
+			Builder:          builderObj,
+			BuildLogReporter: buildLogArchiver,
+			Logger:           logger,
+		},
+	)
+	if err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
 }
