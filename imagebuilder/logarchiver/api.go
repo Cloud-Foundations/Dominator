@@ -27,6 +27,7 @@ type BuildLogArchiveParams struct {
 }
 
 type BuildLogReporter interface {
+	GetBuildInfosForRequestor(username string, incGood, incBad bool) *BuildInfos
 	GetBuildInfosForStream(streamName string, incGood, incBad bool) *BuildInfos
 	GetBuildLog(imageName string) (io.ReadCloser, error)
 	GetSummary() *Summary
@@ -41,6 +42,12 @@ type BuildInfos struct {
 	Builds map[string]BuildInfo // Key: image name.
 }
 
+type RequestorSummary struct {
+	NumBuilds      uint64
+	NumGoodBuilds  uint64
+	NumErrorBuilds uint64
+}
+
 type StreamSummary struct {
 	NumBuilds      uint64
 	NumGoodBuilds  uint64
@@ -48,7 +55,8 @@ type StreamSummary struct {
 }
 
 type Summary struct {
-	Streams map[string]*StreamSummary // Key: stream name.
+	Requestors map[string]*RequestorSummary // Key: username.
+	Streams    map[string]*StreamSummary    // Key: stream name.
 }
 
 func New(options BuildLogArchiveOptions,

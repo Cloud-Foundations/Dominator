@@ -6,14 +6,39 @@ import (
 	"path/filepath"
 )
 
+func (a *buildLogArchiver) GetBuildInfosForRequestor(username string,
+	includeGood, includeBad bool) *BuildInfos {
+	buildInfos := &BuildInfos{make(map[string]BuildInfo)}
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	for _, imageStream := range a.imageStreams {
+		for name, image := range imageStream.images {
+			if username != image.buildInfo.RequestorUsername {
+				continue
+			}
+			if image.buildInfo.Error == "" && !includeGood {
+				continue
+			}
+			if image.buildInfo.Error != "" && !includeBad {
+				continue
+			}
+			buildInfos.Builds[filepath.Join(imageStream.name,
+				name)] = image.buildInfo
+		}
+	}
+	return buildInfos
+}
+
 func (a *buildLogArchiver) GetBuildInfosForStream(streamName string,
 	includeGood, includeBad bool) *BuildInfos {
 	buildInfos := &BuildInfos{make(map[string]BuildInfo)}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for name, image := range a.imageStreams[streamName].images {
-		if (includeGood && image.buildInfo.Error != "") &&
-			includeBad && image.buildInfo.Error == "" {
+		if image.buildInfo.Error == "" && !includeGood {
+			continue
+		}
+		if image.buildInfo.Error != "" && !includeBad {
 			continue
 		}
 		buildInfos.Builds[filepath.Join(streamName, name)] = image.buildInfo
@@ -27,16 +52,29 @@ func (a *buildLogArchiver) GetBuildLog(imageName string) (
 }
 
 func (a *buildLogArchiver) GetSummary() *Summary {
-	summary := &Summary{make(map[string]*StreamSummary)}
+	summary := &Summary{
+		Streams:    make(map[string]*StreamSummary),
+		Requestors: make(map[string]*RequestorSummary),
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for _, imageStream := range a.imageStreams {
 		streamSummary := StreamSummary{}
 		for _, image := range imageStream.images {
+			requestorSummary :=
+				summary.Requestors[image.buildInfo.RequestorUsername]
+			if requestorSummary == nil {
+				requestorSummary = &RequestorSummary{}
+				summary.Requestors[image.buildInfo.RequestorUsername] =
+					requestorSummary
+			}
+			requestorSummary.NumBuilds++
 			streamSummary.NumBuilds++
 			if image.buildInfo.Error == "" {
+				requestorSummary.NumGoodBuilds++
 				streamSummary.NumGoodBuilds++
 			} else {
+				requestorSummary.NumErrorBuilds++
 				streamSummary.NumErrorBuilds++
 			}
 		}
