@@ -65,6 +65,12 @@ func StartServerWithOptionsAndParams(options Options, params Params) error {
 			myState.showStreamGoodBuildsHandler)
 		html.HandleFunc("/showStreamErrorBuilds",
 			myState.showStreamErrorBuildsHandler)
+		html.HandleFunc("/showRequestorAllBuilds",
+			myState.showRequestorAllBuildsHandler)
+		html.HandleFunc("/showRequestorGoodBuilds",
+			myState.showRequestorGoodBuildsHandler)
+		html.HandleFunc("/showRequestorErrorBuilds",
+			myState.showRequestorErrorBuildsHandler)
 	}
 	if params.DaemonMode {
 		go http.Serve(listener, nil)
