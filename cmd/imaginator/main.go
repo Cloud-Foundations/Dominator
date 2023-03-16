@@ -83,17 +83,20 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Error starting slave driver: %s\n", err)
 	}
-	buildLogArchiver, err := logarchiver.New(
-		logarchiver.BuildLogArchiveOptions{
-			Quota:  uint64(buildLogQuota),
-			Topdir: *buildLogDir,
-		},
-		logarchiver.BuildLogArchiveParams{
-			Logger: logger,
-		},
-	)
-	if err != nil {
-		logger.Fatalf("Error starting build log archiver: %s\n", err)
+	var buildLogArchiver logarchiver.BuildLogger
+	if *buildLogDir != "" && buildLogQuota > 1<<20 {
+		buildLogArchiver, err = logarchiver.New(
+			logarchiver.BuildLogArchiveOptions{
+				Quota:  uint64(buildLogQuota),
+				Topdir: *buildLogDir,
+			},
+			logarchiver.BuildLogArchiveParams{
+				Logger: logger,
+			},
+		)
+		if err != nil {
+			logger.Fatalf("Error starting build log archiver: %s\n", err)
+		}
 	}
 	builderObj, err := builder.LoadWithOptionsAndParams(
 		builder.BuilderOptions{
