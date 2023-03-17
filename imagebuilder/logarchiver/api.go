@@ -27,6 +27,7 @@ type BuildLogArchiveParams struct {
 }
 
 type BuildLogReporter interface {
+	GetBuildInfos(incGood, incBad bool) *BuildInfos
 	GetBuildInfosForRequestor(username string, incGood, incBad bool) *BuildInfos
 	GetBuildInfosForStream(streamName string, incGood, incBad bool) *BuildInfos
 	GetBuildLog(imageName string) (io.ReadCloser, error)
@@ -39,7 +40,8 @@ type BuildLogger interface {
 }
 
 type BuildInfos struct {
-	Builds map[string]BuildInfo // Key: image name.
+	Builds      map[string]BuildInfo // Key: image name.
+	ImagesByAge []string             // May be empty.
 }
 
 type RequestorSummary struct {

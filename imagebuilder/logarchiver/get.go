@@ -6,9 +6,30 @@ import (
 	"path/filepath"
 )
 
+func (a *buildLogArchiver) GetBuildInfos(includeGood bool,
+	includeBad bool) *BuildInfos {
+	buildInfos := &BuildInfos{Builds: make(map[string]BuildInfo)}
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	for element := a.ageList.Front(); element != nil; element = element.Next() {
+		image := element.Value.(*imageType)
+		imageStream := image.imageStream
+		if image.buildInfo.Error == "" && !includeGood {
+			continue
+		}
+		if image.buildInfo.Error != "" && !includeBad {
+			continue
+		}
+		imageName := filepath.Join(imageStream.name, image.name)
+		buildInfos.Builds[imageName] = image.buildInfo
+		buildInfos.ImagesByAge = append(buildInfos.ImagesByAge, imageName)
+	}
+	return buildInfos
+}
+
 func (a *buildLogArchiver) GetBuildInfosForRequestor(username string,
 	includeGood, includeBad bool) *BuildInfos {
-	buildInfos := &BuildInfos{make(map[string]BuildInfo)}
+	buildInfos := &BuildInfos{Builds: make(map[string]BuildInfo)}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for _, imageStream := range a.imageStreams {
@@ -31,7 +52,7 @@ func (a *buildLogArchiver) GetBuildInfosForRequestor(username string,
 
 func (a *buildLogArchiver) GetBuildInfosForStream(streamName string,
 	includeGood, includeBad bool) *BuildInfos {
-	buildInfos := &BuildInfos{make(map[string]BuildInfo)}
+	buildInfos := &BuildInfos{Builds: make(map[string]BuildInfo)}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for name, image := range a.imageStreams[streamName].images {
