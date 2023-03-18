@@ -27,11 +27,14 @@ func showBuildInfos(writer io.Writer, buildInfos *logarchiver.BuildInfos,
                           </style>`)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "<h3>")
-	imageNames := make([]string, 0, len(buildInfos.Builds))
-	for imageName := range buildInfos.Builds {
-		imageNames = append(imageNames, imageName)
+	imageNames := buildInfos.ImagesByAge
+	if len(imageNames) < len(buildInfos.Builds) {
+		imageNames = make([]string, 0, len(buildInfos.Builds))
+		for imageName := range buildInfos.Builds {
+			imageNames = append(imageNames, imageName)
+		}
+		sort.Strings(imageNames)
 	}
-	sort.Strings(imageNames)
 	fmt.Fprintln(writer, `<table border="1">`)
 	columns := []string{"Image Name", "Build log", "Duration"}
 	if showError {
@@ -52,6 +55,10 @@ func showBuildInfos(writer io.Writer, buildInfos *logarchiver.BuildInfos,
 	}
 	fmt.Fprintln(writer, "</table>")
 	fmt.Fprintln(writer, "</body>")
+}
+
+func (s state) showAllBuildsHandler(w http.ResponseWriter, req *http.Request) {
+	s.showBuildsHandler(w, req, true, true)
 }
 
 func (s state) showBuildLogHandler(w http.ResponseWriter,
@@ -82,8 +89,12 @@ func (s state) showBuildLogArchiveHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<h3>")
 	summary := s.buildLogReporter.GetSummary()
 	fmt.Fprintln(writer, "Build summary per image stream:<br>")
+	var numBuilds, numGoodBuilds, numErrorBuilds uint64
 	streamNames := make([]string, 0, len(summary.Streams))
-	for streamName := range summary.Streams {
+	for streamName, streamSummary := range summary.Streams {
+		numBuilds += streamSummary.NumBuilds
+		numGoodBuilds += streamSummary.NumGoodBuilds
+		numErrorBuilds += streamSummary.NumErrorBuilds
 		streamNames = append(streamNames, streamName)
 	}
 	sort.Strings(streamNames)
@@ -101,6 +112,11 @@ func (s state) showBuildLogArchiveHandler(w http.ResponseWriter,
 			fmt.Sprintf("<a href=\"showStreamErrorBuilds?%s\">%d</a>",
 				streamName, streamSummary.NumErrorBuilds))
 	}
+	tw.WriteRow("", "",
+		"<b>TOTAL</b>",
+		fmt.Sprintf("<a href=\"showAllBuilds\">%d</a>", numBuilds),
+		fmt.Sprintf("<a href=\"showGoodBuilds\">%d</a>", numGoodBuilds),
+		fmt.Sprintf("<a href=\"showErrorBuilds\">%d</a>", numErrorBuilds))
 	fmt.Fprintln(writer, "</table>")
 	fmt.Fprintln(writer, "<p>")
 	fmt.Fprintln(writer, "Build summary per requestor:<br>")
@@ -131,6 +147,32 @@ func (s state) showBuildLogArchiveHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintln(writer, "</table>")
 	fmt.Fprintln(writer, "</body>")
+}
+
+func (s state) showBuildsHandler(w http.ResponseWriter,
+	req *http.Request, showGood bool, showError bool) {
+	logType := "none"
+	if showGood && !showError {
+		logType = "good"
+	} else if showGood && showError {
+		logType = "all"
+	} else if showError {
+		logType = "bad"
+	}
+	buildInfos := s.buildLogReporter.GetBuildInfos(showGood, showError)
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	fmt.Fprintf(writer, "<title>build log archive (%s)</title>", logType)
+	showBuildInfos(writer, buildInfos, showError)
+}
+
+func (s state) showGoodBuildsHandler(w http.ResponseWriter, req *http.Request) {
+	s.showBuildsHandler(w, req, true, false)
+}
+
+func (s state) showErrorBuildsHandler(w http.ResponseWriter,
+	req *http.Request) {
+	s.showBuildsHandler(w, req, false, true)
 }
 
 func (s state) showStreamAllBuildsHandler(w http.ResponseWriter,

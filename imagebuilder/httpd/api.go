@@ -56,9 +56,12 @@ func StartServerWithOptionsAndParams(options Options, params Params) error {
 	html.HandleFunc("/showImageStreams", myState.showImageStreamsHandler)
 	html.HandleFunc("/showLastBuildLog", myState.showLastBuildLogHandler)
 	if myState.buildLogReporter != nil {
+		html.HandleFunc("/showAllBuilds", myState.showAllBuildsHandler)
 		html.HandleFunc("/showBuildLog", myState.showBuildLogHandler)
 		html.HandleFunc("/showBuildLogArchive",
 			myState.showBuildLogArchiveHandler)
+		html.HandleFunc("/showGoodBuilds", myState.showGoodBuildsHandler)
+		html.HandleFunc("/showErrorBuilds", myState.showErrorBuildsHandler)
 		html.HandleFunc("/showStreamAllBuilds",
 			myState.showStreamAllBuildsHandler)
 		html.HandleFunc("/showStreamGoodBuilds",
