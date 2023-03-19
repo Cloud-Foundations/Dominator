@@ -63,12 +63,16 @@ func (w *logWriterType) delayedFlush() {
 func (w *logWriterType) flush() error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
+	flushPending := w.flushPending
 	w.flushPending = false
 	if w.err != nil {
 		return w.err
 	}
-	w.err = w.conn.Flush()
-	return w.err
+	if flushPending {
+		w.err = w.conn.Flush()
+		return w.err
+	}
+	return nil
 }
 
 func (w *logWriterType) lockAndScheduleFlush() {
