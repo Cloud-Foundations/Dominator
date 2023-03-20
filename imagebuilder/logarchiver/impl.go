@@ -73,7 +73,11 @@ func newBuildLogArchive(options BuildLogArchiveOptions,
 	return archive, nil
 }
 
-func (a *buildLogArchiver) addEntry(image *imageType, name string) {
+// addEntry adds the image to the image stream and optionally adds it to the
+// back of the ageList.
+// No lock is taken.
+func (a *buildLogArchiver) addEntry(image *imageType, name string,
+	addToAgeList bool) {
 	streamName := filepath.Dir(name)
 	imageStream := a.imageStreams[streamName]
 	if imageStream == nil {
@@ -86,14 +90,20 @@ func (a *buildLogArchiver) addEntry(image *imageType, name string) {
 	image.imageStream = imageStream
 	imageStream.images[image.name] = image
 	a.totalSize += a.imageTotalSize(image)
+	if addToAgeList {
+		image.ageListElement = a.ageList.PushBack(image)
+	}
 }
 
+// addEntryWithCheck checks to see if there is sufficient space (deleting old
+// entries if needed) and then adds the image to the image stream and the back
+// of the ageList.
 func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	name string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	for a.imageTotalSize(image)+a.totalSize < a.options.Quota {
-		a.addEntry(image, name)
+		a.addEntry(image, name, true)
 		return nil
 	}
 	targetSize := a.options.Quota * 95 / 100
@@ -112,7 +122,7 @@ func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	}
 	a.params.Logger.Printf("Deleted %d archived build logs consuming %s\n",
 		deletedLogs, format.FormatBytes(origTotalSize-a.totalSize))
-	a.addEntry(image, name)
+	a.addEntry(image, name, true)
 	return nil
 }
 
@@ -231,7 +241,7 @@ func (a *buildLogArchiver) load(dirname string) error {
 	} else {
 		image := a.makeEntry(buildInfo, uint64(fi.Size()), fi.ModTime(),
 			dirname)
-		a.addEntry(image, dirname)
+		a.addEntry(image, dirname, false)
 	}
 	return nil
 }
