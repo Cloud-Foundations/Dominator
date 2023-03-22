@@ -60,6 +60,7 @@ type DeleteUnreferencedObjectsRequest struct {
 type DeleteUnreferencedObjectsResponse struct{}
 
 type FindLatestImageRequest struct {
+	BuildCommitId        string // Optional.
 	DirectoryName        string
 	IgnoreExpiringImages bool
 }
