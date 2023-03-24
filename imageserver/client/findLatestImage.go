@@ -6,12 +6,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func findLatestImage(client *srpc.Client, dirname string,
-	ignoreExpiring bool) (string, error) {
-	request := imageserver.FindLatestImageRequest{
-		DirectoryName:        dirname,
-		IgnoreExpiringImages: ignoreExpiring,
-	}
+func findLatestImage(client *srpc.Client,
+	request imageserver.FindLatestImageRequest) (string, error) {
 	var reply imageserver.FindLatestImageResponse
 	err := client.RequestReply("ImageServer.FindLatestImage", request, &reply)
 	if err == nil {
