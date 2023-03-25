@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	img_proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	subclient "github.com/Cloud-Foundations/Dominator/sub/client"
 )
@@ -488,7 +489,12 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 
 func getLatestImage(client *srpc.Client, name string,
 	ignoreFilesystem bool) (*image.Image, error) {
-	imageName, err := imgclient.FindLatestImage(client, name, *ignoreExpiring)
+	imageName, err := imgclient.FindLatestImageReq(client,
+		img_proto.FindLatestImageRequest{
+			BuildCommitId:        *buildCommitId,
+			DirectoryName:        name,
+			IgnoreExpiringImages: *ignoreExpiring,
+		})
 	if err != nil {
 		return nil, err
 	}

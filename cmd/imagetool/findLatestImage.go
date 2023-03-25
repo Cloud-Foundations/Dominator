@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func findLatestImageSubcommand(args []string, logger log.DebugLogger) error {
@@ -17,8 +18,12 @@ func findLatestImageSubcommand(args []string, logger log.DebugLogger) error {
 
 func findLatestImage(dirname string) error {
 	imageSClient, _ := getClients()
-	imageName, err := client.FindLatestImage(imageSClient, dirname,
-		*ignoreExpiring)
+	imageName, err := client.FindLatestImageReq(imageSClient,
+		proto.FindLatestImageRequest{
+			BuildCommitId:        *buildCommitId,
+			DirectoryName:        dirname,
+			IgnoreExpiringImages: *ignoreExpiring,
+		})
 	if err != nil {
 		return err
 	}
