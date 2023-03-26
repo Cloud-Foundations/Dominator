@@ -3373,51 +3373,6 @@ func (vm *vmInfoType) probeHealthAgent(cancel <-chan struct{}) {
 	}
 }
 
-func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
-	io.Copy(ioutil.Discard, monitorSock) // Read all and drop.
-	vm.mutex.Lock()
-	defer vm.mutex.Unlock()
-	close(vm.commandChannel)
-	vm.commandChannel = nil
-	switch vm.State {
-	case proto.StateStarting:
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-		return
-	case proto.StateRunning, proto.StateDebugging:
-		vm.setState(proto.StateCrashed)
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-		return
-	case proto.StateFailedToStart:
-		return
-	case proto.StateStopping:
-		vm.setState(proto.StateStopped)
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-	case proto.StateStopped:
-		return
-	case proto.StateDestroying:
-		vm.delete()
-		return
-	case proto.StateMigrating:
-		return
-	case proto.StateExporting:
-		return
-	case proto.StateCrashed:
-		vm.logger.Println("monitor socket closed on already crashed VM")
-		return
-	default:
-		vm.logger.Println("unknown state: " + vm.State.String())
-	}
-}
-
 func (vm *vmInfoType) rootLabel(debug bool) string {
 	ipAddr := vm.Address.IpAddress
 	var prefix string
