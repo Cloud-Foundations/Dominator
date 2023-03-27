@@ -662,6 +662,7 @@ type UpdateSubnetsResponse struct {
 type VmInfo struct {
 	Address            Address
 	ConsoleType        ConsoleType `json:",omitempty"`
+	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
