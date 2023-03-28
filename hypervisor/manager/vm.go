@@ -404,6 +404,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 			VmInfo: proto.VmInfo{
 				Address:            address,
 				ConsoleType:        req.ConsoleType,
+				DestroyOnPowerdown: req.DestroyOnPowerdown,
 				DestroyProtection:  req.DestroyProtection,
 				DisableVirtIO:      req.DisableVirtIO,
 				Hostname:           req.Hostname,
