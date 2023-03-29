@@ -23,7 +23,9 @@ import (
 var (
 	adjacentVM = flag.String("adjacentVM", "",
 		"IP address of VM adjacent (same Hypervisor) to VM being created")
-	consoleType       hyper_proto.ConsoleType
+	consoleType        hyper_proto.ConsoleType
+	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
+		"If true, destroy VM if it powers down internally")
 	destroyProtection = flag.Bool("destroyProtection", false,
 		"If true, do not destroy running VM")
 	disableVirtIO = flag.Bool("disableVirtIO", false,
