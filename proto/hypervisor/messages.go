@@ -661,7 +661,9 @@ type UpdateSubnetsResponse struct {
 
 type VmInfo struct {
 	Address            Address
+	ChangedStateOn     time.Time   `json:",omitempty"`
 	ConsoleType        ConsoleType `json:",omitempty"`
+	CreatedOn          time.Time   `json:",omitempty"`
 	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
@@ -674,10 +676,10 @@ type VmInfo struct {
 	OwnerUsers         []string `json:",omitempty"`
 	SpreadVolumes      bool     `json:",omitempty"`
 	State              State
-	Tags               tags.Tags `json:",omitempty"`
 	SecondaryAddresses []Address `json:",omitempty"`
 	SecondarySubnetIDs []string  `json:",omitempty"`
 	SubnetId           string    `json:",omitempty"`
+	Tags               tags.Tags `json:",omitempty"`
 	Uncommitted        bool      `json:",omitempty"`
 	VirtualCPUs        uint      `json:",omitempty"`
 	Volumes            []Volume  `json:",omitempty"`
