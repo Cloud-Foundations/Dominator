@@ -23,9 +23,17 @@ func Duration(duration time.Duration) string {
 		if duration < day {
 			return duration.String()
 		}
+		week := day * 7
+		if duration < week {
+			days := duration / day
+			duration %= day
+			return fmt.Sprintf("%dd%s", days, duration)
+		}
+		weeks := duration / week
+		duration %= week
 		days := duration / day
 		duration %= day
-		return fmt.Sprintf("%dd%s", days, duration)
+		return fmt.Sprintf("%dw%dd%s", weeks, days, duration)
 	}
 }
 

@@ -1,24 +1,24 @@
 all:
-	@cd $(GOPATH)/src; go install github.com/Cloud-Foundations/Dominator/cmd/*
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; go install ./cmd/*
 	@cd c; make
 
 build-darwin:
-	@cd $(GOPATH)/src; (GOOS=darwin go build github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=darwin go build ./cmd/*)
 
 build-linux:
-	@cd $(GOPATH)/src; (GOOS=linux go build github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=linux go build ./cmd/*)
 
 build-windows:
-	@cd $(GOPATH)/src; (GOOS=windows go build github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=windows go build ./cmd/*)
 
 install-darwin:
-	@cd $(GOPATH)/src; (GOOS=darwin go install github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=darwin go install ./cmd/*)
 
 install-linux:
-	@cd $(GOPATH)/src; (GOOS=linux go install github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=linux go install ./cmd/*)
 
 install-windows:
-	@cd $(GOPATH)/src; (GOOS=windows go install github.com/Cloud-Foundations/Dominator/cmd/*)
+	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=windows go install ./cmd/*)
 
 dominator.tarball:
 	@./scripts/make-tarball dominator -C $(ETCDIR) ssl
@@ -51,7 +51,9 @@ mdbd.tarball:
 
 subd.tarball:
 	@cd c; make
-	@./scripts/make-tarball subd -C $(GOPATH) bin/run-in-mntns \
+	@./scripts/make-tarball subd           \
+		-C cmd/subd  set-owner         \
+		-C $(GOPATH) bin/run-in-mntns  \
 		-C $(ETCDIR) ssl
 
 

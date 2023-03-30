@@ -13,7 +13,7 @@ func updateNetworkConfigurationSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := updateNetworkConfiguration(logger)
 	if err != nil {
-		return fmt.Errorf("Error updating network configuration: %s", err)
+		return fmt.Errorf("error updating network configuration: %s", err)
 	}
 	return nil
 }
@@ -23,7 +23,7 @@ func updateNetworkConfiguration(logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	info, err := getInfoForhost("")
+	info, err := getInfoForhost("", logger)
 	if err != nil {
 		return err
 	}

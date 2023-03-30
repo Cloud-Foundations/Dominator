@@ -59,6 +59,13 @@ func GetBridgeVlanId(bridgeIf string) (int, error) {
 	return getBridgeVlanId(bridgeIf)
 }
 
+// ListBridgePorts will return a list of names of interfaces plugged into the
+// specified bridge interface. An error is returned if the specified interface
+// does not exist or is not a bridge.
+func ListBridgePorts(bridge string) ([]string, error) {
+	return listBridgePorts(bridge)
+}
+
 // ListBridges will return a list of EtherNet (layer 2) bridges.
 func ListBridges() ([]net.Interface, error) {
 	bl, _, err := listBroadcastInterfaces(InterfaceTypeBridge, nulllogger.New())

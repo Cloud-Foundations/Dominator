@@ -135,7 +135,7 @@ func importVirshVmSubcommand(args []string, logger log.DebugLogger) error {
 		})
 	}
 	if err := importVirshVm(macAddr, domainName, sAddrs, logger); err != nil {
-		return fmt.Errorf("Error importing VM: %s", err)
+		return fmt.Errorf("error importing VM: %s", err)
 	}
 	return nil
 }

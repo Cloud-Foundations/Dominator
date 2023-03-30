@@ -26,6 +26,10 @@ var (
 		"If true, do not run any triggers. For debugging only")
 )
 
+type flusher interface {
+	Flush() error
+}
+
 func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 	reply *sub.UpdateResponse) error {
 	if err := t.getUpdateLock(); err != nil {
@@ -47,7 +51,7 @@ func (t *rpcType) getUpdateLock() error {
 	}
 	fs := t.fileSystemHistory.FileSystem()
 	if fs == nil {
-		return errors.New("No file-system history yet")
+		return errors.New("no file-system history yet")
 	}
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
@@ -138,37 +142,30 @@ func (t *rpcType) runTriggers(triggers []*triggers.Trigger, action string,
 }
 
 // Returns true if there were failures.
-func runTriggers(triggers []*triggers.Trigger, action string,
+func runTriggers(triggerList []*triggers.Trigger, action string,
 	logger log.Logger) bool {
-	doReboot := false
 	hadFailures := false
 	needRestart := false
 	logPrefix := ""
+	var rebootingTriggers []*triggers.Trigger
 	if *disableTriggers {
 		logPrefix = "Disabled: "
 	}
-	for _, trigger := range triggers {
+	for _, trigger := range triggerList {
 		if trigger.DoReboot {
-			doReboot = true
-			break
+			rebootingTriggers = append(rebootingTriggers, trigger)
 		}
 	}
-	if doReboot {
+	if len(rebootingTriggers) > 0 {
 		if action == "start" {
-			logger.Printf("%sRebooting\n", logPrefix)
-			if *disableTriggers {
-				return hadFailures
-			}
-			if !runCommand(logger, "reboot") {
-				hadFailures = true
-			}
+			triggerList = rebootingTriggers
 		} else {
 			logger.Printf("%sWill reboot on start, skipping %s actions\n",
 				logPrefix, action)
+			return hadFailures
 		}
-		return hadFailures
 	}
-	for _, trigger := range triggers {
+	for _, trigger := range triggerList {
 		if trigger.Service == "subd" {
 			// Never kill myself, just restart. Must do it last, so that other
 			// triggers are started.
@@ -184,10 +181,28 @@ func runTriggers(triggers []*triggers.Trigger, action string,
 		}
 		if !runCommand(logger, "service", trigger.Service, action) {
 			hadFailures = true
-			if trigger.DoReboot && action == "start" {
-				doReboot = false
-			}
 		}
+	}
+	if len(rebootingTriggers) > 0 {
+		if hadFailures {
+			logger.Printf("%sSome triggers failed, will not reboot\n",
+				logPrefix)
+			return hadFailures
+		}
+		logger.Printf("%sRebooting\n", logPrefix)
+		if *disableTriggers {
+			return hadFailures
+		}
+		if logger, ok := logger.(flusher); ok {
+			logger.Flush()
+		}
+		time.Sleep(time.Second)
+		if runCommand(logger, "reboot") {
+			return false
+		}
+		logger.Printf("%sReboot failed, trying harder\n", logPrefix)
+		time.Sleep(time.Second)
+		return !runCommand(logger, "reboot", "-f")
 	}
 	if needRestart {
 		logger.Printf("%sAction: service subd restart\n", logPrefix)

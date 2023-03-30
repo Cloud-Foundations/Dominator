@@ -9,7 +9,7 @@ import (
 
 func getVmVolumeSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getVmVolume(args[0], logger); err != nil {
-		return fmt.Errorf("Error getting VM volume: %s", err)
+		return fmt.Errorf("error getting VM volume: %s", err)
 	}
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 
 func showImageFilterSubcommand(args []string, logger log.DebugLogger) error {
 	if err := showImageFilter(args[0]); err != nil {
-		return fmt.Errorf("Error showing image filter: %s", err)
+		return fmt.Errorf("error showing image filter: %s", err)
 	}
 	return nil
 }

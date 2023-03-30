@@ -12,7 +12,7 @@ import (
 func discardVmOldUserDataSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := discardVmOldUserData(args[0], logger); err != nil {
-		return fmt.Errorf("Error discarding VM old user data: %s", err)
+		return fmt.Errorf("error discarding VM old user data: %s", err)
 	}
 	return nil
 }

@@ -18,10 +18,10 @@ const filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP
 func getObjectSubcommand(args []string, logger log.DebugLogger) error {
 	hash, err := objectcache.FilenameToHash(args[0])
 	if err != nil {
-		return fmt.Errorf("Error parsing hash: %s", err)
+		return fmt.Errorf("error parsing hash: %s", err)
 	}
 	if err = getObject(getObjectServer(), hash, args[1]); err != nil {
-		return fmt.Errorf("Error getting object: %s", err)
+		return fmt.Errorf("error getting object: %s", err)
 	}
 	return nil
 }

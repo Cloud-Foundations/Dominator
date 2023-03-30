@@ -8,6 +8,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func (m *Manager) writeHtml(writer io.Writer) {
@@ -24,14 +25,8 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	numSubnets := len(m.subnets)
 	numFreeAddresses := len(m.addressPool.Free)
 	numRegisteredAddresses := len(m.addressPool.Registered)
-	ownerGroups := make([]string, 0, len(m.ownerGroups))
-	for group := range m.ownerGroups {
-		ownerGroups = append(ownerGroups, group)
-	}
-	ownerUsers := make([]string, 0, len(m.ownerUsers))
-	for user := range m.ownerUsers {
-		ownerUsers = append(ownerUsers, user)
-	}
+	ownerGroups := stringutil.ConvertMapKeysToList(m.ownerGroups, false)
+	ownerUsers := stringutil.ConvertMapKeysToList(m.ownerUsers, false)
 	m.mutex.RUnlock()
 	fmt.Fprintf(writer,
 		"Available addresses: <a href=\"listAvailableAddresses\">%d</a><br>\n",

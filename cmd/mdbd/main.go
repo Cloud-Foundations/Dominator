@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -31,6 +32,8 @@ var (
 		"Port number to allocate and listen on for HTTP/RPC")
 	sourcesFile = flag.String("sourcesFile", "/var/lib/mdbd/mdb.sources.list",
 		"Name of file list of driver url pairs")
+	stateDir = flag.String("stateDir", "/var/lib/mdbd",
+		"Name of state directory")
 	pidfile = flag.String("pidfile", "", "Name of file to write my PID to")
 )
 
@@ -92,6 +95,14 @@ func printUsage() {
 		"    url: URL which yields lines. Each line contains:")
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
+	fmt.Fprintln(os.Stderr,
+		"  topology: url [dir]")
+	fmt.Fprintln(os.Stderr,
+		"    Load Topology")
+	fmt.Fprintln(os.Stderr,
+		"    url: directory or Git URL containing the Topology")
+	fmt.Fprintln(os.Stderr,
+		"    location: optional subdirectory containing the Topology")
 }
 
 type driver struct {
@@ -110,6 +121,7 @@ var drivers = []driver{
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
 	{"text", 1, 1, newTextGenerator},
+	{"topology", 1, 2, newTopologyGenerator},
 }
 
 func gracefulCleanup() {
@@ -161,12 +173,14 @@ func main() {
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
+	srpc.SetDefaultLogger(logger)
 	// We have to have inputs.
 	if *sourcesFile == "" {
 		printUsage()
 		os.Exit(2)
 	}
-	setupserver.SetupTlsClientOnly()
+	params := setupserver.Params{ClientOnly: true, Logger: logger}
+	setupserver.SetupTlsWithParams(params)
 	handleSignals(logger)
 	readerChannel := fsutil.WatchFile(*sourcesFile, logger)
 	file, err := os.Open(*sourcesFile)

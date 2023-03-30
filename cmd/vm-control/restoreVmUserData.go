@@ -11,7 +11,7 @@ import (
 
 func restoreVmUserDataSubcommand(args []string, logger log.DebugLogger) error {
 	if err := restoreVmUserData(args[0], logger); err != nil {
-		return fmt.Errorf("Error restoring VM user data: %s", err)
+		return fmt.Errorf("error restoring VM user data: %s", err)
 	}
 	return nil
 }

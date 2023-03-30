@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	objclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/rsync"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
@@ -203,6 +205,22 @@ func maybeDrainUserData(conn *srpc.Conn, request proto.CreateVmRequest) error {
 	return nil
 }
 
+// numSpecifiedVirtualCPUs calculates the number of virtual CPUs required for
+// the specified request. The request must be correct (i.e. sufficient vCPUs).
+func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
+	nCpus := milliCPUs / 1000
+	if nCpus < 1 {
+		nCpus = 1
+	}
+	if nCpus*1000 < milliCPUs {
+		nCpus++
+	}
+	if nCpus < vCPUs {
+		nCpus = vCPUs
+	}
+	return nCpus
+}
+
 func readData(firstByte byte, moreBytes <-chan byte) []byte {
 	buffer := make([]byte, 1, len(moreBytes)+1)
 	buffer[0] = firstByte
@@ -314,6 +332,10 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if req.MilliCPUs < 1 {
 		return nil, errors.New("no CPUs specified")
 	}
+	minimumCPUs := req.MilliCPUs / 1000
+	if req.VirtualCPUs > 0 && req.VirtualCPUs < minimumCPUs {
+		return nil, fmt.Errorf("VirtualCPUs must be at least %d", minimumCPUs)
+	}
 	subnetIDs := map[string]struct{}{req.SubnetId: {}}
 	for _, subnetId := range req.SecondarySubnetIDs {
 		if subnetId == "" {
@@ -387,6 +409,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				State:              proto.StateStarting,
 				SubnetId:           subnetId,
 				Tags:               req.Tags,
+				VirtualCPUs:        req.VirtualCPUs,
 			},
 		},
 		manager:          m,
@@ -410,18 +433,10 @@ func (m *Manager) becomePrimaryVmOwner(ipAddr net.IP,
 	if vm.OwnerUsers[0] == authInfo.Username {
 		return errors.New("you already are the primary owner")
 	}
-	ownerUsers := make([]string, 1, len(vm.OwnerUsers[0]))
+	ownerUsers := make([]string, 1, len(vm.OwnerUsers))
 	ownerUsers[0] = authInfo.Username
-	for _, user := range vm.OwnerUsers {
-		if user != authInfo.Username {
-			ownerUsers = append(ownerUsers, user)
-		}
-	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, user := range ownerUsers {
-		vm.ownerUsers[user] = struct{}{}
-	}
+	ownerUsers = append(ownerUsers, vm.OwnerUsers...)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -445,35 +460,45 @@ func (m *Manager) changeVmConsoleType(ipAddr net.IP,
 }
 
 // changeVmCPUs returns true if the number of CPUs was changed.
-func (m *Manager) changeVmCPUs(vm *vmInfoType, milliCPUs uint) (bool, error) {
-	if milliCPUs == vm.MilliCPUs {
+func (m *Manager) changeVmCPUs(vm *vmInfoType, req proto.ChangeVmSizeRequest) (
+	bool, error) {
+	if req.MilliCPUs < 1 {
+		req.MilliCPUs = vm.MilliCPUs
+	}
+	if req.VirtualCPUs < 1 {
+		req.VirtualCPUs = vm.VirtualCPUs
+	}
+	minimumCPUs := numSpecifiedVirtualCPUs(req.MilliCPUs, 0)
+	if req.VirtualCPUs > 0 && req.VirtualCPUs < minimumCPUs {
+		return false, fmt.Errorf("VirtualCPUs must be at least %d", minimumCPUs)
+	}
+	if req.MilliCPUs == vm.MilliCPUs && req.VirtualCPUs == vm.VirtualCPUs {
 		return false, nil
 	}
-	changed := false
-	if milliCPUs < vm.MilliCPUs {
-		if vm.State != proto.StateStopped &&
-			milliCPUs/1000 != vm.MilliCPUs/1000 {
-			return false, errors.New("VM is not stopped")
-		}
-		vm.MilliCPUs = milliCPUs
-		changed = true
-	} else if milliCPUs > vm.MilliCPUs {
-		if vm.State != proto.StateStopped &&
-			milliCPUs/1000 != vm.MilliCPUs/1000 {
-			return false, errors.New("VM is not stopped")
-		}
-		m.mutex.Lock()
-		err := m.checkSufficientCPUWithLock(milliCPUs - vm.MilliCPUs)
-		if err == nil {
-			vm.MilliCPUs = milliCPUs
-			changed = true
-		}
-		m.mutex.Unlock()
-		if err != nil {
-			return changed, err
-		}
+	oldCPUs := numSpecifiedVirtualCPUs(vm.MilliCPUs, vm.VirtualCPUs)
+	newCPUs := numSpecifiedVirtualCPUs(req.MilliCPUs, req.VirtualCPUs)
+	if oldCPUs == newCPUs {
+		vm.MilliCPUs = req.MilliCPUs
+		vm.VirtualCPUs = req.VirtualCPUs
+		return true, nil
 	}
-	return changed, nil
+	if vm.State != proto.StateStopped {
+		return false, errors.New("VM is not stopped")
+	}
+	if newCPUs <= oldCPUs {
+		vm.MilliCPUs = req.MilliCPUs
+		vm.VirtualCPUs = req.VirtualCPUs
+		return true, nil
+	}
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	err := m.checkSufficientCPUWithLock(req.MilliCPUs - vm.MilliCPUs)
+	if err != nil {
+		return false, err
+	}
+	vm.MilliCPUs = req.MilliCPUs
+	vm.VirtualCPUs = req.VirtualCPUs
+	return true, nil
 }
 
 func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
@@ -525,35 +550,29 @@ func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
 	defer vm.mutex.Unlock()
 	ownerUsers := make([]string, 1, len(extraUsers)+1)
 	ownerUsers[0] = vm.OwnerUsers[0]
-	for _, user := range extraUsers {
-		ownerUsers = append(ownerUsers, user)
-	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, user := range ownerUsers {
-		vm.ownerUsers[user] = struct{}{}
-	}
+	ownerUsers = append(ownerUsers, extraUsers...)
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.writeAndSendInfo()
 	return nil
 }
 
-func (m *Manager) changeVmSize(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	memoryInMiB uint64, milliCPUs uint) error {
-	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+func (m *Manager) changeVmSize(authInfo *srpc.AuthInformation,
+	req proto.ChangeVmSizeRequest) error {
+	vm, err := m.getVmLockAndAuth(req.IpAddress, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
 	defer vm.mutex.Unlock()
 	changed := false
-	if memoryInMiB > 0 {
-		if _changed, _err := m.changeVmMemory(vm, memoryInMiB); _err != nil {
-			err = _err
+	if req.MemoryInMiB > 0 {
+		if _changed, e := m.changeVmMemory(vm, req.MemoryInMiB); e != nil {
+			err = e
 		} else if _changed {
 			changed = true
 		}
 	}
-	if milliCPUs > 0 && err == nil {
-		if _changed, _err := m.changeVmCPUs(vm, milliCPUs); _err != nil {
+	if (req.MilliCPUs > 0 || req.VirtualCPUs > 0) && err == nil {
+		if _changed, _err := m.changeVmCPUs(vm, req); _err != nil {
 			err = _err
 		} else if _changed {
 			changed = true
@@ -714,11 +733,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, username := range ownerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.Volumes = vmInfo.Volumes
 	if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
 		return err
@@ -740,10 +755,6 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 		vm.cleanup()
 	}()
-	vm.ownerUsers = make(map[string]struct{}, len(vm.OwnerUsers))
-	for _, username := range vm.OwnerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		return err
 	}
@@ -836,11 +847,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
 	memoryError := tryAllocateMemory(request.MemoryInMiB)
-	vm.OwnerUsers = ownerUsers
-	vm.ownerUsers = make(map[string]struct{}, len(ownerUsers))
-	for _, username := range ownerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
@@ -869,8 +876,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err != nil {
 			return sendError(conn, err)
 		}
-		err = sendUpdate(conn, "unpacking image: "+imageName)
-		if err != nil {
+		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
@@ -884,7 +890,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err != nil {
 			return sendError(conn, err)
 		}
-		m.Logger.Debugln(1, "finished writing volume")
 		if fi, err := os.Stat(vm.VolumeLocations[0].Filename); err != nil {
 			return sendError(conn, err)
 		} else {
@@ -1346,10 +1351,7 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	}
 	request.VmInfo.OwnerUsers = []string{authInfo.Username}
 	request.VmInfo.Uncommitted = true
-	volumeDirectories := make(map[string]struct{}, len(m.volumeDirectories))
-	for _, dirname := range m.volumeDirectories {
-		volumeDirectories[dirname] = struct{}{}
-	}
+	volumeDirectories := stringutil.ConvertListToMap(m.volumeDirectories, false)
 	volumes := make([]proto.Volume, 0, len(request.VolumeFilenames))
 	for index, filename := range request.VolumeFilenames {
 		dirname := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
@@ -1565,10 +1567,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 			hyperclient.StartVm(hypervisor, request.IpAddress, accessToken)
 		}
 	}()
-	vm.ownerUsers = make(map[string]struct{}, len(vm.OwnerUsers))
-	for _, username := range vm.OwnerUsers {
-		vm.ownerUsers[username] = struct{}{}
-	}
+	vm.ownerUsers = stringutil.ConvertListToMap(vm.OwnerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
 		return err
 	}
@@ -2623,6 +2622,7 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	client *srpc.Client, fs *filesystem.FileSystem,
 	writeRawOptions util.WriteRawOptions, skipBootloader bool) error {
+	startTime := time.Now()
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
 		objectClient := objclient.AttachObjectClient(client)
@@ -2645,9 +2645,15 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 		writeRawOptions.InstallBootloader = true
 	}
 	writeRawOptions.WriteFstab = true
-	return util.WriteRawWithOptions(fs, objectsGetter,
+	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, privateFilePerms, mbr.TABLE_TYPE_MSDOS,
 		writeRawOptions, m.Logger)
+	if err != nil {
+		return err
+	}
+	m.Logger.Debugf(1, "Wrote root volume in %s\n",
+		format.Duration(time.Since(startTime)))
+	return nil
 }
 
 func (vm *vmInfoType) autoDestroy() {
@@ -3174,12 +3180,9 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	if err := checkAvailableMemory(vm.MemoryInMiB); err != nil {
 		return err
 	}
-	nCpus := vm.MilliCPUs / 1000
-	if nCpus < 1 {
-		nCpus = 1
-	}
-	if nCpus*1000 < vm.MilliCPUs {
-		nCpus++
+	nCpus := numSpecifiedVirtualCPUs(vm.MilliCPUs, vm.VirtualCPUs)
+	if nCpus > uint(runtime.NumCPU()) && runtime.NumCPU() > 0 {
+		nCpus = uint(runtime.NumCPU())
 	}
 	bridges, netOptions, err := vm.getBridgesAndOptions(haveManagerLock)
 	if err != nil {
@@ -3255,6 +3258,14 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
 				options)
+	}
+	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
+		return err
+	} else if cid > 2 {
+		cmd.Args = append(cmd.Args,
+			"-device",
+			fmt.Sprintf("vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=%d",
+				cid))
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.

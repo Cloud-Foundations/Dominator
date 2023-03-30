@@ -9,12 +9,15 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/scanner"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
 type rpcType struct {
+	subConfiguration          proto.Configuration
 	scannerConfiguration      *scanner.Configuration
 	fileSystemHistory         *scanner.FileSystemHistory
 	objectsDir                string
@@ -28,6 +31,7 @@ type rpcType struct {
 	workdirGoroutine          *goroutine.Goroutine
 	logger                    log.Logger
 	*serverutil.PerUserMethodLimiter
+	ownerUsers                   map[string]struct{}
 	rwLock                       sync.RWMutex
 	getFilesLock                 sync.Mutex
 	fetchInProgress              bool // Fetch() & Update() mutually exclusive.
@@ -51,7 +55,8 @@ type HtmlWriter struct {
 	lastSuccessfulImageName *string
 }
 
-func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
+func Setup(subConfiguration proto.Configuration,
+	scannerConfiguration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 	objectsDirname string, rootDirname string,
 	netReaderContext *rateio.ReaderContext,
 	netbenchFname string, oldTriggersFname string,
@@ -59,7 +64,8 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 	rescanObjectCacheFunction func(), workdirGoroutine *goroutine.Goroutine,
 	logger log.Logger) *HtmlWriter {
 	rpcObj := &rpcType{
-		scannerConfiguration:      configuration,
+		subConfiguration:          subConfiguration,
+		scannerConfiguration:      scannerConfiguration,
 		fileSystemHistory:         fsh,
 		objectsDir:                objectsDirname,
 		rootDir:                   rootDirname,
@@ -76,6 +82,8 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 				"Poll": 1,
 			}),
 	}
+	rpcObj.ownerUsers = stringutil.ConvertListToMap(subConfiguration.OwnerUsers,
+		false)
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
@@ -83,7 +91,7 @@ func Setup(configuration *scanner.Configuration, fsh *scanner.FileSystemHistory,
 			}})
 	addObjectsHandler := &addObjectsHandlerType{
 		objectsDir:           objectsDirname,
-		scannerConfiguration: configuration,
+		scannerConfiguration: scannerConfiguration,
 		logger:               logger,
 		rpcObj:               rpcObj,
 	}

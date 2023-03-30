@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"io"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
@@ -15,6 +17,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
+
+// Private interface types.
 
 type buildLogger interface {
 	Bytes() []byte
@@ -29,6 +33,10 @@ type imageBuilder interface {
 	build(b *Builder, client *srpc.Client, request proto.BuildImageRequest,
 		buildLog buildLogger) (*image.Image, error)
 }
+
+// Other private types.
+
+type argList []string
 
 type bootstrapStream struct {
 	builder          *Builder
@@ -50,6 +58,48 @@ type buildResultType struct {
 	error      error
 }
 
+type currentBuildInfo struct {
+	buffer    *bytes.Buffer
+	startedAt time.Time
+}
+
+type dependencyDataType struct {
+	fetchLog           []byte
+	generatedAt        time.Time
+	streamToSource     map[string]string // K: stream name, V: source stream.
+	unbuildableSources map[string]struct{}
+}
+
+type imageStreamsConfigurationType struct {
+	Streams map[string]*imageStreamType `json:",omitempty"`
+}
+
+type imageStreamType struct {
+	builder           *Builder
+	builderUsers      map[string]struct{}
+	name              string
+	BuilderGroups     []string
+	BuilderUsers      []string
+	ManifestUrl       string
+	ManifestDirectory string
+	Variables         map[string]string
+}
+
+type inodeData struct {
+	ctime syscall.Timespec
+	hash  hash.Hash
+	size  uint64
+}
+
+type listCommandType struct {
+	ArgList        argList
+	SizeMultiplier uint64
+}
+
+type manifestConfigType struct {
+	SourceImage string
+	*filter.Filter
+}
 type masterConfigurationType struct {
 	BindMounts                []string                    `json:",omitempty"`
 	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
@@ -59,33 +109,16 @@ type masterConfigurationType struct {
 	PackagerTypes             map[string]packagerType     `json:",omitempty"`
 }
 
-type manifestConfigType struct {
-	SourceImage string
-	*filter.Filter
+// manifestLocationType contains the expanded location of a manifest. These
+// data may include secrets (i.e. username and password).
+type manifestLocationType struct {
+	directory string
+	url       string
 }
 
 type manifestType struct {
 	filter          *filter.Filter
 	sourceImageInfo *sourceImageInfoType
-}
-
-type imageStreamType struct {
-	builder           *Builder
-	name              string
-	BuilderGroups     []string
-	ManifestUrl       string
-	ManifestDirectory string
-}
-
-type imageStreamsConfigurationType struct {
-	Streams map[string]*imageStreamType `json:",omitempty"`
-}
-
-type argList []string
-
-type listCommandType struct {
-	ArgList        argList
-	SizeMultiplier uint64
 }
 
 type packagerType struct {
@@ -101,14 +134,31 @@ type packagerType struct {
 type sourceImageInfoType struct {
 	computedFiles []util.ComputedFile
 	filter        *filter.Filter
+	imageName     string
+	treeCache     *treeCache
 	triggers      *triggers.Triggers
+}
+
+type testResultType struct {
+	buffer   chan byte
+	duration time.Duration
+	err      error
+	prog     string
+}
+
+type treeCache struct {
+	hitBytes    uint64
+	inodeTable  map[uint64]inodeData
+	numHits     uint64
+	pathToInode map[string]uint64
 }
 
 type Builder struct {
 	bindMounts                []string
+	generateDependencyTrigger chan<- struct{}
 	stateDir                  string
 	imageServerAddress        string
-	logger                    log.Logger
+	logger                    log.DebugLogger
 	imageStreamsUrl           string
 	initialNamespace          string // For catching golang bugs.
 	streamsLock               sync.RWMutex
@@ -117,10 +167,14 @@ type Builder struct {
 	imageStreamsToAutoRebuild []string
 	slaveDriver               *slavedriver.SlaveDriver
 	buildResultsLock          sync.RWMutex
-	currentBuildLogs          map[string]*bytes.Buffer   // Key: stream name.
-	lastBuildResults          map[string]buildResultType // Key: stream name.
+	currentBuildInfos         map[string]*currentBuildInfo // Key: stream name.
+	lastBuildResults          map[string]buildResultType   // Key: stream name.
 	packagerTypes             map[string]packagerType
 	variables                 map[string]string
+	dependencyDataLock        sync.RWMutex
+	dependencyData            *dependencyDataType
+	dependencyDataAttempt     time.Time
+	dependencyDataError       error
 }
 
 func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
@@ -138,6 +192,11 @@ func (b *Builder) BuildImage(request proto.BuildImageRequest,
 
 func (b *Builder) GetCurrentBuildLog(streamName string) ([]byte, error) {
 	return b.getCurrentBuildLog(streamName)
+}
+
+func (b *Builder) GetDirectedGraph(request proto.GetDirectedGraphRequest) (
+	proto.GetDirectedGraphResult, error) {
+	return b.getDirectedGraph(request)
 }
 
 func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
@@ -182,7 +241,7 @@ func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(client, manifestDir, rootDir,
+	_, err := unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
 		bindMounts, true, nil, buildLog)
 	return err
 }

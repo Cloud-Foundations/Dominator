@@ -11,7 +11,7 @@ import (
 
 func deleteVmVolumeSubcommand(args []string, logger log.DebugLogger) error {
 	if err := deleteVmVolume(args[0], logger); err != nil {
-		return fmt.Errorf("Error deleting VM volume: %s", err)
+		return fmt.Errorf("error deleting VM volume: %s", err)
 	}
 	return nil
 }

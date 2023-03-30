@@ -11,3 +11,9 @@ func BuildImage(client *srpc.Client, request proto.BuildImageRequest,
 	response *proto.BuildImageResponse, logWriter io.Writer) error {
 	return buildImage(client, request, response, logWriter)
 }
+
+func GetDirectedGraph(client *srpc.Client,
+	request proto.GetDirectedGraphRequest) (
+	proto.GetDirectedGraphResult, error) {
+	return getDirectedGraph(client, request)
+}

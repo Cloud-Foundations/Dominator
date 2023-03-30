@@ -28,7 +28,7 @@ func (objSrv *ObjectServer) commitObject(hashVal hash.Hash) error {
 	}
 	if !fi.Mode().IsRegular() {
 		fsutil.ForceRemove(stashFilename)
-		return errors.New("Existing non-file: " + stashFilename)
+		return errors.New("existing non-file: " + stashFilename)
 	}
 	if err = os.MkdirAll(path.Dir(filename), syscall.S_IRWXU); err != nil {
 		return err

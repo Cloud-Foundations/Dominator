@@ -82,7 +82,7 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string) error {
 }
 
 func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdb.Mdb, error) {
 	var newMdb mdb.Mdb
 	g.mutex.Lock()
 	defer g.mutex.Unlock()

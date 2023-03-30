@@ -18,7 +18,7 @@ func netbootMachineSubcommand(args []string, logger log.DebugLogger) error {
 	}
 	err := netbootMachine(args[0], args[1], hostname, logger)
 	if err != nil {
-		return fmt.Errorf("Error netbooting machine: %s", err)
+		return fmt.Errorf("error netbooting machine: %s", err)
 	}
 	return nil
 }

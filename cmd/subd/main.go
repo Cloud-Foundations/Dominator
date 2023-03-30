@@ -26,6 +26,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/memstats"
 	"github.com/Cloud-Foundations/Dominator/lib/netspeed"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
@@ -276,7 +277,9 @@ func main() {
 	}
 	runtime.GOMAXPROCS(int(*maxThreads))
 	logger := serverlogger.New("")
-	if err := setupserver.SetupTls(); err != nil {
+	srpc.SetDefaultLogger(logger)
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		if *permitInsecureMode {
 			logger.Println(err)
 		} else {
@@ -352,12 +355,14 @@ func main() {
 		configuration.NetworkReaderContext = networkReaderContext
 		invalidateNextScanObjectCache := false
 		rpcdHtmlWriter :=
-			rpcd.Setup(&configuration, &fsh, objectsDir,
+			rpcd.Setup(configParams, &configuration, &fsh, objectsDir,
 				workingRootDir, networkReaderContext, netbenchFilename,
 				oldTriggersFilename, disableScanner,
 				func() {
 					invalidateNextScanObjectCache = true
-					fsh.UpdateObjectCacheOnly()
+					if err := fsh.UpdateObjectCacheOnly(); err != nil {
+						logger.Printf("Error updating object cache: %s\n", err)
+					}
 				},
 				workdirGoroutine, logger)
 		configMetricsDir, err := tricorder.RegisterDirectory("/config")
@@ -407,7 +412,12 @@ func main() {
 					fmt.Printf("Completed cycle: %d\n", iter)
 				}
 				if invalidateNextScanObjectCache {
-					fs.ScanObjectCache()
+					workdirGoroutine.Run(func() {
+						if err := fs.ScanObjectCache(); err != nil {
+							logger.Printf("Error scanning object cache: %s\n",
+								err)
+						}
+					})
 					invalidateNextScanObjectCache = false
 				}
 				fsh.Update(fs)

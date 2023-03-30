@@ -10,7 +10,7 @@ import (
 
 func destroyVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := destroyVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error destroying VM: %s", err)
+		return fmt.Errorf("error destroying VM: %s", err)
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
@@ -35,8 +36,8 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, "<body>")
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ = html.NewTableWriter(writer, true, "IP Addr", "MAC Addr",
-			"Name(tag)", "State", "RAM", "CPU", "Num Volumes", "Storage",
-			"Primary Owner")
+			"Name(tag)", "State", "RAM", "CPU", "vCPU", "Num Volumes",
+			"Storage", "Primary Owner")
 	}
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
@@ -54,6 +55,11 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			if vm.Uncommitted {
 				background = "yellow"
 			}
+			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,
+				vm.VirtualCPUs)))
+			if vm.VirtualCPUs < 1 {
+				vCPUs = `<font color="grey">` + vCPUs + `</font>`
+			}
 			tw.WriteRow("", background,
 				fmt.Sprintf("<a href=\"showVM?%s\">%s</a>", ipAddr, ipAddr),
 				vm.Address.MacAddress,
@@ -61,6 +67,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 				vm.State.String(),
 				format.FormatBytes(vm.MemoryInMiB<<20),
 				fmt.Sprintf("%g", float64(vm.MilliCPUs)*1e-3),
+				vCPUs,
 				numVolumesTableEntry(vm),
 				storageTotalTableEntry(vm),
 				vm.OwnerUsers[0],
@@ -72,6 +79,22 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, "</table>")
 		fmt.Fprintln(writer, "</body>")
 	}
+}
+
+// numSpecifiedVirtualCPUs calculates the number of virtual CPUs required for
+// the specified request. The request must be correct (i.e. sufficient vCPUs).
+func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
+	nCpus := milliCPUs / 1000
+	if nCpus < 1 {
+		nCpus = 1
+	}
+	if nCpus*1000 < milliCPUs {
+		nCpus++
+	}
+	if nCpus < vCPUs {
+		nCpus = vCPUs
+	}
+	return nCpus
 }
 
 func numVolumesTableEntry(vm proto.VmInfo) string {

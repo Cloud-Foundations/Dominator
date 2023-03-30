@@ -11,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	libtags "github.com/Cloud-Foundations/Dominator/lib/tags"
 )
@@ -137,6 +138,7 @@ func doMain() int {
 		return 2
 	}
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := setupclient.SetupTls(true); err != nil {
 		logger.Println(err)
 		return 1

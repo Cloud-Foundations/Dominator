@@ -18,7 +18,7 @@ type vmExporterVirsh struct{}
 
 func exportVirshVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := exportVirshVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error exporting VM: %s", err)
+		return fmt.Errorf("error exporting VM: %s", err)
 	}
 	return nil
 }

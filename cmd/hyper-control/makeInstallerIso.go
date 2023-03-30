@@ -31,7 +31,7 @@ const (
 func makeInstallerIsoSubcommand(args []string, logger log.DebugLogger) error {
 	err := makeInstallerIso(args[0], args[1], logger)
 	if err != nil {
-		return fmt.Errorf("Error making installer ISO: %s", err)
+		return fmt.Errorf("error making installer ISO: %s", err)
 	}
 	return nil
 }

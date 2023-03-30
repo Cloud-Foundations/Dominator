@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -59,14 +60,6 @@ func checkPoolLimits() error {
 			defaultAddressPoolOptions.maximumSize)
 	}
 	return nil
-}
-
-func stringSliceToSet(strings []string) map[string]struct{} {
-	set := make(map[string]struct{}, len(strings))
-	for _, entry := range strings {
-		set[entry] = struct{}{}
-	}
-	return set
 }
 
 func testInLocation(location, enclosingLocation string) bool {
@@ -239,7 +232,7 @@ func (m *Manager) updateHypervisor(h *hypervisorType,
 	h.mutex.Lock()
 	h.location = location
 	h.machine = machine
-	h.ownerUsers = stringSliceToSet(machine.OwnerUsers)
+	h.ownerUsers = stringutil.ConvertListToMap(machine.OwnerUsers, false)
 	subnets := h.subnets
 	for key, localVal := range h.localTags {
 		if machineVal, ok := h.machine.Tags[key]; ok && localVal == machineVal {
@@ -300,8 +293,9 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 				location:     location,
 				machine:      machine,
 				migratingVms: make(map[string]*vmInfoType),
-				ownerUsers:   stringSliceToSet(machine.OwnerUsers),
-				vms:          make(map[string]*vmInfoType),
+				ownerUsers: stringutil.ConvertListToMap(machine.OwnerUsers,
+					false),
+				vms: make(map[string]*vmInfoType),
 			}
 			m.hypervisors[machine.Hostname] = hypervisor
 			hypersToChange = append(hypersToChange, hypervisor)

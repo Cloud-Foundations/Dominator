@@ -35,7 +35,9 @@ var (
 		"Port number of image server")
 	maxSourceAge = flag.Duration("maxSourceAge", time.Hour,
 		"Maximum age of a source image before it is rebuilt")
-	rawSize flagutil.Size
+	rawSize      flagutil.Size
+	showFetchLog = flag.Bool("showFetchLog", false,
+		"If true, show fetch log when getting directed graph")
 
 	minimumExpiration = 5 * time.Minute
 )
@@ -63,6 +65,7 @@ var subcommands = []commands.Command{
 		buildRawFromManifestSubcommand},
 	{"build-tree-from-manifest", "manifestDir", 1, 1,
 		buildTreeFromManifestSubcommand},
+	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
 	{"process-manifest", "rootDir", 2, 2, processManifestSubcommand},
 }
 
@@ -113,6 +116,7 @@ func doMain() int {
 		return 2
 	}
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := setupclient.SetupTls(true); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

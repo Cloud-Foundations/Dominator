@@ -21,7 +21,7 @@ func showUpdateRequestSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClientRetry(logger)
 	defer srpcClient.Close()
 	if err := showUpdateRequest(srpcClient, args[0]); err != nil {
-		return fmt.Errorf("Error showing update: %s: %s", args[0], err)
+		return fmt.Errorf("error showing update: %s: %s", args[0], err)
 	}
 	return nil
 }

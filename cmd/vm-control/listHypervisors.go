@@ -12,7 +12,7 @@ import (
 
 func listHypervisorsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := listHypervisors(logger); err != nil {
-		return fmt.Errorf("Error listing Hypervisors: %s", err)
+		return fmt.Errorf("error listing Hypervisors: %s", err)
 	}
 	return nil
 }

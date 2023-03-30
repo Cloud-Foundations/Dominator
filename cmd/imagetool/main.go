@@ -220,6 +220,7 @@ func doMain() int {
 		return 2
 	}
 	logger = cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if *expiresIn > 0 && *expiresIn < minimumExpiration {
 		fmt.Fprintf(os.Stderr, "Minimum expiration: %s\n", minimumExpiration)
 		return 2

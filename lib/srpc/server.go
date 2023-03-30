@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/net"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
@@ -36,7 +36,7 @@ const (
 	methodTypeRequestReply
 )
 
-type builtinReceiver struct{}
+type builtinReceiver struct{} // NOTE: GrantMethod allows all access.
 
 type methodWrapper struct {
 	methodType                    int
@@ -139,10 +139,7 @@ func registerName(name string, rcvr interface{},
 	if err != nil {
 		return err
 	}
-	publicMethods := make(map[string]struct{}, len(options.PublicMethods))
-	for _, methodName := range options.PublicMethods {
-		publicMethods[methodName] = struct{}{}
-	}
+	publicMethods := stringutil.ConvertListToMap(options.PublicMethods, false)
 	for index := 0; index < typeOfReceiver.NumMethod(); index++ {
 		method := typeOfReceiver.Method(index)
 		if method.PkgPath != "" { // Method must be exported.
@@ -177,6 +174,11 @@ func registerName(name string, rcvr interface{},
 	}
 	receivers[name] = receiver
 	return nil
+}
+
+func (*builtinReceiver) GrantMethod(
+	serviceMethod string, authInfo *AuthInformation) bool {
+	return true
 }
 
 func getMethod(methodType reflect.Type, fn reflect.Value) *methodWrapper {
@@ -313,14 +315,14 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	if !ok {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("not a hijacker ", req.RemoteAddr)
+		logger.Println("not a hijacker ", req.RemoteAddr)
 		return
 	}
 	unsecuredConn, bufrw, err := hijacker.Hijack()
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
+		logger.Println("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
 		return
 	}
 	myConn := &Conn{
@@ -328,27 +330,29 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		localAddr:  unsecuredConn.LocalAddr().String(),
 		remoteAddr: unsecuredConn.RemoteAddr().String(),
 	}
+	connType := "unknown"
 	defer func() {
 		myConn.conn.Close()
 	}()
 	if tcpConn, ok := unsecuredConn.(net.TCPConn); ok {
+		connType = "TCP"
 		if err := tcpConn.SetKeepAlive(true); err != nil {
-			log.Println("error setting keepalive: ", err.Error())
+			logger.Println("error setting keepalive: ", err.Error())
 			return
 		}
 		if err := tcpConn.SetKeepAlivePeriod(time.Minute * 5); err != nil {
-			log.Println("error setting keepalive period: ", err.Error())
+			logger.Println("error setting keepalive period: ", err.Error())
 			return
 		}
 	} else {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotAcceptable)
-		log.Println("non-TCP connection")
+		logger.Println("non-TCP connection")
 		return
 	}
 	_, err = io.WriteString(unsecuredConn, "HTTP/1.0 "+connectString+"\n\n")
 	if err != nil {
-		log.Println("error writing connect message: ", err.Error())
+		logger.Println("error writing connect message: ", err.Error())
 		return
 	}
 	if doTls {
@@ -360,20 +364,22 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 				serverMetricsMutex.Lock()
 				numRejectedServerConnections++
 				serverMetricsMutex.Unlock()
-				log.Println(err)
+				logger.Println(err)
 				return
 			}
+			connType += "/TLS"
 		} else {
 			if tlsConn, ok = unsecuredConn.(*tls.Conn); !ok {
-				log.Println("not really a TLS connection")
+				logger.Println("not really a TLS connection")
 				return
 			}
+			connType += "/TLS"
 		}
 		myConn.isEncrypted = true
 		myConn.username, myConn.permittedMethods, myConn.groupList, err =
 			getAuth(tlsConn.ConnectionState())
 		if err != nil {
-			log.Println(err)
+			logger.Println(err)
 			return
 		}
 		myConn.ReadWriter = bufio.NewReadWriter(bufio.NewReader(tlsConn),
@@ -381,6 +387,8 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	} else {
 		myConn.ReadWriter = bufrw
 	}
+	logger.Debugf(0, "accepted %s connection from: %s\n",
+		connType, myConn.remoteAddr)
 	serverMetricsMutex.Lock()
 	numOpenServerConnections++
 	serverMetricsMutex.Unlock()
@@ -452,9 +460,9 @@ func handleConnection(conn *Conn, makeCoder coderMaker) {
 			return
 		}
 		if err != nil {
-			log.Println(err)
+			logger.Println(err)
 			if _, err := conn.WriteString(err.Error() + "\n"); err != nil {
-				log.Println(err)
+				logger.Println(err)
 				return
 			}
 			continue
@@ -463,7 +471,7 @@ func handleConnection(conn *Conn, makeCoder coderMaker) {
 		if serviceMethod == "" {
 			// Received a "ping" request, send response.
 			if _, err := conn.WriteString("\n"); err != nil {
-				log.Println(err)
+				logger.Println(err)
 				return
 			}
 			continue
@@ -471,23 +479,23 @@ func handleConnection(conn *Conn, makeCoder coderMaker) {
 		method, err := conn.findMethod(serviceMethod)
 		if err != nil {
 			if _, err := conn.WriteString(err.Error() + "\n"); err != nil {
-				log.Println(err)
+				logger.Println(err)
 				return
 			}
 			continue
 		}
 		// Method is OK to call. Tell client and then call method handler.
 		if _, err := conn.WriteString("\n"); err != nil {
-			log.Println(err)
+			logger.Println(err)
 			return
 		}
 		if err := conn.Flush(); err != nil {
-			log.Println(err)
+			logger.Println(err)
 			return
 		}
 		if err := method.call(conn, makeCoder); err != nil {
 			if err != ErrorCloseClient {
-				log.Println(err)
+				logger.Println(err)
 			}
 			return
 		}

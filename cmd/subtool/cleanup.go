@@ -13,7 +13,7 @@ func cleanupSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
 	if err := cleanup(srpcClient); err != nil {
-		return fmt.Errorf("Error cleaning up: %s", err)
+		return fmt.Errorf("error cleaning up: %s", err)
 	}
 	return nil
 }

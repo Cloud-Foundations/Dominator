@@ -13,7 +13,7 @@ import (
 
 func addDeviceSubcommand(args []string, logger log.DebugLogger) error {
 	if err := addDevice(getClient(), args[0], args[1], args[2:]); err != nil {
-		return fmt.Errorf("Error adding device: %s", err)
+		return fmt.Errorf("error adding device: %s", err)
 	}
 	return nil
 }

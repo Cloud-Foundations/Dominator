@@ -12,7 +12,7 @@ import (
 func restoreVmFromSnapshotSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := restoreVmFromSnapshot(args[0], logger); err != nil {
-		return fmt.Errorf("Error restoring VM from snapshot: %s", err)
+		return fmt.Errorf("error restoring VM from snapshot: %s", err)
 	}
 	return nil
 }

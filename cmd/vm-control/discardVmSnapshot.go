@@ -11,7 +11,7 @@ import (
 
 func discardVmSnapshotSubcommand(args []string, logger log.DebugLogger) error {
 	if err := discardVmSnapshot(args[0], logger); err != nil {
-		return fmt.Errorf("Error discarding VM snapshot: %s", err)
+		return fmt.Errorf("error discarding VM snapshot: %s", err)
 	}
 	return nil
 }

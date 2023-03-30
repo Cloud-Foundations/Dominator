@@ -2,6 +2,34 @@ package wsyscall
 
 import "syscall"
 
+const (
+	S_IFBLK  = syscall.S_IFBLK
+	S_IFCHR  = syscall.S_IFCHR
+	S_IFDIR  = syscall.S_IFDIR
+	S_IFIFO  = syscall.S_IFIFO
+	S_IFLNK  = syscall.S_IFLNK
+	S_IFMT   = syscall.S_IFMT
+	S_IFREG  = syscall.S_IFREG
+	S_IFSOCK = syscall.S_IFSOCK
+	S_IREAD  = syscall.S_IRUSR
+	S_IRGRP  = 0x20
+	S_IROTH  = 0x4
+	S_IRUSR  = syscall.S_IRUSR
+	S_IRWXG  = 0x38
+	S_IRWXO  = 0x7
+	S_IRWXU  = 0x1c0
+	S_ISGID  = syscall.S_ISGID
+	S_ISUID  = syscall.S_ISUID
+	S_ISVTX  = syscall.S_ISVTX
+	S_IWGRP  = 0x10
+	S_IWOTH  = 0x2
+	S_IWRITE = syscall.S_IWRITE
+	S_IWUSR  = syscall.S_IWUSR
+	S_IXGRP  = 0x8
+	S_IXOTH  = 0x1
+	S_IXUSR  = syscall.S_IXUSR
+)
+
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
 }

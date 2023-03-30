@@ -10,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -235,10 +236,7 @@ func (sub *Sub) compareInodeLinks(requiredInum, subInum uint64) bool {
 	if len(subNames) > len(requiredNames) {
 		return false
 	}
-	requiredLinks := make(map[string]struct{}, len(requiredNames))
-	for _, name := range requiredNames {
-		requiredLinks[name] = struct{}{}
-	}
+	requiredLinks := stringutil.ConvertListToMap(requiredNames, false)
 	for _, name := range subNames {
 		if _, ok := requiredLinks[name]; !ok {
 			return false

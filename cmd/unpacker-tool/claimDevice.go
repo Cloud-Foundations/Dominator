@@ -9,7 +9,7 @@ import (
 
 func claimDeviceSubcommand(args []string, logger log.DebugLogger) error {
 	if err := uclient.ClaimDevice(getClient(), args[0], args[1]); err != nil {
-		return fmt.Errorf("Error claiming device: %s", err)
+		return fmt.Errorf("error claiming device: %s", err)
 	}
 	return nil
 }

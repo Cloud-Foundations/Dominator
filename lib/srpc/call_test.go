@@ -188,7 +188,7 @@ func testDoCallPlain(t *testing.T, client *Client, data string) error {
 		return err
 	}
 	if response.Response != data {
-		return fmt.Errorf("Response: %s != %s\n", response.Response, data)
+		return fmt.Errorf("response: %s != %s\n", response.Response, data)
 	}
 	doClose = false
 	if err := conn.Close(); err != nil {

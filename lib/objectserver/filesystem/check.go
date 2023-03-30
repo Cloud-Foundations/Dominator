@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -36,7 +35,7 @@ func (objSrv *ObjectServer) checkObject(hash hash.Hash) (uint64, error) {
 	}
 	if fi.Mode().IsRegular() {
 		if fi.Size() < 1 {
-			return 0, errors.New(fmt.Sprintf("zero length file: %s", filename))
+			return 0, fmt.Errorf("zero length file: %s", filename)
 		}
 		size := uint64(fi.Size())
 		objSrv.rwLock.Lock()

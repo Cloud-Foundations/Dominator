@@ -2,7 +2,6 @@ package untar
 
 import (
 	"archive/tar"
-	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -77,8 +76,7 @@ func (decoderData *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
 	header *tar.Header) error {
 	parentDir, ok := decoderData.directoryTable[path.Dir(header.Name)]
 	if !ok {
-		return errors.New(fmt.Sprintf(
-			"No parent directory found for: %s", header.Name))
+		return fmt.Errorf("no parent directory found for: %s", header.Name)
 	}
 	leafName := path.Base(header.Name)
 	if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeRegA {
@@ -97,8 +95,7 @@ func (decoderData *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
 	} else if header.Typeflag == tar.TypeFifo {
 		return decoderData.addSpecialFile(header, parentDir, leafName)
 	} else {
-		return errors.New(fmt.Sprintf("Unsupported file type: %v",
-			header.Typeflag))
+		return fmt.Errorf("unsupported file type: %v", header.Typeflag)
 	}
 }
 
@@ -149,8 +146,7 @@ func (decoderData *decoderData) addHardlink(header *tar.Header,
 		newEntry.InodeNumber = inum
 		parent.EntryList = append(parent.EntryList, &newEntry)
 	} else {
-		return errors.New(fmt.Sprintf("missing hardlink target: %s",
-			header.Linkname))
+		return fmt.Errorf("missing hardlink target: %s", header.Linkname)
 	}
 	return nil
 }
@@ -178,15 +174,15 @@ func (decoderData *decoderData) addSpecialFile(header *tar.Header,
 		newInode.Mode = filesystem.FileMode((header.Mode & ^syscall.S_IFMT) |
 			syscall.S_IFIFO)
 	} else {
-		return errors.New(fmt.Sprintf("unsupported type: %v", header.Typeflag))
+		return fmt.Errorf("unsupported type: %v", header.Typeflag)
 	}
 	newInode.Uid = uint32(header.Uid)
 	newInode.Gid = uint32(header.Gid)
 	newInode.MtimeNanoSeconds = int32(header.ModTime.Nanosecond())
 	newInode.MtimeSeconds = header.ModTime.Unix()
 	if header.Devminor > 255 {
-		return errors.New(fmt.Sprintf("minor device number: %d too large",
-			header.Devminor))
+		return fmt.Errorf("minor device number: %d too large",
+			header.Devminor)
 	}
 	newInode.Rdev = uint64(header.Devmajor<<8 | header.Devminor)
 	decoderData.addEntry(parent, header.Name, name, &newInode)

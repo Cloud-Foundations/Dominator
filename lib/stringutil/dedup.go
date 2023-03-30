@@ -1,5 +1,24 @@
 package stringutil
 
+func deduplicateList(list []string, makeIfEmpty bool) (
+	[]string, map[string]struct{}) {
+	if len(list) < 1 && !makeIfEmpty {
+		return list, nil
+	}
+	copiedEntries := make(map[string]struct{}, len(list))
+	outputList := make([]string, 0, len(list))
+	for _, entry := range list {
+		if _, ok := copiedEntries[entry]; !ok {
+			outputList = append(outputList, entry)
+			copiedEntries[entry] = struct{}{}
+		}
+	}
+	if len(outputList) == len(list) {
+		return list, copiedEntries
+	}
+	return outputList, copiedEntries
+}
+
 func (d *StringDeduplicator) clear() {
 	if d.lock {
 		d.mutex.Lock()

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 )
 
@@ -78,11 +78,7 @@ func showCert(filename string) {
 }
 
 func showList(list map[string]struct{}) {
-	sortedList := make([]string, 0, len(list))
-	for entry := range list {
-		sortedList = append(sortedList, entry)
-	}
-	sort.Strings(sortedList)
+	sortedList := stringutil.ConvertMapKeysToList(list, true)
 	for _, entry := range sortedList {
 		fmt.Println("   ", entry)
 	}

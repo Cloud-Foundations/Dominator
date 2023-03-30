@@ -11,7 +11,7 @@ import (
 
 func snapshotVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := snapshotVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error snapshotting VM: %s", err)
+		return fmt.Errorf("error snapshotting VM: %s", err)
 	}
 	return nil
 }

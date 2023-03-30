@@ -11,6 +11,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
+	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -21,6 +22,38 @@ type statusType struct {
 	err         error
 }
 
+func blockMetadataOnInterface(ifName string) error {
+	cmd := exec.Command("ebtables", "-t", "filter", "-A", "INPUT",
+		"-i", ifName, "-p", "ip",
+		"--ip-src", "169.254.0.0/16", "-j", "DROP")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running ebtables: %s: %s",
+			err, string(output))
+	}
+	cmd = exec.Command("ebtables", "-t", "filter", "-A", "FORWARD",
+		"-i", ifName, "-p", "ip",
+		"--ip-src", "169.254.0.0/16", "-j", "DROP")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running ebtables: %s: %s",
+			err, string(output))
+	}
+	cmd = exec.Command("ebtables", "-t", "filter", "-A", "FORWARD",
+		"-o", ifName, "-p", "ip",
+		"--ip-dst", "169.254.0.0/16", "-j", "DROP")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running ebtables: %s: %s",
+			err, string(output))
+	}
+	cmd = exec.Command("ebtables", "-t", "filter", "-A", "OUTPUT",
+		"-o", ifName, "-p", "ip",
+		"--ip-dst", "169.254.0.0/16", "-j", "DROP")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running ebtables: %s: %s",
+			err, string(output))
+	}
+	return nil
+}
+
 func httpServe(listener net.Listener, handler http.Handler,
 	idleTimeout time.Duration) error {
 	httpServer := &http.Server{Handler: handler, IdleTimeout: idleTimeout}
@@ -28,9 +61,25 @@ func httpServe(listener net.Listener, handler http.Handler,
 }
 
 func (s *server) startServer() error {
-	cmd := exec.Command("ebtables", "-t", "nat", "-F")
+	cmd := exec.Command("ebtables", "-t", "filter", "-F")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error running ebtables: %s: %s", err, string(output))
+	}
+	cmd = exec.Command("ebtables", "-t", "nat", "-F")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running ebtables: %s: %s", err, string(output))
+	}
+	// Block input/forwarding/output of metadata packets for all EtherNet
+	// interfaces. This ensures that metadata traffic cannot leave the host.
+	broadcastInterfaces, _, err := libnet.ListBroadcastInterfaces(
+		libnet.InterfaceTypeEtherNet, s.logger)
+	if err != nil {
+		return err
+	}
+	for _, iface := range broadcastInterfaces {
+		if err := blockMetadataOnInterface(iface.Name); err != nil {
+			return err
+		}
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

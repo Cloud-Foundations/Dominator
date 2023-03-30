@@ -69,6 +69,7 @@ func doMain() int {
 		return 2
 	}
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	if err := setupclient.SetupTls(true); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -77,7 +78,7 @@ func doMain() int {
 		*imageUnpackerHostname, *imageUnpackerPortNum)
 	client, err := srpc.DialHTTP("tcp", clientName, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error dialing\t%s\n", err)
+		fmt.Fprintf(os.Stderr, "Error dialing: %s\n", err)
 		return 1
 	}
 	unpackerSrpcClient = client

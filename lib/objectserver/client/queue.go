@@ -37,9 +37,9 @@ func (objQ *ObjectAdderQueue) add(reader io.Reader, length uint64) (
 		return hashVal, err
 	}
 	if uint64(nRead) != length {
-		return hashVal, errors.New(fmt.Sprintf(
+		return hashVal, fmt.Errorf(
 			"failed to read file data, wanted: %d, got: %d bytes",
-			length, nRead))
+			length, nRead)
 	}
 	hasher := sha512.New()
 	if _, err := hasher.Write(data); err != nil {

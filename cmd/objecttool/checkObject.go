@@ -14,11 +14,11 @@ func checkObjectSubcommand(args []string, logger log.DebugLogger) error {
 	var err error
 	hashes[0], err = objectcache.FilenameToHash(args[0])
 	if err != nil {
-		return fmt.Errorf("Error parsing hash: %s", err)
+		return fmt.Errorf("error parsing hash: %s", err)
 	}
 	objectSizes, err := getObjectServer().CheckObjects(hashes)
 	if err != nil {
-		return fmt.Errorf("Error checking object: %s", err)
+		return fmt.Errorf("error checking object: %s", err)
 	}
 	if objectSizes[0] > 0 {
 		return nil

@@ -16,6 +16,27 @@ type StringDuplicationStatistics struct {
 	UniqueStrings    uint64
 }
 
+// ConvertListToMap will convert list entries to map keys. If makeIfEmpty is
+// true then a map is made for an empty list, otherwise nil is returned.
+func ConvertListToMap(list []string, makeIfEmpty bool) map[string]struct{} {
+	return convertListToMap(list, makeIfEmpty)
+}
+
+// ConvertMapKeysToList will return a list of map keys.
+func ConvertMapKeysToList(mapData map[string]struct{}, doSort bool) []string {
+	return convertMapKeysToList(mapData, doSort)
+}
+
+// DeduplicateList will return a list of strings with duplicates removed,
+// preserving the (initial) ordering of the input list. If the input list has
+// no duplicates, it is simply returned rather than returning a copy of the
+// list. The unique map keys are also returned. If makeIfEmpty, a non-nil map
+// is always returned.
+func DeduplicateList(list []string, makeIfEmpty bool) (
+	[]string, map[string]struct{}) {
+	return deduplicateList(list, makeIfEmpty)
+}
+
 // NewStringDeduplicator will create a StringDeduplicator which may be used to
 // eliminate duplicate string contents. It maintains an internal map of unique
 // strings. If lock is true then each method call will take an exclusive lock.

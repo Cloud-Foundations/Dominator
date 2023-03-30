@@ -13,7 +13,7 @@ import (
 
 func getStatusSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getStatus(getClient()); err != nil {
-		return fmt.Errorf("Error getting status: %s", err)
+		return fmt.Errorf("error getting status: %s", err)
 	}
 	return nil
 }
@@ -28,7 +28,7 @@ func getStatus(srpcClient *srpc.Client) error {
 
 func getDeviceForStreamSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getDeviceForStream(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error getting device for stream: %s", err)
+		return fmt.Errorf("error getting device for stream: %s", err)
 	}
 	return nil
 }

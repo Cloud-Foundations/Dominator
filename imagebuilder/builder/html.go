@@ -2,10 +2,8 @@ package builder
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -86,14 +84,18 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 
 func (b *Builder) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
-		"Number of image streams: <a href=\"showImageStreams\">%d</a><p>\n",
-		b.getNumNormalStreams())
-	currentBuilds := make([]string, 0)
+		"Number of image streams: <a href=\"showImageStreams\">%d</a><br>\n",
+		b.getNumStreams())
+	fmt.Fprintln(writer,
+		"Show image stream <a href=\"showDirectedGraph\">relationships</a><p>")
+	currentBuildNames := make([]string, 0)
+	currentBuildTimes := make([]time.Time, 0)
 	goodBuilds := make(map[string]buildResultType)
 	failedBuilds := make(map[string]buildResultType)
 	b.buildResultsLock.RLock()
-	for name := range b.currentBuildLogs {
-		currentBuilds = append(currentBuilds, name)
+	for name, info := range b.currentBuildInfos {
+		currentBuildNames = append(currentBuildNames, name)
+		currentBuildTimes = append(currentBuildTimes, info.startedAt)
 	}
 	for name, result := range b.lastBuildResults {
 		if result.error == nil {
@@ -104,15 +106,17 @@ func (b *Builder) writeHtml(writer io.Writer) {
 	}
 	b.buildResultsLock.RUnlock()
 	currentTime := time.Now()
-	if len(currentBuilds) > 0 {
+	if len(currentBuildNames) > 0 {
 		fmt.Fprintln(writer, "Current image builds:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
-		tw, _ := html.NewTableWriter(writer, true, "Image Stream", "Build log")
-		for _, streamName := range currentBuilds {
+		tw, _ := html.NewTableWriter(writer, true, "Image Stream", "Build log",
+			"Duration")
+		for index, streamName := range currentBuildNames {
 			tw.WriteRow("", "",
 				streamName,
 				fmt.Sprintf("<a href=\"showCurrentBuildLog?%s#bottom\">log</a>",
 					streamName),
+				format.Duration(time.Since(currentBuildTimes[index])),
 			)
 		}
 		fmt.Fprintln(writer, "</table><br>")
@@ -172,13 +176,27 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		fmt.Fprintf(writer, "BuilderGroups: %s<br>\n",
 			strings.Join(stream.BuilderGroups, ", "))
 	}
+	if len(stream.BuilderUsers) > 0 {
+		fmt.Fprintf(writer, "BuilderUsers: %s<br>\n",
+			strings.Join(stream.BuilderUsers, ", "))
+	}
+	manifestLocation := stream.getManifestLocation(nil, nil)
 	fmt.Fprintf(writer, "Manifest URL: <code>%s</code><br>\n",
 		stream.ManifestUrl)
+	if manifestLocation.url != stream.ManifestUrl {
+		fmt.Fprintf(writer, "Manifest URL (expanded): <code>%s</code><br>\n",
+			manifestLocation.url)
+	}
 	fmt.Fprintf(writer, "Manifest Directory: <code>%s</code><br>\n",
 		stream.ManifestDirectory)
+	if manifestLocation.directory != stream.ManifestDirectory {
+		fmt.Fprintf(writer,
+			"Manifest Directory (expanded): <code>%s</code><br>\n",
+			manifestLocation.directory)
+	}
 	buildLog := new(bytes.Buffer)
-	manifestDirectory, gitInfo, err := stream.getManifest(stream.builder,
-		stream.name, "", nil, buildLog)
+	manifestDirectory, sourceImageName, gitInfo, manifestBytes, _, err :=
+		stream.getSourceImage(stream.builder, buildLog)
 	if err != nil {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
 		return
@@ -189,21 +207,6 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 			"Latest commit on branch: <code>%s</code>: <code>%s</code>s<br>\n",
 			gitInfo.branch, gitInfo.commitId)
 	}
-	manifestFilename := path.Join(manifestDirectory, "manifest")
-	manifestBytes, err := ioutil.ReadFile(manifestFilename)
-	if err != nil {
-		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
-		return
-	}
-	var manifest manifestConfigType
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
-		return
-	}
-	sourceImageName := os.Expand(manifest.SourceImage,
-		func(name string) string {
-			return stream.getenv()[name]
-		})
 	if stream.builder.getHtmlWriter(sourceImageName) == nil {
 		fmt.Fprintf(writer, "SourceImage: <code>%s</code><br>\n",
 			sourceImageName)
@@ -211,6 +214,12 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		fmt.Fprintf(writer,
 			"SourceImage: <a href=\"showImageStream?%s\"><code>%s</code></a><br>\n",
 			sourceImageName, sourceImageName)
+	}
+	if len(stream.Variables) > 0 {
+		fmt.Fprintln(writer, "Stream variables:<br>")
+		fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
+		libjson.WriteWithIndent(writer, "    ", stream.Variables)
+		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
 	}
 	fmt.Fprintln(writer, "Contents of <code>manifest</code> file:<br>")
 	fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)

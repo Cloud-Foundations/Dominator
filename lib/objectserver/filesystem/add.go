@@ -74,9 +74,8 @@ func collisionCheck(data []byte, filename string, size int64) error {
 	}
 	defer file.Close()
 	if int64(len(data)) != size {
-		return errors.New(fmt.Sprintf(
-			"length mismatch. Data=%d, existing object=%d",
-			len(data), size))
+		return fmt.Errorf("length mismatch. Data=%d, existing object=%d",
+			len(data), size)
 	}
 	reader := bufio.NewReader(file)
 	buffer := make([]byte, 0, buflen)

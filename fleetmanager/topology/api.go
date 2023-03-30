@@ -36,6 +36,11 @@ type ownersType struct {
 	OwnerUsers  []string `json:",omitempty"`
 }
 
+type Params struct {
+	Logger      log.DebugLogger
+	TopologyDir string
+}
+
 type Subnet struct {
 	hyper_proto.Subnet
 	FirstAutoIP     net.IP              `json:",omitempty"`
@@ -55,12 +60,17 @@ func (subnet *Subnet) Shrink() {
 
 type Topology struct {
 	Root            *Directory
+	logger          log.DebugLogger
 	machineParents  map[string]*Directory // Key: machine name.
 	reservedIpAddrs map[string]struct{}   // Key: IP address.
 }
 
 func Load(topologyDir string) (*Topology, error) {
-	return load(topologyDir)
+	return load(Params{TopologyDir: topologyDir})
+}
+
+func LoadWithParams(params Params) (*Topology, error) {
+	return load(params)
 }
 
 func Watch(topologyRepository, localRepositoryDir, topologyDir string,

@@ -14,7 +14,7 @@ func listLocationsSubcommand(args []string, logger log.DebugLogger) error {
 		topLocation = args[0]
 	}
 	if err := listLocations(topLocation, logger); err != nil {
-		return fmt.Errorf("Error listing locations: %s", err)
+		return fmt.Errorf("error listing locations: %s", err)
 	}
 	return nil
 }

@@ -16,7 +16,7 @@ import (
 func getMachineInfoSubcommand(args []string, logger log.DebugLogger) error {
 	err := getMachineInfo(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error getting machine info: %s", err)
+		return fmt.Errorf("error getting machine info: %s", err)
 	}
 	return nil
 }
@@ -25,19 +25,21 @@ func getMachineInfo(hostname string, logger log.DebugLogger) error {
 	fmCR := srpc.NewClientResource("tcp",
 		fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum))
 	defer fmCR.ScheduleClose()
-	if info, err := getInfoForMachine(fmCR, hostname); err != nil {
+	if info, err := getInfoForMachine(fmCR, hostname, logger); err != nil {
 		return err
 	} else {
 		return json.WriteWithIndent(os.Stdout, "    ", info)
 	}
 }
 
-func getInfoForMachine(fmCR *srpc.ClientResource, hostname string) (
+func getInfoForMachine(fmCR *srpc.ClientResource, hostname string,
+	logger log.DebugLogger) (
 	fm_proto.GetMachineInfoResponse, error) {
 	if *fleetManagerHostname != "" {
 		return getInfoForMachineFromFleetManager(fmCR, hostname)
 	}
-	if info, err := getInfoForMachineFromTopology(hostname); err != nil {
+	info, err := getInfoForMachineFromTopology(hostname, logger)
+	if err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	} else {
 		return *info, nil
@@ -63,12 +65,15 @@ func getInfoForMachineFromFleetManager(fmCR *srpc.ClientResource,
 	return reply, nil
 }
 
-func getInfoForMachineFromTopology(hostname string) (
+func getInfoForMachineFromTopology(hostname string, logger log.DebugLogger) (
 	*fm_proto.GetMachineInfoResponse, error) {
 	if *topologyDir == "" {
 		return nil, errors.New("no topologyDir specified")
 	}
-	topo, err := topology.Load(*topologyDir)
+	topo, err := topology.LoadWithParams(topology.Params{
+		Logger:      logger,
+		TopologyDir: *topologyDir,
+	})
 	if err != nil {
 		return nil, err
 	}

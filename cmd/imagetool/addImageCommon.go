@@ -127,8 +127,7 @@ func buildImageWithHasher(imageSClient *srpc.Client, filter *filter.Filter,
 		strings.HasSuffix(imageFilename, ".tgz") {
 		gzipReader, err := gzip.NewReader(imageFile)
 		if err != nil {
-			return nil, errors.New(
-				"error creating gzip reader: " + err.Error())
+			return nil, errors.New("error creating gzip reader: " + err.Error())
 		}
 		defer gzipReader.Close()
 		imageReader = gzipReader

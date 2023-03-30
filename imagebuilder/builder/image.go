@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -48,11 +50,39 @@ func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
 }
 
 func (stream *imageStreamType) getenv() map[string]string {
-	envTable := make(map[string]string, 1)
+	envTable := make(map[string]string, len(stream.Variables)+3)
+	for key, value := range stream.Variables {
+		envTable[key] = expandExpression(value, func(name string) string {
+			if name == "IMAGE_STREAM" {
+				return stream.name
+			}
+			return ""
+		})
+	}
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
 	envTable["IMAGE_STREAM_LEAF_NAME"] = filepath.Base(stream.name)
 	return envTable
+}
+
+// getManifestLocation will expand variables and return the actual manifest
+// location. These data may include secrets (i.e. username and password).
+// If b is nil then secret variables are not expaned and thus the returned
+// data do not contain secrets but may be incorrect.
+func (stream *imageStreamType) getManifestLocation(b *Builder,
+	variables map[string]string) manifestLocationType {
+	var variableFunc func(string) string
+	if b == nil {
+		variableFunc = func(name string) string {
+			return stream.getenv()[name]
+		}
+	} else {
+		variableFunc = b.getVariableFunc(stream.getenv(), variables)
+	}
+	return manifestLocationType{
+		directory: expandExpression(stream.ManifestDirectory, variableFunc),
+		url:       expandExpression(stream.ManifestUrl, variableFunc),
+	}
 }
 
 func (stream *imageStreamType) getManifest(b *Builder, streamName string,
@@ -61,7 +91,6 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	if gitBranch == "" {
 		gitBranch = "master"
 	}
-	variableFunc := b.getVariableFunc(stream.getenv(), variables)
 	manifestRoot, err := makeTempDirectory("",
 		strings.Replace(streamName, "/", "_", -1)+".manifest")
 	if err != nil {
@@ -73,75 +102,31 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 			os.RemoveAll(manifestRoot)
 		}
 	}()
-	manifestDirectory := os.Expand(stream.ManifestDirectory, variableFunc)
-	manifestUrl := os.Expand(stream.ManifestUrl, variableFunc)
-	if parsedUrl, err := url.Parse(manifestUrl); err == nil {
-		if parsedUrl.Scheme == "dir" {
-			if parsedUrl.Path[0] != '/' {
-				return "", nil, fmt.Errorf("missing leading slash: %s",
-					parsedUrl.Path)
-			}
-			if gitBranch != "master" {
-				return "", nil,
-					fmt.Errorf("branch: %s is not master", gitBranch)
-			}
-			sourceTree := filepath.Join(parsedUrl.Path, manifestDirectory)
-			fmt.Fprintf(buildLog, "Copying manifest tree: %s\n", sourceTree)
-			if err := fsutil.CopyTree(manifestRoot, sourceTree); err != nil {
-				return "", nil, fmt.Errorf("error copying manifest: %s", err)
-			}
-			doCleanup = false
-			return manifestRoot, nil, nil
+	manifestLocation := stream.getManifestLocation(b, variables)
+	if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
+		return "", nil, err
+	} else if rootDir != "" {
+		if gitBranch != "master" {
+			return "", nil,
+				fmt.Errorf("branch: %s is not master", gitBranch)
 		}
-	}
-	fmt.Fprintf(buildLog, "Cloning repository: %s branch: %s\n",
-		stream.ManifestUrl, gitBranch)
-	err = runCommand(buildLog, "", "git", "init", manifestRoot)
-	if err != nil {
-		return "", nil, err
-	}
-	err = runCommand(buildLog, manifestRoot, "git", "remote", "add", "origin",
-		manifestUrl)
-	if err != nil {
-		return "", nil, err
-	}
-	err = runCommand(buildLog, manifestRoot, "git", "config",
-		"core.sparsecheckout", "true")
-	if err != nil {
-		return "", nil, err
-	}
-	directorySelector := "*\n"
-	if manifestDirectory != "" {
-		directorySelector = manifestDirectory + "/*\n"
-	}
-	err = ioutil.WriteFile(
-		filepath.Join(manifestRoot, ".git", "info", "sparse-checkout"),
-		[]byte(directorySelector), 0644)
-	if err != nil {
-		return "", nil, err
-	}
-	startTime := time.Now()
-	err = runCommand(buildLog, manifestRoot, "git", "pull", "--depth=1",
-		"origin", gitBranch)
-	if err != nil {
-		return "", nil, err
-	}
-	if gitBranch != "master" {
-		err = runCommand(buildLog, manifestRoot, "git", "checkout", gitBranch)
-		if err != nil {
-			return "", nil, err
+		sourceTree := filepath.Join(rootDir, manifestLocation.directory)
+		fmt.Fprintf(buildLog, "Copying manifest tree: %s\n", sourceTree)
+		if err := fsutil.CopyTree(manifestRoot, sourceTree); err != nil {
+			return "", nil, fmt.Errorf("error copying manifest: %s", err)
 		}
+		doCleanup = false
+		return manifestRoot, nil, nil
 	}
-	loadTime := time.Since(startTime)
-	repoSize, err := getTreeSize(manifestRoot)
+	var patterns []string
+	if manifestLocation.directory != "" {
+		patterns = append(patterns, manifestLocation.directory+"/*")
+	}
+	err = gitShallowClone(manifestRoot, manifestLocation.url,
+		stream.ManifestUrl, gitBranch, patterns, buildLog)
 	if err != nil {
 		return "", nil, err
 	}
-	speed := float64(repoSize) / loadTime.Seconds()
-	fmt.Fprintf(buildLog,
-		"Downloaded partial repository in %s, size: %s (%s/s)\n",
-		format.Duration(loadTime), format.FormatBytes(repoSize),
-		format.FormatBytes(uint64(speed)))
 	gitDirectory := filepath.Join(manifestRoot, ".git")
 	var gitInfo *gitInfoType
 	filename := filepath.Join(gitDirectory, "refs", "heads", gitBranch)
@@ -158,9 +143,10 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	if err := os.RemoveAll(gitDirectory); err != nil {
 		return "", nil, err
 	}
-	if manifestDirectory != "" {
-		// Move manifestDirectory into manifestRoot, remove anything else.
-		err := os.Rename(filepath.Join(manifestRoot, manifestDirectory),
+	if manifestLocation.directory != "" {
+		// Move manifest directory into manifestRoot, remove anything else.
+		err := os.Rename(filepath.Join(manifestRoot,
+			manifestLocation.directory),
 			gitDirectory)
 		if err != nil {
 			return "", nil, err
@@ -195,6 +181,37 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	}
 	doCleanup = false
 	return manifestRoot, gitInfo, nil
+}
+
+func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
+	string, string, *gitInfoType, []byte, *manifestConfigType, error) {
+	manifestDirectory, gitInfo, err := stream.getManifest(stream.builder,
+		stream.name, "", nil, buildLog)
+	if err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	doRemove := true
+	defer func() {
+		if doRemove {
+			os.RemoveAll(manifestDirectory)
+		}
+	}()
+	manifestFilename := filepath.Join(manifestDirectory, "manifest")
+	manifestBytes, err := ioutil.ReadFile(manifestFilename)
+	if err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	var manifest manifestConfigType
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return "", "", nil, nil, nil, err
+	}
+	sourceImageName := expandExpression(manifest.SourceImage,
+		func(name string) string {
+			return stream.getenv()[name]
+		})
+	doRemove = false
+	return manifestDirectory, sourceImageName, gitInfo, manifestBytes,
+		&manifest, nil
 }
 
 func getTreeSize(dirname string) (uint64, error) {
@@ -259,10 +276,17 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
-		rootDir, bindMounts, false, envGetter, buildLog)
+		request.MaxSourceAge, rootDir, bindMounts, false, envGetter, buildLog)
 	if err != nil {
 		return nil, err
 	}
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(ctimeResolution)
+	fmt.Fprintf(buildLog, "Waited %s (Ctime resolution)\n",
+		format.Duration(ctimeResolution))
 	if fi, err := os.Lstat(filepath.Join(manifestDir, "tests")); err == nil {
 		if fi.IsDir() {
 			testsDir := filepath.Join(rootDir, "tests", request.StreamName)
@@ -292,7 +316,8 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
-		computedFilesList, imageFilter, imageTriggers, buildLog)
+		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
+		imageTriggers, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +325,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		img.BuildBranch = gitInfo.branch
 		img.BuildCommitId = gitInfo.commitId
 	}
+	img.SourceImage = manifest.sourceImageInfo.imageName
 	return img, nil
 }
 
@@ -319,6 +345,53 @@ func buildImageFromManifestAndUpload(client *srpc.Client, manifestDir string,
 	return img, name, nil
 }
 
+func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
+	buildLog io.Writer) (*treeCache, error) {
+	cache := treeCache{
+		inodeTable:  make(map[uint64]inodeData),
+		pathToInode: make(map[string]uint64),
+	}
+	filenameToInodeTable := fs.FilenameToInodeTable()
+	rootLength := len(rootDir)
+	startTime := time.Now()
+	err := filepath.Walk(rootDir,
+		func(path string, info os.FileInfo, err error) error {
+			if info.Mode()&os.ModeType != 0 {
+				return nil
+			}
+			rootedPath := path[rootLength:]
+			inum, ok := filenameToInodeTable[rootedPath]
+			if !ok {
+				return nil
+			}
+			gInode, ok := fs.InodeTable[inum]
+			if !ok {
+				return nil
+			}
+			rInode, ok := gInode.(*filesystem.RegularInode)
+			if !ok {
+				return nil
+			}
+			var stat syscall.Stat_t
+			if err := syscall.Stat(path, &stat); err != nil {
+				return err
+			}
+			cache.inodeTable[stat.Ino] = inodeData{
+				ctime: stat.Ctim,
+				hash:  rInode.Hash,
+				size:  uint64(stat.Size),
+			}
+			cache.pathToInode[path] = uint64(stat.Ino)
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(buildLog, "Built tree cache in: %s\n",
+		format.Duration(time.Since(startTime)))
+	return &cache, nil
+}
+
 func buildTreeFromManifest(client *srpc.Client, manifestDir string,
 	bindMounts []string, envGetter environmentGetter,
 	buildLog io.Writer) (string, error) {
@@ -326,7 +399,7 @@ func buildTreeFromManifest(client *srpc.Client, manifestDir string,
 	if err != nil {
 		return "", err
 	}
-	_, err = unpackImageAndProcessManifest(client, manifestDir, rootDir,
+	_, err = unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
 		bindMounts, true, envGetter, buildLog)
 	if err != nil {
 		os.RemoveAll(rootDir)
@@ -427,8 +500,12 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 }
 
 func unpackImage(client *srpc.Client, streamName string,
-	maxSourceAge, expiresIn time.Duration, rootDir string,
+	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
 	imageName, sourceImage, err := getLatestImage(client, streamName, buildLog)
 	if err != nil {
 		return nil, err
@@ -437,7 +514,7 @@ func unpackImage(client *srpc.Client, streamName string,
 		return nil, errors.New(errNoSourceImage + streamName)
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		return nil, errors.New(errNoSourceImage + streamName)
+		return nil, errors.New(errTooOldSourceImage + streamName)
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()
@@ -447,9 +524,31 @@ func unpackImage(client *srpc.Client, streamName string,
 		return nil, err
 	}
 	fmt.Fprintf(buildLog, "Source image: %s\n", imageName)
+	treeCache, err := buildTreeCache(rootDir, sourceImage.FileSystem, buildLog)
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(ctimeResolution)
+	fmt.Fprintf(buildLog, "Waited %s (Ctime resolution)\n",
+		format.Duration(ctimeResolution))
 	return &sourceImageInfoType{
-		listComputedFiles(sourceImage.FileSystem),
-		sourceImage.Filter,
-		sourceImage.Triggers,
+		computedFiles: listComputedFiles(sourceImage.FileSystem),
+		filter:        sourceImage.Filter,
+		imageName:     imageName,
+		treeCache:     treeCache,
+		triggers:      sourceImage.Triggers,
 	}, nil
+}
+
+func urlToLocal(urlValue string) (string, error) {
+	if parsedUrl, err := url.Parse(urlValue); err == nil {
+		if parsedUrl.Scheme == "dir" {
+			if parsedUrl.Path[0] != '/' {
+				return "", fmt.Errorf("missing leading slash: %s",
+					parsedUrl.Path)
+			}
+			return parsedUrl.Path, nil
+		}
+	}
+	return "", nil
 }

@@ -6,12 +6,8 @@ import (
 	"io"
 	"os"
 	"path"
-	"syscall"
-)
 
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 func copyToFile(destFilename string, perm os.FileMode, reader io.Reader,
@@ -60,13 +56,13 @@ func copyTree(destDir, sourceDir string,
 	for _, name := range names {
 		sourceFilename := path.Join(sourceDir, name)
 		destFilename := path.Join(destDir, name)
-		var stat syscall.Stat_t
-		if err := syscall.Lstat(sourceFilename, &stat); err != nil {
+		var stat wsyscall.Stat_t
+		if err := wsyscall.Lstat(sourceFilename, &stat); err != nil {
 			return errors.New(sourceFilename + ": " + err.Error())
 		}
-		switch stat.Mode & syscall.S_IFMT {
-		case syscall.S_IFDIR:
-			if err := os.Mkdir(destFilename, dirPerms); err != nil {
+		switch stat.Mode & wsyscall.S_IFMT {
+		case wsyscall.S_IFDIR:
+			if err := os.Mkdir(destFilename, DirPerms); err != nil {
 				if !os.IsExist(err) {
 					return err
 				}
@@ -75,13 +71,13 @@ func copyTree(destDir, sourceDir string,
 			if err != nil {
 				return err
 			}
-		case syscall.S_IFREG:
+		case wsyscall.S_IFREG:
 			err := copyFunc(destFilename, sourceFilename,
 				os.FileMode(stat.Mode)&os.ModePerm)
 			if err != nil {
 				return err
 			}
-		case syscall.S_IFLNK:
+		case wsyscall.S_IFLNK:
 			sourceTarget, err := os.Readlink(sourceFilename)
 			if err != nil {
 				return errors.New(sourceFilename + ": " + err.Error())
@@ -104,11 +100,11 @@ func copyTree(destDir, sourceDir string,
 
 func copyFile(destFilename, sourceFilename string, mode os.FileMode) error {
 	if mode == 0 {
-		var stat syscall.Stat_t
-		if err := syscall.Stat(sourceFilename, &stat); err != nil {
+		var stat wsyscall.Stat_t
+		if err := wsyscall.Stat(sourceFilename, &stat); err != nil {
 			return errors.New(sourceFilename + ": " + err.Error())
 		}
-		mode = os.FileMode(stat.Mode & syscall.S_IFMT)
+		mode = os.FileMode(stat.Mode & wsyscall.S_IFMT)
 	}
 	sourceFile, err := os.Open(sourceFilename)
 	if err != nil {

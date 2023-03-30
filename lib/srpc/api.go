@@ -48,10 +48,14 @@ import (
 	"crypto/x509"
 	"errors"
 	"flag"
+	stdlog "log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/resourcepool"
 )
@@ -72,6 +76,9 @@ var (
 	fullAuthCaCertPool *x509.CertPool
 	serverTlsConfig    *tls.Config
 	tlsRequired        bool
+
+	logger log.DebugLogger = debuglogger.New(
+		stdlog.New(os.Stderr, "", stdlog.LstdFlags))
 
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
@@ -209,6 +216,11 @@ func SetDefaultGrantMethod(grantMethod func(serviceMethod string,
 	defaultGrantMethod = grantMethod
 }
 
+// SetDefaultLogger will override the default logger used.
+func SetDefaultLogger(l log.DebugLogger) {
+	logger = l
+}
+
 // NewClientResource returns a ClientResource which may be later used to Get*
 // a Client which is part of a managed pool of connection slots (to limit
 // consumption of resources such as file descriptors). Clients can be released
@@ -277,6 +289,7 @@ type Client struct {
 	bufrw       *bufio.ReadWriter
 	callLock    sync.Mutex
 	conn        net.Conn
+	connType    string // Human-readable.
 	isEncrypted bool
 	localAddr   string
 	makeCoder   coderMaker

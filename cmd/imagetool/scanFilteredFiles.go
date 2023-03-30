@@ -16,7 +16,7 @@ import (
 
 func scanFilteredFilesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := scanFilteredFiles(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error scanning filtered files: %s", err)
+		return fmt.Errorf("error scanning filtered files: %s", err)
 	}
 	return nil
 }

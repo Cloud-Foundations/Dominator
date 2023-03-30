@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
@@ -34,14 +35,8 @@ const timeFormat = "2006-01-02:15:04:05"
 var errorTestTimedOut = errors.New("test timed out")
 
 type hasher struct {
-	objQ *objectclient.ObjectAdderQueue
-}
-
-type testResultType struct {
-	buffer   chan byte
-	duration time.Duration
-	err      error
-	prog     string
+	cache *treeCache
+	objQ  *objectclient.ObjectAdderQueue
 }
 
 func (h *hasher) Hash(reader io.Reader, length uint64) (
@@ -51,6 +46,41 @@ func (h *hasher) Hash(reader io.Reader, length uint64) (
 		return hash, errors.New("error sending image data: " + err.Error())
 	}
 	return hash, nil
+}
+
+func (h *hasher) OpenAndHash(inode *filesystem.RegularInode,
+	pathName string) (bool, error) {
+	if len(h.cache.inodeTable) < 1 {
+		return false, nil
+	}
+	inum, ok := h.cache.pathToInode[pathName]
+	if !ok {
+		return false, nil
+	}
+	inodeData, ok := h.cache.inodeTable[inum]
+	if !ok {
+		return false, nil
+	}
+	if inode.Size != inodeData.size {
+		return false, nil
+	}
+	var stat syscall.Stat_t
+	if err := syscall.Stat(pathName, &stat); err != nil {
+		return false, err
+	}
+	if stat.Ino != inum {
+		return false, nil
+	}
+	if stat.Size != int64(inodeData.size) {
+		return false, nil
+	}
+	if stat.Ctim != inodeData.ctime {
+		return false, nil
+	}
+	inode.Hash = inodeData.hash
+	h.cache.numHits++
+	h.cache.hitBytes += inodeData.size
+	return true, nil
 }
 
 func addImage(client *srpc.Client, request proto.BuildImageRequest,
@@ -66,9 +96,9 @@ func addImage(client *srpc.Client, request proto.BuildImageRequest,
 }
 
 func buildFileSystem(client *srpc.Client, dirname string,
-	scanFilter *filter.Filter) (
+	scanFilter *filter.Filter, cache *treeCache) (
 	*filesystem.FileSystem, error) {
-	var h hasher
+	h := hasher{cache: cache}
 	var err error
 	h.objQ, err = objectclient.NewObjectAdderQueue(client)
 	if err != nil {
@@ -161,8 +191,12 @@ func listPackages(g *goroutine.Goroutine, rootDir string) (
 
 func packImage(g *goroutine.Goroutine, client *srpc.Client,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
-	computedFilesList []util.ComputedFile, imageFilter *filter.Filter,
-	trig *triggers.Triggers, buildLog buildLogger) (*image.Image, error) {
+	cache *treeCache, computedFilesList []util.ComputedFile,
+	imageFilter *filter.Filter, trig *triggers.Triggers,
+	buildLog buildLogger) (*image.Image, error) {
+	if cache == nil {
+		cache = &treeCache{}
+	}
 	if g == nil {
 		var err error
 		g, err = newNamespaceTarget()
@@ -176,7 +210,7 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 		return nil, fmt.Errorf("error listing packages: %s", err)
 	}
 	buildStartTime := time.Now()
-	fs, err := buildFileSystem(client, dirname, scanFilter)
+	fs, err := buildFileSystem(client, dirname, scanFilter, cache)
 	if err != nil {
 		return nil, fmt.Errorf("error building file-system: %s", err)
 	}
@@ -185,10 +219,14 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 	}
 	fs.ComputeTotalDataBytes()
 	duration := time.Since(buildStartTime)
-	speed := uint64(float64(fs.TotalDataBytes) / duration.Seconds())
+	speed := uint64(float64(fs.TotalDataBytes-cache.hitBytes) /
+		duration.Seconds())
+	fmt.Fprintf(buildLog, "Skipped %d unchanged objects (%s)\n",
+		cache.numHits, format.FormatBytes(cache.hitBytes))
 	fmt.Fprintf(buildLog,
 		"Scanned file-system and uploaded %d objects (%s) in %s (%s/s)\n",
-		fs.NumRegularInodes, format.FormatBytes(fs.TotalDataBytes),
+		fs.NumRegularInodes-cache.numHits,
+		format.FormatBytes(fs.TotalDataBytes-cache.hitBytes),
 		format.Duration(duration), format.FormatBytes(speed))
 	_, oldImage, err := getLatestImage(client, request.StreamName, buildLog)
 	if err != nil {

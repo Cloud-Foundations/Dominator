@@ -23,7 +23,7 @@ func addImagesubSubcommand(args []string, logger log.DebugLogger) error {
 	err := addImagesub(imageSClient, objectClient, args[0], args[1], args[2],
 		args[3], logger)
 	if err != nil {
-		return fmt.Errorf("Error adding image: \"%s\"\t%s", args[0], err)
+		return fmt.Errorf("error adding image: \"%s\": %s", args[0], err)
 	}
 	return nil
 }
@@ -48,9 +48,6 @@ func addImagesub(imageSClient *srpc.Client,
 	if err != nil {
 		return err
 	}
-	if fs, err = applyDeleteFilter(fs); err != nil {
-		return err
-	}
 	fs = fs.Filter(newImage.Filter)
 	if err := spliceComputedFiles(fs); err != nil {
 		return err
@@ -63,16 +60,19 @@ func addImagesub(imageSClient *srpc.Client,
 	return addImage(imageSClient, name, newImage, logger)
 }
 
-func applyDeleteFilter(fs *filesystem.FileSystem) (
+func applyDeleteFilter(fs *filesystem.FileSystem, filt *filter.Filter) (
 	*filesystem.FileSystem, error) {
 	if *deleteFilter == "" {
-		return fs, nil
+		if filt == nil {
+			return fs, nil
+		}
+		return fs.Filter(filt), nil
 	}
-	filter, err := filter.Load(*deleteFilter)
+	filt, err := filter.Load(*deleteFilter)
 	if err != nil {
 		return nil, err
 	}
-	return fs.Filter(filter), nil
+	return fs.Filter(filt), nil
 }
 
 func copyMissingObjects(fs *filesystem.FileSystem, imageSClient *srpc.Client,

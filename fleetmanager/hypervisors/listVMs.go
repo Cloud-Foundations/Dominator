@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
+	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -42,6 +43,22 @@ func getVmListFromMap(vmMap map[string]*vmInfoType, doSort bool) []*vmInfoType {
 	return vms
 }
 
+// numSpecifiedVirtualCPUs calculates the number of virtual CPUs required for
+// the specified request. The request must be correct (i.e. sufficient vCPUs).
+func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
+	nCpus := milliCPUs / 1000
+	if nCpus < 1 {
+		nCpus = 1
+	}
+	if nCpus*1000 < milliCPUs {
+		nCpus++
+	}
+	if nCpus < vCPUs {
+		nCpus = vCPUs
+	}
+	return nCpus
+}
+
 func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	primaryOwnerFilter string, outputType uint) (map[string]struct{}, error) {
 	topology, err := m.getTopology()
@@ -54,8 +71,8 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 		writer.WriteString(commonStyleSheet)
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ = html.NewTableWriter(writer, true, "IP Addr", "Name(tag)",
-			"State", "RAM", "CPU", "Num Volumes", "Storage", "Primary Owner",
-			"Hypervisor", "Location")
+			"State", "RAM", "CPU", "vCPU", "Num Volumes", "Storage",
+			"Primary Owner", "Hypervisor", "Location")
 	}
 	primaryOwnersMap := make(map[string]struct{})
 	for _, vm := range vms {
@@ -86,6 +103,11 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			} else if topology.CheckIfIpIsReserved(vm.ipAddr) {
 				background = "orange"
 			}
+			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,
+				vm.VirtualCPUs)))
+			if vm.VirtualCPUs < 1 {
+				vCPUs = `<font color="grey">` + vCPUs + `</font>`
+			}
 			tw.WriteRow(foreground, background,
 				fmt.Sprintf("<a href=\"http://%s:%d/showVM?%s\">%s</a>",
 					vm.hypervisor.machine.Hostname,
@@ -94,6 +116,7 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 				vm.State.String(),
 				format.FormatBytes(vm.MemoryInMiB<<20),
 				fmt.Sprintf("%g", float64(vm.MilliCPUs)*1e-3),
+				vCPUs,
 				vm.numVolumesTableEntry(),
 				vm.storageTotalTableEntry(),
 				vm.OwnerUsers[0],
@@ -137,11 +160,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
 		fmt.Fprintln(writer, "</body>")
-		primaryOwners := make([]string, 0, len(primaryOwnersMap))
-		for primaryOwner := range primaryOwnersMap {
-			primaryOwners = append(primaryOwners, primaryOwner)
-		}
-		sort.Strings(primaryOwners)
+		primaryOwners := stringutil.ConvertMapKeysToList(primaryOwnersMap, true)
 		fmt.Fprintln(writer, "Filter by primary owner:<br>")
 		for _, primaryOwner := range primaryOwners {
 			fmt.Fprintf(writer,

@@ -25,34 +25,35 @@ func showNetworkConfigurationSubcommand(args []string,
 	logger log.DebugLogger) error {
 	err := showNetworkConfiguration(logger)
 	if err != nil {
-		return fmt.Errorf("Error showing network configuration: %s", err)
+		return fmt.Errorf("error showing network configuration: %s", err)
 	}
 	return nil
 }
 
-func getInfoForhost(hostname string) (fm_proto.GetMachineInfoResponse, error) {
+func getInfoForhost(hostname string,
+	logger log.DebugLogger) (fm_proto.GetMachineInfoResponse, error) {
 	fmCR := srpc.NewClientResource("tcp",
 		fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum))
 	defer fmCR.ScheduleClose()
 	if hostname != "" && hostname != "localhost" {
-		return getInfoForMachine(fmCR, hostname)
+		return getInfoForMachine(fmCR, hostname, logger)
 	}
 	if hostname, err := os.Hostname(); err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
-	} else if info, err := getInfoForMachine(fmCR, hostname); err == nil {
+	} else if info, e := getInfoForMachine(fmCR, hostname, logger); e == nil {
 		return info, nil
 	} else if !strings.Contains(err.Error(), "unknown machine") {
 		return fm_proto.GetMachineInfoResponse{}, err
 	} else if hostname, err := getHostname(); err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	} else {
-		return getInfoForMachine(fmCR, hostname)
+		return getInfoForMachine(fmCR, hostname, logger)
 	}
 }
 
 func getNetworkConfiguration(hostname string, logger log.DebugLogger) (
 	*configurator.NetworkConfig, error) {
-	info, err := getInfoForhost(hostname)
+	info, err := getInfoForhost(hostname, logger)
 	if err != nil {
 		return nil, err
 	}

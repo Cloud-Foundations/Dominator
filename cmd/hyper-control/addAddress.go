@@ -17,7 +17,7 @@ func addAddressSubcommand(args []string, logger log.DebugLogger) error {
 	}
 	err := addAddress(args[0], ipAddr, logger)
 	if err != nil {
-		return fmt.Errorf("Error adding address: %s", err)
+		return fmt.Errorf("error adding address: %s", err)
 	}
 	return nil
 }

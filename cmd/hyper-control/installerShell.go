@@ -13,7 +13,7 @@ import (
 func installerShellSubcommand(args []string, logger log.DebugLogger) error {
 	err := installerShell(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error talking to installer shell: %s", err)
+		return fmt.Errorf("error talking to installer shell: %s", err)
 	}
 	return nil
 }

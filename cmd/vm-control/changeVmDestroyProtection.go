@@ -12,7 +12,7 @@ import (
 func changeVmDestroyProtectionSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := changeVmDestroyProtection(args[0], logger); err != nil {
-		return fmt.Errorf("Error changing VM destroy protection: %s", err)
+		return fmt.Errorf("error changing VM destroy protection: %s", err)
 	}
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 
 func clearSafetyShutoffSubcommand(args []string, logger log.DebugLogger) error {
 	if err := clearSafetyShutoff(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error clearing safety shutoff: %s", err)
+		return fmt.Errorf("error clearing safety shutoff: %s", err)
 	}
 	return nil
 }

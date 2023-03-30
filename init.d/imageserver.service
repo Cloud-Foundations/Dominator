@@ -6,7 +6,9 @@ After=network.target
 ExecStart=/usr/local/sbin/imageserver
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
-RestartSec=1
+RestartSec=5
+StartLimitIntervalSec=0
+StartLimitBurst=0
 User=imageserver
 Group=imageserver
 

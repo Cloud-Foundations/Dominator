@@ -9,13 +9,13 @@ import (
 
 func showImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := showImage(args[0]); err != nil {
-		return fmt.Errorf("Error showing image: %s", err)
+		return fmt.Errorf("error showing image: %s", err)
 	}
 	return nil
 }
 
 func showImage(image string) error {
-	fs, err := getTypedImage(image)
+	fs, _, err := getTypedImage(image)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ import (
 func copyImageSubcommand(args []string, logger log.DebugLogger) error {
 	imageSClient, _ := getClients()
 	if err := copyImage(imageSClient, args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error copying image: %s", err)
+		return fmt.Errorf("error copying image: %s", err)
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,10 +15,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 )
@@ -34,10 +35,19 @@ func getNamespace() (string, error) {
 }
 
 func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
+	return imageStreamsRealDecoder(reader)
+}
+
+func imageStreamsRealDecoder(reader io.Reader) (
+	*imageStreamsConfigurationType, error) {
 	var config imageStreamsConfigurationType
 	decoder := json.NewDecoder(bufio.NewReader(reader))
 	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("error reading image streams: %s", err)
+		return nil, err
+	}
+	for _, stream := range config.Streams {
+		stream.builderUsers = stringutil.ConvertListToMap(stream.BuilderUsers,
+			false)
 	}
 	return &config, nil
 }
@@ -45,6 +55,12 @@ func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
 func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
+	ctimeResolution, err := getCtimeResolution()
+	if err != nil {
+		return nil, err
+	}
+	logger.Printf("Inode Ctime resolution: %s\n",
+		format.Duration(ctimeResolution))
 	initialNamespace, err := getNamespace()
 	if err != nil {
 		return nil, err
@@ -75,8 +91,10 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	if variables == nil {
 		variables = make(map[string]string)
 	}
+	generateDependencyTrigger := make(chan struct{}, 0)
 	b := &Builder{
 		bindMounts:                masterConfiguration.BindMounts,
+		generateDependencyTrigger: generateDependencyTrigger,
 		stateDir:                  stateDir,
 		imageServerAddress:        imageServerAddress,
 		logger:                    logger,
@@ -85,7 +103,7 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
 		slaveDriver:               slaveDriver,
-		currentBuildLogs:          make(map[string]*bytes.Buffer),
+		currentBuildInfos:         make(map[string]*currentBuildInfo),
 		lastBuildResults:          make(map[string]buildResultType),
 		packagerTypes:             masterConfiguration.PackagerTypes,
 		variables:                 variables,
@@ -103,6 +121,7 @@ func load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	if err != nil {
 		return nil, err
 	}
+	go b.dependencyGeneratorLoop(generateDependencyTrigger)
 	go b.watchConfigLoop(imageStreamsConfigChannel)
 	go b.rebuildImages(imageRebuildInterval)
 	return b, nil
@@ -117,13 +136,12 @@ func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
 		return nil, err
 	}
 	defer file.Close()
-	var configuration imageStreamsConfigurationType
-	decoder := json.NewDecoder(bufio.NewReader(file))
-	if err := decoder.Decode(&configuration); err != nil {
+	configuration, err := imageStreamsRealDecoder(file)
+	if err != nil {
 		return nil, fmt.Errorf("error decoding image streams from: %s: %s",
 			url, err)
 	}
-	return &configuration, nil
+	return configuration, nil
 }
 
 func masterConfiguration(url string) (*masterConfigurationType, error) {
@@ -241,6 +259,7 @@ func (b *Builder) updateImageStreams(
 	b.streamsLock.Lock()
 	b.imageStreams = imageStreamsConfiguration.Streams
 	b.streamsLock.Unlock()
+	b.triggerDependencyDataGeneration()
 	return b.makeRequiredDirectories()
 }
 

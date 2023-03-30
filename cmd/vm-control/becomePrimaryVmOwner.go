@@ -12,7 +12,7 @@ import (
 func becomePrimaryVmOwnerSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := becomePrimaryVmOwner(args[0], logger); err != nil {
-		return fmt.Errorf("Error becoming primary VM owner: %s", err)
+		return fmt.Errorf("error becoming primary VM owner: %s", err)
 	}
 	return nil
 }

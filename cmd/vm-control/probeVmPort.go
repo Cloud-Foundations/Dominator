@@ -12,10 +12,10 @@ import (
 
 func probeVmPortSubcommand(args []string, logger log.DebugLogger) error {
 	if *probePortNum < 1 {
-		return fmt.Errorf("Must provide -probePortNum flag")
+		return fmt.Errorf("must provide -probePortNum flag")
 	}
 	if err := probeVmPort(args[0], logger); err != nil {
-		return fmt.Errorf("Error probing VM: %s", err)
+		return fmt.Errorf("error probing VM: %s", err)
 	}
 	return nil
 }
@@ -54,7 +54,7 @@ func probeVmPortOnHypervisorClient(client *srpc.Client, ipAddr net.IP,
 		return err
 	}
 	if !reply.PortIsOpen {
-		return errors.New("Timed out probing port")
+		return errors.New("timed out probing port")
 	}
 	logger.Debugf(0, "Port %d is open\n", *probePortNum)
 	return nil

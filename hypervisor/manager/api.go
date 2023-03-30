@@ -48,6 +48,8 @@ type Manager struct {
 	subnets           map[string]proto.Subnet // Key: Subnet ID.
 	subnetChannels    []chan<- proto.Subnet
 	vms               map[string]*vmInfoType // Key: IP address.
+	vsocketsEnabled   bool
+	uuid              string
 }
 
 type StartOptions struct {
@@ -131,9 +133,9 @@ func (m *Manager) ChangeVmOwnerUsers(ipAddr net.IP,
 	return m.changeVmOwnerUsers(ipAddr, authInfo, extraUsers)
 }
 
-func (m *Manager) ChangeVmSize(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	memoryInMiB uint64, milliCPUs uint) error {
-	return m.changeVmSize(ipAddr, authInfo, memoryInMiB, milliCPUs)
+func (m *Manager) ChangeVmSize(authInfo *srpc.AuthInformation,
+	req proto.ChangeVmSizeRequest) error {
+	return m.changeVmSize(authInfo, req)
 }
 
 func (m *Manager) ChangeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
@@ -147,6 +149,10 @@ func (m *Manager) CheckOwnership(authInfo *srpc.AuthInformation) bool {
 
 func (m *Manager) CheckVmHasHealthAgent(ipAddr net.IP) (bool, error) {
 	return m.checkVmHasHealthAgent(ipAddr)
+}
+
+func (m *Manager) CheckVsocketsEnabled() bool {
+	return m.vsocketsEnabled
 }
 
 func (m *Manager) CloseUpdateChannel(channel <-chan proto.Update) {
@@ -228,13 +234,17 @@ func (m *Manager) GetRootCookiePath() string {
 	return filepath.Join(m.StartOptions.StateDir, "root-cookie")
 }
 
+func (m *Manager) GetVmAccessToken(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, lifetime time.Duration) ([]byte, error) {
+	return m.getVmAccessToken(ipAddr, authInfo, lifetime)
+}
+
 func (m *Manager) GetVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return m.getVmBootLog(ipAddr)
 }
 
-func (m *Manager) GetVmAccessToken(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, lifetime time.Duration) ([]byte, error) {
-	return m.getVmAccessToken(ipAddr, authInfo, lifetime)
+func (m *Manager) GetVmCID(ipAddr net.IP) (uint32, error) {
+	return m.getVmCID(ipAddr)
 }
 
 func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
@@ -256,6 +266,10 @@ func (m *Manager) GetVmUserDataRPC(ipAddr net.IP,
 
 func (m *Manager) GetVmVolume(conn *srpc.Conn) error {
 	return m.getVmVolume(conn)
+}
+
+func (m *Manager) GetUUID() (string, error) {
+	return m.uuid, nil
 }
 
 func (m *Manager) ImportLocalVm(authInfo *srpc.AuthInformation,

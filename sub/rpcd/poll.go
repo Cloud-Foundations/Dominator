@@ -18,11 +18,12 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 		_, err = conn.WriteString(err.Error() + "\n")
 		return err
 	}
+	if !request.ShortPollOnly && !conn.GetAuthInformation().HaveMethodAccess {
+		_, e := conn.WriteString(srpc.ErrorAccessToMethodDenied.Error() + "\n")
+		return e
+	}
 	if _, err := conn.WriteString("\n"); err != nil {
 		return err
-	}
-	if !request.ShortPollOnly && !conn.GetAuthInformation().HaveMethodAccess {
-		return srpc.ErrorAccessToMethodDenied
 	}
 	response.NetworkSpeed = t.networkReaderContext.MaximumSpeed()
 	response.CurrentConfiguration = t.getConfiguration()

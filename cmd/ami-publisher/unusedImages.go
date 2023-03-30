@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"syscall"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	libtags "github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
@@ -22,7 +22,7 @@ const (
 
 func listUnusedImagesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := listUnusedImages(logger); err != nil {
-		return fmt.Errorf("Error listing unused images: %s", err)
+		return fmt.Errorf("error listing unused images: %s", err)
 	}
 	logMemoryUsage(logger)
 	return nil
@@ -70,7 +70,7 @@ func writeInstancesCsv(filename string,
 			tagKeysSet[key] = struct{}{}
 		}
 	}
-	tagKeysList := makeTagKeysList(tagKeysSet)
+	tagKeysList := stringutil.ConvertMapKeysToList(tagKeysSet, true)
 	header := []string{"Account", "Region", "AmiId", "InstanceId", "LaunchTime"}
 	header = append(header, tagKeysList...)
 	if err := writer.Write(header); err != nil {
@@ -108,7 +108,7 @@ func writeUnusedImagesCsv(filename string,
 			tagKeysSet[key] = struct{}{}
 		}
 	}
-	tagKeysList := makeTagKeysList(tagKeysSet)
+	tagKeysList := stringutil.ConvertMapKeysToList(tagKeysSet, true)
 	header := []string{
 		"Account",
 		"Region",
@@ -140,15 +140,6 @@ func writeUnusedImagesCsv(filename string,
 	return nil
 }
 
-func makeTagKeysList(tagKeysSet map[string]struct{}) []string {
-	tagKeysList := make([]string, 0, len(tagKeysSet))
-	for key := range tagKeysSet {
-		tagKeysList = append(tagKeysList, key)
-	}
-	sort.Strings(tagKeysList)
-	return tagKeysList
-}
-
 func appendRecordAndWrite(writer *csv.Writer, record []string,
 	tagKeysList []string, tags libtags.Tags) error {
 	for _, key := range tagKeysList {
@@ -160,7 +151,7 @@ func appendRecordAndWrite(writer *csv.Writer, record []string,
 
 func deleteUnusedImagesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := deleteUnusedImages(logger); err != nil {
-		return fmt.Errorf("Error deleting unused images: %s", err)
+		return fmt.Errorf("error deleting unused images: %s", err)
 	}
 	logMemoryUsage(logger)
 	return nil

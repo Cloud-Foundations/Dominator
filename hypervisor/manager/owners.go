@@ -2,17 +2,12 @@ package manager
 
 import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func (m *Manager) changeOwners(ownerGroups, ownerUsers []string) error {
-	ownerGroupsMap := make(map[string]struct{}, len(ownerGroups))
-	for _, group := range ownerGroups {
-		ownerGroupsMap[group] = struct{}{}
-	}
-	ownerUsersMap := make(map[string]struct{}, len(ownerUsers))
-	for _, user := range ownerUsers {
-		ownerUsersMap[user] = struct{}{}
-	}
+	ownerGroupsMap := stringutil.ConvertListToMap(ownerGroups, false)
+	ownerUsersMap := stringutil.ConvertListToMap(ownerUsers, false)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.ownerGroups = ownerGroupsMap

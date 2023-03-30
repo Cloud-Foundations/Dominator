@@ -110,6 +110,7 @@ type ChangeVmSizeRequest struct {
 	IpAddress   net.IP
 	MemoryInMiB uint64
 	MilliCPUs   uint
+	VirtualCPUs uint
 }
 
 type ChangeVmSizeResponse struct {
@@ -609,6 +610,7 @@ type VmInfo struct {
 	SecondarySubnetIDs []string  `json:",omitempty"`
 	SubnetId           string    `json:",omitempty"`
 	Uncommitted        bool      `json:",omitempty"`
+	VirtualCPUs        uint      `json:",omitempty"`
 	Volumes            []Volume  `json:",omitempty"`
 }
 

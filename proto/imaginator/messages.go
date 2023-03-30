@@ -23,3 +23,20 @@ type BuildImageResponse struct {
 	BuildLog    []byte
 	ErrorString string
 }
+
+type GetDirectedGraphRequest struct {
+	MaxAge time.Duration
+}
+
+type GetDirectedGraphResponse struct {
+	GetDirectedGraphResult
+	Error string
+}
+
+type GetDirectedGraphResult struct {
+	FetchLog         []byte
+	GeneratedAt      time.Time
+	GraphvizDot      []byte
+	LastAttemptAt    time.Time
+	LastAttemptError string
+}

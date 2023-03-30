@@ -11,7 +11,7 @@ import (
 
 func startVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := startVm(args[0], logger); err != nil {
-		return fmt.Errorf("Error starting VM: %s", err)
+		return fmt.Errorf("error starting VM: %s", err)
 	}
 	return nil
 }

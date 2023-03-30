@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb/mdbd"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
@@ -99,6 +100,7 @@ func main() {
 	}
 	objectServer := memory.NewObjectServer()
 	logger := cmdlogger.New()
+	srpc.SetDefaultLogger(logger)
 	manager := client.New(objectServer, logger)
 	mdbChannel := mdbd.StartMdbDaemon(*mdbFile, logger)
 	machines := make(map[string]struct{})

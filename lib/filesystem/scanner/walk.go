@@ -340,7 +340,15 @@ func (h cpuLimitedHasher) hash(reader io.Reader, length uint64) (
 
 func scanRegularInode(inode *filesystem.RegularInode, fileSystem *FileSystem,
 	myPathName string) error {
-	f, err := os.Open(path.Join(fileSystem.rootDirectoryName, myPathName))
+	pathName := path.Join(fileSystem.rootDirectoryName, myPathName)
+	if oh, ok := fileSystem.hasher.(openingHasher); ok {
+		if hashed, err := oh.OpenAndHash(inode, pathName); err != nil {
+			return err
+		} else if hashed {
+			return nil
+		}
+	}
+	f, err := os.Open(pathName)
 	if err != nil {
 		return err
 	}

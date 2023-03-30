@@ -37,6 +37,7 @@ type Image struct {
 	CreatedOn     time.Time
 	ExpiresAt     time.Time
 	Packages      []Package
+	SourceImage   string // Name of source image.
 }
 
 type Package struct {

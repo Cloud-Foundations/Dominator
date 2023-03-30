@@ -11,7 +11,7 @@ import (
 
 func disableUpdatesSubcommand(args []string, logger log.DebugLogger) error {
 	if err := disableUpdates(getClient(), args[0]); err != nil {
-		return fmt.Errorf("Error disabling updates: %s", err)
+		return fmt.Errorf("error disabling updates: %s", err)
 	}
 	return nil
 }

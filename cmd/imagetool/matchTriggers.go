@@ -16,13 +16,13 @@ var quitEarly = errors.New("quit early")
 
 func matchTriggersSubcommand(args []string, logger log.DebugLogger) error {
 	if err := matchTriggers(args[0], args[1]); err != nil {
-		return fmt.Errorf("Error matching triggers: %s", err)
+		return fmt.Errorf("error matching triggers: %s", err)
 	}
 	return nil
 }
 
 func matchTriggers(image string, triggersFile string) error {
-	fs, err := getTypedImage(image)
+	fs, _, err := getTypedImage(image)
 	if err != nil {
 		return err
 	}

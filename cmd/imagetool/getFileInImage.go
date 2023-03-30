@@ -19,14 +19,14 @@ func getFileInImageSubcommand(args []string, logger log.DebugLogger) error {
 	}
 	err := getFileInImage(objectClient, args[0], args[1], outFileName)
 	if err != nil {
-		return fmt.Errorf("Error getting file in image: %s", err)
+		return fmt.Errorf("error getting file in image: %s", err)
 	}
 	return nil
 }
 
 func getFileInImage(objectClient *objectclient.ObjectClient, imageName,
 	imageFile, outFileName string) error {
-	fs, err := getTypedImage(imageName)
+	fs, _, err := getTypedImage(imageName)
 	if err != nil {
 		return err
 	}

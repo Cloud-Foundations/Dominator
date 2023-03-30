@@ -12,10 +12,22 @@ func (b *Builder) getNormalStream(name string) *imageStreamType {
 	return b.imageStreams[name]
 }
 
+func (b *Builder) getNumBootstrapStreams() int {
+	b.streamsLock.RLock()
+	defer b.streamsLock.RUnlock()
+	return len(b.bootstrapStreams)
+}
+
 func (b *Builder) getNumNormalStreams() int {
 	b.streamsLock.RLock()
 	defer b.streamsLock.RUnlock()
 	return len(b.imageStreams)
+}
+
+func (b *Builder) getNumStreams() int {
+	b.streamsLock.RLock()
+	defer b.streamsLock.RUnlock()
+	return len(b.bootstrapStreams) + len(b.imageStreams)
 }
 
 func (b *Builder) listAllStreamNames() []string {

@@ -16,7 +16,7 @@ func addImageimageSubcommand(args []string, logger log.DebugLogger) error {
 	err := addImageimage(imageSClient, objectClient, args[0], args[1], args[2],
 		args[3], logger)
 	if err != nil {
-		return fmt.Errorf("Error adding image: \"%s\"\t%s", args[0], err)
+		return fmt.Errorf("error adding image: \"%s\": %s", args[0], err)
 	}
 	return nil
 }
@@ -37,14 +37,15 @@ func addImageimage(imageSClient *srpc.Client,
 		triggersFilename); err != nil {
 		return err
 	}
-	fs, err := getFsOfImage(imageSClient, oldImageName)
+	img, err := getImage(imageSClient, oldImageName)
 	if err != nil {
 		return err
 	}
-	if err := spliceComputedFiles(fs); err != nil {
+	if err := spliceComputedFiles(img.FileSystem); err != nil {
 		return err
 	}
-	if fs, err = applyDeleteFilter(fs); err != nil {
+	fs, err := applyDeleteFilter(img.FileSystem, img.Filter)
+	if err != nil {
 		return err
 	}
 	fs = fs.Filter(newImage.Filter)

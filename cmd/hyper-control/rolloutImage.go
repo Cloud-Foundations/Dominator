@@ -53,7 +53,7 @@ type hypervisorType struct {
 func rolloutImageSubcommand(args []string, logger log.DebugLogger) error {
 	err := rolloutImage(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error rolling out image: %s", err)
+		return fmt.Errorf("error rolling out image: %s", err)
 	}
 	return nil
 }

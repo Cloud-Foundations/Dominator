@@ -13,7 +13,7 @@ import (
 
 func replaceVmUserDataSubcommand(args []string, logger log.DebugLogger) error {
 	if err := replaceVmUserData(args[0], logger); err != nil {
-		return fmt.Errorf("Error replacing VM user data: %s", err)
+		return fmt.Errorf("error replacing VM user data: %s", err)
 	}
 	return nil
 }

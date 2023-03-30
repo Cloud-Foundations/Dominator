@@ -12,7 +12,7 @@ import (
 
 func patchVmImageSubcommand(args []string, logger log.DebugLogger) error {
 	if err := patchVmImage(args[0], logger); err != nil {
-		return fmt.Errorf("Error patching VM image: %s", err)
+		return fmt.Errorf("error patching VM image: %s", err)
 	}
 	return nil
 }

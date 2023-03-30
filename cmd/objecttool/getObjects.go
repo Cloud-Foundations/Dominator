@@ -16,7 +16,7 @@ import (
 
 func getObjectsSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getObjects(getObjectServer(), args[0], args[1]); err != nil {
-		return fmt.Errorf("Error getting objects: %s", err)
+		return fmt.Errorf("error getting objects: %s", err)
 	}
 	return nil
 }

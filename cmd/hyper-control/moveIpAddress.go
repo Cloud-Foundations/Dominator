@@ -12,7 +12,7 @@ import (
 
 func moveIpAddressSubcommand(args []string, logger log.DebugLogger) error {
 	if err := moveIpAddress(args[0], logger); err != nil {
-		return fmt.Errorf("Error moving IP address: %s", err)
+		return fmt.Errorf("error moving IP address: %s", err)
 	}
 	return nil
 }

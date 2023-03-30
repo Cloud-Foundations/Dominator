@@ -8,7 +8,9 @@ ExecStart=/usr/local/sbin/hypervisor
 ExecStop=/usr/local/sbin/hypervisor stop
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
-RestartSec=1
+RestartSec=5
+StartLimitIntervalSec=0
+StartLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target

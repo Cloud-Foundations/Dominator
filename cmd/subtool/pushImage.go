@@ -40,7 +40,7 @@ func pushImageSubcommand(args []string, logger log.DebugLogger) error {
 	defer srpcClient.Close()
 	showTimeTaken(startTime)
 	if err := pushImage(srpcClient, args[0]); err != nil {
-		return fmt.Errorf("Error pushing image: %s: %s", args[0], err)
+		return fmt.Errorf("error pushing image: %s: %s", args[0], err)
 	}
 	return nil
 }
@@ -98,9 +98,13 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 			return err
 		}
 	}
-	if err := pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime,
-		logger); err != nil {
+	err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, false,
+		logger)
+	if err != nil {
 		return err
+	}
+	if err := srpcClient.SetKeepAlivePeriod(time.Second); err != nil {
+		return fmt.Errorf("error setting keep-alive period: %s", err)
 	}
 	var updateRequest sub.UpdateRequest
 	var updateReply sub.UpdateResponse
@@ -144,6 +148,7 @@ func getImageRetry(clientName, imageName string,
 		return nil, err
 	}
 	defer imageSrpcClient.Close()
+	firstTime := true
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		img, err := imgclient.GetImage(imageSrpcClient, imageName)
 		if err != nil {
@@ -158,15 +163,18 @@ func getImageRetry(clientName, imageName string,
 			img.FileSystem.ComputeTotalDataBytes()
 			img.FileSystem.BuildEntryMap()
 			return img, nil
+		} else if firstTime {
+			logger.Printf("Image: %s not found, will retry\n", imageName)
+			firstTime = false
 		}
 	}
 	return nil, errors.New("timed out getting image")
 }
 
 func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
-	imageServerAddress string, timeoutTime time.Time,
+	imageServerAddress string, timeoutTime time.Time, singleFetch bool,
 	logger log.DebugLogger) error {
-	var generationCount uint64
+	var generationCount, lastGenerationCount, lastScanCount uint64
 	deleteEarly := *deleteBeforeFetch
 	ignoreMissingComputedFiles := true
 	pushComputedFiles := true
@@ -176,10 +184,30 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 	}
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		var pollReply sub.PollResponse
+		if err := client.BoostCpuLimit(subObj.Client); err != nil {
+			return err
+		}
 		if err := pollAndBuildPointers(subObj.Client, &generationCount,
 			&pollReply); err != nil {
 			return err
 		}
+		if pollReply.GenerationCount != lastGenerationCount ||
+			pollReply.ScanCount != lastScanCount {
+			if pollReply.FileSystem == nil {
+				logger.Debugf(0,
+					"Poll Scan: %d, Generation: %d, cached objects: %d\n",
+					pollReply.ScanCount, pollReply.GenerationCount,
+					len(pollReply.ObjectCache))
+			} else {
+				logger.Debugf(0,
+					"Poll Scan: %d, Generation: %d, FS objects: %d, cached objects: %d\n",
+					pollReply.ScanCount, pollReply.GenerationCount,
+					len(pollReply.FileSystem.InodeTable),
+					len(pollReply.ObjectCache))
+			}
+		}
+		lastGenerationCount = pollReply.GenerationCount
+		lastScanCount = pollReply.ScanCount
 		if pollReply.FileSystem == nil {
 			continue
 		}
@@ -200,6 +228,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			return nil
 		}
 		if len(objectsToFetch) > 0 {
+			logger.Debugf(0, "Fetch(%d)\n", len(objectsToFetch))
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
 				ServerAddress: imageServerAddress,
@@ -212,8 +241,12 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 				return err
 			}
 			showTimeTaken(startTime)
+			if singleFetch {
+				return nil
+			}
 		}
 		if len(objectsToPush) > 0 {
+			logger.Debugf(0, "PushObjects(%d)\n", len(objectsToPush))
 			startTime := showStart("lib.PushObjects()")
 			err := lib.PushObjects(*subObj, objectsToPush, logger)
 			if err != nil {

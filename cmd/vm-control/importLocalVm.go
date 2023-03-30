@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -55,10 +56,7 @@ func askForCommitDecision(client *srpc.Client, ipAddress net.IP) error {
 
 func askForInputChoice(prompt string, choices []string) (string, error) {
 	reader := bufio.NewReader(os.Stdin)
-	choicesMap := make(map[string]struct{}, len(choices))
-	for _, choice := range choices {
-		choicesMap[choice] = struct{}{}
-	}
+	choicesMap := stringutil.ConvertListToMap(choices, false)
 	for {
 		fmt.Fprintf(os.Stderr, "%s (%s)? ", prompt, strings.Join(choices, "/"))
 		if response, err := reader.ReadString('\n'); err != nil {
@@ -84,7 +82,7 @@ func commitVm(client *srpc.Client, ipAddress net.IP) error {
 
 func importLocalVmSubcommand(args []string, logger log.DebugLogger) error {
 	if err := importLocalVm(args[0], args[1], logger); err != nil {
-		return fmt.Errorf("Error importing VM: %s", err)
+		return fmt.Errorf("error importing VM: %s", err)
 	}
 	return nil
 }

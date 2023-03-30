@@ -29,7 +29,11 @@ func handleNotifications(directoryChannel <-chan string,
 	logger log.DebugLogger) {
 	var prevTopology *Topology
 	for dir := range directoryChannel {
-		if topology, err := load(filepath.Join(dir, topologyDir)); err != nil {
+		params := Params{
+			Logger:      logger,
+			TopologyDir: filepath.Join(dir, topologyDir),
+		}
+		if topology, err := load(params); err != nil {
 			logger.Println(err)
 		} else if prevTopology.equal(topology) {
 			logger.Debugln(1, "Ignoring unchanged configuration")

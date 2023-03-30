@@ -79,10 +79,10 @@ func testEcho(conn net.Conn) error {
 	if nRead, err := conn.Read(readBuffer); err != nil {
 		return errors.New("error reading test string response: " + err.Error())
 	} else if nRead != len(writeBuffer) {
-		return fmt.Errorf("Wrote: %d bytes, read: %d bytes",
+		return fmt.Errorf("wrote: %d bytes, read: %d bytes",
 			len(writeBuffer), nRead)
 	} else if rString := string(readBuffer[0:nRead]); rString != testString {
-		return fmt.Errorf("Wrote: \"%s\", read: \"%s\"", testString, rString)
+		return fmt.Errorf("wrote: \"%s\", read: \"%s\"", testString, rString)
 	}
 	return conn.Close()
 }

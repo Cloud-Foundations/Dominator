@@ -2,7 +2,6 @@ package objectcache
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 )
@@ -20,8 +19,7 @@ func decode(reader io.Reader) (ObjectCache, error) {
 			return nil, err
 		}
 		if nRead != len(*hash) {
-			return nil, errors.New(fmt.Sprintf(
-				"read: %d, expected: %d", nRead, len(hash)))
+			return nil, fmt.Errorf("read: %d, expected: %d", nRead, len(hash))
 		}
 	}
 	return objectCache, nil
@@ -38,8 +36,7 @@ func (objectCache ObjectCache) encode(writer io.Writer) error {
 			return err
 		}
 		if nWritten != len(hash) {
-			return errors.New(fmt.Sprintf(
-				"wrote: %d, expected: %d", nWritten, len(hash)))
+			return fmt.Errorf("wrote: %d, expected: %d", nWritten, len(hash))
 		}
 	}
 	return nil

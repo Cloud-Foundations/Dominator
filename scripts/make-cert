@@ -76,10 +76,14 @@ else
 fi
 
 # Now generate the signed certificate.
-openssl genpkey -algorithm RSA -out "$newkey.key.pem" \
-		-pkeyopt rsa_keygen_bits:2048
-openssl req -new -key "$newkey.key.pem" -extensions v3_ca \
-	    -batch -out "$newkey.csr" -utf8 -subj "/CN=$username"
+if [ ! -r "$newkey.key.pem" ]; then
+    openssl genpkey -algorithm RSA -out "$newkey.key.pem" \
+		    -pkeyopt rsa_keygen_bits:2048
+fi
+if [ ! -r "$newkey.csr" ]; then
+    openssl req -new -key "$newkey.key.pem" -extensions v3_ca \
+		-batch -out "$newkey.csr" -utf8 -subj "/CN=$username"
+fi
 openssl x509 -req -sha256 -days "$KEY_LIFETIME" -in "$newkey.csr" \
 	     -extfile "$tmpfile" $methods_args \
 	     -CAkey "$signing_key.key.pem" -CA "$signing_key.pem" \

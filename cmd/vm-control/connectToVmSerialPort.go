@@ -14,7 +14,7 @@ import (
 func connectToVmSerialPortSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := connectToVmSerialPort(args[0], logger); err != nil {
-		return fmt.Errorf("Error connecting to VM serial port: %s", err)
+		return fmt.Errorf("error connecting to VM serial port: %s", err)
 	}
 	return nil
 }

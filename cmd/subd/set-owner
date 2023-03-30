@@ -1,0 +1,29 @@
+#! /bin/bash --posix
+#
+# Set the subd owner for the machine.
+
+set -e
+
+readonly dirname='/etc/subd/conf.d'
+
+umask 022
+mkdir -p "$dirname"
+username="$1"
+
+if [ -z "$username" ]; then
+    # Try Keymaster certificate.
+    username=$(openssl x509 -subject -nameopt sep_multiline -noout \
+		       -in "$HOME/.ssl/keymaster.cert"             \
+		       | fgrep CN= | tr = ' ' | awk '{print $2}')
+fi
+
+if [ -z "$username" ]; then
+    echo "Username not specified on command line and not found in Keymaster certificate"
+    exit 1
+fi
+
+cat > "$dirname/90_set_owner" <<EndOfJson
+{
+    "OwnerUsers": ["$username"]
+}
+EndOfJson

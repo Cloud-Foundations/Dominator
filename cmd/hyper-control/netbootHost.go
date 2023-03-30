@@ -31,7 +31,7 @@ type leaseType struct {
 func netbootHostSubcommand(args []string, logger log.DebugLogger) error {
 	err := netbootHost(args[0], logger)
 	if err != nil {
-		return fmt.Errorf("Error netbooting host: %s", err)
+		return fmt.Errorf("error netbooting host: %s", err)
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func getInstallConfig(fmCR *srpc.ClientResource, imageClient *srpc.Client,
 	hostname string, addRandomData bool,
 	logger log.DebugLogger) (*fm_proto.GetMachineInfoResponse, []leaseType,
 	map[string][]byte, error) {
-	info, err := getInfoForMachine(fmCR, hostname)
+	info, err := getInfoForMachine(fmCR, hostname, logger)
 	if err != nil {
 		return nil, nil, nil, err
 	}

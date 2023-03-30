@@ -11,7 +11,7 @@ import (
 
 func changeVmOwnerUsersSubcommand(args []string, logger log.DebugLogger) error {
 	if err := changeVmOwnerUsers(args[0], logger); err != nil {
-		return fmt.Errorf("Error changing VM owner users: %s", err)
+		return fmt.Errorf("error changing VM owner users: %s", err)
 	}
 	return nil
 }
