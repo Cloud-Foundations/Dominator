@@ -403,6 +403,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		LocalVmInfo: proto.LocalVmInfo{
 			VmInfo: proto.VmInfo{
 				Address:            address,
+				CreatedOn:          time.Now(),
 				ConsoleType:        req.ConsoleType,
 				DestroyOnPowerdown: req.DestroyOnPowerdown,
 				DestroyProtection:  req.DestroyProtection,
@@ -3436,7 +3437,10 @@ func (vm *vmInfoType) serialManager() {
 }
 
 func (vm *vmInfoType) setState(state proto.State) {
-	vm.State = state
+	if state != vm.State {
+		vm.ChangedStateOn = time.Now()
+		vm.State = state
+	}
 	if !vm.doNotWriteOrSend {
 		vm.writeAndSendInfo()
 	}
