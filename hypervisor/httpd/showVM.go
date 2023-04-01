@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
+
+var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
 
 func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 	parsedQuery := url.ParseQuery(req.URL)
@@ -77,6 +80,8 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		} else {
 			writeString(writer, "Boot image", "was streamed in")
 		}
+		writeTime(writer, "Created on", vm.CreatedOn)
+		writeTime(writer, "Last state change", vm.ChangedStateOn)
 		writeString(writer, "State", vm.State.String())
 		writeString(writer, "RAM", format.FormatBytes(vm.MemoryInMiB<<20))
 		writeFloat(writer, "CPU", float64(vm.MilliCPUs)*1e-3)
@@ -114,12 +119,12 @@ func writeBool(writer io.Writer, name string, value bool) {
 	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%t</td></tr>\n", name, value)
 }
 
-func writeInt(writer io.Writer, name string, value int) {
-	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%d</td></tr>\n", name, value)
-}
-
 func writeFloat(writer io.Writer, name string, value float64) {
 	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%g</td></tr>\n", name, value)
+}
+
+func writeInt(writer io.Writer, name string, value int) {
+	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%d</td></tr>\n", name, value)
 }
 
 func writeString(writer io.Writer, name, value string) {
@@ -132,6 +137,14 @@ func writeStrings(writer io.Writer, name string, value []string) {
 	}
 	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%s</td></tr>\n",
 		name, strings.Join(value, ", "))
+}
+
+func writeTime(writer io.Writer, name string, value time.Time) {
+	if value.IsZero() {
+		return
+	}
+	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%s (%s ago)</td></tr>\n",
+		name, value.Format(timeFormat), format.Duration(time.Since(value)))
 }
 
 func writeUint64(writer io.Writer, name string, value uint64) {
