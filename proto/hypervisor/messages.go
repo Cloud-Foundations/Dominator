@@ -190,6 +190,7 @@ type CopyVmResponse struct { // Multiple responses are sent.
 
 type CreateVmRequest struct {
 	DhcpTimeout          time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
+	DoNotStart           bool
 	EnableNetboot        bool
 	ImageDataSize        uint64
 	ImageTimeout         time.Duration
