@@ -1054,21 +1054,26 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn, err)
 		}
 	}
-	if vm.ipAddress == "" {
-		ipAddressToSend = net.ParseIP(vm.ipAddress)
-		if err := sendUpdate(conn, "starting VM"); err != nil {
-			return err
-		}
+	var dhcpTimedOut bool
+	if request.DoNotStart {
+		vm.setState(proto.StateStopped)
 	} else {
-		ipAddressToSend = net.ParseIP(vm.ipAddress)
-		if err := sendUpdate(conn, "starting VM "+vm.ipAddress); err != nil {
-			return err
+		if vm.ipAddress == "" {
+			ipAddressToSend = net.ParseIP(vm.ipAddress)
+			if err := sendUpdate(conn, "starting VM"); err != nil {
+				return err
+			}
+		} else {
+			ipAddressToSend = net.ParseIP(vm.ipAddress)
+			if err := sendUpdate(conn, "starting VM "+vm.ipAddress); err != nil {
+				return err
+			}
 		}
-	}
-	dhcpTimedOut, err := vm.startManaging(request.DhcpTimeout,
-		request.EnableNetboot, false)
-	if err != nil {
-		return sendError(conn, err)
+		dhcpTimedOut, err = vm.startManaging(request.DhcpTimeout,
+			request.EnableNetboot, false)
+		if err != nil {
+			return sendError(conn, err)
+		}
 	}
 	vm.destroyTimer = time.AfterFunc(time.Second*15, vm.autoDestroy)
 	response := proto.CreateVmResponse{
