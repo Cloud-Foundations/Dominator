@@ -137,6 +137,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 	request := hyper_proto.CreateVmRequest{
 		DhcpTimeout:      *dhcpTimeout,
+		DoNotStart:       *doNotStart,
 		EnableNetboot:    *enableNetboot,
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
@@ -265,6 +266,9 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		return fmt.Errorf("error acknowledging VM: %s", err)
 	}
 	fmt.Println(reply.IpAddress)
+	if *doNotStart {
+		return nil
+	}
 	if reply.DhcpTimedOut {
 		return errors.New("DHCP ACK timed out")
 	}
