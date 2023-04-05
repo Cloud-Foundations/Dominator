@@ -69,10 +69,12 @@ type ListHypervisorsInLocationRequest struct {
 	IncludeUnhealthy bool
 	Location         string
 	SubnetId         string
+	TagsToInclude    []string
 }
 
 type ListHypervisorsInLocationResponse struct {
-	HypervisorAddresses []string // host:port
+	HypervisorAddresses []string    // host:port
+	TagsForHypervisors  []tags.Tags `json:",omitempty"`
 	Error               string
 }
 
