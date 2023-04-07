@@ -88,3 +88,9 @@ func (b *Builder) getVariableFunc(
 		return b.variables[varName]
 	}
 }
+
+type variablesGetter map[string]string
+
+func (vg variablesGetter) getenv() map[string]string {
+	return vg
+}
