@@ -38,6 +38,8 @@ var (
 	rawSize      flagutil.Size
 	showFetchLog = flag.Bool("showFetchLog", false,
 		"If true, show fetch log when getting directed graph")
+	variablesFilename = flag.String("variablesFilename", "",
+		"Name of file to read variables from for local builds")
 
 	minimumExpiration = 5 * time.Minute
 )
@@ -67,7 +69,8 @@ var subcommands = []commands.Command{
 		buildTreeFromManifestSubcommand},
 	{"get-dependencies", "", 0, 0, getDependenciesSubcommand},
 	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
-	{"process-manifest", "rootDir", 2, 2, processManifestSubcommand},
+	{"process-manifest", "manifestDir rootDir", 2, 2,
+		processManifestSubcommand},
 	{"replace-idle-slaves", "", 0, 0, replaceIdleSlavesSubcommand},
 }
 
