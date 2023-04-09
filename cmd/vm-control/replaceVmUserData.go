@@ -61,6 +61,13 @@ func replaceVmUserDataOnHypervisor(hypervisor string, ipAddr net.IP,
 	if err := conn.Flush(); err != nil {
 		return err
 	}
+	errorString, err := conn.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	if err := errors.New(errorString[:len(errorString)-1]); err != nil {
+		return err
+	}
 	var response proto.ReplaceVmUserDataResponse
 	if err := conn.Decode(&response); err != nil {
 		return err
