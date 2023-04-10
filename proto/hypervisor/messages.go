@@ -192,6 +192,8 @@ type CreateVmRequest struct {
 	DhcpTimeout          time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
 	DoNotStart           bool
 	EnableNetboot        bool
+	IdentityCertificate  []byte // PEM encoded.
+	IdentityKey          []byte // PEM encoded.
 	ImageDataSize        uint64
 	ImageTimeout         time.Duration
 	MinimumFreeBytes     uint64
@@ -669,6 +671,7 @@ type VmInfo struct {
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
+	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`
 	ImageURL           string      `json:",omitempty"`
 	MemoryInMiB        uint64
