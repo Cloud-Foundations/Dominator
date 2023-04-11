@@ -852,7 +852,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 	}
 	err = migratevmUserData(hypervisor,
-		filepath.Join(vm.dirname, "user-data.raw"),
+		filepath.Join(vm.dirname, UserDataFile),
 		request.IpAddress, accessToken)
 	if err != nil {
 		return err
@@ -900,6 +900,18 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		return sendError(conn, errors.New("no authentication data"))
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
+	var identityName string
+	if len(request.IdentityCertificate) > 0 && len(request.IdentityKey) > 0 {
+		var err error
+		identityName, err = validateIdentityKeyPair(
+			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
+		if err != nil {
+			if err := maybeDrainAll(conn, request); err != nil {
+				return err
+			}
+			return sendError(conn, err)
+		}
+	}
 	vm, err := m.allocateVm(request, conn.GetAuthInformation())
 	if err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
@@ -910,12 +922,22 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	defer func() {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
+	vm.IdentityName = identityName
 	var memoryError <-chan error
 	if !request.SkipMemoryCheck {
 		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
+		return sendError(conn, err)
+	}
+	err = writeKeyPair(request.IdentityCertificate, request.IdentityKey,
+		filepath.Join(vm.dirname, IdentityCertFile),
+		filepath.Join(vm.dirname, IdentityKeyFile))
+	if err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
 		}
@@ -1006,7 +1028,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
-		filename := filepath.Join(vm.dirname, "user-data.raw")
+		filename := filepath.Join(vm.dirname, UserDataFile)
 		if err := copyData(filename, conn, request.UserDataSize); err != nil {
 			return sendError(conn, err)
 		}
@@ -1336,7 +1358,7 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(filepath.Join(vm.dirname, "user-data.old"))
+	return os.Remove(filepath.Join(vm.dirname, UserDataFile+".old"))
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
@@ -1519,6 +1541,24 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return os.Open(filename)
 }
 
+func (m *Manager) getVmFileReader(ipAddr net.IP, authInfo *srpc.AuthInformation,
+	accessToken []byte, filename string) (io.ReadCloser, uint64, error) {
+	filename = filepath.Clean(filename)
+	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, accessToken)
+	if err != nil {
+		return nil, 0, err
+	}
+	pathname := filepath.Join(vm.dirname, filename)
+	vm.mutex.RUnlock()
+	if file, err := os.Open(pathname); err != nil {
+		return nil, 0, err
+	} else if fi, err := file.Stat(); err != nil {
+		return nil, 0, err
+	} else {
+		return file, uint64(fi.Size()), nil
+	}
+}
+
 func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
 	if err != nil {
@@ -1526,23 +1566,6 @@ func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	}
 	defer vm.mutex.RUnlock()
 	return vm.VmInfo, nil
-}
-
-func (m *Manager) getVmUserData(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	accessToken []byte) (io.ReadCloser, uint64, error) {
-	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, accessToken)
-	if err != nil {
-		return nil, 0, err
-	}
-	filename := filepath.Join(vm.dirname, "user-data.raw")
-	vm.mutex.RUnlock()
-	if file, err := os.Open(filename); err != nil {
-		return nil, 0, err
-	} else if fi, err := file.Stat(); err != nil {
-		return nil, 0, err
-	} else {
-		return file, uint64(fi.Size()), nil
-	}
 }
 
 func (m *Manager) getVmVolume(conn *srpc.Conn) error {
@@ -1904,7 +1927,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		}
 	}
 	err = migratevmUserData(hypervisor,
-		filepath.Join(vm.dirname, "user-data.raw"),
+		filepath.Join(vm.dirname, UserDataFile),
 		request.IpAddress, accessToken)
 	if err != nil {
 		return err
@@ -2711,7 +2734,7 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	filename := filepath.Join(vm.dirname, "user-data.raw")
+	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	newFilename := filename + ".new"
 	err = fsutil.CopyToFile(newFilename, privateFilePerms, reader, size)
@@ -2720,7 +2743,9 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	}
 	defer os.Remove(newFilename)
 	if err := os.Rename(filename, oldFilename); err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 	if err := os.Rename(newFilename, filename); err != nil {
 		os.Rename(oldFilename, filename)
@@ -2787,7 +2812,7 @@ func (m *Manager) restoreVmUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	filename := filepath.Join(vm.dirname, "user-data.raw")
+	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	return os.Rename(oldFilename, filename)
 }

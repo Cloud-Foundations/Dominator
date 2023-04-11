@@ -16,6 +16,12 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+const (
+	IdentityCertFile = "identity.cert"
+	IdentityKeyFile  = "identity.key"
+	UserDataFile     = "user-data.raw"
+)
+
 type addressPoolType struct {
 	Free       []proto.Address
 	Registered []proto.Address
@@ -258,21 +264,29 @@ func (m *Manager) GetVmCID(ipAddr net.IP) (uint32, error) {
 	return m.getVmCID(ipAddr)
 }
 
+func (m *Manager) GetVmFileData(ipAddr net.IP, filename string) (
+	io.ReadCloser, error) {
+	rc, _, err := m.getVmFileReader(ipAddr,
+		&srpc.AuthInformation{HaveMethodAccess: true},
+		nil, filename)
+	return rc, err
+}
+
 func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return m.getVmInfo(ipAddr)
 }
 
 func (m *Manager) GetVmUserData(ipAddr net.IP) (io.ReadCloser, error) {
-	rc, _, err := m.getVmUserData(ipAddr,
+	rc, _, err := m.getVmFileReader(ipAddr,
 		&srpc.AuthInformation{HaveMethodAccess: true},
-		nil)
+		nil, UserDataFile)
 	return rc, err
 }
 
 func (m *Manager) GetVmUserDataRPC(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, accessToken []byte) (
 	io.ReadCloser, uint64, error) {
-	return m.getVmUserData(ipAddr, authInfo, accessToken)
+	return m.getVmFileReader(ipAddr, authInfo, accessToken, UserDataFile)
 }
 
 func (m *Manager) GetVmVolume(conn *srpc.Conn) error {
