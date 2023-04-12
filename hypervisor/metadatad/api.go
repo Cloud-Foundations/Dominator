@@ -18,6 +18,7 @@ type server struct {
 	hypervisorPortNum uint
 	manager           *manager.Manager
 	logger            log.DebugLogger
+	fileHandlers      map[string]string
 	infoHandlers      map[string]metadataWriter
 	rawHandlers       map[string]rawHandlerFunc
 	paths             map[string]struct{}
@@ -31,6 +32,11 @@ func StartServer(hypervisorPortNum uint, bridges []net.Interface,
 		manager:           managerObj,
 		logger:            logger,
 	}
+	s.fileHandlers = map[string]string{
+		"/latest/dynamic/instance-identity/X.509-certificate": manager.IdentityCertFile,
+		"/latest/dynamic/instance-identity/X.509-key":         manager.IdentityKeyFile,
+		"/latest/user-data": manager.UserDataFile,
+	}
 	s.infoHandlers = map[string]metadataWriter{
 		"/latest/dynamic/epoch-time":                 s.showTime,
 		"/latest/dynamic/instance-identity/document": s.showVM,
@@ -38,7 +44,6 @@ func StartServer(hypervisorPortNum uint, bridges []net.Interface,
 	s.rawHandlers = map[string]rawHandlerFunc{
 		"/datasource/SmallStack":          s.showTrue,
 		"/latest/is-externally-patchable": s.showTrue,
-		"/latest/user-data":               s.showUserData,
 	}
 	s.computePaths()
 	return s.startServer()
