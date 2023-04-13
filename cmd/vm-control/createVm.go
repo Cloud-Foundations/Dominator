@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -209,6 +210,18 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 			util.WriteFstabEntry(secondaryFstab, "LABEL="+vinit.Label,
 				vinit.MountPoint, "ext4", "discard", 0, 2)
 		}
+	}
+	if *identityCertFile != "" && *identityKeyFile != "" {
+		identityCert, err := ioutil.ReadFile(*identityCertFile)
+		if err != nil {
+			return err
+		}
+		identityKey, err := ioutil.ReadFile(*identityKeyFile)
+		if err != nil {
+			return err
+		}
+		request.IdentityCertificate = identityCert
+		request.IdentityKey = identityKey
 	}
 	var imageReader, userDataReader io.Reader
 	if *imageName != "" {

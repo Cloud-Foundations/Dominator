@@ -47,6 +47,10 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
+	identityCertFile = flag.String("identityCertFile", "",
+		"Filename of PEM-encoded cetificate availabe from metadata service ")
+	identityKeyFile = flag.String("identityKeyFile", "",
+		"Filename of PEM-encoded key available from metadata service ")
 	includeUnhealthy = flag.Bool("includeUnhealthy", false,
 		"If true, list connected but unhealthy hypervisors")
 	imageFile = flag.String("imageFile", "",
