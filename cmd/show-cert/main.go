@@ -4,7 +4,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"time"
 
@@ -13,18 +15,41 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 )
 
-func printUsage() {
-	fmt.Fprintln(os.Stderr,
-		"Usage: show-cert certfile")
-}
+const (
+	linklocalAddress = "169.254.169.254"
+	metadataUrl      = "http://" + linklocalAddress + "/"
+	identityCert     = "latest/dynamic/instance-identity/X.509-certificate"
+)
 
-func showCert(filename string) {
-	fmt.Println("Certificate:", filename+":")
+func showCertFile(filename string) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to read certfile: %s\n", err)
 		return
 	}
+	fmt.Println("Certificate:", filename+":")
+	showCert(data)
+}
+
+func showCertMetadata() {
+	client := http.Client{Timeout: 100 * time.Millisecond}
+	resp, err := client.Get(metadataUrl + identityCert)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	fmt.Println("Certificate:", "MetadataIdentity:")
+	showCert(data)
+}
+
+func showCert(data []byte) {
 	block, rest := pem.Decode(data)
 	if block == nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse certificate PEM")
@@ -88,11 +113,11 @@ func showList(list map[string]struct{}) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(2)
+	if len(os.Args) == 1 {
+		showCertMetadata()
+		return
 	}
 	for _, filename := range os.Args[1:] {
-		showCert(filename)
+		showCertFile(filename)
 	}
 }
