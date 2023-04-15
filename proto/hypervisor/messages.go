@@ -523,6 +523,16 @@ type RegisterExternalLeasesResponse struct {
 	Error string
 }
 
+type ReplaceVmCredentialsRequest struct {
+	IdentityCertificate []byte // PEM encoded.
+	IdentityKey         []byte // PEM encoded.
+	IpAddress           net.IP
+}
+
+type ReplaceVmCredentialsResponse struct {
+	Error string
+}
+
 type ReplaceVmImageRequest struct {
 	DhcpTimeout      time.Duration
 	ImageDataSize    uint64
