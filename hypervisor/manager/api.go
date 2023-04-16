@@ -370,6 +370,12 @@ func (m *Manager) RegisterVmMetadataNotifier(ipAddr net.IP,
 	return m.registerVmMetadataNotifier(ipAddr, authInfo, pathChannel)
 }
 
+func (m *Manager) ReplaceVmCredentials(
+	request proto.ReplaceVmCredentialsRequest,
+	authInfo *srpc.AuthInformation) error {
+	return m.replaceVmCredentials(request, authInfo)
+}
+
 func (m *Manager) ReplaceVmImage(conn *srpc.Conn,
 	authInfo *srpc.AuthInformation) error {
 	return m.replaceVmImage(conn, authInfo)
