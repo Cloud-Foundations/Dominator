@@ -188,6 +188,7 @@ var subcommands = []commands.Command{
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
 	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
+	{"replace-vm-credentials", "IPaddr", 1, 1, replaceVmCredentialsSubcommand},
 	{"replace-vm-image", "IPaddr", 1, 1, replaceVmImageSubcommand},
 	{"replace-vm-user-data", "IPaddr", 1, 1, replaceVmUserDataSubcommand},
 	{"restore-vm", "source", 1, 1, restoreVmSubcommand},
