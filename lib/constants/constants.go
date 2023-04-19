@@ -24,6 +24,25 @@ const (
 
 	InitialImageNameFile = "/var/lib/initial-image"
 	PatchedImageNameFile = "/var/lib/patched-image"
+
+	// Metadata service.
+	LinklocalAddress = "169.254.169.254"
+	MetadataUrl      = "http://" + LinklocalAddress
+
+	// Common endpoints.
+	MetadataUserData = "/latest/user-data"
+
+	// SmallStack endpoints.
+	SmallStackDataSource = "/datasource/SmallStack"
+	MetadataEpochTime    = "/latest/dynamic/epoch-time"
+	MetadataIdentityCert = "/latest/dynamic/instance-identity/X.509-certificate"
+	MetadataIdentityDoc  = "/latest/dynamic/instance-identity/document"
+	MetadataIdentityKey  = "/latest/dynamic/instance-identity/X.509-key"
+
+	MetadataExternallyPatchable = "/latest/is-externally-patchable"
+
+	// AWS endpoints.
+	MetadataAwsInstanceType = "/latest/meta-data/instance-type"
 )
 
 var RequiredPaths = map[string]rune{
