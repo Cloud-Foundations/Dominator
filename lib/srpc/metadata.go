@@ -1,19 +1,23 @@
 package srpc
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 var (
-	identityDocument         = "latest/dynamic/instance-identity/document"
-	metadataAddress          = "http://169.254.169.254/"
-	smallStackDataSource     = "datasource/SmallStack"
 	smallStackOwnersLock     sync.Mutex
 	_smallStackOwners        *smallStackOwnersType
 	startedReadingSmallStack sync.Once
@@ -25,7 +29,8 @@ type smallStackOwnersType struct {
 }
 
 func checkSmallStack() bool {
-	resp, err := http.Get(metadataAddress + smallStackDataSource)
+	resp, err := http.Get(constants.MetadataUrl +
+		constants.SmallStackDataSource)
 	if err != nil {
 		return false
 	}
@@ -48,9 +53,66 @@ func getSmallStackOwners() *smallStackOwnersType {
 	return _smallStackOwners
 }
 
+func loadCertificatesFromMetadata(timeout time.Duration, errorIfMissing bool,
+	errorIfExpired bool) (
+	*tls.Certificate, error) {
+	certPEM, err := readMetadataFile(constants.MetadataIdentityCert, timeout)
+	if err != nil {
+		if errorIfMissing {
+			return nil, err
+		}
+		return nil, nil
+	}
+	keyPEM, err := readMetadataFile(constants.MetadataIdentityKey, timeout)
+	if err != nil {
+		if errorIfMissing {
+			return nil, err
+		}
+		return nil, nil
+	}
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, err
+	}
+	x509Cert, err := x509.ParseCertificate(tlsCert.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	if errorIfExpired {
+		now := time.Now()
+		if notYet := x509Cert.NotBefore.Sub(now); notYet > 0 {
+			return nil, fmt.Errorf("cert will not be valid for %s",
+				format.Duration(notYet))
+		}
+		if expired := now.Sub(x509Cert.NotAfter); expired > 0 {
+			return nil, fmt.Errorf("cert expired %s ago",
+				format.Duration(expired))
+		}
+	}
+	tlsCert.Leaf = x509Cert
+	return &tlsCert, nil
+}
+
+func readMetadataFile(filename string, timeout time.Duration) ([]byte, error) {
+	client := http.Client{Timeout: timeout}
+	resp, err := client.Get(constants.MetadataUrl + filename)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func readSmallStackMetaData() {
 	var vmInfo proto.VmInfo
-	resp, err := http.Get(metadataAddress + identityDocument)
+	resp, err := http.Get(constants.MetadataUrl + constants.MetadataIdentityDoc)
 	if err != nil {
 		return
 	}
