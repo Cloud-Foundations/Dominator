@@ -55,6 +55,42 @@ func getSleepInterval(cert *x509.Certificate) time.Duration {
 	}
 }
 
+func loadClientCert(params Params) (*tls.Certificate, error) {
+	// Load certificate and key.
+	if *certFile == "" || *keyFile == "" {
+		cert, err := srpc.LoadCertificatesFromMetadata(100*time.Millisecond,
+			true, false)
+		if err != nil {
+			return nil, err
+		}
+		params.Logger.Debugln(0,
+			"Loaded certifcate and key from metadata service\n")
+		return cert, nil
+	}
+	cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			cert, e := srpc.LoadCertificatesFromMetadata(100*time.Millisecond,
+				true, false)
+			if e != nil {
+				return nil, err
+			}
+			params.Logger.Debugln(0,
+				"Loaded certifcate and key from metadata service\n")
+			return cert, nil
+		}
+		return nil, fmt.Errorf("unable to load keypair: %s", err)
+	}
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	cert.Leaf = x509Cert
+	params.Logger.Debugf(0, "Loaded certifcate and key from: %s and %s\n",
+		*certFile, *keyFile)
+	return &cert, nil
+}
+
 func loadLoop(params Params, cert *x509.Certificate) {
 	params.FailIfExpired = true
 	for {
@@ -80,19 +116,12 @@ func setupTls(params Params) error {
 }
 
 func setupTlsOnce(params Params) (*x509.Certificate, error) {
-	// Load certificate and key.
-	cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+	tlsCert, err := loadClientCert(params)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load keypair: %s", err)
 	}
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		return nil, err
-	}
-	cert.Leaf = x509Cert
-	params.Logger.Debugf(0, "Loaded certifcate and key from: %s and %s\n",
-		*certFile, *keyFile)
 	now := time.Now()
+	x509Cert := tlsCert.Leaf
 	if notYet := x509Cert.NotBefore.Sub(now); notYet > 0 {
 		msg := fmt.Sprintf("%s will not be valid for %s",
 			*certFile, format.Duration(notYet))
@@ -126,7 +155,7 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		serverConfig.ClientAuth = tls.RequireAndVerifyClientCert
 		serverConfig.MinVersion = tls.VersionTLS12
 		serverConfig.ClientCAs = caCertPool
-		serverConfig.Certificates = append(serverConfig.Certificates, cert)
+		serverConfig.Certificates = append(serverConfig.Certificates, *tlsCert)
 		if *identityCaFile != "" {
 			identityCaData, err := ioutil.ReadFile(*identityCaFile)
 			if err != nil {
@@ -152,7 +181,7 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 	clientConfig := new(tls.Config)
 	clientConfig.InsecureSkipVerify = true
 	clientConfig.MinVersion = tls.VersionTLS12
-	clientConfig.Certificates = append(clientConfig.Certificates, cert)
+	clientConfig.Certificates = append(clientConfig.Certificates, *tlsCert)
 	srpc.RegisterClientTlsConfig(clientConfig)
-	return cert.Leaf, nil
+	return tlsCert.Leaf, nil
 }
