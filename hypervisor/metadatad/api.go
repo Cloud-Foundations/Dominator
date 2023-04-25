@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -33,17 +34,17 @@ func StartServer(hypervisorPortNum uint, bridges []net.Interface,
 		logger:            logger,
 	}
 	s.fileHandlers = map[string]string{
-		"/latest/dynamic/instance-identity/X.509-certificate": manager.IdentityCertFile,
-		"/latest/dynamic/instance-identity/X.509-key":         manager.IdentityKeyFile,
-		"/latest/user-data": manager.UserDataFile,
+		constants.MetadataIdentityCert: manager.IdentityCertFile,
+		constants.MetadataIdentityKey:  manager.IdentityKeyFile,
+		constants.MetadataUserData:     manager.UserDataFile,
 	}
 	s.infoHandlers = map[string]metadataWriter{
-		"/latest/dynamic/epoch-time":                 s.showTime,
-		"/latest/dynamic/instance-identity/document": s.showVM,
+		constants.MetadataEpochTime:   s.showTime,
+		constants.MetadataIdentityDoc: s.showVM,
 	}
 	s.rawHandlers = map[string]rawHandlerFunc{
-		"/datasource/SmallStack":          s.showTrue,
-		"/latest/is-externally-patchable": s.showTrue,
+		constants.SmallStackDataSource:        s.showTrue,
+		constants.MetadataExternallyPatchable: s.showTrue,
 	}
 	s.computePaths()
 	return s.startServer()
