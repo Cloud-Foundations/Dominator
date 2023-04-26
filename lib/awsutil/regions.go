@@ -11,12 +11,12 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 )
 
 var (
-	metadataServer       = "http://169.254.169.254/"
-	instanceDocumentPath = "latest/dynamic/instance-identity/document"
-	instanceDocumentMap  map[string]string
+	instanceDocumentMap map[string]string
 )
 
 func getLocalRegion() (string, error) {
@@ -26,7 +26,7 @@ func getLocalRegion() (string, error) {
 	if region, ok := instanceDocumentMap["region"]; ok {
 		return region, nil
 	}
-	resp, err := http.Get(metadataServer + instanceDocumentPath)
+	resp, err := http.Get(constants.MetadataUrl + constants.MetadataIdentityDoc)
 	if err != nil {
 		return "", err
 	}
