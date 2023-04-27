@@ -18,12 +18,6 @@ import (
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-const (
-	linklocalAddress = "169.254.169.254"
-	metadataUrl      = "http://" + linklocalAddress + "/"
-	identityPath     = "latest/dynamic/instance-identity/document"
-)
-
 type slaveTrader struct {
 	closeChannel      <-chan closeRequestMessage
 	hypervisor        *srpc.Client
@@ -38,7 +32,7 @@ var (
 )
 
 func readVmInfo(vmInfo *hyper_proto.VmInfo) error {
-	url := metadataUrl + identityPath
+	url := constants.MetadataUrl + constants.MetadataIdentityDoc
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -58,7 +52,7 @@ func newSlaveTrader(options SlaveTraderOptions,
 	logger log.DebugLogger) (*SlaveTrader, error) {
 	if options.HypervisorAddress == "" {
 		options.HypervisorAddress = fmt.Sprintf("%s:%d",
-			linklocalAddress, constants.HypervisorPortNumber)
+			constants.LinklocalAddress, constants.HypervisorPortNumber)
 	} else if !strings.Contains(options.HypervisorAddress, ":") {
 		options.HypervisorAddress += fmt.Sprintf(":%d",
 			constants.HypervisorPortNumber)
