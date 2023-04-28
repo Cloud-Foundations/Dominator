@@ -10,15 +10,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
-)
-
-const (
-	linklocalAddress = "169.254.169.254"
-	metadataUrl      = "http://" + linklocalAddress + "/"
-	identityCert     = "latest/dynamic/instance-identity/X.509-certificate"
 )
 
 func showCertFile(filename string) {
@@ -33,7 +28,8 @@ func showCertFile(filename string) {
 
 func showCertMetadata() {
 	client := http.Client{Timeout: 100 * time.Millisecond}
-	resp, err := client.Get(metadataUrl + identityCert)
+	resp, err := client.Get(constants.MetadataUrl +
+		constants.MetadataIdentityCert)
 	if err != nil {
 		return
 	}
