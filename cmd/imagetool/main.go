@@ -52,6 +52,8 @@ var (
 		constants.HypervisorPortNumber, "Port number of hypervisor")
 	ignoreExpiring = flag.Bool("ignoreExpiring", false,
 		"If true, ignore expiring images when finding images")
+	ignoreFilters = flag.Bool("ignoreFilters", false,
+		"If true, ignore filters when diffing")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
