@@ -65,6 +65,7 @@ import (
 var (
 	ErrorConnectionRefused    = errors.New("connection refused")
 	ErrorNoRouteToHost        = errors.New("no route to host")
+	ErrorMissingCA            = errors.New("missing CA")
 	ErrorMissingCertificate   = errors.New("missing certificate")
 	ErrorBadCertificate       = errors.New("bad certificate")
 	ErrorNoSrpcEndpoint       = errors.New("no SRPC endpoint")
