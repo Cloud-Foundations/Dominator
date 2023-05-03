@@ -116,6 +116,7 @@ func setupTls(params Params) error {
 }
 
 func setupTlsOnce(params Params) (*x509.Certificate, error) {
+	// Setup client.
 	tlsCert, err := loadClientCert(params)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load keypair: %s", err)
@@ -141,9 +142,20 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 			x509Cert.NotAfter.Local(),
 			format.Duration(time.Until(x509Cert.NotAfter)))
 	}
+	clientConfig := new(tls.Config)
+	clientConfig.InsecureSkipVerify = true
+	clientConfig.MinVersion = tls.VersionTLS12
+	clientConfig.Certificates = append(clientConfig.Certificates, *tlsCert)
+	srpc.RegisterClientTlsConfig(clientConfig)
 	if !params.ClientOnly {
+		if *caFile == "" {
+			return nil, srpc.ErrorMissingCA
+		}
 		caData, err := ioutil.ReadFile(*caFile)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, srpc.ErrorMissingCA
+			}
 			return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
 				*caFile, err)
 		}
@@ -177,11 +189,5 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		}
 		srpc.RegisterServerTlsConfig(serverConfig, true)
 	}
-	// Setup client.
-	clientConfig := new(tls.Config)
-	clientConfig.InsecureSkipVerify = true
-	clientConfig.MinVersion = tls.VersionTLS12
-	clientConfig.Certificates = append(clientConfig.Certificates, *tlsCert)
-	srpc.RegisterClientTlsConfig(clientConfig)
 	return tlsCert.Leaf, nil
 }
