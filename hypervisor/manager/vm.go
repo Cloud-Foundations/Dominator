@@ -390,7 +390,8 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		return nil, err
 	}
 	totalMemoryInMiB := getVmInfoMemoryInMiB(req.VmInfo)
-	if err := m.checkSufficientMemoryWithLock(totalMemoryInMiB); err != nil {
+	err = m.checkSufficientMemoryWithLock(totalMemoryInMiB, nil)
+	if err != nil {
 		return nil, err
 	}
 	var ipAddress string
@@ -539,7 +540,7 @@ func (m *Manager) changeVmMemory(vm *vmInfoType,
 		changed = true
 	} else if memoryInMiB > vm.MemoryInMiB {
 		m.mutex.Lock()
-		err := m.checkSufficientMemoryWithLock(memoryInMiB - vm.MemoryInMiB)
+		err := m.checkSufficientMemoryWithLock(memoryInMiB-vm.MemoryInMiB, vm)
 		if err == nil {
 			vm.MemoryInMiB = memoryInMiB
 			changed = true
@@ -2026,7 +2027,8 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
 	if err := m.checkSufficientCPUWithLock(vmInfo.MilliCPUs); err != nil {
 		return err
 	}
-	if err := m.checkSufficientMemoryWithLock(vmInfo.MemoryInMiB); err != nil {
+	err := m.checkSufficientMemoryWithLock(vmInfo.MemoryInMiB, nil)
+	if err != nil {
 		return err
 	}
 	if !skipMemoryCheck {

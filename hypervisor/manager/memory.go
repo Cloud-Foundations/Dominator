@@ -70,14 +70,15 @@ func tryAllocateMemory(memoryInMiB uint64) <-chan error {
 func (m *Manager) getUnallocatedMemoryInMiB() uint64 {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	return m.getUnallocatedMemoryInMiBWithLock()
+	return m.getUnallocatedMemoryInMiBWithLock(nil)
 }
 
-// This will grab the lock for each VM.
-func (m *Manager) getUnallocatedMemoryInMiBWithLock() uint64 {
+// This will grab the lock for each VM, except a specified VM which should
+// already be locked.
+func (m *Manager) getUnallocatedMemoryInMiBWithLock(locked *vmInfoType) uint64 {
 	unallocated := int64(m.memTotalInMiB)
 	for _, vm := range m.vms {
-		unallocated -= int64(vm.getMemoryInMiB(true))
+		unallocated -= int64(vm.getMemoryInMiB(vm != locked))
 	}
 	if unallocated < 0 {
 		return 0
@@ -85,8 +86,11 @@ func (m *Manager) getUnallocatedMemoryInMiBWithLock() uint64 {
 	return uint64(unallocated)
 }
 
-func (m *Manager) checkSufficientMemoryWithLock(memoryInMiB uint64) error {
-	if memoryInMiB > m.getUnallocatedMemoryInMiBWithLock() {
+// This will grab the lock for each VM, except a specified VM which should
+// already be locked.
+func (m *Manager) checkSufficientMemoryWithLock(memoryInMiB uint64,
+	locked *vmInfoType) error {
+	if memoryInMiB > m.getUnallocatedMemoryInMiBWithLock(locked) {
 		return errorInsufficientUnallocatedMemory
 	}
 	return checkAvailableMemory(memoryInMiB)
