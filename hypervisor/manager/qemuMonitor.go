@@ -31,7 +31,9 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 		var message monitorMessageType
 		if err := decoder.Decode(&message); err != nil {
 			if err == io.EOF {
-				vm.logger.Debugln(0, "EOF on monitor socket")
+				if !guestShutdown {
+					vm.logger.Debugln(0, "EOF on monitor socket")
+				}
 				break
 			}
 			vm.logger.Printf("error reading monitor message: %s\n", err)
@@ -45,13 +47,11 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 				err)
 			continue
 		}
-		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
-			guestShutdown = true
-			monitorSock.Close()
-			break
-		}
 		vm.logger.Debugf(0, "VM shutdown, guest: %v, reason: %s\n",
 			shutdownData.Guest, shutdownData.Reason)
+		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
+			guestShutdown = true
+		}
 	}
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
