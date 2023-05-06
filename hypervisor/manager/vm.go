@@ -1250,7 +1250,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 	vm.setState(proto.StateStarting)
 	sendUpdate(conn, "starting VM")
 	vm.mutex.Unlock()
-	_, err = vm.startManaging(-1, false, false)
+	_, err = vm.startManaging(0, false, false)
 	vm.mutex.Lock()
 	if err != nil {
 		sendError(conn, err)
@@ -2410,7 +2410,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		vm.setState(proto.StateStarting)
 		sendVmPatchImageMessage(conn, "starting VM")
 		vm.mutex.Unlock()
-		_, err := vm.startManaging(-1, false, false)
+		_, err := vm.startManaging(0, false, false)
 		vm.mutex.Lock()
 		if err != nil {
 			return err
@@ -2714,7 +2714,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		vm.setState(proto.StateStarting)
 		sendUpdate(conn, "starting VM")
 		vm.mutex.Unlock()
-		_, err := vm.startManaging(-1, false, false)
+		_, err := vm.startManaging(0, false, false)
 		vm.mutex.Lock()
 		if err != nil {
 			sendError(conn, err)
@@ -3040,7 +3040,7 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		vm.setState(proto.StateStarting)
 		vm.mutex.Unlock()
 		doUnlock = false
-		return vm.startManaging(-1, false, false)
+		return vm.startManaging(dhcpTimeout, false, false)
 	default:
 		return false, errors.New("unknown state: " + vm.State.String())
 	}
@@ -3479,6 +3479,8 @@ func (vm *vmInfoType) setState(state proto.State) {
 }
 
 // This may grab and release the VM lock.
+// If dhcpTimeout <0: no DHCP lease is set up, if 0, do not wait for DHCP ACK,
+// else wait for DHCP ACK.
 // It returns true if there was a timeout waiting for the DHCP request, else
 // false.
 func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
