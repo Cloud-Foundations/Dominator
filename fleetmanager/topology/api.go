@@ -71,6 +71,7 @@ func (subnet *Subnet) Shrink() {
 type Topology struct {
 	Root            *Directory
 	Variables       map[string]string
+	hostIpAddresses map[string]struct{}
 	logger          log.DebugLogger
 	machineParents  map[string]*Directory // Key: machine name.
 	reservedIpAddrs map[string]struct{}   // Key: IP address.
@@ -100,6 +101,11 @@ func Watch(topologyRepository, localRepositoryDir, topologyDir string,
 
 func WatchWithParams(params WatchParams) (<-chan *Topology, error) {
 	return watch(params)
+}
+
+func (t *Topology) CheckIfIpIsHost(ipAddr string) bool {
+	_, ok := t.hostIpAddresses[ipAddr]
+	return ok
 }
 
 func (t *Topology) CheckIfIpIsReserved(ipAddr string) bool {

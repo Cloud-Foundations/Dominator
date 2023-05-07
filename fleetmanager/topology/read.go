@@ -54,18 +54,18 @@ func load(params Params) (*Topology, error) {
 		machineParents:  make(map[string]*Directory),
 		reservedIpAddrs: make(map[string]struct{}),
 	}
+	commonState := &commonStateType{
+		hostnames:    make(map[string]struct{}),
+		ipAddresses:  make(map[string]struct{}),
+		macAddresses: make(map[string]struct{}),
+	}
 	directory, err := topology.readDirectory(params.TopologyDir, "",
-		newInheritingState(),
-		&commonStateType{
-			hostnames:    make(map[string]struct{}),
-			ipAddresses:  make(map[string]struct{}),
-			macAddresses: make(map[string]struct{}),
-		},
-	)
+		newInheritingState(), commonState)
 	if err != nil {
 		return nil, err
 	}
 	topology.Root = directory
+	topology.hostIpAddresses = commonState.ipAddresses
 	if err := topology.readVariables(params.VariablesDir, ""); err != nil {
 		return nil, err
 	}
