@@ -100,7 +100,8 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			}
 			if vm.Uncommitted {
 				background = "yellow"
-			} else if topology.CheckIfIpIsReserved(vm.ipAddr) {
+			} else if topology.CheckIfIpIsHost(vm.ipAddr) ||
+				topology.CheckIfIpIsReserved(vm.ipAddr) {
 				background = "orange"
 			}
 			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,

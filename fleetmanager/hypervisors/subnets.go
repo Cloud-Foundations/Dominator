@@ -23,6 +23,9 @@ func (m *Manager) checkIpReserved(tSubnet *topology.Subnet, ip net.IP) bool {
 	if _, ok := m.migratingIPs[ipAddr]; ok {
 		return true
 	}
+	if m.topology.CheckIfIpIsHost(ipAddr) {
+		return true
+	}
 	return false
 }
 
