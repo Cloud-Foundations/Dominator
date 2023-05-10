@@ -8,6 +8,11 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type copyingReader struct {
+	copyChannel chan<- byte
+	r           io.Reader
+}
+
 type monitorMessageType struct {
 	Data      json.RawMessage      `json:data",omitempty"`
 	Event     string               `json:event",omitempty"`
@@ -24,8 +29,21 @@ type shutdownDataType struct {
 	Reason string `json:reason",omitempty"`
 }
 
-func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
-	decoder := json.NewDecoder(monitorSock)
+func (r *copyingReader) Read(p []byte) (int, error) {
+	nRead, err := r.r.Read(p)
+	for index := 0; index < nRead; index++ {
+		select {
+		case r.copyChannel <- p[index]:
+		default:
+		}
+	}
+	return nRead, err
+}
+
+func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
+	commandOutput chan<- byte) {
+	reader := &copyingReader{commandOutput, monitorSock}
+	decoder := json.NewDecoder(reader)
 	var guestShutdown bool
 	for {
 		var message monitorMessageType
@@ -53,10 +71,12 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 			guestShutdown = true
 		}
 	}
+	close(commandOutput)
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
-	close(vm.commandChannel)
-	vm.commandChannel = nil
+	close(vm.commandInput)
+	vm.commandInput = nil
+	vm.commandOutput = nil
 	switch vm.State {
 	case proto.StateStarting:
 		select {

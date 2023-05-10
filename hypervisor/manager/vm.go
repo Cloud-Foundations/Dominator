@@ -256,6 +256,24 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 	return fsutil.CopyToFile(filename, fsutil.PrivateFilePerms, reader, length)
 }
 
+// Returns bytes read up to a carriage return (which is discarded), and true if
+// the last byte was read, else false.
+func readUntilCarriageReturn(firstByte byte, moreBytes <-chan byte,
+	echo chan<- byte) ([]byte, bool) {
+	buffer := make([]byte, 1, len(moreBytes)+1)
+	buffer[0] = firstByte
+	echo <- firstByte
+	for char := range moreBytes {
+		echo <- char
+		if char == '\r' {
+			echo <- '\n'
+			return buffer, false
+		}
+		buffer = append(buffer, char)
+	}
+	return buffer, true
+}
+
 func setVolumeSize(filename string, size uint64) error {
 	if err := os.Truncate(filename, int64(size)); err != nil {
 		return err
@@ -706,6 +724,47 @@ func (m *Manager) connectToVmConsole(ipAddr net.IP,
 		return nil, err
 	}
 	return console, nil
+}
+
+func (m *Manager) connectToVmManager(ipAddr net.IP) (
+	chan<- byte, <-chan byte, error) {
+	input := make(chan byte, 256)
+	vm, err := m.getVmAndLock(ipAddr, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer vm.mutex.Unlock()
+	if vm.State != proto.StateRunning {
+		return nil, nil, errors.New("VM is not running")
+	}
+	commandInput := vm.commandInput
+	if commandInput == nil {
+		return nil, nil, errors.New("no commandInput for VM")
+	}
+	// Drain any previous output.
+	for keepReading := true; keepReading; {
+		select {
+		case <-vm.commandOutput:
+		default:
+			keepReading = false
+			break
+		}
+	}
+	go func(input <-chan byte, output chan<- string) {
+		for char := range input {
+			if char == '\r' {
+				continue
+			}
+			buffer, gotLast := readUntilCarriageReturn(char, input,
+				vm.commandOutput)
+			output <- "\\" + string(buffer)
+			if gotLast {
+				break
+			}
+		}
+		vm.logger.Debugln(0, "input channel for manager closed")
+	}(input, vm.commandInput)
+	return input, vm.commandOutput, nil
 }
 
 func (m *Manager) connectToVmSerialPort(ipAddr net.IP,
@@ -1236,7 +1295,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -1314,7 +1373,7 @@ func (m *Manager) destroyVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			return errors.New("cannot destroy running VM when protected")
 		}
 		vm.setState(proto.StateDestroying)
-		vm.commandChannel <- "quit"
+		vm.commandInput <- "quit"
 	case proto.StateStopping:
 		return errors.New("VM is stopping")
 	case proto.StateStopped, proto.StateFailedToStart, proto.StateMigrating,
@@ -2256,7 +2315,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -2494,7 +2553,7 @@ func (m *Manager) rebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	case proto.StateStarting:
 		return false, errors.New("VM is starting")
 	case proto.StateRunning:
-		vm.commandChannel <- "reboot" // Not a QMP command: interpreted locally.
+		vm.commandInput <- "reboot" // Not a QMP command: interpreted locally.
 		vm.mutex.Unlock()
 		doUnlock = false
 		if dhcpTimeout > 0 {
@@ -2681,7 +2740,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -3025,7 +3084,7 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -3073,7 +3132,7 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		doUnlock = false
@@ -3212,7 +3271,7 @@ func (vm *vmInfoType) cleanup() {
 		return
 	}
 	select {
-	case vm.commandChannel <- "quit":
+	case vm.commandInput <- "quit":
 	default:
 	}
 	m := vm.manager
@@ -3301,7 +3360,7 @@ func (vm *vmInfoType) delete() {
 
 func (vm *vmInfoType) destroy() {
 	select {
-	case vm.commandChannel <- "quit":
+	case vm.commandInput <- "quit":
 	default:
 	}
 	vm.delete()
@@ -3354,27 +3413,32 @@ func (vm *vmInfoType) kill() {
 	vm.mutex.RLock()
 	defer vm.mutex.RUnlock()
 	if vm.State == proto.StateStopping {
-		vm.commandChannel <- "quit"
+		vm.commandInput <- "quit"
 	}
 }
 
 func (vm *vmInfoType) monitor(monitorSock net.Conn,
-	commandChannel <-chan string) {
+	commandInput <-chan string, commandOutput chan<- byte) {
 	vm.hasHealthAgent = false
 	defer monitorSock.Close()
-	go vm.processMonitorResponses(monitorSock)
+	go vm.processMonitorResponses(monitorSock, commandOutput)
 	cancelChannel := make(chan struct{}, 1)
 	go vm.probeHealthAgent(cancelChannel)
 	go vm.serialManager()
-	for command := range commandChannel {
+	for command := range commandInput {
 		var err error
 		if command == "reboot" { // Not a QMP command: convert to ctrl-alt-del.
 			_, err = monitorSock.Write([]byte(rebootJson))
+		} else if command[0] == '\\' {
+			_, err = fmt.Fprintln(monitorSock, command[1:])
 		} else {
-			_, err = fmt.Fprintf(monitorSock, `{"execute":"%s"}`, command)
+			_, err = fmt.Fprintf(monitorSock, "{\"execute\":\"%s\"}\n",
+				command)
 		}
 		if err != nil {
 			vm.logger.Println(err)
+		} else if command[0] == '\\' {
+			vm.logger.Debugf(0, "sent JSON: %s", command[1:])
 		} else {
 			vm.logger.Debugf(0, "sent %s command", command)
 		}
@@ -3494,10 +3558,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	case proto.StateStopping:
 		monitorSock, err := net.Dial("unix", vm.monitorSockname)
 		if err == nil {
-			commandChannel := make(chan string, 1)
-			vm.commandChannel = commandChannel
-			go vm.monitor(monitorSock, commandChannel)
-			commandChannel <- "qmp_capabilities"
+			commandInput := make(chan string, 1)
+			commandOutput := make(chan byte, 16<<10)
+			vm.commandInput = commandInput
+			vm.commandOutput = commandOutput
+			go vm.monitor(monitorSock, commandInput, commandOutput)
+			commandInput <- "qmp_capabilities"
 			vm.kill()
 		} else {
 			vm.setState(proto.StateStopped)
@@ -3549,10 +3615,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		vm.setState(proto.StateFailedToStart)
 		return false, err
 	}
-	commandChannel := make(chan string, 1)
-	vm.commandChannel = commandChannel
-	go vm.monitor(monitorSock, commandChannel)
-	commandChannel <- "qmp_capabilities"
+	commandInput := make(chan string, 1)
+	vm.commandInput = commandInput
+	commandOutput := make(chan byte, 16<<10)
+	vm.commandOutput = commandOutput
+	go vm.monitor(monitorSock, commandInput, commandOutput)
+	commandInput <- "qmp_capabilities"
 	if vm.getDebugRoot() == "" {
 		vm.setState(proto.StateRunning)
 	} else {

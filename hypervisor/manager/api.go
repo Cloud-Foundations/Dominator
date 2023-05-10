@@ -76,7 +76,8 @@ type vmInfoType struct {
 	mutex                      sync.RWMutex
 	accessToken                []byte
 	accessTokenCleanupNotifier chan<- struct{}
-	commandChannel             chan<- string
+	commandInput               chan<- string
+	commandOutput              chan byte
 	destroyTimer               *time.Timer
 	dirname                    string
 	doNotWriteOrSend           bool
@@ -179,6 +180,11 @@ func (m *Manager) CommitImportedVm(ipAddr net.IP,
 func (m *Manager) ConnectToVmConsole(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) (net.Conn, error) {
 	return m.connectToVmConsole(ipAddr, authInfo)
+}
+
+func (m *Manager) ConnectToVmManager(ipAddr net.IP) (
+	chan<- byte, <-chan byte, error) {
+	return m.connectToVmManager(ipAddr)
 }
 
 func (m *Manager) ConnectToVmSerialPort(ipAddr net.IP,
