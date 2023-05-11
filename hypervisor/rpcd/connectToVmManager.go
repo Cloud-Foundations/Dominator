@@ -6,17 +6,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func (t *srpcType) ConnectToVmSerialPort(conn *srpc.Conn) error {
-	var request hypervisor.ConnectToVmSerialPortRequest
+func (t *srpcType) ConnectToVmManager(conn *srpc.Conn) error {
+	var request hypervisor.ConnectToVmManagerRequest
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	input, output, err := t.manager.ConnectToVmSerialPort(request.IpAddress,
-		conn.GetAuthInformation(), request.PortNumber)
+	input, output, err := t.manager.ConnectToVmManager(request.IpAddress)
 	if input != nil {
 		defer close(input)
 	}
-	e := conn.Encode(hypervisor.ConnectToVmSerialPortResponse{
+	e := conn.Encode(hypervisor.ConnectToVmManagerResponse{
 		Error: errors.ErrorToString(err)})
 	if e != nil {
 		return e
