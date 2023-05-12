@@ -100,6 +100,7 @@ var subcommands = []commands.Command{
 	{"add-subnet", "ID IPgateway IPmask DNSserver...", 4, -1,
 		addSubnetSubcommand},
 	{"change-tags", "", 0, 0, changeTagsSubcommand},
+	{"connect-to-vm-manager", "IPaddr", 1, 1, connectToVmManagerSubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
 	{"installer-shell", "hostname", 1, 1, installerShellSubcommand},
