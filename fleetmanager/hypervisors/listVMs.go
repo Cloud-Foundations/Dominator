@@ -14,7 +14,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const commonStyleSheet string = `<style>
@@ -171,26 +172,44 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	}
 }
 
-func (m *Manager) listVMsInLocation(dirname string) ([]net.IP, error) {
-	hypervisors, err := m.listHypervisors(dirname, showAll, "")
+func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
+	[]net.IP, error) {
+	hypervisors, err := m.listHypervisors(request.Location, showAll, "")
 	if err != nil {
 		return nil, err
 	}
+	ownerUsers := stringutil.ConvertListToMap(request.OwnerUsers, false)
 	addresses := make([]net.IP, 0)
 	for _, hypervisor := range hypervisors {
 		hypervisor.mutex.RLock()
 		for _, vm := range hypervisor.vms {
-			addresses = append(addresses, vm.Address.IpAddress)
+			if vm.checkOwnerUsers(ownerUsers) {
+				addresses = append(addresses, vm.Address.IpAddress)
+			}
 		}
 		hypervisor.mutex.RUnlock()
 	}
 	return addresses, nil
 }
 
+// checkOwnerUsers returns true if one of the specified ownerUsers owns the VM.
+// If ownerUsers is nil, checkOwnerUsers returns true.
+func (vm *vmInfoType) checkOwnerUsers(ownerUsers map[string]struct{}) bool {
+	if ownerUsers == nil {
+		return true
+	}
+	for _, ownerUser := range vm.OwnerUsers {
+		if _, ok := ownerUsers[ownerUser]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (vm *vmInfoType) numVolumesTableEntry() string {
 	var comment string
 	for _, volume := range vm.Volumes {
-		if comment == "" && volume.Format != proto.VolumeFormatRaw {
+		if comment == "" && volume.Format != hyper_proto.VolumeFormatRaw {
 			comment = `<font style="color:grey;font-size:12px"> (!RAW)</font>`
 		}
 	}

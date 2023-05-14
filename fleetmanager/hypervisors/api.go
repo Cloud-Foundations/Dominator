@@ -158,8 +158,9 @@ func (m *Manager) ListLocations(dirname string) ([]string, error) {
 	return m.listLocations(dirname)
 }
 
-func (m *Manager) ListVMsInLocation(dirname string) ([]net.IP, error) {
-	return m.listVMsInLocation(dirname)
+func (m *Manager) ListVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
+	[]net.IP, error) {
+	return m.listVMsInLocation(request)
 }
 
 func (m *Manager) MakeUpdateChannel(location string) <-chan fm_proto.Update {
