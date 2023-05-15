@@ -44,7 +44,10 @@ func listVMsByLocation(fleetManager string, location string,
 		return err
 	}
 	defer conn.Close()
-	request := fm_proto.ListVMsInLocationRequest{location}
+	request := fm_proto.ListVMsInLocationRequest{
+		Location:   location,
+		OwnerUsers: ownerUsers,
+	}
 	if err := conn.Encode(request); err != nil {
 		return err
 	}
