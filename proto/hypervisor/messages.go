@@ -415,6 +415,7 @@ type ImportLocalVmResponse struct {
 
 type ListVMsRequest struct {
 	IgnoreStateMask uint64
+	OwnerGroups     []string
 	OwnerUsers      []string
 	Sort            bool
 }
