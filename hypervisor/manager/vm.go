@@ -1824,6 +1824,7 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 }
 
 func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
+	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
 	m.mutex.RLock()
 	ipAddrs := make([]string, 0, len(m.vms))
 	for ipAddr, vm := range m.vms {
@@ -1831,6 +1832,15 @@ func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 			continue
 		}
 		include := true
+		if len(ownerGroups) > 0 {
+			include = false
+			for _, ownerGroup := range vm.OwnerGroups {
+				if _, ok := ownerGroups[ownerGroup]; ok {
+					include = true
+					break
+				}
+			}
+		}
 		if len(request.OwnerUsers) > 0 {
 			include = false
 			for _, ownerUser := range request.OwnerUsers {
