@@ -79,8 +79,9 @@ type ListHypervisorsInLocationResponse struct {
 }
 
 type ListVMsInLocationRequest struct {
-	Location   string
-	OwnerUsers []string
+	Location    string
+	OwnerGroups []string
+	OwnerUsers  []string
 }
 
 // A stream of ListVMsInLocationResponse messages is sent, until either the
