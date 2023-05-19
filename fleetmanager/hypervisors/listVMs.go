@@ -178,18 +178,34 @@ func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
 	if err != nil {
 		return nil, err
 	}
+	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
 	ownerUsers := stringutil.ConvertListToMap(request.OwnerUsers, false)
 	addresses := make([]net.IP, 0)
 	for _, hypervisor := range hypervisors {
 		hypervisor.mutex.RLock()
 		for _, vm := range hypervisor.vms {
-			if vm.checkOwnerUsers(ownerUsers) {
+			if vm.checkOwnerGroups(ownerGroups) &&
+				vm.checkOwnerUsers(ownerUsers) {
 				addresses = append(addresses, vm.Address.IpAddress)
 			}
 		}
 		hypervisor.mutex.RUnlock()
 	}
 	return addresses, nil
+}
+
+// checkOwnerGroups returns true if one of the specified ownerGroups owns the
+// VM. If ownerGroups is nil, checkOwnerGroups returns true.
+func (vm *vmInfoType) checkOwnerGroups(ownerGroups map[string]struct{}) bool {
+	if ownerGroups == nil {
+		return true
+	}
+	for _, ownerGroup := range vm.OwnerGroups {
+		if _, ok := ownerGroups[ownerGroup]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // checkOwnerUsers returns true if one of the specified ownerUsers owns the VM.
