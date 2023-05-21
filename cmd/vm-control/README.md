@@ -68,6 +68,8 @@ Some of the sub-commands available are:
                       VM must not be running
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
 - **reboot-vm**: reboot a VM
+- **replace-vm-credentials**: replace the credentials made available to a VM via
+                              the Metadata service
 - **replace-vm-image**: replace the root image for a VM. The old root image is
                         saved. The VM must not be running
 - **replace-vm-user-data**: replace the user data for a VM. The old user data is
@@ -86,7 +88,8 @@ Some of the sub-commands available are:
 - **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **save-vm**: save (backup) all VM data (volumes) and metadata to a storage
                destination
-- **scan-vm**: scan the root file-system of stopped VM and write to scanFilename
+- **scan-vm-root**: scan the root file-system of stopped VM and write to
+                    scanFilename
 - **start-vm**: start a stopped VM
 - **stop-vm**: stop a running VM. All data and metadata are preserved
 - **trace-vm-metadata**: trace the requests a VM makes to the metadata service
