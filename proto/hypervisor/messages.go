@@ -393,6 +393,15 @@ type GetVmVolumeResponse struct {
 	ExtraFiles map[string][]byte // May contain "kernel", "initrd" and such.
 }
 
+type HoldLockRequest struct {
+	Timeout   time.Duration
+	WriteLock bool
+}
+
+type HoldLockResponse struct {
+	Error string
+}
+
 type ListSubnetsRequest struct {
 	Sort bool
 }
