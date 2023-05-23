@@ -303,6 +303,10 @@ func (m *Manager) GetUUID() (string, error) {
 	return m.uuid, nil
 }
 
+func (m *Manager) HoldLock(timeout time.Duration, writeLock bool) error {
+	return m.holdLock(timeout, writeLock)
+}
+
 func (m *Manager) ImportLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
 	return m.importLocalVm(authInfo, request)
