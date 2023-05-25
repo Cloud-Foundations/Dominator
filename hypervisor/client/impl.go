@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -219,6 +220,17 @@ func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 		return proto.VmInfo{}, err
 	}
 	return reply.VmInfo, nil
+}
+
+func holdLock(client *srpc.Client, timeout time.Duration,
+	writeLock bool) error {
+	request := proto.HoldLockRequest{timeout, writeLock}
+	var reply proto.HoldLockResponse
+	err := client.RequestReply("Hypervisor.HoldLock", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
 }
 
 func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {

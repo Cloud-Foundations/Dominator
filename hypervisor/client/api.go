@@ -2,6 +2,7 @@ package client
 
 import (
 	"net"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -58,6 +59,11 @@ func GetRootCookiePath(client *srpc.Client) (string, error) {
 
 func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
+}
+
+func HoldLock(client *srpc.Client, timeout time.Duration,
+	writeLock bool) error {
+	return holdLock(client, timeout, writeLock)
 }
 
 func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
