@@ -44,6 +44,8 @@ var (
 		constants.InstallerPortNumber, "Port number of installer")
 	location = flag.String("location", "",
 		"Location to search for hypervisors")
+	lockTimeout = flag.Duration("lockTimeout", 15*time.Second,
+		"Time to hold the lock")
 	offerTimeout = flag.Duration("offerTimeout", time.Minute+time.Second,
 		"How long to offer DHCP OFFERs and ACKs")
 	memory              = flagutil.Size(4 << 30)
@@ -70,6 +72,7 @@ var (
 		"If true, use kexec to reboot into newly installed OS")
 	vncViewer   = flag.String("vncViewer", "", "Path to VNC viewer for VM")
 	volumeSizes = flagutil.SizeList{16 << 30}
+	writeLock   = flag.Bool("writeLock", false, "If true, hold a write lock")
 
 	rrDialer *rrdialer.Dialer
 )
@@ -103,6 +106,7 @@ var subcommands = []commands.Command{
 	{"connect-to-vm-manager", "IPaddr", 1, 1, connectToVmManagerSubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
+	{"hold-lock", "", 0, 0, holdLockSubcommand},
 	{"installer-shell", "hostname", 1, 1, installerShellSubcommand},
 	{"make-installer-iso", "hostname dirname", 2, 2,
 		makeInstallerIsoSubcommand},

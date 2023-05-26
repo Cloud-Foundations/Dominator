@@ -35,10 +35,15 @@ Some of the sub-commands available are:
 - **add-subnet**: manually add a subnet to a specific *Hypervisor*. This is only
                   required if a *Fleet Manager* is not available
 - **change-tags**: change the tags for a specific *Hypervisor*
+- **connect-to-vm-manager**: connect to the manager for the specified VM. This
+                             is meant for low-level development
 - **get-machine-info**: get information for a specific *Hypervisor*
 - **get-updates**: get and show a continuous stream of updates from a
                    *Hypervisor* or *Fleet Manager*. This is primarily for
                    debugging
+- **hold-lock**: hold the *Hypervisor* lock for the time specified by
+                 *-lock-timeout*. *-writeLock* specifies whether to hold a
+		 write lock
 - **installer-shell**: start a remote shell (via SRPC) to the installer running
                        on a machine
 - **make-installer-iso**: make a bootable installation ISO (CD-ROM) image for a
