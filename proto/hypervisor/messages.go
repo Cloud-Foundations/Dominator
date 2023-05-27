@@ -402,6 +402,16 @@ type HoldLockResponse struct {
 	Error string
 }
 
+type HoldVmLockRequest struct {
+	IpAddress net.IP
+	Timeout   time.Duration
+	WriteLock bool
+}
+
+type HoldVmLockResponse struct {
+	Error string
+}
+
 type ListSubnetsRequest struct {
 	Sort bool
 }
