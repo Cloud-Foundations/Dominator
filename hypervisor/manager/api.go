@@ -307,6 +307,11 @@ func (m *Manager) HoldLock(timeout time.Duration, writeLock bool) error {
 	return m.holdLock(timeout, writeLock)
 }
 
+func (m *Manager) HoldVmLock(ipAddr net.IP, timeout time.Duration,
+	writeLock bool, authInfo *srpc.AuthInformation) error {
+	return m.holdVmLock(ipAddr, timeout, writeLock, authInfo)
+}
+
 func (m *Manager) ImportLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
 	return m.importLocalVm(authInfo, request)

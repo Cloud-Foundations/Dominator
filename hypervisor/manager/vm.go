@@ -1693,6 +1693,32 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 		vm.Volumes[request.VolumeIndex].Size)
 }
 
+func (m *Manager) holdVmLock(ipAddr net.IP, timeout time.Duration,
+	writeLock bool, authInfo *srpc.AuthInformation) error {
+	if timeout > time.Minute {
+		return fmt.Errorf("timeout: %s exceeds one minute", timeout)
+	}
+	if authInfo == nil {
+		return fmt.Errorf("no authentication information")
+	}
+	vm, err := m.getVmAndLock(ipAddr, writeLock)
+	if err != nil {
+		return err
+	}
+	if writeLock {
+		vm.logger.Printf("HoldVmLock(%s) by %s for writing\n",
+			format.Duration(timeout), authInfo.Username)
+		time.Sleep(timeout)
+		vm.mutex.Unlock()
+	} else {
+		vm.logger.Printf("HoldVmLock(%s) by %s for reading\n",
+			format.Duration(timeout), authInfo.Username)
+		time.Sleep(timeout)
+		vm.mutex.RUnlock()
+	}
+	return nil
+}
+
 func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
 	requestedIpAddrs := make(map[string]struct{},
