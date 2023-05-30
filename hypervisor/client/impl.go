@@ -233,6 +233,17 @@ func holdLock(client *srpc.Client, timeout time.Duration,
 	return errors.New(reply.Error)
 }
 
+func holdVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+	writeLock bool) error {
+	request := proto.HoldVmLockRequest{ipAddr, timeout, writeLock}
+	var reply proto.HoldVmLockResponse
+	err := client.RequestReply("Hypervisor.HoldVmLock", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	request := proto.ListSubnetsRequest{Sort: doSort}
 	var reply proto.ListSubnetsResponse

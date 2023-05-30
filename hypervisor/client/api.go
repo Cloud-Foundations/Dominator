@@ -66,6 +66,11 @@ func HoldLock(client *srpc.Client, timeout time.Duration,
 	return holdLock(client, timeout, writeLock)
 }
 
+func HoldVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+	writeLock bool) error {
+	return holdVmLock(client, ipAddr, timeout, writeLock)
+}
+
 func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	return listSubnets(client, doSort)
 }
