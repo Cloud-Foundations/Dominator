@@ -44,6 +44,9 @@ Some of the sub-commands available are:
 - **hold-lock**: hold the *Hypervisor* lock for the time specified by
                  *-lock-timeout*. *-writeLock* specifies whether to hold a
 		 write lock
+- **hold-vm-lock**: hold the lock for a VM for the time specified by
+                    *-lock-timeout* *-writeLock* specifies whether to hold a
+		    write lock
 - **installer-shell**: start a remote shell (via SRPC) to the installer running
                        on a machine
 - **make-installer-iso**: make a bootable installation ISO (CD-ROM) image for a

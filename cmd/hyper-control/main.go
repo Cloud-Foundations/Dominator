@@ -107,6 +107,7 @@ var subcommands = []commands.Command{
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
 	{"hold-lock", "", 0, 0, holdLockSubcommand},
+	{"hold-vm-lock", "", 1, 1, holdVmLockSubcommand},
 	{"installer-shell", "hostname", 1, 1, installerShellSubcommand},
 	{"make-installer-iso", "hostname dirname", 2, 2,
 		makeInstallerIsoSubcommand},
