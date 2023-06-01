@@ -113,24 +113,25 @@ type requestSlaveMessage struct {
 }
 
 type slaveDriver struct {
-	options             SlaveDriverOptions
-	busySlaves          map[*Slave]struct{}
-	clientDialer        clientDialerFunc
-	createdSlaveChannel chan *Slave
-	destroySlaveChannel <-chan *Slave
-	databaseDriver      databaseLoadSaver
-	getSlaveChannel     <-chan requestSlaveMessage
-	getSlavesChannel    <-chan chan<- slaveRoll
-	getterList          *list.List
-	idleSlaves          map[*Slave]struct{}
-	logger              log.DebugLogger
-	pingResponseChannel chan pingResponseMessage
-	publicDriver        *SlaveDriver
-	releaseSlaveChannel <-chan *Slave
-	replaceIdleChannel  <-chan bool
-	slaveTrader         SlaveTrader
-	writeState          bool
-	zombies             map[*Slave]struct{}
+	options               SlaveDriverOptions
+	busySlaves            map[*Slave]struct{}
+	clientDialer          clientDialerFunc
+	createdSlaveChannel   chan *Slave
+	destroySlaveChannel   <-chan *Slave
+	destroyedSlaveChannel chan *Slave
+	databaseDriver        databaseLoadSaver
+	getSlaveChannel       <-chan requestSlaveMessage
+	getSlavesChannel      <-chan chan<- slaveRoll
+	getterList            *list.List
+	idleSlaves            map[*Slave]struct{}
+	logger                log.DebugLogger
+	pingResponseChannel   chan pingResponseMessage
+	publicDriver          *SlaveDriver
+	releaseSlaveChannel   <-chan *Slave
+	replaceIdleChannel    <-chan bool
+	slaveTrader           SlaveTrader
+	writeState            bool
+	zombies               map[*Slave]struct{}
 }
 
 type slaveRoll struct {
