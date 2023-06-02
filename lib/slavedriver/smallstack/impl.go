@@ -31,6 +31,37 @@ var (
 	myVmInfo hyper_proto.VmInfo
 )
 
+func createVm(hyperClient *srpc.Client, request hyper_proto.CreateVmRequest,
+	reply *hyper_proto.CreateVmResponse, timeout time.Duration,
+	logger log.DebugLogger) error {
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(timeout)
+	go func() {
+		errorChannel <- client.CreateVm(hyperClient, request, reply, logger)
+	}()
+	select {
+	case <-timer.C:
+		return fmt.Errorf("timed out creating VM")
+	case err := <-errorChannel:
+		return err
+	}
+}
+
+func destroyVm(hyperClient *srpc.Client, ipAddr net.IP, accessToken []byte,
+	timeout time.Duration) error {
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(timeout)
+	go func() {
+		errorChannel <- client.DestroyVm(hyperClient, ipAddr, accessToken)
+	}()
+	select {
+	case <-timer.C:
+		return fmt.Errorf("timed out destroying VM")
+	case err := <-errorChannel:
+		return err
+	}
+}
+
 func readVmInfo(vmInfo *hyper_proto.VmInfo) error {
 	url := constants.MetadataUrl + constants.MetadataIdentityDoc
 	resp, err := http.Get(url)
@@ -85,6 +116,12 @@ func newSlaveTrader(options SlaveTraderOptions,
 		options.CreateRequest.Tags = tags.Tags{
 			"Name": options.CreateRequest.Hostname}
 	}
+	if options.CreateTimeout == 0 {
+		options.CreateTimeout = 5 * time.Minute
+	}
+	if options.DestroyTimeout == 0 {
+		options.DestroyTimeout = time.Minute
+	}
 	closeChannel := make(chan closeRequestMessage)
 	hypervisorChannel := make(chan *srpc.Client)
 	privateTrader := &slaveTrader{
@@ -115,8 +152,8 @@ func (trader *SlaveTrader) createSlave() (slavedriver.SlaveInfo, error) {
 		return slavedriver.SlaveInfo{}, err
 	} else {
 		var reply hyper_proto.CreateVmResponse
-		err := client.CreateVm(hyperClient, trader.options.CreateRequest,
-			&reply, trader.logger)
+		err := createVm(hyperClient, trader.options.CreateRequest,
+			&reply, trader.options.CreateTimeout, trader.logger)
 		if err != nil {
 			return slavedriver.SlaveInfo{},
 				fmt.Errorf("error creating VM: %s", err)
@@ -147,9 +184,10 @@ func (trader *SlaveTrader) destroySlave(identifier string) error {
 	if ip4 := ipAddr.To4(); ip4 != nil {
 		ipAddr = ip4
 	}
+	timeout := trader.options.DestroyTimeout
 	if hyperClient, err := trader.getHypervisor(); err != nil {
 		return err
-	} else if err := client.DestroyVm(hyperClient, ipAddr, nil); err != nil {
+	} else if err := destroyVm(hyperClient, ipAddr, nil, timeout); err != nil {
 		if !strings.Contains(err.Error(), "no VM with IP address") {
 			return err
 		}
