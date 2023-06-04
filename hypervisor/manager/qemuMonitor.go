@@ -44,12 +44,12 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 	commandOutput chan<- byte) {
 	reader := &copyingReader{commandOutput, monitorSock}
 	decoder := json.NewDecoder(reader)
-	var guestShutdown bool
+	var guestShutdown, hostQuit bool
 	for {
 		var message monitorMessageType
 		if err := decoder.Decode(&message); err != nil {
 			if err == io.EOF {
-				if !guestShutdown {
+				if !guestShutdown && !hostQuit {
 					vm.logger.Debugln(0, "EOF on monitor socket")
 				}
 				break
@@ -69,6 +69,8 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 			shutdownData.Guest, shutdownData.Reason)
 		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
 			guestShutdown = true
+		} else if shutdownData.Reason == "host-qmp-quit" {
+			hostQuit = true
 		}
 	}
 	close(commandOutput)
