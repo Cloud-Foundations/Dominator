@@ -274,6 +274,17 @@ func readUntilCarriageReturn(firstByte byte, moreBytes <-chan byte,
 	return buffer, true
 }
 
+// removeFile will remove the specified filename. If the removal was successful
+// or the file does not exist, nil is returned, else an error is returned.
+func removeFile(filename string) error {
+	if err := os.Remove(filename); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func setVolumeSize(filename string, size uint64) error {
 	if err := os.Truncate(filename, int64(size)); err != nil {
 		return err
@@ -1403,12 +1414,19 @@ func (m *Manager) discardVmAccessToken(ipAddr net.IP,
 
 func (m *Manager) discardVmOldImage(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) error {
+	extension := ".old"
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(vm.VolumeLocations[0].Filename + ".old")
+	if err := removeFile(vm.getInitrdPath() + extension); err != nil {
+		return err
+	}
+	if err := removeFile(vm.getKernelPath() + extension); err != nil {
+		return err
+	}
+	return removeFile(vm.VolumeLocations[0].Filename + extension)
 }
 
 func (m *Manager) discardVmOldUserData(ipAddr net.IP,
@@ -1418,7 +1436,7 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(filepath.Join(vm.dirname, UserDataFile+".old"))
+	return removeFile(filepath.Join(vm.dirname, UserDataFile+".old"))
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
@@ -3404,10 +3422,8 @@ func (vm *vmInfoType) destroy() {
 
 func (vm *vmInfoType) discardSnapshot() error {
 	for _, volume := range vm.VolumeLocations {
-		if err := os.Remove(volume.Filename + ".snapshot"); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
+		if err := removeFile(volume.Filename + ".snapshot"); err != nil {
+			return err
 		}
 	}
 	return nil
