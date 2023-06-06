@@ -154,7 +154,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		fmt.Fprintln(writer, "Failed image builds:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
 		tw, _ := html.NewTableWriter(writer, true,
-			"Image Stream", "Error", "Build log", "Last attempt")
+			"Image Stream", "Error", "Build log", "Duration", "Last attempt")
 		for _, streamName := range streamNames {
 			result := failedBuilds[streamName]
 			tw.WriteRow("", "",
@@ -162,6 +162,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 				result.error.Error(),
 				fmt.Sprintf("<a href=\"showLastBuildLog?%s\">log</a>",
 					streamName),
+				format.Duration(result.finishTime.Sub(result.startTime)),
 				fmt.Sprintf("%s ago",
 					format.Duration(currentTime.Sub(result.finishTime))),
 			)
