@@ -53,20 +53,7 @@ func newObjectServer(baseDir string, maxCachedBytes uint64,
 	if err := objSrv.loadLru(); err != nil {
 		return nil, err
 	}
-	// Link orphaned entries.
-	for _, object := range objSrv.objects {
-		if objSrv.newest == nil { // Empty list: initialise it.
-			objSrv.newest = object
-			objSrv.oldest = object
-			objSrv.lruBytes += object.size
-		} else if object.newer == nil && objSrv.newest != object {
-			// Orphaned object: make it the newest.
-			object.older = objSrv.newest
-			objSrv.newest.newer = object
-			objSrv.newest = object
-			objSrv.lruBytes += object.size
-		}
-	}
+	objSrv.linkOrphanedEntries()
 	go objSrv.flusher(lruUpdateNotifier)
 	return objSrv, nil
 }
