@@ -10,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
@@ -17,7 +18,7 @@ import (
 func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	[]proto.SubInfo, error) {
 	selectFunc := makeSelector(request.LocationsToMatch,
-		request.StatusesToMatch, request.TagsToMatch)
+		request.StatusesToMatch, tagmatcher.New(request.TagsToMatch, false))
 	if len(request.Hostnames) < 1 {
 		herd.RLock()
 		defer herd.RUnlock()

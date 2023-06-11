@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
@@ -55,7 +56,7 @@ func (herd *Herd) listUnreachableSubsHandler(w http.ResponseWriter,
 
 func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
 	selectFunc := makeSelector(request.LocationsToMatch,
-		request.StatusesToMatch, request.TagsToMatch)
+		request.StatusesToMatch, tagmatcher.New(request.TagsToMatch, false))
 	if len(request.Hostnames) < 1 {
 		return herd.selectSubs(selectFunc), nil
 	}

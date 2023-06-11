@@ -15,15 +15,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
 func makeSelector(locationsToMatch []string, statusesToMatch []string,
-	tagsToMatch map[string][]string) func(sub *Sub) bool {
+	tagsToMatch *tagmatcher.TagMatcher) func(sub *Sub) bool {
 	if len(locationsToMatch) < 1 &&
 		len(statusesToMatch) < 1 &&
-		len(tagsToMatch) < 1 {
+		tagsToMatch == nil {
 		return selectAll
 	}
 	locationsToMatchMap := stringutil.ConvertListToMap(locationsToMatch, false)
@@ -55,17 +56,8 @@ func makeSelector(locationsToMatch []string, statusesToMatch []string,
 				return false
 			}
 		}
-		for key, values := range tagsToMatch {
-			var matchedTag bool
-			for _, value := range values {
-				if value == sub.mdb.Tags[key] {
-					matchedTag = true
-					break
-				}
-			}
-			if !matchedTag {
-				return false
-			}
+		if !tagsToMatch.MatchEach(sub.mdb.Tags) {
+			return false
 		}
 		return true
 	}
@@ -86,7 +78,7 @@ func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
 		tagsToMatch[key] = append(tagsToMatch[key], value)
 	}
 	return makeSelector(queryValues["location"], queryValues["status"],
-		tagsToMatch)
+		tagmatcher.New(tagsToMatch, false))
 }
 
 func selectAll(sub *Sub) bool {
