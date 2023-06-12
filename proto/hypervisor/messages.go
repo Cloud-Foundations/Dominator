@@ -437,6 +437,7 @@ type ListVMsRequest struct {
 	OwnerGroups     []string
 	OwnerUsers      []string
 	Sort            bool
+	VmTagsToMatch   tags.MatchTags // Empty: match all tags.
 }
 
 type ListVMsResponse struct {
