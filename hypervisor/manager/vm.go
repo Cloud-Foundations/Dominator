@@ -39,6 +39,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -1869,10 +1870,14 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 
 func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
+	vmTagMatcher := tagmatcher.New(request.VmTagsToMatch, false)
 	m.mutex.RLock()
 	ipAddrs := make([]string, 0, len(m.vms))
 	for ipAddr, vm := range m.vms {
 		if request.IgnoreStateMask&(1<<vm.State) != 0 {
+			continue
+		}
+		if !vmTagMatcher.MatchEach(vm.Tags) {
 			continue
 		}
 		include := true
