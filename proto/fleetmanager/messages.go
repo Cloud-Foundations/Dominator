@@ -66,22 +66,25 @@ type ListHypervisorLocationsResponse struct {
 }
 
 type ListHypervisorsInLocationRequest struct {
-	IncludeUnhealthy bool
-	Location         string
-	SubnetId         string
-	TagsToInclude    []string
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeUnhealthy      bool
+	Location              string
+	SubnetId              string
+	TagsToInclude         []string
 }
 
 type ListHypervisorsInLocationResponse struct {
+	Error               string
 	HypervisorAddresses []string    // host:port
 	TagsForHypervisors  []tags.Tags `json:",omitempty"`
-	Error               string
 }
 
 type ListVMsInLocationRequest struct {
-	Location    string
-	OwnerGroups []string
-	OwnerUsers  []string
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	Location              string
+	OwnerGroups           []string
+	OwnerUsers            []string
+	VmTagsToMatch         tags.MatchTags // Empty: match all tags.
 }
 
 // A stream of ListVMsInLocationResponse messages is sent, until either the
