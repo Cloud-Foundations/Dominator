@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
@@ -42,7 +43,8 @@ func (h *hypervisorType) getNumVMs() uint {
 }
 
 func (m *Manager) listHypervisors(topologyDir string, showFilter int,
-	subnetId string) (hypervisorList, error) {
+	subnetId string,
+	tagsToMatch *tagmatcher.TagMatcher) (hypervisorList, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	machines, err := m.topology.ListMachines(topologyDir)
@@ -59,6 +61,12 @@ func (m *Manager) listHypervisors(topologyDir string, showFilter int,
 			}
 		}
 		hypervisor := m.hypervisors[machine.Hostname]
+		if tagsToMatch != nil {
+			if !tagsToMatch.MatchEach(machine.Tags) &&
+				!tagsToMatch.MatchEach(hypervisor.localTags) {
+				continue
+			}
+		}
 		switch showFilter {
 		case showOK:
 			if hypervisor.probeStatus == probeStatusConnected &&
@@ -100,7 +108,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	case "off":
 		showFilter = showOff
 	}
-	hypervisors, err := m.listHypervisors("", showFilter, "")
+	hypervisors, err := m.listHypervisors("", showFilter, "", nil)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
@@ -171,7 +179,7 @@ func (m *Manager) listHypervisorsInLocation(
 		showFilter = showConnected
 	}
 	hypervisors, err := m.listHypervisors(request.Location, showFilter,
-		request.SubnetId)
+		request.SubnetId, tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return proto.ListHypervisorsInLocationResponse{}, err
 	}

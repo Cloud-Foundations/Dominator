@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -174,18 +175,21 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 
 func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
 	[]net.IP, error) {
-	hypervisors, err := m.listHypervisors(request.Location, showAll, "")
+	hypervisors, err := m.listHypervisors(request.Location, showAll, "",
+		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return nil, err
 	}
 	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
 	ownerUsers := stringutil.ConvertListToMap(request.OwnerUsers, false)
 	addresses := make([]net.IP, 0)
+	vmTagMatcher := tagmatcher.New(request.VmTagsToMatch, false)
 	for _, hypervisor := range hypervisors {
 		hypervisor.mutex.RLock()
 		for _, vm := range hypervisor.vms {
 			if vm.checkOwnerGroups(ownerGroups) &&
-				vm.checkOwnerUsers(ownerUsers) {
+				vm.checkOwnerUsers(ownerUsers) &&
+				vmTagMatcher.MatchEach(vm.Tags) {
 				addresses = append(addresses, vm.Address.IpAddress)
 			}
 		}
