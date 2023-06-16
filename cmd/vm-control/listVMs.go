@@ -45,9 +45,11 @@ func listVMsByLocation(fleetManager string, location string,
 	}
 	defer conn.Close()
 	request := fm_proto.ListVMsInLocationRequest{
-		Location:    location,
-		OwnerGroups: ownerGroups,
-		OwnerUsers:  ownerUsers,
+		HypervisorTagsToMatch: hypervisorTagsToMatch,
+		Location:              location,
+		OwnerGroups:           ownerGroups,
+		OwnerUsers:            ownerUsers,
+		VmTagsToMatch:         vmTagsToMatch,
 	}
 	if err := conn.Encode(request); err != nil {
 		return err
@@ -87,9 +89,10 @@ func listVMsOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 	}
 	defer client.Close()
 	request := hyper_proto.ListVMsRequest{
-		OwnerGroups: ownerGroups,
-		OwnerUsers:  ownerUsers,
-		Sort:        true,
+		OwnerGroups:   ownerGroups,
+		OwnerUsers:    ownerUsers,
+		Sort:          true,
+		VmTagsToMatch: vmTagsToMatch,
 	}
 	var reply hyper_proto.ListVMsResponse
 	err = client.RequestReply("Hypervisor.ListVMs", request, &reply)

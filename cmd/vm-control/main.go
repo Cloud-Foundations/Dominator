@@ -47,7 +47,8 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
-	identityCertFile = flag.String("identityCertFile", "",
+	hypervisorTagsToMatch tags.MatchTags
+	identityCertFile      = flag.String("identityCertFile", "",
 		"Filename of PEM-encoded cetificate availabe from metadata service ")
 	identityKeyFile = flag.String("identityKeyFile", "",
 		"Filename of PEM-encoded key available from metadata service ")
@@ -105,9 +106,10 @@ var (
 		"Name file containing user-data accessible from the metadata server")
 	virtualCPUs = flag.Uint("vCPUs", 0,
 		"virtual CPUs (default rounds up milliCPUs)")
-	vmHostname = flag.String("vmHostname", "", "Hostname for VM")
-	vmTags     tags.Tags
-	vncViewer  = flag.String("vncViewer", defaultVncViewer,
+	vmHostname    = flag.String("vmHostname", "", "Hostname for VM")
+	vmTags        tags.Tags
+	vmTagsToMatch tags.MatchTags
+	vncViewer     = flag.String("vncViewer", defaultVncViewer,
 		"Path to VNC viewer")
 	volumeFilename = flag.String("volumeFilename", "",
 		"Name of file to write volume data to")
@@ -124,6 +126,8 @@ var (
 func init() {
 	flag.Var(&consoleType, "consoleType",
 		"type of graphical console (default none)")
+	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
+		"Tags to match when listing")
 	flag.Var(&memory, "memory", "memory (default 1GiB)")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in root volume")
@@ -134,6 +138,7 @@ func init() {
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
+	flag.Var(&vmTagsToMatch, "vmTagsToMatch", "Tags to match when listing")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
