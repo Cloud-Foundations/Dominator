@@ -115,15 +115,24 @@ func LoadLines(filename string) ([]string, error) {
 }
 
 // LoopbackDelete will disassociate (delete) a loopback block device from its
-// backing file. The name of the block device is returned.
+// backing file.
 func LoopbackDelete(loopDevice string) error {
-	return loopbackDelete(loopDevice)
+	return loopbackDelete(loopDevice, true)
+}
+
+// LoopbackDeleteAndWaitForPartition will disassociate (delete) a loopback block
+// device from its backing file and wait for specified partition inode to
+// disappear.
+func LoopbackDeleteAndWaitForPartition(loopDevice, partition string,
+	timeout time.Duration, logger log.DebugLogger) error {
+	return loopbackDeleteAndWaitForPartition(loopDevice, partition, timeout,
+		logger)
 }
 
 // LoopbackSetup will associate a loopback block device with a regular file
 // named filename. The name of the loop block device is returned.
 func LoopbackSetup(filename string) (string, error) {
-	return loopbackSetup(filename)
+	return loopbackSetup(filename, true)
 }
 
 // LoopbackSetupAndWaitForPartition will associate a loopback block device with

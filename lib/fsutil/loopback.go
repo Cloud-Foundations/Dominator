@@ -15,15 +15,46 @@ import (
 
 var losetupMutex sync.Mutex
 
-func loopbackDelete(loopDevice string) error {
-	losetupMutex.Lock()
-	defer losetupMutex.Unlock()
+func loopbackDelete(loopDevice string, grabLock bool) error {
+	if grabLock {
+		losetupMutex.Lock()
+		defer losetupMutex.Unlock()
+	}
 	return exec.Command("losetup", "-d", loopDevice).Run()
 }
 
-func loopbackSetup(filename string) (string, error) {
+func loopbackDeleteAndWaitForPartition(loopDevice, partition string,
+	timeout time.Duration, logger log.DebugLogger) error {
 	losetupMutex.Lock()
 	defer losetupMutex.Unlock()
+	if err := loopbackDelete(loopDevice, false); err != nil {
+		return err
+	}
+	// Wait for partition device to disappear. Deleting it directly might not be
+	// safe because there may be a pending dynamic device node deletion event.
+	partitionDevice := loopDevice + partition
+	sleeper := backoffdelay.NewExponential(time.Millisecond,
+		100*time.Millisecond, 2)
+	startTime := time.Now()
+	stopTime := startTime.Add(timeout)
+	for count := 0; time.Until(stopTime) >= 0; count++ {
+		if _, err := os.Stat(partitionDevice); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		sleeper.Sleep()
+	}
+	return fmt.Errorf("timed out waiting for partition: %s",
+		partitionDevice)
+}
+
+func loopbackSetup(filename string, grabLock bool) (string, error) {
+	if grabLock {
+		losetupMutex.Lock()
+		defer losetupMutex.Unlock()
+	}
 	cmd := exec.Command("losetup", "-fP", "--show", filename)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -37,14 +68,16 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 	if timeout < 0 || timeout > time.Hour {
 		timeout = time.Hour
 	}
-	loopDevice, err := LoopbackSetup(filename)
+	losetupMutex.Lock()
+	defer losetupMutex.Unlock()
+	loopDevice, err := loopbackSetup(filename, false)
 	if err != nil {
 		return "", err
 	}
 	doDelete := true
 	defer func() {
 		if doDelete {
-			LoopbackDelete(loopDevice)
+			loopbackDelete(loopDevice, false)
 		}
 	}()
 	// Probe for partition device because it might not be immediately available.
