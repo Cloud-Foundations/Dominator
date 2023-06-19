@@ -2406,7 +2406,8 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDelete(loopDevice)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+		time.Minute, vm.logger)
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", loopDevice, rootDir)
 	err = wsyscall.Mount(loopDevice+partition, rootDir, "ext4", 0, "")
 	if err != nil {
@@ -3039,7 +3040,8 @@ func (vm *vmInfoType) scanVmRoot(scanFilter *filter.Filter) (
 	if err != nil {
 		return nil, err
 	}
-	defer fsutil.LoopbackDelete(loopDevice)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+		time.Minute, vm.logger)
 	blockDevice := loopDevice + partition
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", blockDevice, rootDir)
 	err = wsyscall.Mount(blockDevice, rootDir, "ext4", 0, "")

@@ -195,7 +195,8 @@ func grow2fs(volume string, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDelete(device)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(device, "p1", time.Minute,
+		logger)
 	partition := device + "p1"
 	if !check2fs(partition) {
 		return nil
@@ -283,7 +284,8 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	deleteLoopback := true
 	defer func() {
 		if deleteLoopback {
-			fsutil.LoopbackDelete(device)
+			fsutil.LoopbackDeleteAndWaitForPartition(device, "p1", time.Minute,
+				logger)
 		}
 	}()
 	partition := device + "p1"
@@ -294,7 +296,9 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 		return err
 	}
 	deleteLoopback = false
-	if err := fsutil.LoopbackDelete(device); err != nil {
+	err = fsutil.LoopbackDeleteAndWaitForPartition(device, "p1", time.Minute,
+		logger)
+	if err != nil {
 		return err
 	}
 	return partitionTable.Write(volume)
