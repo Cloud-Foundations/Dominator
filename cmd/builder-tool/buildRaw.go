@@ -69,7 +69,8 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDelete(loopDevice)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+		time.Minute, logger)
 	rootDevice := loopDevice + partition
 	rootLabel := "root@test"
 	err = util.MakeExt4fs(rootDevice, rootLabel, nil, 0, logger)
