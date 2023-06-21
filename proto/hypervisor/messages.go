@@ -336,6 +336,8 @@ type GetUpdatesRequest struct {
 type Update struct {
 	HaveAddressPool  bool               `json:",omitempty"`
 	AddressPool      []Address          `json:",omitempty"` // Used & free.
+	HaveDisabled     bool               `json:",omitempty"`
+	Disabled         bool               `json:",omitempty"`
 	MemoryInMiB      *uint64            `json:",omitempty"`
 	NumCPUs          *uint              `json:",omitempty"`
 	NumFreeAddresses map[string]uint    `json:",omitempty"` // Key: subnet ID.
@@ -637,6 +639,14 @@ type ScanVmRootRequest struct {
 type ScanVmRootResponse struct {
 	Error      string
 	FileSystem *filesystem.FileSystem
+}
+
+type SetDisabledStateRequest struct {
+	Disable bool
+}
+
+type SetDisabledStateResponse struct {
+	Error string
 }
 
 type SnapshotVmRequest struct {
