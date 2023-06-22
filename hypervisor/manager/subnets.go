@@ -8,6 +8,7 @@ import (
 	"path"
 	"sort"
 
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -284,7 +285,7 @@ func (m *Manager) updateSubnetsLocked(
 		return err
 	}
 	err = json.WriteToFile(path.Join(m.StateDir, "subnets.json"),
-		publicFilePerms, "    ", subnetsToWrite)
+		fsutil.PublicFilePerms, "    ", subnetsToWrite)
 	if err != nil {
 		return err
 	}

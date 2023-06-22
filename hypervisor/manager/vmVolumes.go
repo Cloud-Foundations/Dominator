@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -37,7 +38,7 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 	}
 	volumeDirectory := filepath.Join(volumeDirectories[0], vm.ipAddress)
 	os.RemoveAll(volumeDirectory)
-	if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
+	if err := os.MkdirAll(volumeDirectory, fsutil.DirPerms); err != nil {
 		return err
 	}
 	filename := filepath.Join(volumeDirectory, "root")
@@ -47,7 +48,7 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 		volumeDirectory := filepath.Join(volumeDirectories[index+1],
 			vm.ipAddress)
 		os.RemoveAll(volumeDirectory)
-		if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
+		if err := os.MkdirAll(volumeDirectory, fsutil.DirPerms); err != nil {
 			return err
 		}
 		filename := filepath.Join(volumeDirectory, indexToName(index+1))

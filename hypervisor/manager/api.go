@@ -46,6 +46,7 @@ type Manager struct {
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
 	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
+	disabled          bool
 	healthStatus      string
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	objectCache       *cachingreader.ObjectServer
@@ -425,6 +426,10 @@ func (m *Manager) ReorderVmVolumes(ipAddr net.IP,
 func (m *Manager) ScanVmRoot(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return m.scanVmRoot(ipAddr, authInfo, scanFilter)
+}
+
+func (m *Manager) SetDisabledState(disable bool) error {
+	return m.setDisabledState(disable)
 }
 
 func (m *Manager) ShutdownVMsAndExit() {

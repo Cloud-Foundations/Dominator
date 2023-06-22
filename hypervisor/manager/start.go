@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -25,10 +24,6 @@ import (
 )
 
 const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	privateFilePerms  = syscall.S_IRUSR | syscall.S_IWUSR
-	publicFilePerms   = privateFilePerms | syscall.S_IRGRP | syscall.S_IROTH
 	productSerialFile = "/sys/class/dmi/id/product_serial"
 
 	uuidLength = 16
@@ -86,10 +81,14 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vms:           make(map[string]*vmInfoType),
 		uuid:          uuid,
 	}
-	err = fsutil.CopyToFile(manager.GetRootCookiePath(), privateFilePerms,
-		bytes.NewReader(rootCookie), 0)
+	err = fsutil.CopyToFile(manager.GetRootCookiePath(),
+		fsutil.PrivateFilePerms, bytes.NewReader(rootCookie), 0)
 	if err != nil {
 		return nil, err
+	}
+	_, err = os.Stat(filepath.Join(startOptions.StateDir, "disabled"))
+	if err == nil {
+		manager.disabled = true
 	}
 	if err := manager.setupVolumes(startOptions); err != nil {
 		return nil, err
@@ -107,7 +106,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	dir, err := os.Open(dirname)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.Mkdir(dirname, dirPerms); err != nil {
+			if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
 				return nil, errors.New(
 					"error making: " + dirname + ": " + err.Error())
 			}
@@ -175,7 +174,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if startOptions.ObjectCacheBytes >= 1<<20 {
 		dirname := filepath.Join(filepath.Dir(manager.volumeDirectories[0]),
 			"objectcache")
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return nil, err
 		}
 		objSrv, err := cachingreader.NewObjectServer(dirname,

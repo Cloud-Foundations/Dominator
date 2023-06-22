@@ -251,7 +251,7 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 	reader io.Reader) error {
 	filename := filepath.Join(objectsDir, objectcache.HashToFilename(hashVal))
 	dirname := filepath.Dir(filename)
-	if err := os.MkdirAll(dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	return fsutil.CopyToFile(filename, fsutil.PrivateFilePerms, reader, length)
@@ -337,11 +337,11 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			DirectoryToCleanup: dirname,
 			Filename:           filename,
 		}
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		cFlags := os.O_CREATE | os.O_EXCL | os.O_RDWR
-		file, err := os.OpenFile(filename, cFlags, privateFilePerms)
+		file, err := os.OpenFile(filename, cFlags, fsutil.PrivateFilePerms)
 		if err != nil {
 			return err
 		} else {
@@ -890,7 +890,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 		vm.cleanup()
 	}()
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	// Begin copying over the volumes.
@@ -966,9 +966,18 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+	if m.disabled {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
+		return sendError(conn, errors.New("Hypervisor is disabled"))
+	}
 	ownerUsers := make([]string, 1, len(request.OwnerUsers)+1)
 	ownerUsers[0] = conn.Username()
 	if ownerUsers[0] == "" {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
 		return sendError(conn, errors.New("no authentication data"))
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
@@ -1000,7 +1009,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
 		}
@@ -1843,14 +1852,14 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 			os.RemoveAll(volume.DirectoryToCleanup)
 		}
 	}()
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for index, sourceFilename := range request.VolumeFilenames {
 		dirname := filepath.Join(filepath.Dir(filepath.Dir(
 			filepath.Dir(sourceFilename))),
 			ipAddress)
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		destFilename := filepath.Join(dirname, indexToName(index))
@@ -1990,12 +1999,12 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		}
 	}()
 	vm.ownerUsers = stringutil.ConvertListToMap(vm.OwnerUsers, false)
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for index, _dirname := range volumeDirectories {
 		dirname := filepath.Join(_dirname, ipAddress)
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		vm.VolumeLocations = append(vm.VolumeLocations, proto.LocalVolume{
@@ -2186,7 +2195,7 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 		return nil
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
-		privateFilePerms)
+		fsutil.PrivateFilePerms)
 	if err != nil {
 		io.CopyN(ioutil.Discard, conn, int64(reply.Length))
 		return err
@@ -2233,7 +2242,7 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		}
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE,
-		privateFilePerms)
+		fsutil.PrivateFilePerms)
 	if err != nil {
 		return nil, err
 	}
@@ -2858,7 +2867,7 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	newFilename := filename + ".new"
-	err = fsutil.CopyToFile(newFilename, privateFilePerms, reader, size)
+	err = fsutil.CopyToFile(newFilename, fsutil.PrivateFilePerms, reader, size)
 	if err != nil {
 		return err
 	}
@@ -3094,7 +3103,7 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		snapshotFilename := volume.Filename + ".snapshot"
 		if index == 0 || !snapshotRootOnly {
 			err := fsutil.CopyFile(snapshotFilename, volume.Filename,
-				privateFilePerms)
+				fsutil.PrivateFilePerms)
 			if err != nil {
 				return err
 			}
@@ -3107,6 +3116,9 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 // startVm returns true if the DHCP check timed out.
 func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	accessToken []byte, dhcpTimeout time.Duration) (bool, error) {
+	if m.disabled {
+		return false, errors.New("Hypervisor is disabled")
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, accessToken)
 	if err != nil {
 		return false, err
@@ -3256,8 +3268,8 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	writeRawOptions.WriteFstab = true
 	err := util.WriteRawWithOptions(fs, objectsGetter,
-		volume.Filename+extension, privateFilePerms, mbr.TABLE_TYPE_MSDOS,
-		writeRawOptions, m.Logger)
+		volume.Filename+extension, fsutil.PrivateFilePerms,
+		mbr.TABLE_TYPE_MSDOS, writeRawOptions, m.Logger)
 	if err != nil {
 		return err
 	}
@@ -3873,5 +3885,5 @@ func (vm *vmInfoType) writeAndSendInfo() {
 
 func (vm *vmInfoType) writeInfo() error {
 	filename := filepath.Join(vm.dirname, "info.json")
-	return json.WriteToFile(filename, publicFilePerms, "    ", vm)
+	return json.WriteToFile(filename, fsutil.PublicFilePerms, "    ", vm)
 }

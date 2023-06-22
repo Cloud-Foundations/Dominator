@@ -12,6 +12,10 @@ import (
 )
 
 func (m *Manager) writeHtml(writer io.Writer) {
+	if m.disabled {
+		fmt.Fprintln(writer,
+			`Hypervisor is <font color="red">disabled</font><p>`)
+	}
 	numRunning, numStopped := m.getNumVMs()
 	writeCountLinks(writer, "Number of VMs known", "listVMs?state=",
 		numRunning+numStopped)
