@@ -323,6 +323,16 @@ func scanVmRoot(client *srpc.Client, ipAddr net.IP,
 	return reply.FileSystem, errors.New(reply.Error)
 }
 
+func setDisabledState(client *srpc.Client, disable bool) error {
+	request := proto.SetDisabledStateRequest{Disable: disable}
+	var reply proto.SetDisabledStateResponse
+	err := client.RequestReply("Hypervisor.SetDisabledState", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func startVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
 	request := proto.StartVmRequest{
 		AccessToken: accessToken,

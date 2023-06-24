@@ -99,6 +99,10 @@ func ScanVmRoot(client *srpc.Client, ipAddr net.IP,
 	return scanVmRoot(client, ipAddr, scanFilter)
 }
 
+func SetDisabledState(client *srpc.Client, disable bool) error {
+	return setDisabledState(client, disable)
+}
+
 func StartVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
 	return startVm(client, ipAddr, accessToken)
 }
