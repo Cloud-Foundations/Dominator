@@ -104,6 +104,8 @@ var subcommands = []commands.Command{
 		addSubnetSubcommand},
 	{"change-tags", "", 0, 0, changeTagsSubcommand},
 	{"connect-to-vm-manager", "IPaddr", 1, 1, connectToVmManagerSubcommand},
+	{"disable-hypervisor", "", 0, 0, disableHypervisorSubcommand},
+	{"enable-hypervisor", "", 0, 0, enableHypervisorSubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
 	{"hold-lock", "", 0, 0, holdLockSubcommand},
