@@ -20,6 +20,7 @@ import (
 const (
 	showOK = iota
 	showConnected
+	showDisabled
 	showAll
 	showOff
 )
@@ -31,6 +32,8 @@ func (h *hypervisorType) getHealthStatus() string {
 	if h.probeStatus == probeStatusConnected {
 		if h.healthStatus != "" {
 			healthStatus = h.healthStatus
+		} else if h.disabled {
+			healthStatus = "disabled"
 		}
 	}
 	return healthStatus
@@ -78,6 +81,11 @@ func (m *Manager) listHypervisors(topologyDir string, showFilter int,
 			if hypervisor.probeStatus == probeStatusConnected {
 				hypervisors = append(hypervisors, hypervisor)
 			}
+		case showDisabled:
+			if hypervisor.probeStatus == probeStatusConnected &&
+				hypervisor.disabled {
+				hypervisors = append(hypervisors, hypervisor)
+			}
 		case showAll:
 			hypervisors = append(hypervisors, hypervisor)
 		case showOff:
@@ -103,6 +111,8 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	switch parsedQuery.Table["state"] {
 	case "connected":
 		showFilter = showConnected
+	case "disabled":
+		showFilter = showDisabled
 	case "OK":
 		showFilter = showOK
 	case "off":

@@ -93,6 +93,9 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			var background, foreground string
 			if vm.hypervisor.probeStatus == probeStatusOff {
 				foreground = "#ff8080"
+			} else if vm.hypervisor.probeStatus == probeStatusConnected &&
+				vm.hypervisor.disabled {
+				foreground = "grey"
 			} else if vm.hypervisor.probeStatus != probeStatusConnected {
 				foreground = "red"
 			} else if vm.hypervisor.healthStatus == "at risk" {

@@ -32,6 +32,7 @@ type hypervisorType struct {
 	cachedSerialNumber string
 	conn               *srpc.Conn
 	deleteScheduled    bool
+	disabled           bool
 	healthStatus       string
 	lastIpmiProbe      time.Time
 	localTags          tags.Tags

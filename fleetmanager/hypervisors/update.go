@@ -512,7 +512,11 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		return
 	}
 	addressPoolOptions := defaultAddressPoolOptions
-	if h.healthStatus == "marginal" || h.healthStatus == "at risk" {
+	if h.disabled {
+		addressPoolOptions.desiredSize = 0
+		addressPoolOptions.maximumSize = 0
+		addressPoolOptions.minimumSize = 0
+	} else if h.healthStatus == "marginal" || h.healthStatus == "at risk" {
 		addressPoolOptions.desiredSize = 1
 		addressPoolOptions.maximumSize = 1
 		addressPoolOptions.minimumSize = 1
@@ -595,6 +599,9 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	update hyper_proto.Update, firstUpdate bool) {
 	h.mutex.Lock()
+	if update.HaveDisabled {
+		h.disabled = update.Disabled
+	}
 	if update.MemoryInMiB != nil {
 		h.memoryInMiB = *update.MemoryInMiB
 	}
