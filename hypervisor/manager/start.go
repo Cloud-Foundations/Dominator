@@ -226,8 +226,14 @@ func (m *Manager) loopCheckHealthStatus() {
 		healthStatus := m.checkHealthStatus(cr)
 		m.mutex.Lock()
 		if m.healthStatus != healthStatus {
+			numFreeAddresses, err := m.computeNumFreeAddressesMap(m.addressPool)
+			if err != nil {
+				m.Logger.Println(err)
+			}
 			m.healthStatus = healthStatus
-			m.sendUpdateWithLock(proto.Update{})
+			m.sendUpdateWithLock(proto.Update{
+				NumFreeAddresses: numFreeAddresses,
+			})
 		}
 		m.mutex.Unlock()
 	}
