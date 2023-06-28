@@ -37,6 +37,12 @@ Some of the sub-commands available are:
 - **change-tags**: change the tags for a specific *Hypervisor*
 - **connect-to-vm-manager**: connect to the manager for the specified VM. This
                              is meant for low-level development
+- **disable-hypervisor**: disable a specific *Hypervisor*, preventing VMs from
+                          being created or started. Useful for draining (taking
+			  out of service) a *Hypervisor*
+- **enable-hypervisor**: enable a specific *Hypervisor*, enabling VMs to be
+                         be created and started. Useful for bringing a
+			 *Hypervisor* back into service
 - **get-machine-info**: get information for a specific *Hypervisor*
 - **get-updates**: get and show a continuous stream of updates from a
                    *Hypervisor* or *Fleet Manager*. This is primarily for
