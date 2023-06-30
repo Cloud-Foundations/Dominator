@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -159,6 +158,9 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 		} else {
 			memoryInMiB = hypervisor.memoryInMiB
 		}
+		memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
+		volumeShift, volumeMultiplier := format.GetMiltiplier(
+			hypervisor.totalVolumeBytes)
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 				machine.Hostname, machine.Hostname),
@@ -169,9 +171,17 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			hypervisor.serialNumber,
 			hypervisor.location,
 			machineType,
-			strconv.FormatUint(uint64(hypervisor.numCPUs), 10),
-			format.FormatBytes(memoryInMiB<<20),
-			format.FormatBytes(hypervisor.totalVolumeBytes),
+			fmt.Sprintf("%.3f/%d",
+				float64(hypervisor.allocatedMilliCPUs)/1000,
+				hypervisor.numCPUs),
+			fmt.Sprintf("%d/%d %sB",
+				hypervisor.allocatedMemory<<20>>memoryShift,
+				memoryInMiB<<20>>memoryShift,
+				memoryMultiplier),
+			fmt.Sprintf("%d/%d %sB",
+				hypervisor.allocatedVolumeBytes>>volumeShift,
+				hypervisor.totalVolumeBytes>>volumeShift,
+				volumeMultiplier),
 			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 				machine.Hostname, constants.HypervisorPortNumber,
 				hypervisor.getNumVMs()),

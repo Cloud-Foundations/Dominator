@@ -806,6 +806,16 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 		}
 		update.DeletedVMs = append(update.DeletedVMs, ipAddr)
 	}
+	h.allocatedMilliCPUs = 0
+	h.allocatedMemory = 0
+	h.allocatedVolumeBytes = 0
+	for _, vm := range h.vms {
+		h.allocatedMilliCPUs += uint64(vm.MilliCPUs)
+		h.allocatedMemory += vm.MemoryInMiB
+		for _, volume := range vm.Volumes {
+			h.allocatedVolumeBytes += volume.Size
+		}
+	}
 	m.sendUpdate(h.location, &update)
 }
 
