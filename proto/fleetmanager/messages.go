@@ -97,12 +97,15 @@ type ListVMsInLocationResponse struct {
 type Machine struct {
 	GatewaySubnetId         string `json:",omitempty"`
 	Location                string `json:",omitempty"`
+	MemoryInMiB             uint64 `json:",omitempty"`
 	NetworkEntry            `json:",omitempty"`
+	NumCPUs                 uint           `json:",omitempty"`
 	IPMI                    NetworkEntry   `json:",omitempty"`
 	OwnerGroups             []string       `json:",omitempty"`
 	OwnerUsers              []string       `json:",omitempty"`
 	SecondaryNetworkEntries []NetworkEntry `json:",omitempty"`
 	Tags                    tags.Tags      `json:",omitempty"`
+	TotalVolumeBytes        uint64         `json:",omitempty"`
 }
 
 type MoveIpAddressesRequest struct {
