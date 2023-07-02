@@ -128,10 +128,12 @@ func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	if len(h.localTags) < 1 {
 		return h.machine
 	}
-	var machine fm_proto.Machine
-	machine = *h.machine
+	machine := *h.machine
+	machine.MemoryInMiB = h.memoryInMiB
+	machine.NumCPUs = h.numCPUs
 	machine.Tags = h.machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
+	machine.TotalVolumeBytes = h.totalVolumeBytes
 	return &machine
 }
 
