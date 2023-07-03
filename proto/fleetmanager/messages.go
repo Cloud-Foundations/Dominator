@@ -26,7 +26,8 @@ type GetHypervisorForVMResponse struct {
 }
 
 type GetMachineInfoRequest struct {
-	Hostname string
+	Hostname               string
+	IgnoreMissingLocalTags bool
 }
 
 type GetMachineInfoResponse struct {
@@ -41,8 +42,9 @@ type GetMachineInfoResponse struct {
 // The server sends a stream of Update messages.
 
 type GetUpdatesRequest struct {
-	Location   string
-	MaxUpdates uint64 // Zero means infinite.
+	IgnoreMissingLocalTags bool
+	Location               string
+	MaxUpdates             uint64 // Zero means infinite.
 }
 
 type Update struct {
