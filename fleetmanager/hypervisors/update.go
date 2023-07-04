@@ -186,7 +186,8 @@ func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
 	delete(m.notifiers, channel)
 }
 
-func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
+func (m *Manager) makeUpdateChannel(
+	request fm_proto.GetUpdatesRequest) <-chan fm_proto.Update {
 	channel := make(chan fm_proto.Update, 16)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -196,16 +197,16 @@ func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
 	if m.notifiers == nil {
 		m.notifiers = make(map[<-chan fm_proto.Update]*locationType)
 	}
-	location, ok := m.locations[locationStr]
+	location, ok := m.locations[request.Location]
 	if !ok {
 		location = &locationType{
 			notifiers: make(map[<-chan fm_proto.Update]chan<- fm_proto.Update),
 		}
-		m.locations[locationStr] = location
+		m.locations[request.Location] = location
 	}
 	location.notifiers[channel] = channel
 	m.notifiers[channel] = location
-	if !*manageHypervisors {
+	if !*manageHypervisors && !request.IgnoreMissingLocalTags {
 		channel <- fm_proto.Update{Error: "this is a read-only Fleet Manager"}
 		return channel
 	}
@@ -213,7 +214,7 @@ func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
 	vms := make(map[string]*hyper_proto.VmInfo, len(m.vms))
 	vmToHypervisor := make(map[string]string, len(m.vms))
 	for _, h := range m.hypervisors {
-		if !testInLocation(h.location, locationStr) {
+		if !testInLocation(h.location, request.Location) {
 			continue
 		}
 		machines = append(machines, h.getMachine())

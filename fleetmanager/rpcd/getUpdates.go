@@ -16,7 +16,7 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 		return err
 	}
 	closeChannel := conn.GetCloseNotifier()
-	updateChannel := t.hypervisorsManager.MakeUpdateChannel(request.Location)
+	updateChannel := t.hypervisorsManager.MakeUpdateChannel(request)
 	defer t.hypervisorsManager.CloseUpdateChannel(updateChannel)
 	flushTimer := time.NewTimer(flushDelay)
 	var numToFlush uint

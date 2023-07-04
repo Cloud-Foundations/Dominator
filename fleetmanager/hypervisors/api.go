@@ -144,8 +144,9 @@ func (m *Manager) GetHypervisorForVm(ipAddr net.IP) (string, error) {
 	return m.getHypervisorForVm(ipAddr)
 }
 
-func (m *Manager) GetMachineInfo(hostname string) (fm_proto.Machine, error) {
-	return m.getMachineInfo(hostname)
+func (m *Manager) GetMachineInfo(request fm_proto.GetMachineInfoRequest) (
+	fm_proto.Machine, error) {
+	return m.getMachineInfo(request)
 }
 
 func (m *Manager) GetTopology() (*topology.Topology, error) {
@@ -167,8 +168,9 @@ func (m *Manager) ListVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
 	return m.listVMsInLocation(request)
 }
 
-func (m *Manager) MakeUpdateChannel(location string) <-chan fm_proto.Update {
-	return m.makeUpdateChannel(location)
+func (m *Manager) MakeUpdateChannel(
+	request fm_proto.GetUpdatesRequest) <-chan fm_proto.Update {
+	return m.makeUpdateChannel(request)
 }
 
 func (m *Manager) MoveIpAddresses(hostname string, ipAddresses []net.IP) error {
