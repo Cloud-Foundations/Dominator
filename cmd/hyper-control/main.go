@@ -32,7 +32,9 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
-	hypervisorTags      tags.Tags
+	hypervisorTags         tags.Tags
+	ignoreMissingLocalTags = flag.Bool("ignoreMissingLocalTags", false,
+		"If true, ignore missing local tags when connecting to Fleet Manager")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",

@@ -48,7 +48,10 @@ func getInfoForMachine(fmCR *srpc.ClientResource, hostname string,
 
 func getInfoForMachineFromFleetManager(fmCR *srpc.ClientResource,
 	hostname string) (fm_proto.GetMachineInfoResponse, error) {
-	request := fm_proto.GetMachineInfoRequest{Hostname: hostname}
+	request := fm_proto.GetMachineInfoRequest{
+		Hostname:               hostname,
+		IgnoreMissingLocalTags: *ignoreMissingLocalTags,
+	}
 	var reply fm_proto.GetMachineInfoResponse
 	client, err := fmCR.GetHTTP(nil, 0)
 	if err != nil {

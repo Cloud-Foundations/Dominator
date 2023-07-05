@@ -47,7 +47,10 @@ func getUpdatesOnFleetManager(fleetManager string,
 		return err
 	}
 	defer conn.Close()
-	request := fm_proto.GetUpdatesRequest{Location: *location}
+	request := fm_proto.GetUpdatesRequest{
+		IgnoreMissingLocalTags: *ignoreMissingLocalTags,
+		Location:               *location,
+	}
 	if err := conn.Encode(request); err != nil {
 		return err
 	}
