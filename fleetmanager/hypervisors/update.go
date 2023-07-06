@@ -125,15 +125,15 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 }
 
 func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
-	if len(h.localTags) < 1 {
-		return h.machine
-	}
 	machine := *h.machine
 	machine.MemoryInMiB = h.memoryInMiB
 	machine.NumCPUs = h.numCPUs
+	machine.TotalVolumeBytes = h.totalVolumeBytes
+	if len(h.localTags) < 1 {
+		return &machine
+	}
 	machine.Tags = h.machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
-	machine.TotalVolumeBytes = h.totalVolumeBytes
 	return &machine
 }
 
