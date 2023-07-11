@@ -50,6 +50,8 @@ var (
 		"Time to hold the lock")
 	offerTimeout = flag.Duration("offerTimeout", time.Minute+time.Second,
 		"How long to offer DHCP OFFERs and ACKs")
+	maxUpdates = flag.Uint64("maxUpdates", 0,
+		"Maximum number of updates to receive (default infinite)")
 	memory              = flagutil.Size(4 << 30)
 	netbootFiles        tags.Tags
 	netbootFilesTimeout = flag.Duration("netbootFilesTimeout",

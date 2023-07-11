@@ -50,6 +50,7 @@ func getUpdatesOnFleetManager(fleetManager string,
 	request := fm_proto.GetUpdatesRequest{
 		IgnoreMissingLocalTags: *ignoreMissingLocalTags,
 		Location:               *location,
+		MaxUpdates:             *maxUpdates,
 	}
 	if err := conn.Encode(request); err != nil {
 		return err
@@ -57,7 +58,7 @@ func getUpdatesOnFleetManager(fleetManager string,
 	if err := conn.Flush(); err != nil {
 		return err
 	}
-	for {
+	for count := uint64(0); *maxUpdates < 1 || count < *maxUpdates; count++ {
 		var update fm_proto.Update
 		if err := conn.Decode(&update); err != nil {
 			return err
@@ -69,6 +70,7 @@ func getUpdatesOnFleetManager(fleetManager string,
 			return err
 		}
 	}
+	return nil
 }
 
 func getUpdatesOnHypervisor(hypervisor string, logger log.DebugLogger) error {
