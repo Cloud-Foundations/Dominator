@@ -168,6 +168,8 @@ func (m *Manager) changeMachineTags(hostname string,
 		}
 		location := h.location
 		h.mutex.Unlock()
+		m.mutex.Lock()
+		defer m.mutex.Unlock()
 		m.sendUpdate(location, update)
 		return nil
 	}
@@ -182,8 +184,10 @@ func (h *hypervisorType) getMachine() *fm_proto.Machine {
 func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	delete(m.notifiers[channel].notifiers, channel)
-	delete(m.notifiers, channel)
+	if location, ok := m.notifiers[channel]; ok {
+		delete(location.notifiers, channel)
+		delete(m.notifiers, channel)
+	}
 }
 
 func (m *Manager) makeUpdateChannel(
@@ -191,6 +195,10 @@ func (m *Manager) makeUpdateChannel(
 	channel := make(chan fm_proto.Update, 16)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !*manageHypervisors && !request.IgnoreMissingLocalTags {
+		channel <- fm_proto.Update{Error: "this is a read-only Fleet Manager"}
+		return channel
+	}
 	if m.locations == nil {
 		m.locations = make(map[string]*locationType)
 	}
@@ -206,10 +214,6 @@ func (m *Manager) makeUpdateChannel(
 	}
 	location.notifiers[channel] = channel
 	m.notifiers[channel] = location
-	if !*manageHypervisors && !request.IgnoreMissingLocalTags {
-		channel <- fm_proto.Update{Error: "this is a read-only Fleet Manager"}
-		return channel
-	}
 	machines := make([]*fm_proto.Machine, 0)
 	vms := make(map[string]*hyper_proto.VmInfo, len(m.vms))
 	vmToHypervisor := make(map[string]string, len(m.vms))
@@ -857,8 +861,14 @@ func (m *Manager) sendUpdate(hyperLocation string, update *fm_proto.Update) {
 		if !testInLocation(hyperLocation, locationStr) {
 			continue
 		}
-		for _, channel := range location.notifiers {
-			channel <- *update
+		for rChannel, sChannel := range location.notifiers {
+			select {
+			case sChannel <- *update:
+			default:
+				delete(location.notifiers, rChannel)
+				delete(m.notifiers, rChannel)
+				close(sChannel)
+			}
 		}
 	}
 }
