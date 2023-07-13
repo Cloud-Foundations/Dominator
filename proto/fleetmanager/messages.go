@@ -25,6 +25,27 @@ type GetHypervisorForVMResponse struct {
 	Error             string
 }
 
+type GetHypervisorsInLocationRequest struct {
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeUnhealthy      bool
+	IncludeVMs            bool
+	Location              string
+	SubnetId              string
+}
+
+type GetHypervisorsInLocationResponse struct {
+	Error       string
+	Hypervisors []Hypervisor `json:",omitempty"`
+}
+
+type Hypervisor struct {
+	AllocatedMilliCPUs   uint64 `json:",omitempty"`
+	AllocatedMemory      uint64 `json:",omitempty"`
+	AllocatedVolumeBytes uint64 `json:",omitempty"`
+	Machine
+	VMs []proto.VmInfo `json:",omitempty"`
+}
+
 type GetMachineInfoRequest struct {
 	Hostname               string
 	IgnoreMissingLocalTags bool
