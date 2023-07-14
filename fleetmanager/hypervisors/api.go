@@ -144,6 +144,12 @@ func (m *Manager) GetHypervisorForVm(ipAddr net.IP) (string, error) {
 	return m.getHypervisorForVm(ipAddr)
 }
 
+func (m *Manager) GetHypervisorsInLocation(
+	request fm_proto.GetHypervisorsInLocationRequest) (
+	fm_proto.GetHypervisorsInLocationResponse, error) {
+	return m.getHypervisorsInLocation(request)
+}
+
 func (m *Manager) GetMachineInfo(request fm_proto.GetMachineInfoRequest) (
 	fm_proto.Machine, error) {
 	return m.getMachineInfo(request)
