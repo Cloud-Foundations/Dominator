@@ -180,6 +180,7 @@ var subcommands = []commands.Command{
 	{"discard-vm-snapshot", "IPaddr", 1, 1, discardVmSnapshotSubcommand},
 	{"export-local-vm", "IPaddr", 1, 1, exportLocalVmSubcommand},
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
+	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},
 	{"get-vm-info", "IPaddr", 1, 1, getVmInfoSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
 	{"get-vm-volume", "IPaddr", 1, 1, getVmVolumeSubcommand},
