@@ -59,10 +59,6 @@ func callCopyVm(client *srpc.Client, request hyper_proto.CopyVmRequest,
 
 func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	logger log.DebugLogger) error {
-	destHypervisorAddress, err := getHypervisorAddress()
-	if err != nil {
-		return err
-	}
 	sourceHypervisor, err := dialHypervisor(sourceHypervisorAddress)
 	if err != nil {
 		return err
@@ -105,6 +101,10 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		return err
 	}
 	defer discardAccessToken(sourceHypervisor, vmIP)
+	destHypervisorAddress, err := getHypervisorAddress(vmInfo)
+	if err != nil {
+		return err
+	}
 	destHypervisor, err := dialHypervisor(destHypervisorAddress)
 	if err != nil {
 		return err

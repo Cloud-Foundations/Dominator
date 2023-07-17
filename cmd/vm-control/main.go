@@ -71,6 +71,7 @@ var (
 		"Location to search for hypervisors")
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	placement        placementType
 	minFreeBytes     = flagutil.Size(256 << 20)
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
@@ -127,10 +128,12 @@ func init() {
 	flag.Var(&consoleType, "consoleType",
 		"type of graphical console (default none)")
 	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
-		"Tags to match when listing")
+		"Tags to match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&memory, "memory", "memory (default 1GiB)")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in root volume")
+	flag.Var(&placement, "placement",
+		"Placement choice when selecting Hypervisor to create/copy/move VM")
 	flag.Var(&ownerGroups, "ownerGroups", "Groups who own the VM")
 	flag.Var(&ownerUsers, "ownerUsers", "Extra users who own the VM")
 	flag.Var(&requestIPs, "requestIPs", "Request specific IPs, if available")

@@ -50,10 +50,6 @@ func migrateVm(vmHostname string, logger log.DebugLogger) error {
 
 func migrateVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	logger log.DebugLogger) error {
-	destHypervisorAddress, err := getHypervisorAddress()
-	if err != nil {
-		return err
-	}
 	sourceHypervisor, err := dialHypervisor(sourceHypervisorAddress)
 	if err != nil {
 		return err
@@ -70,6 +66,10 @@ func migrateVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		return err
 	}
 	defer discardAccessToken(sourceHypervisor, vmIP)
+	destHypervisorAddress, err := getHypervisorAddress(vmInfo)
+	if err != nil {
+		return err
+	}
 	destHypervisor, err := dialHypervisor(destHypervisorAddress)
 	if err != nil {
 		return err

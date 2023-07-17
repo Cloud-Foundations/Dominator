@@ -22,7 +22,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
-	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -40,6 +39,16 @@ type wrappedReadCloser struct {
 
 func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
+}
+
+func approximateVolumesForCreateRequest(request *hyper_proto.CreateVmRequest) {
+	request.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
+	request.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
+	for _, size := range secondaryVolumeSizes {
+		request.Volumes = append(request.Volumes, hyper_proto.Volume{
+			Size: uint64(size),
+		})
+	}
 }
 
 func createVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -103,39 +112,6 @@ func createVm(logger log.DebugLogger) error {
 			vmTags["Name"] = *vmHostname
 		}
 	}
-	if hypervisor, err := getHypervisorAddress(); err != nil {
-		return err
-	} else {
-		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		return createVmOnHypervisor(hypervisor, logger)
-	}
-}
-
-func createVmInfoFromFlags() hyper_proto.VmInfo {
-	var volumes []hyper_proto.Volume
-	if len(volumeTypes) > 0 {
-		// If provided, set for root volume. Secondaries are done later.
-		volumes = append(volumes, hyper_proto.Volume{Type: volumeTypes[0]})
-	}
-	return hyper_proto.VmInfo{
-		ConsoleType:        consoleType,
-		DestroyOnPowerdown: *destroyOnPowerdown,
-		DestroyProtection:  *destroyProtection,
-		DisableVirtIO:      *disableVirtIO,
-		Hostname:           *vmHostname,
-		MemoryInMiB:        uint64(memory >> 20),
-		MilliCPUs:          *milliCPUs,
-		OwnerGroups:        ownerGroups,
-		OwnerUsers:         ownerUsers,
-		Tags:               vmTags,
-		SecondarySubnetIDs: secondarySubnetIDs,
-		SubnetId:           *subnetId,
-		VirtualCPUs:        *virtualCPUs,
-		Volumes:            volumes,
-	}
-}
-
-func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 	request := hyper_proto.CreateVmRequest{
 		DhcpTimeout:      *dhcpTimeout,
 		DoNotStart:       *doNotStart,
@@ -178,6 +154,42 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 				IpAddress: ipAddr}
 		}
 	}
+	approximateVolumesForCreateRequest(&request)
+	if hypervisor, err := getHypervisorAddress(request.VmInfo); err != nil {
+		return err
+	} else {
+		logger.Debugf(0, "creating VM on %s\n", hypervisor)
+		request.VmInfo.Volumes = nil // Not strictly needed, but be paranoid.
+		return createVmOnHypervisor(hypervisor, request, logger)
+	}
+}
+
+func createVmInfoFromFlags() hyper_proto.VmInfo {
+	var volumes []hyper_proto.Volume
+	if len(volumeTypes) > 0 {
+		// If provided, set for root volume. Secondaries are done later.
+		volumes = append(volumes, hyper_proto.Volume{Type: volumeTypes[0]})
+	}
+	return hyper_proto.VmInfo{
+		ConsoleType:        consoleType,
+		DestroyOnPowerdown: *destroyOnPowerdown,
+		DestroyProtection:  *destroyProtection,
+		DisableVirtIO:      *disableVirtIO,
+		Hostname:           *vmHostname,
+		MemoryInMiB:        uint64(memory >> 20),
+		MilliCPUs:          *milliCPUs,
+		OwnerGroups:        ownerGroups,
+		OwnerUsers:         ownerUsers,
+		Tags:               vmTags,
+		SecondarySubnetIDs: secondarySubnetIDs,
+		SubnetId:           *subnetId,
+		VirtualCPUs:        *virtualCPUs,
+		Volumes:            volumes,
+	}
+}
+
+func createVmOnHypervisor(hypervisor string,
+	request hyper_proto.CreateVmRequest, logger log.DebugLogger) error {
 	secondaryFstab := &bytes.Buffer{}
 	var vinitParams []volumeInitParams
 	if *secondaryVolumesInitParams == "" {
@@ -289,46 +301,6 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		logger.Debugln(0, "Received DHCP ACK")
 	}
 	return maybeWatchVm(client, hypervisor, reply.IpAddress, logger)
-}
-
-func getHypervisorAddress() (string, error) {
-	if *hypervisorHostname != "" {
-		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
-			nil
-	}
-	client, err := dialFleetManager(fmt.Sprintf("%s:%d",
-		*fleetManagerHostname, *fleetManagerPortNum))
-	if err != nil {
-		return "", err
-	}
-	defer client.Close()
-	if *adjacentVM != "" {
-		if adjacentVmIpAddr, err := lookupIP(*adjacentVM); err != nil {
-			return "", err
-		} else {
-			return findHypervisorClient(client, adjacentVmIpAddr)
-		}
-	}
-	request := fm_proto.ListHypervisorsInLocationRequest{
-		Location: *location,
-		SubnetId: *subnetId,
-	}
-	var reply fm_proto.ListHypervisorsInLocationResponse
-	err = client.RequestReply("FleetManager.ListHypervisorsInLocation",
-		request, &reply)
-	if err != nil {
-		return "", err
-	}
-	if reply.Error != "" {
-		return "", errors.New(reply.Error)
-	}
-	if numHyper := len(reply.HypervisorAddresses); numHyper < 1 {
-		return "", errors.New("no active Hypervisors in location")
-	} else if numHyper < 2 {
-		return reply.HypervisorAddresses[0], nil
-	} else {
-		return reply.HypervisorAddresses[rand.Intn(numHyper-1)], nil
-	}
 }
 
 func getReader(filename string) (io.ReadCloser, int64, error) {
