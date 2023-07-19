@@ -1,35 +1,46 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
+	"os/exec"
 	"sort"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type placementMessage struct {
+	Hypervisors []fm_proto.Hypervisor `json:",omitempty"`
+	VmInfo      hyper_proto.VmInfo
+}
+
 type placementType uint
 
 const (
-	placementAny = iota
-	placementRandom
-	placementEmptiest
-	placmentFullest
+	placementChoiceAny = iota
+	placementChoiceCommand
+	placementChoiceEmptiest
+	placmentChoiceFullest
+	placementChoiceRandom
 
 	placementTypeUnknown = "UNKNOWN placementType"
 )
 
 var (
 	placementTypeToText = map[placementType]string{
-		placementAny:      "any",
-		placementRandom:   "random",
-		placementEmptiest: "emptiest",
-		placmentFullest:   "fullest",
+		placementChoiceAny:      "any",
+		placementChoiceCommand:  "command",
+		placementChoiceEmptiest: "emptiest",
+		placmentChoiceFullest:   "fullest",
+		placementChoiceRandom:   "random",
 	}
 	textToPlacementType map[string]placementType
 )
@@ -103,11 +114,12 @@ func getHypervisorAddress(vmInfo hyper_proto.VmInfo) (string, error) {
 			return findHypervisorClient(client, adjacentVmIpAddr)
 		}
 	}
-	if placement == placementAny { // Really dumb placement.
+	if placement == placementChoiceAny { // Really dumb placement.
 		return selectAnyHypervisor(client)
 	}
 	request := fm_proto.GetHypervisorsInLocationRequest{
 		HypervisorTagsToMatch: hypervisorTagsToMatch,
+		IncludeVMs:            placement == placementChoiceCommand,
 		Location:              *location,
 		SubnetId:              *subnetId,
 	}
@@ -121,7 +133,7 @@ func getHypervisorAddress(vmInfo hyper_proto.VmInfo) (string, error) {
 		return "", errors.New(reply.Error)
 	}
 	hypervisors := findHypervisorsWithCapacity(reply.Hypervisors, vmInfo)
-	hypervisor, err := selectHypervisor(client, hypervisors)
+	hypervisor, err := selectHypervisor(client, hypervisors, vmInfo)
 	if err != nil {
 		return "", err
 	}
@@ -153,8 +165,8 @@ func selectAnyHypervisor(client *srpc.Client) (string, error) {
 	return reply.HypervisorAddresses[rand.Intn(numHyper)], nil
 }
 
-func selectHypervisor(client *srpc.Client,
-	hypervisors []fm_proto.Hypervisor) (*fm_proto.Hypervisor, error) {
+func selectHypervisor(client *srpc.Client, hypervisors []fm_proto.Hypervisor,
+	vmInfo hyper_proto.VmInfo) (*fm_proto.Hypervisor, error) {
 	numHyper := len(hypervisors)
 	if numHyper < 1 {
 		return nil, errors.New("no Hypervisors in location with capacity")
@@ -162,16 +174,52 @@ func selectHypervisor(client *srpc.Client,
 		return &hypervisors[0], nil
 	}
 	switch placement {
-	case placementRandom:
-		return &hypervisors[rand.Intn(numHyper)], nil
-	case placementEmptiest:
+	case placementChoiceCommand:
+		return selectHypervisorUsingCommand(hypervisors, vmInfo)
+	case placementChoiceEmptiest:
 		sortHypervisors(hypervisors)
 		return &hypervisors[len(hypervisors)-1], nil
-	case placmentFullest:
+	case placmentChoiceFullest:
 		sortHypervisors(hypervisors)
 		return &hypervisors[0], nil
+	case placementChoiceRandom:
+		return &hypervisors[rand.Intn(numHyper)], nil
 	}
 	return nil, errors.New(placementTypeUnknown)
+}
+
+func selectHypervisorUsingCommand(hypervisors []fm_proto.Hypervisor,
+	vmInfo hyper_proto.VmInfo) (*fm_proto.Hypervisor, error) {
+	if *placementCommand == "" {
+		return nil, errors.New("no placementCommand")
+	}
+	cmd := exec.Command(*placementCommand)
+	buffer := &bytes.Buffer{}
+	writer, err := cmd.StdinPipe()
+	defer writer.Close()
+	cmd.Stdout = buffer
+	cmd.Stderr = os.Stderr
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	msg := placementMessage{hypervisors, vmInfo}
+	if err := json.WriteWithIndent(writer, "    ", msg); err != nil {
+		return nil, err
+	}
+	writer.Close()
+	if err := cmd.Wait(); err != nil {
+		return nil, err
+	}
+	output := string(bytes.TrimSpace(buffer.Bytes()))
+	if output == "" {
+		return nil, errors.New("no output from command")
+	}
+	var h fm_proto.Hypervisor
+	h.Hostname = output
+	return &h, nil
 }
 
 // Returns true if [i] has less free capacity than [j].

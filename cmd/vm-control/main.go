@@ -72,6 +72,8 @@ var (
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
 	placement        placementType
+	placementCommand = flag.String("placementCommand", "",
+		"Command to make placement decisions when creating/copying/moving VM")
 	minFreeBytes     = flagutil.Size(256 << 20)
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
