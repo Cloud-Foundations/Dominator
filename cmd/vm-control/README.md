@@ -2,14 +2,14 @@
 A utility to manage Virtual Machines (VMs).
 
 The *vm-control* utility creates and manages VMs by communicating with a
-*Hypervisor*. It is typically run on a desktop, bastion or build machine.
+*[Hypervisor](../hypervisor/README.md)*. It is typically run on a desktop, bastion or build machine.
 
 ## Usage
 *vm-control* supports several sub-commands. There are many command-line flags
 which provide parameters for these sub-commands. The most commonly used
 parameters are `-fleetManagerHostname` or `-hypervisorHostname` which specify
-either the Fleet Manager or a specific *Hypervisor* to communicate with. The
-basic usage pattern is:
+either the *[Fleet Manager](../fleet-manager/README.md)* or a specific *[Hypervisor](../hypervisor/README.md)* to communicate with.
+The basic usage pattern is:
 
 ```
 vm-control [flags...] command [args...]
@@ -103,9 +103,8 @@ The *Hypervisor* restricts RPC access using TLS client authentication.
 `~/.ssl` directory. *vm-control* will present these certificates to
 the *Hypervisor*. If one of the certificates is signed by a certificate
 authority that the *Hypervisor* trusts, the *Hypervisor* will grant access.
-Most operations only require a certificate that proves *identity*. The
-*[Keymaster](https://github.com/Symantec/keymaster)* is a good choice for
-issuing these certificates.
+Most operations only require a certificate that proves *identity*.
+The *[Keymaster](https://github.com/Symantec/keymaster)* is a good choice for issuing these certificates.
 
 ## Importing virsh (libvirt) VMs
 A libvirt VM may be imported into the *Hypervisor*. Once the VM is *committed*
@@ -147,7 +146,7 @@ name*.
 - add the IP and MAC addresses of the VM being exported to the DHCP server
   configuration. Alternatively, you can log into the VM prior to exporting it
   and reconfigure it to use a static network configuration
-- if a *Fleet Manager* is being used, the IP address must be added to the
+- if a *[Fleet Manager](../fleet-manager/README.md)* is being used, the IP address must be added to the
   `ReservedIPs` list in the topology, so as to prevent re-use of the IP address
   when creating new VMs
 - run `vm-control export-virsh-vm jump.prod.company.com`
@@ -161,3 +160,22 @@ name*.
              recommended
   - `abandon`: the new libvirt VM is deleted from the libvirt database and the
                original VM will be started
+
+## VM Placement Command
+An optional local command to be used when making VM placement decisions (when
+creating, copying, migrating or restoring VMs) may be specified using the
+`-placementCommand` option when `-placement=command`.
+The *placement command* may read from the standard input a JSON payload
+describing the `Hypervisors` available (based on other location and tag matching
+options) and the `VmInfo` describing the VM that will be placed. The name of
+the selected *Hypervisor* must be written to the standard output.
+
+The schema of the data presented to the standard input is:
+```
+struct {
+    Hypervisors []fm_proto.Hypervisor `json:",omitempty"`
+    VmInfo      hyper_proto.VmInfo
+}
+```
+
+See [fm_proto](../../protos/fleetmanager/messages.go) and [hyper_proto](../../protos/hypervisor/messages.go) for sub-schema definitions.
