@@ -16,6 +16,62 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
+func isExcluded(streamName string, excludes []string) bool {
+	for _, exclude := range excludes {
+		if len(streamName) < len(exclude) {
+			continue
+		}
+		if streamName == exclude {
+			return true
+		}
+		if len(streamName) <= len(exclude) {
+			continue
+		}
+		if streamName[len(exclude)] != '/' {
+			continue
+		}
+		if strings.HasPrefix(streamName, exclude) {
+			return true
+		}
+	}
+	return false
+}
+
+// computeExcludes will compute the set of excluded image streams. Dependent
+// streams are also excluded.
+func computeExcludes(streamToSource map[string]string,
+	bootstrapStreams []string, excludes []string) map[string]struct{} {
+	if len(excludes) < 1 {
+		return nil
+	}
+	allStreams := make(map[string]struct{})
+	excludedStreams := make(map[string]struct{})
+	streamToDependents := make(map[string][]string)
+	for _, stream := range bootstrapStreams {
+		allStreams[stream] = struct{}{}
+	}
+	for stream, source := range streamToSource {
+		allStreams[stream] = struct{}{}
+		streamToDependents[source] = append(streamToDependents[source], stream)
+	}
+	for streamName := range allStreams {
+		if isExcluded(streamName, excludes) {
+			walkDependents(streamToDependents, streamName, func(name string) {
+				excludedStreams[name] = struct{}{}
+			})
+		}
+	}
+	return excludedStreams
+}
+
+func walkDependents(streamToDependents map[string][]string, streamName string,
+	fn func(string)) {
+	for _, name := range streamToDependents[streamName] {
+		walkDependents(streamToDependents, name, fn)
+	}
+	fn(streamName)
+}
+
 func (b *Builder) dependencyGeneratorLoop(
 	generateDependencyTrigger <-chan struct{}) {
 	interval := time.Hour // The first configuration load should happen first.
@@ -218,9 +274,14 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 			LastAttemptError: errors.ErrorToString(lastErr),
 		}, nil
 	}
+	bootstrapStreams := b.listBootstrapStreamNames()
+	excludedStreams := computeExcludes(dependencyData.streamToSource,
+		bootstrapStreams, request.Excludes)
 	streamNames := make([]string, 0, len(dependencyData.streamToSource))
 	for streamName := range dependencyData.streamToSource {
-		streamNames = append(streamNames, streamName)
+		if _, ok := excludedStreams[streamName]; !ok {
+			streamNames = append(streamNames, streamName)
+		}
 	}
 	sort.Strings(streamNames) // For consistent output.
 	buffer := bytes.NewBuffer(nil)
@@ -230,15 +291,21 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 			streamName, dependencyData.streamToSource[streamName])
 	}
 	// Mark streams with no source in red, to show they are unbuildable.
-	for sourceName := range dependencyData.unbuildableSources {
-		fmt.Fprintf(buffer, "  \"%s\" [fontcolor=red]\n", sourceName)
+	for streamName := range dependencyData.unbuildableSources {
+		if _, ok := excludedStreams[streamName]; !ok {
+			fmt.Fprintf(buffer, "  \"%s\" [fontcolor=red]\n", streamName)
+		}
 	}
 	// Mark streams which are auto rebuilt in bold.
-	for _, streamName := range b.listBootstrapStreamNames() {
-		fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+	for _, streamName := range bootstrapStreams {
+		if _, ok := excludedStreams[streamName]; !ok {
+			fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+		}
 	}
 	for _, streamName := range b.imageStreamsToAutoRebuild {
-		fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+		if _, ok := excludedStreams[streamName]; !ok {
+			fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
+		}
 	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
