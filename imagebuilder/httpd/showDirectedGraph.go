@@ -34,14 +34,15 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, "<h1>imaginator image stream relationships</h1>")
 	fmt.Fprintln(writer, "</center>")
-	s.writeDirectedGraph(writer)
+	s.writeDirectedGraph(writer, req.URL.Query()["exclude"])
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
 }
 
-func (s state) writeDirectedGraph(writer io.Writer) {
-	result, err := s.builder.GetDirectedGraph(proto.GetDirectedGraphRequest{})
+func (s state) writeDirectedGraph(writer io.Writer, excludes []string) {
+	result, err := s.builder.GetDirectedGraph(
+		proto.GetDirectedGraphRequest{Excludes: excludes})
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
