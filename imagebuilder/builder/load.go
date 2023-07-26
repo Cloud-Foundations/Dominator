@@ -113,6 +113,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		currentBuildInfos:         make(map[string]*currentBuildInfo),
 		lastBuildResults:          make(map[string]buildResultType),
 		packagerTypes:             masterConfiguration.PackagerTypes,
+		relationshipsQuickLinks:   masterConfiguration.RelationshipsQuickLinks,
 		variables:                 variables,
 	}
 	for name, stream := range b.bootstrapStreams {

@@ -102,6 +102,7 @@ type manifestConfigType struct {
 	SourceImage string
 	*filter.Filter
 }
+
 type masterConfigurationType struct {
 	BindMounts                []string                    `json:",omitempty"`
 	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
@@ -109,6 +110,7 @@ type masterConfigurationType struct {
 	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
 	ImageStreamsUrl           string                      `json:",omitempty"`
 	PackagerTypes             map[string]packagerType     `json:",omitempty"`
+	RelationshipsQuickLinks   []WebLink                   `json:",omitempty"`
 }
 
 // manifestLocationType contains the expanded location of a manifest. These
@@ -155,6 +157,11 @@ type treeCache struct {
 	pathToInode map[string]uint64
 }
 
+type WebLink struct {
+	Name string
+	URL  string
+}
+
 type BuildLocalOptions struct {
 	BindMounts        []string
 	ManifestDirectory string
@@ -174,6 +181,7 @@ type Builder struct {
 	bootstrapStreams          map[string]*bootstrapStream
 	imageStreams              map[string]*imageStreamType
 	imageStreamsToAutoRebuild []string
+	relationshipsQuickLinks   []WebLink
 	slaveDriver               *slavedriver.SlaveDriver
 	buildResultsLock          sync.RWMutex
 	currentBuildInfos         map[string]*currentBuildInfo // Key: stream name.
@@ -244,6 +252,10 @@ func (b *Builder) GetDependencies(request proto.GetDependenciesRequest) (
 
 func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
+}
+
+func (b *Builder) GetRelationshipsQuickLinks() ([]WebLink, error) {
+	return b.relationshipsQuickLinks, nil
 }
 
 func (b *Builder) ReplaceIdleSlaves(immediateGetNew bool) error {
