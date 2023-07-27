@@ -65,6 +65,11 @@ func (s state) writeDirectedGraph(writer io.Writer, excludes []string) {
 		writer.Write(result.GraphvizDot)
 		fmt.Fprintln(writer, "</pre>")
 	}
+	weblinks, _ := s.builder.GetRelationshipsQuickLinks()
+	for _, weblink := range weblinks {
+		fmt.Fprintf(writer, "<a href=\"/showDirectedGraph%s\">%s</a><br>\n",
+			weblink.URL, weblink.Name)
+	}
 	if len(result.FetchLog) > 0 {
 		fmt.Fprintln(writer,
 			"<hr style=\"height:2px\"><font color=\"#bbb\">")
