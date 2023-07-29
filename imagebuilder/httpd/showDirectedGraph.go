@@ -14,6 +14,8 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
+var processStartTime = time.Now()
+
 func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	req *http.Request) {
 	if req.Method == "POST" {
@@ -49,6 +51,12 @@ func (s state) writeDirectedGraph(writer io.Writer, excludes []string) {
 	}
 	if result.GeneratedAt.IsZero() { // No data yet.
 		fmt.Fprintln(writer, "No data generated yet<br>")
+		if time.Since(processStartTime) > 2*time.Second {
+			fmt.Fprintln(writer,
+				`<form enctype="application/x-www-form-urlencoded" action="/showDirectedGraph" method="post">`)
+			fmt.Fprintln(writer,
+				`<input type="submit" value="Regenerate">`)
+		}
 		return
 	}
 	cmd := exec.Command("dot", "-Tsvg")
