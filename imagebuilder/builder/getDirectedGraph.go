@@ -73,12 +73,13 @@ func walkDependents(streamToDependents map[string][]string, streamName string,
 }
 
 func (b *Builder) dependencyGeneratorLoop(
-	generateDependencyTrigger <-chan struct{}) {
+	generateDependencyTrigger <-chan chan<- struct{}) {
 	interval := time.Hour // The first configuration load should happen first.
 	timer := time.NewTimer(interval)
 	for {
+		var wakeChannel chan<- struct{}
 		select {
-		case <-generateDependencyTrigger:
+		case wakeChannel = <-generateDependencyTrigger:
 			if !timer.Stop() {
 				<-timer.C
 			}
@@ -101,13 +102,19 @@ func (b *Builder) dependencyGeneratorLoop(
 		b.dependencyDataAttempt = finishTime
 		b.dependencyDataError = err
 		b.dependencyDataLock.Unlock()
+		if wakeChannel != nil {
+			wakeChannel <- struct{}{}
+		}
 		interval = fetchTime * 10
 		if interval < 10*time.Second {
 			interval = 10 * time.Second
 		}
 		for keepDraining := true; keepDraining; {
 			select {
-			case <-generateDependencyTrigger:
+			case wakeChannel := <-generateDependencyTrigger:
+				if wakeChannel != nil {
+					wakeChannel <- struct{}{}
+				}
 			default:
 				keepDraining = false
 			}
@@ -261,7 +268,9 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 		if time.Since(lastAttempt) < maxAge {
 			return dependencyData, lastAttempt, err
 		}
-		b.generateDependencyTrigger <- struct{}{} // Trigger and wait.
+		waitChannel := make(chan struct{}, 1)
+		b.generateDependencyTrigger <- waitChannel // Trigger and wait.
+		<-waitChannel
 	}
 }
 
@@ -319,7 +328,7 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 
 func (b *Builder) triggerDependencyDataGeneration() {
 	select {
-	case b.generateDependencyTrigger <- struct{}{}:
+	case b.generateDependencyTrigger <- nil:
 	default:
 	}
 }

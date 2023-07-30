@@ -97,7 +97,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	if variables == nil {
 		variables = make(map[string]string)
 	}
-	generateDependencyTrigger := make(chan struct{}, 0)
+	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	b := &Builder{
 		buildLogArchiver:          params.BuildLogArchiver,
 		bindMounts:                masterConfiguration.BindMounts,

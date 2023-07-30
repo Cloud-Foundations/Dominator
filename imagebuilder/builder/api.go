@@ -171,7 +171,7 @@ type BuildLocalOptions struct {
 type Builder struct {
 	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
-	generateDependencyTrigger chan<- struct{}
+	generateDependencyTrigger chan<- chan<- struct{}
 	stateDir                  string
 	imageServerAddress        string
 	logger                    log.DebugLogger
