@@ -44,6 +44,7 @@ type GetDependenciesResult struct {
 
 type GetDirectedGraphRequest struct {
 	Excludes []string
+	Includes []string
 	MaxAge   time.Duration
 }
 
