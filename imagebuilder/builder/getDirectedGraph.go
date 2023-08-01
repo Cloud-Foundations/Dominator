@@ -16,21 +16,21 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
-func isExcluded(streamName string, excludes []string) bool {
-	for _, exclude := range excludes {
-		if len(streamName) < len(exclude) {
+func isMatch(streamName string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if len(streamName) < len(pattern) {
 			continue
 		}
-		if streamName == exclude {
+		if streamName == pattern {
 			return true
 		}
-		if len(streamName) <= len(exclude) {
+		if len(streamName) <= len(pattern) {
 			continue
 		}
-		if streamName[len(exclude)] != '/' {
+		if streamName[len(pattern)] != '/' {
 			continue
 		}
-		if strings.HasPrefix(streamName, exclude) {
+		if strings.HasPrefix(streamName, pattern) {
 			return true
 		}
 	}
@@ -40,8 +40,9 @@ func isExcluded(streamName string, excludes []string) bool {
 // computeExcludes will compute the set of excluded image streams. Dependent
 // streams are also excluded.
 func computeExcludes(streamToSource map[string]string,
-	bootstrapStreams []string, excludes []string) map[string]struct{} {
-	if len(excludes) < 1 {
+	bootstrapStreams []string, excludes []string,
+	includes []string) map[string]struct{} {
+	if len(excludes) < 1 && len(includes) < 1 {
 		return nil
 	}
 	allStreams := make(map[string]struct{})
@@ -54,11 +55,35 @@ func computeExcludes(streamToSource map[string]string,
 		allStreams[stream] = struct{}{}
 		streamToDependents[source] = append(streamToDependents[source], stream)
 	}
+	if len(excludes) > 0 {
+		for streamName := range allStreams {
+			if isMatch(streamName, excludes) {
+				walkDependents(streamToDependents, streamName,
+					func(name string) {
+						excludedStreams[name] = struct{}{}
+					})
+			}
+		}
+	}
+	if len(includes) < 1 {
+		return excludedStreams
+	}
+	includedStreams := make(map[string]struct{})
 	for streamName := range allStreams {
-		if isExcluded(streamName, excludes) {
-			walkDependents(streamToDependents, streamName, func(name string) {
-				excludedStreams[name] = struct{}{}
-			})
+		if isMatch(streamName, includes) {
+			walkDependents(streamToDependents, streamName,
+				func(name string) {
+					includedStreams[name] = struct{}{}
+				})
+			walkParents(streamToSource, streamName,
+				func(name string) {
+					includedStreams[name] = struct{}{}
+				})
+		}
+	}
+	for streamName := range allStreams {
+		if _, ok := includedStreams[streamName]; !ok {
+			excludedStreams[streamName] = struct{}{}
 		}
 	}
 	return excludedStreams
@@ -70,6 +95,14 @@ func walkDependents(streamToDependents map[string][]string, streamName string,
 		walkDependents(streamToDependents, name, fn)
 	}
 	fn(streamName)
+}
+
+func walkParents(streamToSource map[string]string, streamName string,
+	fn func(string)) {
+	if name, ok := streamToSource[streamName]; ok {
+		walkParents(streamToSource, name, fn)
+		fn(name)
+	}
 }
 
 func (b *Builder) dependencyGeneratorLoop(
@@ -285,7 +318,7 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	}
 	bootstrapStreams := b.listBootstrapStreamNames()
 	excludedStreams := computeExcludes(dependencyData.streamToSource,
-		bootstrapStreams, request.Excludes)
+		bootstrapStreams, request.Excludes, request.Includes)
 	streamNames := make([]string, 0, len(dependencyData.streamToSource))
 	for streamName := range dependencyData.streamToSource {
 		if _, ok := excludedStreams[streamName]; !ok {
