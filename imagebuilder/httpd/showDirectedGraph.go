@@ -36,15 +36,17 @@ func (s state) showDirectedGraphHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, "<h1>imaginator image stream relationships</h1>")
 	fmt.Fprintln(writer, "</center>")
-	s.writeDirectedGraph(writer, req.URL.Query()["exclude"])
+	queries := req.URL.Query()
+	s.writeDirectedGraph(writer, queries["exclude"], queries["include"])
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
 	fmt.Fprintln(writer, "</body>")
 }
 
-func (s state) writeDirectedGraph(writer io.Writer, excludes []string) {
+func (s state) writeDirectedGraph(writer io.Writer,
+	excludes, includes []string) {
 	result, err := s.builder.GetDirectedGraph(
-		proto.GetDirectedGraphRequest{Excludes: excludes})
+		proto.GetDirectedGraphRequest{Excludes: excludes, Includes: includes})
 	if err != nil {
 		fmt.Fprintf(writer, "error getting graph data: %s<br>\n", err)
 		return
@@ -75,8 +77,12 @@ func (s state) writeDirectedGraph(writer io.Writer, excludes []string) {
 	}
 	weblinks, _ := s.builder.GetRelationshipsQuickLinks()
 	for _, weblink := range weblinks {
-		fmt.Fprintf(writer, "<a href=\"/showDirectedGraph%s\">%s</a><br>\n",
+		fmt.Fprintf(writer,
+			"<a href=\"/showDirectedGraph%s\">%s</a>&nbsp;&nbsp;&nbsp;\n",
 			weblink.URL, weblink.Name)
+	}
+	if len(weblinks) > 0 {
+		fmt.Fprintln(writer, "<br>")
 	}
 	if len(result.FetchLog) > 0 {
 		fmt.Fprintln(writer,
