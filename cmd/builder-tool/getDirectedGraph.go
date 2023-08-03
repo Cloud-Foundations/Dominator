@@ -18,7 +18,10 @@ func getDirectedGraphSubcommand(args []string, logger log.DebugLogger) error {
 
 func getDirectedGraph(logger log.Logger) error {
 	srpcClient := getImaginatorClient()
-	req := proto.GetDirectedGraphRequest{Excludes: digraphExcludes}
+	req := proto.GetDirectedGraphRequest{
+		Excludes: digraphExcludes,
+		Includes: digraphIncludes,
+	}
 	if result, err := client.GetDirectedGraph(srpcClient, req); err != nil {
 		return err
 	} else {

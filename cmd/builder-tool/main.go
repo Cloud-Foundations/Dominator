@@ -20,6 +20,7 @@ var (
 		"If true, show build log even for successful builds")
 	bindMounts      flagutil.StringList
 	digraphExcludes flagutil.StringList
+	digraphIncludes flagutil.StringList
 	expiresIn       = flag.Duration("expiresIn", time.Hour,
 		"How long before the image expires (auto deletes)")
 	imaginatorHostname = flag.String("imaginatorHostname", "localhost",
@@ -50,6 +51,8 @@ func init() {
 		"Comma separated list of directories to bind mount into build workspace")
 	flag.Var(&digraphExcludes, "digraphExcludes",
 		"Comma separated list of excludes when generating digraph")
+	flag.Var(&digraphIncludes, "digraphIncludes",
+		"Comma separated list of includes when generating digraph")
 	flag.Var(&rawSize, "rawSize", "Size of RAW file to create")
 }
 
