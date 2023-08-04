@@ -146,7 +146,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			}
 		}
 	}
-	// Check address pool for used addresses with no VM.
+	// Check address pool for used addresses with no VM, and remove.
 	freeIPs := make(map[string]struct{}, len(manager.addressPool.Free))
 	for _, addr := range manager.addressPool.Free {
 		freeIPs[addr.IpAddress.String()] = struct{}{}
@@ -157,19 +157,27 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			secondaryIPs[addr.IpAddress.String()] = struct{}{}
 		}
 	}
+	var addressesToKeep []proto.Address
 	for _, addr := range manager.addressPool.Registered {
 		ipAddr := addr.IpAddress.String()
 		if _, ok := freeIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
 		if _, ok := manager.vms[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
 		if _, ok := secondaryIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
-		manager.Logger.Printf("%s shown as used but no corresponding VM\n",
-			ipAddr)
+		manager.Logger.Printf(
+			"%s shown as used but no corresponding VM, removing\n", ipAddr)
+	}
+	if len(manager.addressPool.Registered) != len(addressesToKeep) {
+		manager.addressPool.Registered = addressesToKeep
+		manager.writeAddressPoolWithLock(manager.addressPool, false)
 	}
 	if startOptions.ObjectCacheBytes >= 1<<20 {
 		dirname := filepath.Join(filepath.Dir(manager.volumeDirectories[0]),
