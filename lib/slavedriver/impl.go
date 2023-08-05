@@ -343,7 +343,13 @@ func (driver *slaveDriver) rollCall() {
 	case slave := <-driver.createdSlaveChannel:
 		driver.createdSlaveChannel = nil
 		driver.idleSlaves[slave] = struct{}{}
-		driver.writeState = true
+		// Write state now to reduce chance of forgetting about this slave.
+		if err := driver.databaseDriver.save(driver.getSlaves()); err != nil {
+			driver.logger.Println(err)
+			driver.writeState = true
+		} else {
+			driver.writeState = false
+		}
 		return // Return now so that new slave can be sent to a getter quickly.
 	case slave := <-driver.destroySlaveChannel:
 		if _, ok := driver.idleSlaves[slave]; ok {
