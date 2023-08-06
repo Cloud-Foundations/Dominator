@@ -147,7 +147,8 @@ func (trader *SlaveTrader) close() error {
 	return <-errorChannel
 }
 
-func (trader *SlaveTrader) createSlave() (slavedriver.SlaveInfo, error) {
+func (trader *SlaveTrader) createSlave(
+	acknowledgeChannel <-chan struct{}) (slavedriver.SlaveInfo, error) {
 	if hyperClient, err := trader.getHypervisor(); err != nil {
 		return slavedriver.SlaveInfo{}, err
 	} else {
@@ -158,16 +159,27 @@ func (trader *SlaveTrader) createSlave() (slavedriver.SlaveInfo, error) {
 			return slavedriver.SlaveInfo{},
 				fmt.Errorf("error creating VM: %s", err)
 		}
-		err = client.AcknowledgeVm(hyperClient, reply.IpAddress)
-		if err != nil {
-			client.DestroyVm(hyperClient, reply.IpAddress, nil)
-			return slavedriver.SlaveInfo{},
-				fmt.Errorf("error acknowledging VM: %s", err)
-		}
 		if reply.DhcpTimedOut {
 			client.DestroyVm(hyperClient, reply.IpAddress, nil)
 			return slavedriver.SlaveInfo{},
 				fmt.Errorf("DHCP timeout for: %s", reply.IpAddress)
+		}
+		if acknowledgeChannel == nil {
+			err := client.AcknowledgeVm(hyperClient, reply.IpAddress)
+			if err != nil {
+				client.DestroyVm(hyperClient, reply.IpAddress, nil)
+				return slavedriver.SlaveInfo{},
+					fmt.Errorf("error acknowledging VM: %s", err)
+			}
+		} else {
+			go func() {
+				<-acknowledgeChannel
+				err := client.AcknowledgeVm(hyperClient, reply.IpAddress)
+				if err != nil {
+					trader.logger.Printf("error acknowledging VM: %s: %s",
+						reply.IpAddress, err)
+				}
+			}()
 		}
 		return slavedriver.SlaveInfo{
 			Identifier: reply.IpAddress.String(),

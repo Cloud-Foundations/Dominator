@@ -43,7 +43,12 @@ func (trader *SlaveTrader) Close() error {
 }
 
 func (trader *SlaveTrader) CreateSlave() (slavedriver.SlaveInfo, error) {
-	return trader.createSlave()
+	return trader.createSlave(nil)
+}
+
+func (trader *SlaveTrader) CreateSlaveWithAcknowledger(
+	acknowledgeChannel <-chan struct{}) (slavedriver.SlaveInfo, error) {
+	return trader.createSlave(acknowledgeChannel)
 }
 
 func (trader *SlaveTrader) DestroySlave(identifier string) error {
