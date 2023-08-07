@@ -158,12 +158,13 @@ func (driver *slaveDriver) createSlave() {
 	driver.logger.Debugln(0, "creating slave")
 	sleeper := backoffdelay.NewExponential(time.Second, time.Minute, 1)
 	for ; ; sleeper.Sleep() {
-		slaveInfo, err := driver.slaveTrader.CreateSlave()
+		slaveInfo, acknowledgeChannel, err := driver.createSlaveMachine()
 		if err != nil {
 			driver.logger.Println(err)
 			continue
 		}
 		slave := &Slave{
+			acknowledgeChannel: acknowledgeChannel,
 			clientAddress: fmt.Sprintf("%s:%d", slaveInfo.IpAddress,
 				driver.options.PortNumber),
 			info:       slaveInfo,
@@ -186,6 +187,22 @@ func (driver *slaveDriver) createSlave() {
 		driver.createdSlaveChannel <- slave
 		return
 	}
+}
+
+func (driver *slaveDriver) createSlaveMachine() (SlaveInfo, chan<- struct{},
+	error) {
+	if creator, ok := driver.slaveTrader.(SlaveTraderAcknowledger); ok {
+		acknowledgeChannel := make(chan struct{}, 1)
+		slaveInfo, err := creator.CreateSlaveWithAcknowledger(
+			acknowledgeChannel)
+		if err != nil {
+			close(acknowledgeChannel)
+			return SlaveInfo{}, nil, err
+		}
+		return slaveInfo, acknowledgeChannel, err
+	}
+	slaveInfo, err := driver.slaveTrader.CreateSlave()
+	return slaveInfo, nil, err
 }
 
 func (driver *slaveDriver) destroySlave(slave *Slave) {
@@ -349,6 +366,10 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = true
 		} else {
 			driver.writeState = false
+		}
+		if slave.acknowledgeChannel != nil {
+			slave.acknowledgeChannel <- struct{}{}
+			slave.acknowledgeChannel = nil
 		}
 		return // Return now so that new slave can be sent to a getter quickly.
 	case slave := <-driver.destroySlaveChannel:
