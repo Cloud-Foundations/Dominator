@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -37,12 +36,9 @@ func testDownloadSpeed(imageName string, logger log.Logger) error {
 		}
 	}
 	startTime := time.Now()
-	img, err := imgclient.GetImageWithTimeout(imageSClient, imageName, *timeout)
+	img, err := getTypedImage(imageName)
 	if err != nil {
 		return err
-	}
-	if img == nil {
-		return errors.New(imageName + ": not found")
 	}
 	finishedTime := time.Now()
 	logger.Printf("downloaded image metadata in %s\n",

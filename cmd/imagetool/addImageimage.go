@@ -37,7 +37,7 @@ func addImageimage(imageSClient *srpc.Client,
 		triggersFilename); err != nil {
 		return err
 	}
-	img, err := getImage(imageSClient, oldImageName)
+	img, err := getTypedImage(oldImageName)
 	if err != nil {
 		return err
 	}

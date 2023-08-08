@@ -8,10 +8,8 @@ import (
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
-	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
-	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func scanFilteredFilesSubcommand(args []string, logger log.DebugLogger) error {
@@ -21,32 +19,13 @@ func scanFilteredFilesSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func getImageMetadata(imageName string) (*image.Image, error) {
-	imageSClient, _ := getClients()
-	logger.Debugf(0, "getting image: %s\n", imageName)
-	request := proto.GetImageRequest{
-		ImageName:        imageName,
-		IgnoreFilesystem: true,
-		Timeout:          *timeout,
-	}
-	var reply proto.GetImageResponse
-	err := imageSClient.RequestReply("ImageServer.GetImage", request, &reply)
-	if err != nil {
-		return nil, err
-	}
-	if reply.Image == nil {
-		return nil, fmt.Errorf("image: %s not found", imageName)
-	}
-	return reply.Image, nil
-}
-
 func scanFilteredFiles(imageName, dirName string,
 	logger log.DebugLogger) error {
 	scanFilter, err := filter.New(scanExcludeList)
 	if err != nil {
 		return err
 	}
-	img, err := getImageMetadata(imageName)
+	img, err := getTypedImageMetadata(imageName)
 	if err != nil {
 		return err
 	}

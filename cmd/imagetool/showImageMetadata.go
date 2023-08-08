@@ -6,7 +6,6 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func showImageMetadataSubcommand(args []string, logger log.DebugLogger) error {
@@ -17,19 +16,11 @@ func showImageMetadataSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func showImageMetadata(imageName string) error {
-	imageSClient, _ := getClients()
-	request := imageserver.GetImageRequest{
-		ImageName:        imageName,
-		IgnoreFilesystem: true,
-		Timeout:          *timeout,
-	}
-	var reply imageserver.GetImageResponse
-	err := imageSClient.RequestReply("ImageServer.GetImage", request, &reply)
-	if err != nil {
+	if img, err := getTypedImageMetadata(imageName); err != nil {
 		return err
-	}
-	if reply.Image == nil {
+	} else if img == nil {
 		return fmt.Errorf("no image")
+	} else {
+		return json.WriteWithIndent(os.Stdout, "    ", img)
 	}
-	return json.WriteWithIndent(os.Stdout, "    ", reply.Image)
 }

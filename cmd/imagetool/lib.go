@@ -43,6 +43,7 @@ type typedImage struct {
 	fileSystem *filesystem.FileSystem
 	filter     *filter.Filter
 	image      *image.Image
+	imageName  string
 	imageType  uint
 	specifier  string
 	triggers   *triggers.Triggers
@@ -98,6 +99,22 @@ func getTypedImage(typedName string) (*image.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+func getTypedImageAndName(typedName string) (*image.Image, string, error) {
+	ti, err := getTypedImageType(typedName)
+	if err != nil {
+		return nil, "", err
+	}
+	img, err := ti.getImage()
+	if err != nil {
+		return nil, "", err
+	}
+	name, err := ti.getImageName()
+	if err != nil {
+		return nil, "", err
+	}
+	return img, name, nil
 }
 
 func getTypedImageBuildLog(typedName string) (*image.Annotation, error) {
@@ -277,6 +294,14 @@ func (ti *typedImage) getImage() (*image.Image, error) {
 	}
 }
 
+func (ti *typedImage) getImageName() (string, error) {
+	if name := ti.imageName; name == "" {
+		return "", errors.New("Image name not available")
+	} else {
+		return name, nil
+	}
+}
+
 func (ti *typedImage) load() error {
 	switch ti.imageType {
 	case imageTypeDirectory:
@@ -301,10 +326,11 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
+		ti.imageName = ti.specifier
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, err := getLatestImage(imageSClient, ti.specifier, false)
+		img, name, err := getLatestImage(imageSClient, ti.specifier, false)
 		if err != nil {
 			return err
 		}
@@ -312,6 +338,7 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
+		ti.imageName = name
 		ti.triggers = img.Triggers
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
@@ -354,13 +381,14 @@ func (ti *typedImage) loadMetadata() error {
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, err := getLatestImage(imageSClient, ti.specifier, true)
+		img, name, err := getLatestImage(imageSClient, ti.specifier, true)
 		if err != nil {
 			return err
 		}
 		ti.buildLog = img.BuildLog
 		ti.filter = img.Filter
 		ti.image = img
+		ti.imageName = name
 		ti.triggers = img.Triggers
 	case imageTypeImageFile:
 		img, err := readImage(ti.specifier)
@@ -487,8 +515,27 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 	return img, nil
 }
 
+func getImageMetadata(imageName string) (*image.Image, error) {
+	imageSClient, _ := getClients()
+	logger.Debugf(0, "getting image: %s\n", imageName)
+	request := img_proto.GetImageRequest{
+		ImageName:        imageName,
+		IgnoreFilesystem: true,
+		Timeout:          *timeout,
+	}
+	var reply img_proto.GetImageResponse
+	err := imageSClient.RequestReply("ImageServer.GetImage", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if reply.Image == nil {
+		return nil, fmt.Errorf("image: %s not found", imageName)
+	}
+	return reply.Image, nil
+}
+
 func getLatestImage(client *srpc.Client, name string,
-	ignoreFilesystem bool) (*image.Image, error) {
+	ignoreFilesystem bool) (*image.Image, string, error) {
 	imageName, err := imgclient.FindLatestImageReq(client,
 		img_proto.FindLatestImageRequest{
 			BuildCommitId:        *buildCommitId,
@@ -496,12 +543,21 @@ func getLatestImage(client *srpc.Client, name string,
 			IgnoreExpiringImages: *ignoreExpiring,
 		})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if ignoreFilesystem {
-		return getImageMetadata(imageName)
+		img, err := getImageMetadata(imageName)
+		if err != nil {
+			return nil, "", err
+		}
+		return img, imageName, nil
 	}
-	return getImage(client, imageName)
+	img, err := getImage(client, imageName)
+	if err != nil {
+		return nil, "", err
+	} else {
+		return img, imageName, nil
+	}
 }
 
 func getVmIpAndHypervisor(vmHostname string) (net.IP, *srpc.Client, error) {
