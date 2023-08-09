@@ -116,6 +116,13 @@ type ImageUpdate struct {
 // The server sends a stream of strings (image names) with an empty string
 // signifying the end of the list.
 
+type ListSelectedImagesRequest struct {
+	IgnoreExpiringImages bool
+}
+
+// The server sends a stream of strings (image names) with an empty string
+// signifying the end of the list.
+
 // The ListUnreferencedObjects() RPC is fully streamed.
 // The client sends no information to the server.
 // The server sends a stream of Object values with a zero Size field signifying
