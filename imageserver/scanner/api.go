@@ -126,7 +126,12 @@ func (imdb *ImageDataBase) ListDirectories() []image.Directory {
 }
 
 func (imdb *ImageDataBase) ListImages() []string {
-	return imdb.listImages()
+	return imdb.listImages(proto.ListSelectedImagesRequest{})
+}
+
+func (imdb *ImageDataBase) ListSelectedImages(
+	request proto.ListSelectedImagesRequest) []string {
+	return imdb.listImages(request)
 }
 
 // ListUnreferencedObjects will return a map listing all the objects and their

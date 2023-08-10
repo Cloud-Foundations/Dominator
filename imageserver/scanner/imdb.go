@@ -388,11 +388,15 @@ func (imdb *ImageDataBase) listDirectories() []image.Directory {
 	return directories
 }
 
-func (imdb *ImageDataBase) listImages() []string {
+func (imdb *ImageDataBase) listImages(
+	request proto.ListSelectedImagesRequest) []string {
 	imdb.RLock()
 	defer imdb.RUnlock()
 	names := make([]string, 0)
-	for name := range imdb.imageMap {
+	for name, img := range imdb.imageMap {
+		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
+			continue
+		}
 		names = append(names, name)
 	}
 	return names
