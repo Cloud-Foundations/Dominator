@@ -91,6 +91,7 @@ func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
 			"GetImageExpiration",
 			"ListDirectories",
 			"ListImages",
+			"ListSelectedImages",
 		}})
 	if replicationMaster != "" {
 		go srpcObj.replicator(finishedReplication)
