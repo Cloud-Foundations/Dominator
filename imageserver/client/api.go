@@ -77,6 +77,11 @@ func ListImages(client *srpc.Client) ([]string, error) {
 	return listImages(client)
 }
 
+func ListSelectedImages(client *srpc.Client,
+	request proto.ListSelectedImagesRequest) ([]string, error) {
+	return listSelectedImages(client, request)
+}
+
 func ListUnreferencedObjects(client *srpc.Client) (
 	map[hash.Hash]uint64, error) {
 	return listUnreferencedObjects(client)
