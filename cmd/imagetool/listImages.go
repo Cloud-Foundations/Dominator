@@ -7,6 +7,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func listImagesSubcommand(args []string, logger log.DebugLogger) error {
@@ -18,7 +19,10 @@ func listImagesSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func listImages(imageSClient *srpc.Client) error {
-	imageNames, err := client.ListImages(imageSClient)
+	imageNames, err := client.ListSelectedImages(imageSClient,
+		proto.ListSelectedImagesRequest{
+			IgnoreExpiringImages: *ignoreExpiring,
+		})
 	if err != nil {
 		return err
 	}
