@@ -28,7 +28,12 @@ func (m *Manager) holdLock(timeout time.Duration, writeLock bool) error {
 
 func (m *Manager) setDisabledState(disable bool) error {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	doUnlock := true
+	defer func() {
+		if doUnlock {
+			m.mutex.Unlock()
+		}
+	}()
 	if m.disabled == disable {
 		return nil
 	}
@@ -50,9 +55,11 @@ func (m *Manager) setDisabledState(disable bool) error {
 	if err != nil {
 		m.Logger.Println(err)
 	}
-	m.sendUpdateWithLock(proto.Update{
+	m.mutex.Unlock()
+	doUnlock = false
+	m.sendUpdate(proto.Update{
 		HaveDisabled:     true,
-		Disabled:         m.disabled,
+		Disabled:         disable,
 		NumFreeAddresses: numFreeAddresses,
 	})
 	return nil

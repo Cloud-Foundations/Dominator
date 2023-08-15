@@ -44,11 +44,13 @@ type Manager struct {
 	serialNumber      string
 	volumeDirectories []string
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
-	mutex             sync.RWMutex          // Lock everything below (those can change).
+	healthStatusMutex sync.RWMutex
+	healthStatus      string
+	notifiersMutex    sync.Mutex
+	notifiers         map[<-chan proto.Update]chan<- proto.Update
+	mutex             sync.RWMutex // Lock everything below (those can change).
 	addressPool       addressPoolType
 	disabled          bool
-	healthStatus      string
-	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	objectCache       *cachingreader.ObjectServer
 	ownerGroups       map[string]struct{}
 	ownerUsers        map[string]struct{}

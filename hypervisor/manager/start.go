@@ -13,6 +13,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
@@ -194,6 +195,10 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.objectCache = objSrv
 	}
 	go manager.loopCheckHealthStatus()
+	lockwatcher.New(&manager.mutex, lockwatcher.LockWatcherOptions{
+		Logger:     startOptions.Logger,
+		LogTimeout: 50 * time.Second,
+	})
 	return manager, nil
 }
 
@@ -232,18 +237,22 @@ func (m *Manager) loopCheckHealthStatus() {
 	cr := rpcclientpool.New("tcp", ":6910", true, "")
 	for ; ; time.Sleep(time.Second * 10) {
 		healthStatus := m.checkHealthStatus(cr)
-		m.mutex.Lock()
-		if m.healthStatus != healthStatus {
-			numFreeAddresses, err := m.computeNumFreeAddressesMap(m.addressPool)
-			if err != nil {
-				m.Logger.Println(err)
-			}
-			m.healthStatus = healthStatus
-			m.sendUpdateWithLock(proto.Update{
-				NumFreeAddresses: numFreeAddresses,
-			})
+		m.healthStatusMutex.Lock()
+		if m.healthStatus == healthStatus {
+			m.healthStatusMutex.Unlock()
+			continue
 		}
-		m.mutex.Unlock()
+		m.healthStatus = healthStatus
+		m.healthStatusMutex.Unlock()
+		m.mutex.RLock()
+		numFreeAddresses, err := m.computeNumFreeAddressesMap(m.addressPool)
+		m.mutex.RUnlock()
+		if err != nil {
+			m.Logger.Println(err)
+		}
+		m.sendUpdate(proto.Update{
+			NumFreeAddresses: numFreeAddresses,
+		})
 	}
 }
 

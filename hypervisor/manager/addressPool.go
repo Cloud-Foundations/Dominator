@@ -323,13 +323,6 @@ func (m *Manager) unregisterAddress(address proto.Address, lock bool) error {
 	return m.writeAddressPoolWithLock(m.addressPool, true)
 }
 
-func (m *Manager) writeAddressPool(addressPool addressPoolType,
-	sendAll bool) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	return m.writeAddressPoolWithLock(addressPool, sendAll)
-}
-
 func (m *Manager) writeAddressPoolWithLock(addressPool addressPoolType,
 	sendAll bool) error {
 	// TODO(rgooch): Should precompute the numFreeAddresses map.
@@ -347,6 +340,6 @@ func (m *Manager) writeAddressPoolWithLock(addressPool addressPoolType,
 		update.HaveAddressPool = true
 		update.AddressPool = addressPool.Registered
 	}
-	m.sendUpdateWithLock(update)
+	m.sendUpdate(update)
 	return nil
 }

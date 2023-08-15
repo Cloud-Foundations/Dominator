@@ -1187,8 +1187,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
+	m.Logger.Debugf(1, "CreateVm(%s) finished\n", vm.ipAddress)
 	vm = nil // Cancel cleanup.
-	m.Logger.Debugln(1, "CreateVm() finished")
 	return nil
 }
 
@@ -3070,7 +3070,7 @@ func (m *Manager) sendVmInfo(ipAddress string, vm *proto.VmInfo) {
 		if vm == nil { // GOB cannot encode a nil value in a map.
 			vm = new(proto.VmInfo)
 		}
-		m.sendUpdateWithLock(proto.Update{
+		m.sendUpdate(proto.Update{
 			HaveVMs: true,
 			VMs:     map[string]*proto.VmInfo{ipAddress: vm},
 		})
@@ -3313,7 +3313,7 @@ func (vm *vmInfoType) changeIpAddress(ipAddress string) error {
 	delete(vm.manager.vms, vm.ipAddress)
 	vm.ipAddress = ipAddress
 	vm.manager.vms[vm.ipAddress] = vm
-	vm.manager.sendUpdateWithLock(proto.Update{
+	vm.manager.sendUpdate(proto.Update{
 		HaveVMs: true,
 		VMs:     map[string]*proto.VmInfo{ipAddress: &vm.VmInfo},
 	})
