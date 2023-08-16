@@ -946,6 +946,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 func (m *Manager) createVm(conn *srpc.Conn) error {
 
 	sendError := func(conn *srpc.Conn, err error) error {
+		m.Logger.Debugf(1, "CreateVm(%s) failed: %s\n", conn.Username(), err)
 		return conn.Encode(proto.CreateVmResponse{Error: err.Error()})
 	}
 
@@ -1187,7 +1188,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
-	m.Logger.Debugf(1, "CreateVm(%s) finished\n", vm.ipAddress)
+	m.Logger.Debugf(1, "CreateVm(%s) finished, IP=%s\n",
+		conn.Username(), vm.ipAddress)
 	vm = nil // Cancel cleanup.
 	return nil
 }
