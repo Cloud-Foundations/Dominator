@@ -61,6 +61,9 @@ func (w *grabWriter) Write(p []byte) (int, error) {
 }
 
 func newLogger(name string, options logbuf.Options, flags int) *Logger {
+	if name == "" && !options.AlsoLogToStderr {
+		options.RedirectStderr = true
+	}
 	loggerMap.Lock()
 	defer loggerMap.Unlock()
 	if _, ok := loggerMap.loggerMap[name]; ok {
