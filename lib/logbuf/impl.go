@@ -88,9 +88,22 @@ func (lb *LogBuffer) scanPreviousForPanic() {
 	go func() {
 		defer file.Close()
 		scanner := bufio.NewScanner(file)
+		var previousLineHadPanicString bool
 		for scanner.Scan() {
 			line := scanner.Text()
+			var looksLikeAPanic bool
 			if strings.HasPrefix(line, "panic: ") {
+				looksLikeAPanic = true
+			} else if strings.HasPrefix(line, "goroutine ") {
+				if previousLineHadPanicString {
+					looksLikeAPanic = true
+				}
+			} else if strings.Contains(line, "panic") {
+				previousLineHadPanicString = true
+			} else {
+				previousLineHadPanicString = false
+			}
+			if looksLikeAPanic {
 				lb.rwMutex.Lock()
 				lb.panicLogfile = &target
 				lb.rwMutex.Unlock()
