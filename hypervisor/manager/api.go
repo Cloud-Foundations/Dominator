@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -46,6 +47,7 @@ type Manager struct {
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
 	healthStatusMutex sync.RWMutex
 	healthStatus      string
+	lockWatcher       *lockwatcher.LockWatcher
 	notifiersMutex    sync.Mutex
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	mutex             sync.RWMutex // Lock everything below (those can change).
@@ -66,6 +68,8 @@ type StartOptions struct {
 	BridgeMap          map[string]net.Interface // Key: interface name.
 	DhcpServer         DhcpServer
 	ImageServerAddress string
+	LockCheckInterval  time.Duration
+	LockLogTimeout     time.Duration
 	Logger             log.DebugLogger
 	ObjectCacheBytes   uint64
 	ShowVgaConsole     bool
@@ -76,6 +80,7 @@ type StartOptions struct {
 }
 
 type vmInfoType struct {
+	lockWatcher                *lockwatcher.LockWatcher
 	mutex                      sync.RWMutex
 	accessToken                []byte
 	accessTokenCleanupNotifier chan<- struct{}

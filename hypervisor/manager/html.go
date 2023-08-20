@@ -75,6 +75,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	} else {
 		m.objectCache.WriteHtml(writer)
 	}
+	m.lockWatcher.WriteHtml(writer, "")
 }
 
 func writeCountLinks(writer io.Writer, text, path string, count uint) {

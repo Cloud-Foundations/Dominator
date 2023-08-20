@@ -28,6 +28,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
@@ -866,6 +867,9 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
+	defer func() { // Evaluate vm at return time, not defer time.
+		vm.cleanup()
+	}()
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	vm.Volumes = vmInfo.Volumes
 	if !request.SkipMemoryCheck {
@@ -884,12 +888,6 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
-	defer func() { // Evaluate vm at return time, not defer time.
-		if vm == nil {
-			return
-		}
-		vm.cleanup()
-	}()
 	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
@@ -939,6 +937,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		return err
 	}
 	vm = nil // Cancel cleanup.
+	vm.setupLockWatcher()
 	m.Logger.Debugln(1, "CopyVm() finished")
 	return nil
 }
@@ -1188,6 +1187,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
+	vm.setupLockWatcher()
 	m.Logger.Debugf(1, "CreateVm(%s) finished, IP=%s\n",
 		conn.Username(), vm.ipAddress)
 	vm = nil // Cancel cleanup.
@@ -1875,6 +1875,7 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	if _, err := vm.startManaging(0, false, true); err != nil {
 		return err
 	}
+	vm.setupLockWatcher()
 	vm = nil // Cancel cleanup.
 	return nil
 }
@@ -1990,9 +1991,6 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 	}
 	vm.Uncommitted = true
 	defer func() { // Evaluate vm at return time, not defer time.
-		if vm == nil {
-			return
-		}
 		vm.cleanup()
 		hyperclient.PrepareVmForMigration(hypervisor, request.IpAddress,
 			accessToken, false)
@@ -2105,6 +2103,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 	if err != nil {
 		m.Logger.Printf("error cleaning up old migrated VM: %s\n", ipAddress)
 	}
+	vm.setupLockWatcher()
 	vm = nil // Cancel cleanup.
 	return nil
 }
@@ -2514,6 +2513,11 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	_, _, err = sublib.Update(subRequest, rootDir, objectsDir, nil, nil, nil,
 		vm.logger)
 	if err != nil {
+		return err
+	}
+	msg = fmt.Sprintf("updated(%s) in %s",
+		imageName, format.Duration(time.Since(startTime)))
+	if err := sendVmPatchImageMessage(conn, msg); err != nil {
 		return err
 	}
 	if writeBootloaderConfig {
@@ -3431,6 +3435,9 @@ func (vm *vmInfoType) delete() {
 		}
 	}
 	os.RemoveAll(vm.dirname)
+	if vm.lockWatcher != nil {
+		vm.lockWatcher.Stop()
+	}
 }
 
 func (vm *vmInfoType) destroy() {
@@ -3765,6 +3772,15 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 				deviceDriver, index, address.MacAddress))
 	}
 	return bridges, options, nil
+}
+
+func (vm *vmInfoType) setupLockWatcher() {
+	vm.lockWatcher = lockwatcher.New(&vm.mutex,
+		lockwatcher.LockWatcherOptions{
+			CheckInterval: vm.manager.LockCheckInterval,
+			Logger:        vm.logger,
+			LogTimeout:    vm.manager.LockLogTimeout,
+		})
 }
 
 func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {

@@ -139,6 +139,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.logger = prefixlogger.New(ipAddr+": ", manager.Logger)
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
+		vmInfo.setupLockWatcher()
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {
 			manager.Logger.Println(err)
 			if ipAddr == "0.0.0.0" {
@@ -195,10 +196,12 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.objectCache = objSrv
 	}
 	go manager.loopCheckHealthStatus()
-	lockwatcher.New(&manager.mutex, lockwatcher.LockWatcherOptions{
-		Logger:     startOptions.Logger,
-		LogTimeout: 50 * time.Second,
-	})
+	manager.lockWatcher = lockwatcher.New(&manager.mutex,
+		lockwatcher.LockWatcherOptions{
+			CheckInterval: startOptions.LockCheckInterval,
+			Logger:        startOptions.Logger,
+			LogTimeout:    startOptions.LockLogTimeout,
+		})
 	return manager, nil
 }
 
