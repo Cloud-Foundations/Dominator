@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/dhcpd"
 	"github.com/Cloud-Foundations/Dominator/hypervisor/httpd"
@@ -37,6 +38,10 @@ var (
 	imageServerPortNum = flag.Uint("imageServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
+	lockCheckInterval = flag.Duration("lockCheckInterval", 2*time.Second,
+		"Interval between checks for lock timeouts")
+	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
+		"Timeout before logging that a lock has been held too long")
 	networkBootImage = flag.String("networkBootImage", "pxelinux.0",
 		"Name of boot image passed via DHCP option")
 	objectCacheSize = flagutil.Size(10 << 30)
@@ -170,6 +175,8 @@ func main() {
 		BridgeMap:          bridgeMap,
 		DhcpServer:         dhcpServer,
 		ImageServerAddress: imageServerAddress,
+		LockCheckInterval:  *lockCheckInterval,
+		LockLogTimeout:     *lockLogTimeout,
 		Logger:             logger,
 		ObjectCacheBytes:   uint64(objectCacheSize),
 		ShowVgaConsole:     *showVGA,
