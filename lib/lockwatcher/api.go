@@ -53,6 +53,9 @@ func (lw *LockWatcher) Stop() {
 	lw.stop()
 }
 
-func (lw *LockWatcher) WriteHtml(writer io.Writer, prefix string) {
-	lw.writeHtml(writer, prefix)
+// WriteHtml will write HTML-formatted statistics information to writer, with an
+// optional prefix. It returns true if something was written, else false.
+func (lw *LockWatcher) WriteHtml(writer io.Writer,
+	prefix string) (bool, error) {
+	return lw.writeHtml(writer, prefix)
 }

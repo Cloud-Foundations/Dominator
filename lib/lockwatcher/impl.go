@@ -187,20 +187,22 @@ func (lw *LockWatcher) stop() {
 	}
 }
 
-func (lw *LockWatcher) writeHtml(writer io.Writer, prefix string) {
+func (lw *LockWatcher) writeHtml(writer io.Writer,
+	prefix string) (bool, error) {
 	stats := lw.GetStats()
 	if stats.NumLockTimeouts > 0 {
 		fmt.Fprintf(writer,
 			"%sLock timeouts: %d", prefix, stats.NumLockTimeouts)
+		var err error
 		if stats.WaitingForLock {
-			fmt.Fprintf(writer, " still waiting for lock<br>\n")
+			_, err = fmt.Fprintf(writer, " still waiting for lock<br>\n")
 		} else {
-			fmt.Fprintln(writer, "<br>")
+			_, err = fmt.Fprintln(writer, "<br>")
 		}
-		return
+		return true, err
 	}
 	if stats.NumRLockTimeouts < 1 && stats.NumWLockTimeouts < 1 {
-		return
+		return false, nil
 	}
 	if stats.NumRLockTimeouts > 0 {
 		fmt.Fprintf(writer,
@@ -217,5 +219,6 @@ func (lw *LockWatcher) writeHtml(writer io.Writer, prefix string) {
 			fmt.Fprintf(writer, ", still waiting for WLock")
 		}
 	}
-	fmt.Fprintln(writer, "<br>")
+	_, err := fmt.Fprintln(writer, "<br>")
+	return true, err
 }
