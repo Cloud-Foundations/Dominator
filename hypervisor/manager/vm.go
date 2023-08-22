@@ -1658,6 +1658,16 @@ func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return vm.VmInfo, nil
 }
 
+func (m *Manager) getVmLockWatcher(ipAddr net.IP) (
+	*lockwatcher.LockWatcher, error) {
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return nil, err
+	}
+	defer vm.mutex.RUnlock()
+	return vm.lockWatcher, nil
+}
+
 func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	var request proto.GetVmVolumeRequest
 	if err := conn.Decode(&request); err != nil {

@@ -290,6 +290,11 @@ func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return m.getVmInfo(ipAddr)
 }
 
+func (m *Manager) GetVmLockWatcher(ipAddr net.IP) (
+	*lockwatcher.LockWatcher, error) {
+	return m.getVmLockWatcher(ipAddr)
+}
+
 func (m *Manager) GetVmUserData(ipAddr net.IP) (io.ReadCloser, error) {
 	rc, _, err := m.getVmFileReader(ipAddr,
 		&srpc.AuthInformation{HaveMethodAccess: true},
