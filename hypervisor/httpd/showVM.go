@@ -59,6 +59,11 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
                           }
                           </style>`)
 		fmt.Fprintln(writer, "<body>")
+		if lw, _ := s.manager.GetVmLockWatcher(netIpAddr); lw != nil {
+			if wroteSomething, _ := lw.WriteHtml(writer, ""); wroteSomething {
+				fmt.Fprintln(writer, "<br>")
+			}
+		}
 		fmt.Fprintln(writer, `<table border="0">`)
 		if len(vm.Address.IpAddress) < 1 {
 			writeString(writer, "IP Address", ipAddr+" (externally allocated)")
@@ -98,7 +103,7 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 					ipAddr))
 		}
 		fmt.Fprintln(writer, "</table>")
-		fmt.Fprintln(writer, "Tags:<br>")
+		fmt.Fprintln(writer, "<br>Tags:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
 		tw, _ := html.NewTableWriter(writer, true, "Name", "Value")
 		for _, name := range tagNames {
