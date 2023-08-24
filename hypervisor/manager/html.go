@@ -16,6 +16,9 @@ func (m *Manager) writeHtml(writer io.Writer) {
 		fmt.Fprintln(writer,
 			`Hypervisor is <font color="red">disabled</font><p>`)
 	}
+	if wrote, _ := m.lockWatcher.WriteHtml(writer, ""); wrote {
+		fmt.Fprintln(writer, "<br>")
+	}
 	numRunning, numStopped := m.getNumVMs()
 	writeCountLinks(writer, "Number of VMs known", "listVMs?state=",
 		numRunning+numStopped)
@@ -75,7 +78,6 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	} else {
 		m.objectCache.WriteHtml(writer)
 	}
-	m.lockWatcher.WriteHtml(writer, "")
 }
 
 func writeCountLinks(writer io.Writer, text, path string, count uint) {
