@@ -213,6 +213,7 @@ func (driver *slaveDriver) destroySlave(slave *Slave) {
 		driver.logger.Printf("error destroying: %s: %s\n",
 			slave.info.Identifier, err)
 		driver.destroyedSlaveChannel <- nil
+		return
 	}
 	if duration := time.Since(startTime); duration > 5*time.Second {
 		driver.logger.Printf("destroyed slave: %s in %s\n",
