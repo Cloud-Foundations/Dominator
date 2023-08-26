@@ -154,7 +154,7 @@ func (driver *SlaveDriver) getSlave(timeout time.Duration) (*Slave, error) {
 	}
 }
 
-func (driver *slaveDriver) createSlave() {
+func (driver *slaveDriver) createSlave(responseChannel chan<- *Slave) {
 	driver.logger.Debugln(0, "creating slave")
 	sleeper := backoffdelay.NewExponential(time.Second, time.Minute, 1)
 	for ; ; sleeper.Sleep() {
@@ -184,7 +184,7 @@ func (driver *slaveDriver) createSlave() {
 			continue
 		}
 		driver.logger.Printf("created slave: %s\n", slaveInfo.Identifier)
-		driver.createdSlaveChannel <- slave
+		responseChannel <- slave
 		return
 	}
 }
@@ -205,21 +205,22 @@ func (driver *slaveDriver) createSlaveMachine() (SlaveInfo, chan<- struct{},
 	return slaveInfo, nil, err
 }
 
-func (driver *slaveDriver) destroySlave(slave *Slave) {
+func (driver *slaveDriver) destroySlave(slave *Slave,
+	responseChannel chan<- *Slave) {
 	driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
 	startTime := time.Now()
 	err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
 	if err != nil {
 		driver.logger.Printf("error destroying: %s: %s\n",
 			slave.info.Identifier, err)
-		driver.destroyedSlaveChannel <- nil
+		responseChannel <- nil
 		return
 	}
 	if duration := time.Since(startTime); duration > 5*time.Second {
 		driver.logger.Printf("destroyed slave: %s in %s\n",
 			slave.info.Identifier, format.Duration(duration))
 	}
-	driver.destroyedSlaveChannel <- slave
+	responseChannel <- slave
 }
 
 func (driver *slaveDriver) getSlaves() slaveRoll {
@@ -302,8 +303,9 @@ func (driver *slaveDriver) rollCall() {
 	if driver.getterList.Len() > 0 ||
 		uint(len(driver.idleSlaves)) < driver.options.MinimumIdleSlaves {
 		if driver.createdSlaveChannel == nil {
-			driver.createdSlaveChannel = make(chan *Slave, 1)
-			go driver.createSlave()
+			ch := make(chan *Slave, 1)
+			driver.createdSlaveChannel = ch
+			go driver.createSlave(ch)
 		}
 	}
 	if uint(len(driver.idleSlaves)) > driver.options.MaximumIdleSlaves &&
@@ -329,8 +331,9 @@ func (driver *slaveDriver) rollCall() {
 	}
 	for slave := range driver.zombies { // Destroy one zombie at a time.
 		if driver.destroyedSlaveChannel == nil {
-			driver.destroyedSlaveChannel = make(chan *Slave, 1)
-			go driver.destroySlave(slave)
+			ch := make(chan *Slave, 1)
+			driver.destroyedSlaveChannel = ch
+			go driver.destroySlave(slave, ch)
 		}
 		break
 	}
@@ -429,8 +432,9 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = true
 		}
 		if createIfNeeded && driver.createdSlaveChannel == nil {
-			driver.createdSlaveChannel = make(chan *Slave, 1)
-			go driver.createSlave()
+			ch := make(chan *Slave, 1)
+			driver.createdSlaveChannel = ch
+			go driver.createSlave(ch)
 		}
 	case <-pingTimer.C:
 	}

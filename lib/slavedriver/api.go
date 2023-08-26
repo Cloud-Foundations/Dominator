@@ -121,9 +121,9 @@ type slaveDriver struct {
 	options               SlaveDriverOptions
 	busySlaves            map[*Slave]struct{}
 	clientDialer          clientDialerFunc
-	createdSlaveChannel   chan *Slave
+	createdSlaveChannel   <-chan *Slave
 	destroySlaveChannel   <-chan *Slave
-	destroyedSlaveChannel chan *Slave
+	destroyedSlaveChannel <-chan *Slave
 	databaseDriver        databaseLoadSaver
 	getSlaveChannel       <-chan requestSlaveMessage
 	getSlavesChannel      <-chan chan<- slaveRoll
