@@ -5,10 +5,10 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
-	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func (m *Manager) writeHtml(writer io.Writer) {
@@ -19,52 +19,50 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	if wrote, _ := m.lockWatcher.WriteHtml(writer, ""); wrote {
 		fmt.Fprintln(writer, "<br>")
 	}
-	numRunning, numStopped := m.getNumVMs()
+	summary := m.getSummary()
+	if age := time.Since(summary.updatedAt); age > time.Second {
+		fmt.Fprintf(writer,
+			"<font color=\"salmon\">Dashboard data are %s old</font><p>\n",
+			format.Duration(age))
+	}
 	writeCountLinks(writer, "Number of VMs known", "listVMs?state=",
-		numRunning+numStopped)
+		summary.numRunning+summary.numStopped)
 	writeCountLinks(writer, "Number of VMs running", "listVMs?state=running",
-		numRunning)
+		summary.numRunning)
 	writeCountLinks(writer, "Number of VMs stopped", "listVMs?state=stopped",
-		numStopped)
+		summary.numStopped)
 	fmt.Fprintln(writer, "<br>")
-	m.mutex.RLock()
-	memUnallocated := m.getUnallocatedMemoryInMiBWithLock(nil)
-	numSubnets := len(m.subnets)
-	numFreeAddresses := len(m.addressPool.Free)
-	numRegisteredAddresses := len(m.addressPool.Registered)
-	ownerGroups := stringutil.ConvertMapKeysToList(m.ownerGroups, false)
-	ownerUsers := stringutil.ConvertMapKeysToList(m.ownerUsers, false)
-	m.mutex.RUnlock()
 	fmt.Fprintf(writer,
 		"Available addresses: <a href=\"listAvailableAddresses\">%d</a><br>\n",
-		numFreeAddresses)
+		summary.numFreeAddresses)
 	fmt.Fprintf(writer,
 		"Registered addresses: <a href=\"listRegisteredAddresses\">%d</a><br>\n",
-		numRegisteredAddresses)
+		summary.numRegisteredAddresses)
 	fmt.Fprintf(writer, "Available CPU: %g<br>\n",
-		float64(m.getAvailableMilliCPU())*1e-3)
+		float64(summary.availableMilliCPU)*1e-3)
 	if memInfo, err := meminfo.GetMemInfo(); err != nil {
 		fmt.Fprintf(writer, "Error getting available RAM: %s<br>\n", err)
 	} else {
 		fmt.Fprintf(writer, "Available RAM: real: %s, unallocated: %s<br>\n",
 			format.FormatBytes(memInfo.Available),
-			format.FormatBytes(memUnallocated<<20))
+			format.FormatBytes(summary.memUnallocated<<20))
 	}
-	sort.Strings(ownerGroups)
-	sort.Strings(ownerUsers)
-	if len(ownerGroups) > 0 {
+	sort.Strings(summary.ownerGroups)
+	sort.Strings(summary.ownerUsers)
+	if len(summary.ownerGroups) > 0 {
 		fmt.Fprintf(writer, "Owner groups: %s<br>\n",
-			strings.Join(ownerGroups, " "))
+			strings.Join(summary.ownerGroups, " "))
 	}
-	if len(ownerUsers) > 0 {
+	if len(summary.ownerUsers) > 0 {
 		fmt.Fprintf(writer, "Owner users: %s<br>\n",
-			strings.Join(ownerUsers, " "))
+			strings.Join(summary.ownerUsers, " "))
 	}
 	if m.serialNumber != "" {
 		fmt.Fprintf(writer, "Serial number: \"%s\"<br>\n", m.serialNumber)
 	}
 	fmt.Fprintf(writer,
-		"Number of subnets: <a href=\"listSubnets\">%d</a><br>\n", numSubnets)
+		"Number of subnets: <a href=\"listSubnets\">%d</a><br>\n",
+		summary.numSubnets)
 	fmt.Fprint(writer, "Volume directories:")
 	for _, dirname := range m.volumeDirectories {
 		fmt.Fprint(writer, " ", dirname)

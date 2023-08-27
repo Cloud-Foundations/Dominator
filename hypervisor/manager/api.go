@@ -39,18 +39,20 @@ type DhcpServer interface {
 
 type Manager struct {
 	StartOptions
-	rootCookie        []byte
-	memTotalInMiB     uint64
-	numCPUs           uint
-	serialNumber      string
-	volumeDirectories []string
-	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
 	healthStatusMutex sync.RWMutex
 	healthStatus      string
 	lockWatcher       *lockwatcher.LockWatcher
+	memTotalInMiB     uint64
 	notifiersMutex    sync.Mutex
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
-	mutex             sync.RWMutex // Lock everything below (those can change).
+	numCPUs           uint
+	rootCookie        []byte
+	serialNumber      string
+	summaryMutex      sync.RWMutex
+	summary           *summaryData
+	volumeDirectories []string
+	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
+	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
 	disabled          bool
 	objectCache       *cachingreader.ObjectServer
@@ -77,6 +79,19 @@ type StartOptions struct {
 	Username           string
 	VlanIdToBridge     map[uint]string // Key: VLAN ID, value: bridge interface.
 	VolumeDirectories  []string
+}
+
+type summaryData struct {
+	availableMilliCPU      uint
+	memUnallocated         uint64
+	numFreeAddresses       uint
+	numRegisteredAddresses uint
+	numRunning             uint
+	numStopped             uint
+	numSubnets             uint
+	ownerGroups            []string
+	ownerUsers             []string
+	updatedAt              time.Time
 }
 
 type vmInfoType struct {

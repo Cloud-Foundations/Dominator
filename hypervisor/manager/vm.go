@@ -1536,6 +1536,10 @@ func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
 func (m *Manager) getNumVMs() (uint, uint) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
+	return m.getNumVMsWithLock()
+}
+
+func (m *Manager) getNumVMsWithLock() (uint, uint) {
 	var numRunning, numStopped uint
 	for _, vm := range m.vms {
 		if vm.State == proto.StateRunning {

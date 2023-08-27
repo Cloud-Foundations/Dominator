@@ -196,11 +196,17 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.objectCache = objSrv
 	}
 	go manager.loopCheckHealthStatus()
+	lockCheckInterval := startOptions.LockCheckInterval
+	if lockCheckInterval > time.Second {
+		// Leveraged for dashboard, so keep it fresh.
+		lockCheckInterval = time.Second
+	}
 	manager.lockWatcher = lockwatcher.New(&manager.mutex,
 		lockwatcher.LockWatcherOptions{
-			CheckInterval: startOptions.LockCheckInterval,
+			CheckInterval: lockCheckInterval,
 			Logger:        startOptions.Logger,
 			LogTimeout:    startOptions.LockLogTimeout,
+			RFunction:     manager.updateSummaryWithMainRLock,
 		})
 	return manager, nil
 }
