@@ -103,6 +103,11 @@ func GetEarliestClientCertExpiration() time.Time {
 	return getEarliestClientCertExpiration()
 }
 
+// GetNumPanicedCalls returns the number of server method calls which paniced.
+func GetNumPanicedCalls() uint64 {
+	return getNumPanicedCalls()
+}
+
 // LoadCertificates loads zero or more X.509 certificates from directory. Each
 // certificate must be stored in a pair of PEM-encoded files, with the private
 // key in a file with extension '.key' and the corresponding public key

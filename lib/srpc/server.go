@@ -69,6 +69,7 @@ var (
 	serverMetricsDir             *tricorder.DirectorySpec
 	bucketer                     *tricorder.Bucketer
 	serverMetricsMutex           sync.Mutex
+	numPanicedCalls              uint64
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
@@ -91,6 +92,12 @@ func init() {
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
 	http.HandleFunc(listPublicMethodsPath, listPublicMethodsHttpHandler)
 	registerServerMetrics()
+}
+
+func getNumPanicedCalls() uint64 {
+	serverMetricsMutex.Lock()
+	defer serverMetricsMutex.Unlock()
+	return numPanicedCalls
 }
 
 func registerServerMetrics() {
@@ -632,6 +639,14 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 }
 
 func (m *methodWrapper) _call(conn *Conn, makeCoder coderMaker) error {
+	defer func() {
+		if err := recover(); err != nil {
+			serverMetricsMutex.Lock()
+			numPanicedCalls++
+			serverMetricsMutex.Unlock()
+			panic(err)
+		}
+	}()
 	connValue := reflect.ValueOf(conn)
 	conn.Decoder = makeCoder.MakeDecoder(conn)
 	conn.Encoder = makeCoder.MakeEncoder(conn)
