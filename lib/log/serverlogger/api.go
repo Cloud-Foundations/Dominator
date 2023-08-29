@@ -174,5 +174,5 @@ func (l *Logger) SetLevel(maxLevel int16) {
 // WriteHtml will write the contents of the internal log buffer to writer, with
 // appropriate HTML markups.
 func (l *Logger) WriteHtml(writer io.Writer) {
-	l.circularBuffer.WriteHtml(writer)
+	l.writeHtml(writer)
 }
