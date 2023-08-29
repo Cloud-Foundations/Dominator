@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
@@ -117,11 +118,20 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	showTimeTaken(startTime)
 	updateRequest.ImageName = imageName
 	updateRequest.Wait = true
+	stopTicker := make(chan struct{}, 1)
+	if !*showTimes {
+		logger.Println("Starting Subd.Update()")
+		go tickerLoop(stopTicker)
+	}
 	startTime = showStart("Subd.Update()")
 	err = client.CallUpdate(srpcClient, updateRequest, &updateReply)
+	stopTicker <- struct{}{}
 	if err != nil {
 		showBlankLine()
 		return err
+	}
+	if !*showTimes {
+		logger.Println("Subd.Update() complete")
 	}
 	showTimeTaken(startTime)
 	return nil
@@ -182,7 +192,11 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		ignoreMissingComputedFiles = false
 		pushComputedFiles = false
 	}
-	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
+	logger.Println("Starting polling loop, waiting for completed scan")
+	interval := time.Second
+	newlineNeeded := false
+	objectsNeeded := false
+	for ; time.Now().Before(timeoutTime); time.Sleep(interval) {
 		var pollReply sub.PollResponse
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
 			return err
@@ -190,6 +204,22 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		if err := pollAndBuildPointers(subObj.Client, &generationCount,
 			&pollReply); err != nil {
 			return err
+		}
+		if pollReply.FileSystem == nil {
+			if interval < 5*time.Second {
+				interval += 200 * time.Millisecond
+			}
+		} else {
+			interval = time.Second
+		}
+		if !*showTimes {
+			if pollReply.FileSystem == nil {
+				fmt.Fprintf(os.Stderr, ".")
+				newlineNeeded = true
+			} else if newlineNeeded {
+				fmt.Fprintln(os.Stderr)
+				newlineNeeded = false
+			}
 		}
 		if pollReply.GenerationCount != lastGenerationCount ||
 			pollReply.ScanCount != lastScanCount {
@@ -225,12 +255,17 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 			pushComputedFiles, ignoreMissingComputedFiles, logger)
 		showTimeTaken(startTime)
 		if len(objectsToFetch) < 1 && len(objectsToPush) < 1 {
+			if !objectsNeeded {
+				logger.Println("No objects need to be fetched or pushed")
+			}
 			return nil
 		}
+		objectsNeeded = true
 		if len(objectsToFetch) > 0 {
 			logger.Debugf(0, "Fetch(%d)\n", len(objectsToFetch))
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
+				LockFor:       *lockDuration,
 				ServerAddress: imageServerAddress,
 				Wait:          true,
 				Hashes:        objectcache.ObjectMapToCache(objectsToFetch)},
@@ -261,29 +296,29 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 
 func fetchUntil(subObj *lib.Sub, request sub.FetchRequest,
 	timeoutTime time.Time, logger log.DebugLogger) error {
-	showBlank := true
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
-		err := subObj.Client.RequestReply("Subd.Fetch", request,
-			&sub.FetchResponse{})
+		stopTicker := make(chan struct{}, 1)
+		if !*showTimes {
+			logger.Println("Starting Subd.Fetch()")
+			go tickerLoop(stopTicker)
+		}
+		err := client.CallFetch(subObj.Client, request, &sub.FetchResponse{})
+		stopTicker <- struct{}{}
 		if err == nil {
 			return nil
 		}
-		if showBlank {
-			showBlankLine()
-			showBlank = false
-		}
 		logger.Printf("Error calling %s:Subd.Fetch(): %s\n",
 			subObj.Hostname, err)
-	}
-	if showBlank {
-		showBlankLine()
 	}
 	return errors.New("timed out fetching objects")
 }
 
 func pollAndBuildPointers(srpcClient *srpc.Client, generationCount *uint64,
 	pollReply *sub.PollResponse) error {
-	pollRequest := sub.PollRequest{HaveGeneration: *generationCount}
+	pollRequest := sub.PollRequest{
+		HaveGeneration: *generationCount,
+		LockFor:        *lockDuration,
+	}
 	startTime := showStart("Poll()")
 	err := client.CallPoll(srpcClient, pollRequest, pollReply)
 	if err != nil {
@@ -323,6 +358,22 @@ func showTimeTaken(startTime time.Time) {
 func showBlankLine() {
 	if *showTimes {
 		logger.Println()
+	}
+}
+
+func tickerLoop(stopTicker <-chan struct{}) {
+	for {
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-timer.C:
+			fmt.Fprintf(os.Stderr, ".")
+		case <-stopTicker:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			fmt.Fprintln(os.Stderr)
+			return
+		}
 	}
 }
 

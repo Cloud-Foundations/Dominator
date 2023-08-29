@@ -21,6 +21,9 @@ func (state *State) goRun(doFunc func() error) error {
 	if state.entered {
 		panic("GoRun is not re-entrant safe")
 	}
+	if state.error != nil {
+		return state.error
+	}
 	if state.reaped {
 		panic("state has been reaped")
 	}
@@ -31,6 +34,7 @@ func (state *State) goRun(doFunc func() error) error {
 		case err := <-state.errorChannel:
 			state.pending--
 			if err != nil {
+				state.error = err
 				state.reap()
 				return err
 			}
@@ -47,9 +51,12 @@ func (state *State) goRun(doFunc func() error) error {
 }
 
 func (state *State) reap() error {
+	if state.reaped {
+		return state.error
+	}
 	state.reaped = true
 	close(state.semaphore)
-	var err error
+	err := state.error
 	for ; state.pending > 0; state.pending-- {
 		if e := <-state.errorChannel; err == nil && e != nil {
 			err = e

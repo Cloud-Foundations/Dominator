@@ -14,6 +14,12 @@ func (configuration Configuration) String() string {
 			retval += "\n  " + exclusion
 		}
 	}
+	if len(configuration.OwnerGroups) > 0 {
+		retval += fmt.Sprintf("\nOwnerGroups: %v", configuration.OwnerGroups)
+	}
+	if len(configuration.OwnerUsers) > 0 {
+		retval += fmt.Sprintf("\nOwnerUsers: %v", configuration.OwnerUsers)
+	}
 	return retval
 }
 

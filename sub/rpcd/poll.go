@@ -25,7 +25,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 	if _, err := conn.WriteString("\n"); err != nil {
 		return err
 	}
-	response.NetworkSpeed = t.networkReaderContext.MaximumSpeed()
+	response.NetworkSpeed = t.params.NetworkReaderContext.MaximumSpeed()
 	response.CurrentConfiguration = t.getConfiguration()
 	t.rwLock.RLock()
 	response.FetchInProgress = t.fetchInProgress
@@ -40,17 +40,22 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 		response.LastUpdateHadTriggerFailures = t.lastUpdateHadTriggerFailures
 	}
 	response.LastSuccessfulImageName = t.lastSuccessfulImageName
+	response.LastNote = t.lastNote
+	response.LockedByAnotherClient =
+		t.getClientLock(conn, request.LockFor) != nil
+	response.LockedUntil = t.lockedUntil
 	response.FreeSpace = t.getFreeSpace()
 	t.rwLock.RUnlock()
 	response.StartTime = startTime
 	response.PollTime = time.Now()
-	response.ScanCount = t.fileSystemHistory.ScanCount()
-	response.DurationOfLastScan = t.fileSystemHistory.DurationOfLastScan()
-	response.GenerationCount = t.fileSystemHistory.GenerationCount()
-	fs := t.fileSystemHistory.FileSystem()
+	response.ScanCount = t.params.FileSystemHistory.ScanCount()
+	response.DurationOfLastScan =
+		t.params.FileSystemHistory.DurationOfLastScan()
+	response.GenerationCount = t.params.FileSystemHistory.GenerationCount()
+	fs := t.params.FileSystemHistory.FileSystem()
 	if fs != nil &&
 		!request.ShortPollOnly &&
-		request.HaveGeneration != t.fileSystemHistory.GenerationCount() {
+		request.HaveGeneration != t.params.FileSystemHistory.GenerationCount() {
 		response.FileSystemFollows = true
 	}
 	if err := conn.Encode(response); err != nil {
@@ -68,14 +73,15 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 }
 
 func (t *rpcType) getFreeSpace() *uint64 {
-	if fd, err := syscall.Open(t.rootDir, syscall.O_RDONLY, 0); err != nil {
-		t.logger.Printf("error opening: %s: %s", t.rootDir, err)
+	rootDir := t.config.RootDirectoryName
+	if fd, err := syscall.Open(rootDir, syscall.O_RDONLY, 0); err != nil {
+		t.params.Logger.Printf("error opening: %s: %s", rootDir, err)
 		return nil
 	} else {
 		defer syscall.Close(fd)
 		var statbuf syscall.Statfs_t
 		if err := syscall.Fstatfs(fd, &statbuf); err != nil {
-			t.logger.Printf("error getting file-system stats: %s\n", err)
+			t.params.Logger.Printf("error getting file-system stats: %s\n", err)
 			return nil
 		}
 		retval := uint64(statbuf.Bfree * uint64(statbuf.Bsize))

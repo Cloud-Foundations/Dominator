@@ -1,17 +1,21 @@
 package manager
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
+	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -22,6 +26,12 @@ const (
 type mountInfo struct {
 	mountEntry *mounts.MountEntry
 	size       uint64
+}
+
+// check2fs returns true if the device hosts an ext{2,3,4} file-system.
+func check2fs(device string) bool {
+	cmd := exec.Command("e2label", device)
+	return cmd.Run() == nil
 }
 
 func checkTrim(mountEntry *mounts.MountEntry) bool {
@@ -94,6 +104,152 @@ func getMounts(mountTable *mounts.MountTable) (
 		}
 	}
 	return mountMap, nil
+}
+
+// grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size,
+// expanding the partition first if appropriate.
+func grow2fs(volume string) error {
+	if check2fs(volume) {
+		// Simple case: file-system is on the raw volume, no partition table.
+		return resize2fs(volume, 0)
+	}
+	// Read MBR and check if it's a simple single-partition volume.
+	file, err := os.Open(volume)
+	if err != nil {
+		return err
+	}
+	partitionTable, err := mbr.Decode(file)
+	file.Close()
+	if err != nil {
+		return err
+	}
+	if partitionTable == nil {
+		return fmt.Errorf("no DOS partition table found")
+	}
+	if partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(2) > 0 ||
+		partitionTable.GetPartitionSize(3) > 0 {
+		return fmt.Errorf("unsupported partition sizes: [%s,%s,%s,%s]",
+			format.FormatBytes(partitionTable.GetPartitionSize(0)),
+			format.FormatBytes(partitionTable.GetPartitionSize(1)),
+			format.FormatBytes(partitionTable.GetPartitionSize(2)),
+			format.FormatBytes(partitionTable.GetPartitionSize(3)))
+	}
+	// Try and extend the partition.
+	cmd := exec.Command("parted", "-s", volume, "resizepart", "1", "100%")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		return fmt.Errorf("error running parted for: %s: %s: %s",
+			volume, err, string(output))
+	}
+	// Try and resize the file-system in the partition (need a loop device).
+	device, err := fsutil.LoopbackSetup(volume)
+	if err != nil {
+		return err
+	}
+	defer fsutil.LoopbackDelete(device)
+	partition := device + "p1"
+	if !check2fs(partition) {
+		return nil
+	}
+	return resize2fs(partition, 0)
+}
+
+// indexToName will return the volume name for the specified volume index (0
+// is the "root" volume, 1 is "secondary-volume.0" and so on).
+func indexToName(index int) string {
+	if index == 0 {
+		return "root"
+	}
+	return fmt.Sprintf("secondary-volume.%d", index-1)
+}
+
+// resize2fs will resize an ext{2,3,4} file-system to fit the specified size.
+// If size is zero, it will resize to fit the device size.
+func resize2fs(device string, size uint64) error {
+	cmd := exec.Command("e2fsck", "-f", "-y", device)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		return fmt.Errorf("error running e2fsck for: %s: %s: %s",
+			device, err, string(output))
+	}
+	cmd = exec.Command("resize2fs", device)
+	if size > 0 {
+		if size < 1<<20 {
+			return fmt.Errorf("size: %d too small", size)
+		}
+		cmd.Args = append(cmd.Args, strconv.FormatUint(size>>9, 10)+"s")
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+		return fmt.Errorf("error running resize2fs for: %s: %s: %s",
+			device, err, string(output))
+	}
+	return nil
+}
+
+// shrink2fs will try and shrink an ext{2,3,4} file-system on a volume,
+// shrinking the partition afterwards if appropriate.
+func shrink2fs(volume string, size uint64) error {
+	if check2fs(volume) {
+		// Simple case: file-system is on the raw volume, no partition table.
+		return resize2fs(volume, size)
+	}
+	// Read MBR and check if it's a simple single-partition volume.
+	file, err := os.Open(volume)
+	if err != nil {
+		return err
+	}
+	partitionTable, err := mbr.Decode(file)
+	file.Close()
+	if err != nil {
+		return err
+	}
+	if partitionTable == nil {
+		return fmt.Errorf("no DOS partition table found")
+	}
+	if partitionTable.GetPartitionSize(1) > 0 ||
+		partitionTable.GetPartitionSize(2) > 0 ||
+		partitionTable.GetPartitionSize(3) > 0 {
+		return fmt.Errorf("unsupported partition sizes: [%s,%s,%s,%s]",
+			format.FormatBytes(partitionTable.GetPartitionSize(0)),
+			format.FormatBytes(partitionTable.GetPartitionSize(1)),
+			format.FormatBytes(partitionTable.GetPartitionSize(2)),
+			format.FormatBytes(partitionTable.GetPartitionSize(3)))
+	}
+	size -= partitionTable.GetPartitionOffset(0)
+	if size >= partitionTable.GetPartitionSize(0) {
+		return errors.New("size greater than existing partition")
+	}
+	if err := partitionTable.SetPartitionSize(0, size); err != nil {
+		return err
+	}
+	// Try and resize the file-system in the partition (need a loop device).
+	device, err := fsutil.LoopbackSetup(volume)
+	if err != nil {
+		return err
+	}
+	deleteLoopback := true
+	defer func() {
+		if deleteLoopback {
+			fsutil.LoopbackDelete(device)
+		}
+	}()
+	partition := device + "p1"
+	if !check2fs(partition) {
+		return errors.New("no ext2 file-system found in partition")
+	}
+	if err := resize2fs(partition, size); err != nil {
+		return err
+	}
+	deleteLoopback = false
+	if err := fsutil.LoopbackDelete(device); err != nil {
+		return err
+	}
+	return partitionTable.Write(volume)
 }
 
 func (m *Manager) checkTrim(filename string) bool {
@@ -232,6 +388,11 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 		if err := os.MkdirAll(volumeDirectory, fsutil.DirPerms); err != nil {
 			return err
 		}
+		var statbuf syscall.Statfs_t
+		if err := syscall.Statfs(volumeDirectory, &statbuf); err != nil {
+			return fmt.Errorf("error statfsing: %s: %s", volumeDirectory, err)
+		}
+		m.totalVolumeBytes += uint64(statbuf.Blocks * uint64(statbuf.Bsize))
 	}
 	return nil
 }

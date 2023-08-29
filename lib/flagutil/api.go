@@ -20,3 +20,7 @@ type StringList []string
 
 // A StringToRuneMap satisfies the standard library flag.Value interface.
 type StringToRuneMap map[string]rune
+
+// A UintList is a slice of uint types that satisfies the standard library
+// flag.Value interface.
+type UintList []uint

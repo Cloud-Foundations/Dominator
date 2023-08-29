@@ -23,6 +23,13 @@ func restartServiceSubcommand(args []string, logger log.DebugLogger) error {
 
 func restartService(srpcClient *srpc.Client, serviceName string) error {
 	tmpPathname := fmt.Sprintf("/subtool-restart-%d", os.Getpid())
+	trg := triggers.Trigger{
+		MatchLines: []string{tmpPathname},
+		Service:    serviceName,
+	}
+	if serviceName == "reboot" {
+		trg.DoReboot = true
+	}
 	return client.CallUpdate(srpcClient, sub.UpdateRequest{
 		Wait: true,
 		InodesToMake: []sub.Inode{
@@ -33,12 +40,7 @@ func restartService(srpcClient *srpc.Client, serviceName string) error {
 		},
 		PathsToDelete: []string{tmpPathname},
 		Triggers: &triggers.Triggers{
-			Triggers: []*triggers.Trigger{
-				{
-					MatchLines: []string{tmpPathname},
-					Service:    serviceName,
-				},
-			},
+			Triggers: []*triggers.Trigger{&trg},
 		},
 	},
 		&sub.UpdateResponse{})

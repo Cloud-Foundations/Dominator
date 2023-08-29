@@ -23,6 +23,7 @@ const (
 	StateMigrating     = 6
 	StateExporting     = 7
 	StateCrashed       = 8
+	StateDebugging     = 9
 
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
@@ -126,6 +127,16 @@ type ChangeVmTagsResponse struct {
 	Error string
 }
 
+type ChangeVmVolumeSizeRequest struct {
+	IpAddress   net.IP
+	VolumeIndex uint
+	VolumeSize  uint64
+}
+
+type ChangeVmVolumeSizeResponse struct {
+	Error string
+}
+
 type CommitImportedVmRequest struct {
 	IpAddress net.IP
 }
@@ -162,6 +173,7 @@ type ConsoleType uint
 type CopyVmRequest struct {
 	AccessToken      []byte
 	IpAddress        net.IP
+	SkipMemoryCheck  bool
 	SourceHypervisor string
 	VmInfo
 }
@@ -179,10 +191,14 @@ type CreateVmRequest struct {
 	ImageDataSize        uint64
 	ImageTimeout         time.Duration
 	MinimumFreeBytes     uint64
+	OverlayDirectories   []string
+	OverlayFiles         map[string][]byte
 	RoundupPower         uint64
 	SecondaryVolumes     []Volume
-	SecondaryVolumesData bool
+	SecondaryVolumesData bool // Exclusive of SecondaryVolumesInit.
+	SecondaryVolumesInit []VolumeInitialisationInfo
 	SkipBootloader       bool
+	SkipMemoryCheck      bool
 	UserDataSize         uint64
 	VmInfo
 } // The following data are streamed afterwards in the following order:
@@ -194,6 +210,26 @@ type CreateVmResponse struct { // Multiple responses are sent.
 	DhcpTimedOut    bool
 	Final           bool // If true, this is the final response.
 	IpAddress       net.IP
+	ProgressMessage string
+	Error           string
+}
+
+type DebugVmImageRequest struct {
+	DhcpTimeout      time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
+	ImageDataSize    uint64
+	ImageName        string
+	ImageTimeout     time.Duration
+	ImageURL         string
+	IpAddress        net.IP
+	MinimumFreeBytes uint64
+	OverlayFiles     map[string][]byte
+	RoundupPower     uint64
+} // The following data are streamed afterwards in the following order:
+//     RAW image data (length=ImageDataSize)
+
+type DebugVmImageResponse struct { // Multiple responses are sent.
+	DhcpTimedOut    bool
+	Final           bool // If true, this is the final response.
 	ProgressMessage string
 	Error           string
 }
@@ -283,12 +319,15 @@ type GetUpdatesRequest struct {
 type Update struct {
 	HaveAddressPool  bool               `json:",omitempty"`
 	AddressPool      []Address          `json:",omitempty"` // Used & free.
+	MemoryInMiB      *uint64            `json:",omitempty"`
+	NumCPUs          *uint              `json:",omitempty"`
 	NumFreeAddresses map[string]uint    `json:",omitempty"` // Key: subnet ID.
 	HealthStatus     string             `json:",omitempty"`
 	HaveSerialNumber bool               `json:",omitempty"`
 	SerialNumber     string             `json:",omitempty"`
 	HaveSubnets      bool               `json:",omitempty"`
 	Subnets          []Subnet           `json:",omitempty"`
+	TotalVolumeBytes *uint64            `json:",omitempty"`
 	HaveVMs          bool               `json:",omitempty"`
 	VMs              map[string]*VmInfo `json:",omitempty"` // Key: IP address.
 }
@@ -325,13 +364,16 @@ type GetVmUserDataResponse struct {
 // The GetVmVolume() RPC is followed by the proto/rsync.GetBlocks message.
 
 type GetVmVolumeRequest struct {
-	AccessToken []byte
-	IpAddress   net.IP
-	VolumeIndex uint
+	AccessToken      []byte
+	GetExtraFiles    bool
+	IgnoreExtraFiles bool
+	IpAddress        net.IP
+	VolumeIndex      uint
 }
 
 type GetVmVolumeResponse struct {
-	Error string
+	Error      string
+	ExtraFiles map[string][]byte // May contain "kernel", "initrd" and such.
 }
 
 type ListSubnetsRequest struct {
@@ -344,6 +386,7 @@ type ListSubnetsResponse struct {
 }
 
 type ImportLocalVmRequest struct {
+	SkipMemoryCheck    bool
 	VerificationCookie []byte `json:",omitempty"`
 	VmInfo
 	VolumeFilenames []string
@@ -384,6 +427,7 @@ type MigrateVmRequest struct {
 	AccessToken      []byte
 	DhcpTimeout      time.Duration
 	IpAddress        net.IP
+	SkipMemoryCheck  bool
 	SourceHypervisor string
 }
 
@@ -454,6 +498,16 @@ type ProbeVmPortResponse struct {
 	Error      string
 }
 
+type RebootVmRequest struct {
+	DhcpTimeout time.Duration
+	IpAddress   net.IP
+}
+
+type RebootVmResponse struct {
+	DhcpTimedOut bool
+	Error        string
+}
+
 type RegisterExternalLeasesRequest struct {
 	Addresses AddressList
 	Hostnames []string `json:",omitempty"`
@@ -471,6 +525,7 @@ type ReplaceVmImageRequest struct {
 	ImageURL         string `json:",omitempty"`
 	IpAddress        net.IP
 	MinimumFreeBytes uint64
+	OverlayFiles     map[string][]byte
 	RoundupPower     uint64
 	SkipBootloader   bool
 } // RAW image data (length=ImageDataSize) is streamed afterwards.
@@ -513,6 +568,16 @@ type RestoreVmUserDataRequest struct {
 }
 
 type RestoreVmUserDataResponse struct {
+	Error string
+}
+
+type ReorderVmVolumesRequest struct {
+	AccessToken   []byte
+	IpAddress     net.IP
+	VolumeIndices []uint
+}
+
+type ReorderVmVolumesResponse struct {
 	Error string
 }
 
@@ -620,3 +685,9 @@ type Volume struct {
 }
 
 type VolumeFormat uint
+
+type VolumeInitialisationInfo struct {
+	BytesPerInode            uint64
+	Label                    string
+	ReservedBlocksPercentage uint16
+}

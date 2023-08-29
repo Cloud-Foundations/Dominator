@@ -12,7 +12,7 @@ func (t *rpcType) GrantMethod(serviceMethod string,
 	if _, ok := t.ownerUsers[authInfo.Username]; ok {
 		return true
 	}
-	for _, group := range t.subConfiguration.OwnerGroups {
+	for _, group := range t.config.SubConfiguration.OwnerGroups {
 		if _, ok := authInfo.GroupList[group]; ok {
 			return true
 		}

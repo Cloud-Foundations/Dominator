@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
@@ -118,9 +120,26 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true,
-		"Name", "Status", "IP Addr", "Serial Number", "Location", "NumVMs")
+		"Name", "Status", "IP Addr", "Serial Number", "Location", "Type",
+		"CPUs", "RAM", "Storage", "NumVMs")
 	for _, hypervisor := range hypervisors {
 		machine := hypervisor.machine
+		machineType := machine.Tags["Type"]
+		if machineTypeURL := machine.Tags["TypeURL"]; machineTypeURL != "" {
+			machineType = `<a href="` + machineTypeURL + `">` + machineType +
+				`</a>`
+		}
+		numShift := 0
+		memoryInMiB := hypervisor.memoryInMiB
+		for ; memoryInMiB >= 16; numShift++ {
+			memoryInMiB >>= 1
+		}
+		if memoryInMiB == 15 {
+			memoryInMiB++
+			memoryInMiB <<= numShift
+		} else {
+			memoryInMiB = hypervisor.memoryInMiB
+		}
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 				machine.Hostname, machine.Hostname),
@@ -130,6 +149,10 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 			machine.HostIpAddress.String(),
 			hypervisor.serialNumber,
 			hypervisor.location,
+			machineType,
+			strconv.FormatUint(uint64(hypervisor.numCPUs), 10),
+			format.FormatBytes(memoryInMiB<<20),
+			format.FormatBytes(hypervisor.totalVolumeBytes),
 			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 				machine.Hostname, constants.HypervisorPortNumber,
 				hypervisor.getNumVMs()),

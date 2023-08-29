@@ -10,6 +10,18 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type Config struct {
+	AllowPublicAddObjects   bool
+	AllowPublicCheckObjects bool
+	AllowPublicGetObjects   bool
+	ReplicationMaster       string
+}
+
+type Params struct {
+	Logger       log.DebugLogger
+	ObjectServer objectserver.StashingObjectServer
+}
+
 type srpcType struct {
 	objectServer      objectserver.StashingObjectServer
 	replicationMaster string
@@ -25,11 +37,26 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
 }
 
-func Setup(objSrv objectserver.StashingObjectServer, replicationMaster string,
-	logger log.DebugLogger) *htmlWriter {
+func Setup(config Config, params Params) *htmlWriter {
 	getSemaphore := make(chan bool, 100)
-	srpcObj := &srpcType{objSrv, replicationMaster, getSemaphore, logger}
-	srpc.RegisterName("ObjectServer", srpcObj)
+	srpcObj := &srpcType{
+		objectServer:      params.ObjectServer,
+		replicationMaster: config.ReplicationMaster,
+		getSemaphore:      getSemaphore,
+		logger:            params.Logger,
+	}
+	var publicMethods []string
+	if config.AllowPublicAddObjects {
+		publicMethods = append(publicMethods, "AddObjects")
+	}
+	if config.AllowPublicCheckObjects {
+		publicMethods = append(publicMethods, "CheckObjects")
+	}
+	if config.AllowPublicGetObjects {
+		publicMethods = append(publicMethods, "GetObjects")
+	}
+	srpc.RegisterNameWithOptions("ObjectServer", srpcObj,
+		srpc.ReceiverOptions{PublicMethods: publicMethods})
 	tricorder.RegisterMetric("/get-requests",
 		func() uint { return uint(len(getSemaphore)) },
 		units.None, "number of GetObjects() requests in progress")

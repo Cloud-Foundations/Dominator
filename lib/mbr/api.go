@@ -44,6 +44,18 @@ func (tt *TableType) Set(value string) error {
 	return tt.set(value)
 }
 
+func (mbr *Mbr) SetPartitionOffset(index uint, offset uint64) error {
+	return mbr.setPartitionOffset(index, offset)
+}
+
+func (mbr *Mbr) SetPartitionSize(index uint, size uint64) error {
+	return mbr.setPartitionSize(index, size)
+}
+
+func (mbr *Mbr) Write(filename string) error {
+	return mbr.write(filename)
+}
+
 func (tt TableType) String() string {
 	return tt.string()
 }

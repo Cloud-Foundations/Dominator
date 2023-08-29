@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -254,7 +255,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			return err
 		}
 	}
-	err = makeExt4fs(rootDevice, options.RootLabel, unsupportedOptions, 8192,
+	err = MakeExt4fs(rootDevice, options.RootLabel, unsupportedOptions, 8192,
 		logger)
 	if err != nil {
 		return err
@@ -268,10 +269,29 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
-	defer syscall.Unmount(mountPoint, 0)
+	doUnmount := true
+	defer func() {
+		if doUnmount {
+			syscall.Unmount(mountPoint, 0)
+		}
+	}()
 	os.RemoveAll(filepath.Join(mountPoint, "lost+found"))
 	if err := Unpack(fs, objectsGetter, mountPoint, logger); err != nil {
 		return err
+	}
+	for _, dirname := range options.OverlayDirectories {
+		dirname := filepath.Clean(dirname) // Stop funny business.
+		err := os.MkdirAll(filepath.Join(mountPoint, dirname), fsutil.DirPerms)
+		if err != nil {
+			return err
+		}
+	}
+	for filename, data := range options.OverlayFiles {
+		filename := filepath.Clean(filename) // Stop funny business.
+		err := writeFile(filepath.Join(mountPoint, filename), data)
+		if err != nil {
+			return err
+		}
 	}
 	if err := writeImageName(mountPoint, options.InitialImageName); err != nil {
 		return err
@@ -288,6 +308,15 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 		if err != nil {
 			return err
 		}
+	}
+	doUnmount = false
+	startTime := time.Now()
+	if err := syscall.Unmount(mountPoint, 0); err != nil {
+		return err
+	}
+	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
+		logger.Debugf(0, "Unmounted: %s in %s\n",
+			rootDevice, format.Duration(time.Since(startTime)))
 	}
 	return nil
 }
@@ -306,32 +335,40 @@ func makeBootable(fs *filesystem.FileSystem,
 	}
 }
 
-func makeExt4fs(deviceName, label string, unsupportedOptions []string,
-	bytesPerInode uint64, logger log.Logger) error {
-	size, err := getDeviceSize(deviceName)
-	if err != nil {
-		return err
+func makeExt4fs(deviceName string, params MakeExt4fsParams,
+	logger log.Logger) error {
+	if params.Size < 1 {
+		var err error
+		params.Size, err = getDeviceSize(deviceName)
+		if err != nil {
+			return err
+		}
 	}
-	sizeString := strconv.FormatUint(size>>10, 10)
+	sizeString := strconv.FormatUint(params.Size>>10, 10)
 	var options []string
-	if len(unsupportedOptions) > 0 {
+	if len(params.UnsupportedOptions) > 0 {
 		defaultFeatures, err := getDefaultMkfsFeatures(deviceName, sizeString,
 			logger)
 		if err != nil {
 			return err
 		}
-		for _, option := range unsupportedOptions {
+		for _, option := range params.UnsupportedOptions {
 			if _, ok := defaultFeatures[option]; ok {
 				options = append(options, "^"+option)
 			}
 		}
 	}
 	cmd := exec.Command("mkfs.ext4")
-	if bytesPerInode != 0 {
-		cmd.Args = append(cmd.Args, "-i", strconv.FormatUint(bytesPerInode, 10))
+	if params.BytesPerInode != 0 {
+		cmd.Args = append(cmd.Args, "-i",
+			strconv.FormatUint(params.BytesPerInode, 10))
 	}
-	if label != "" {
-		cmd.Args = append(cmd.Args, "-L", label)
+	if params.Label != "" {
+		cmd.Args = append(cmd.Args, "-L", params.Label)
+	}
+	if params.ReservedBlocksPercentage != 0 {
+		cmd.Args = append(cmd.Args, "-m",
+			strconv.FormatUint(uint64(params.ReservedBlocksPercentage), 10))
 	}
 	if len(options) > 0 {
 		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
@@ -343,7 +380,7 @@ func makeExt4fs(deviceName, label string, unsupportedOptions []string,
 			deviceName, err, output)
 	}
 	logger.Printf("Made %s file-system on: %s in %s\n",
-		format.FormatBytes(size), deviceName,
+		format.FormatBytes(params.Size), deviceName,
 		format.Duration(time.Since(startTime)))
 	return nil
 }
@@ -410,7 +447,10 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 		}
 		grubConfigFile = filepath.Join(rootDir, "boot", "grub2", "grub.cfg")
 	}
-	cmd := exec.Command(grubInstaller, "--boot-directory="+bootDir, deviceName)
+	cmd := exec.Command(grubInstaller,
+		"--boot-directory="+bootDir,
+		"--target=i386-pc", // TODO(rgooch): make this configurable.
+		deviceName)
 	if doChroot {
 		cmd.Dir = "/"
 		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: chrootDir}
@@ -471,6 +511,19 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 		return err
 	}
 	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
+}
+
+func writeFile(filename string, data []byte) error {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+		fsutil.PublicFilePerms)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := file.Write(data); err != nil {
+		return err
+	}
+	return file.Close()
 }
 
 func writeFstabEntry(writer io.Writer,
@@ -550,8 +603,24 @@ func writeToFile(fs *filesystem.FileSystem,
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, loopDevice+"p1",
-		options, logger)
+	rootDevice := loopDevice + "p1"
+	// Probe for partition device because it might not be immediately available.
+	// Need to open rather than just test for inode existance.
+	startTime := time.Now()
+	stopTime := startTime.Add(time.Second)
+	for count := 0; time.Until(stopTime) >= 0; count++ {
+		if file, err := os.Open(rootDevice); err == nil {
+			file.Close()
+			if count > 0 {
+				logger.Debugf(0, "%s valid after: %d iterations, %s\n",
+					rootDevice, count, format.Duration(time.Since(startTime)))
+			}
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
+		logger)
 	if options.AllocateBlocks { // mkfs discards blocks, so do this after.
 		if err := fsutil.Fallocate(tmpFilename, imageSize); err != nil {
 			return err
@@ -580,13 +649,34 @@ func writeRaw(fs *filesystem.FileSystem,
 }
 
 func writeRootFstabEntry(rootDir, rootLabel string) error {
-	file, err := os.Create(filepath.Join(rootDir, "etc", "fstab"))
+	pathname := filepath.Join(rootDir, "etc", "fstab")
+	oldFstab, err := ioutil.ReadFile(pathname)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	file, err := os.Create(pathname)
 	if err != nil {
 		return err
 	} else {
-		defer file.Close()
-		return writeFstabEntry(file, "LABEL="+rootLabel, "/", "ext4",
-			"", 0, 1)
+		doClose := true
+		defer func() {
+			if doClose {
+				file.Close()
+			}
+		}()
+		w := bufio.NewWriter(file)
+		err := writeFstabEntry(w, "LABEL="+rootLabel, "/", "ext4", "", 0, 1)
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(oldFstab); err != nil {
+			return err
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		doClose = false
+		return file.Close()
 	}
 }
 

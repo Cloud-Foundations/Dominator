@@ -25,6 +25,8 @@ var (
 	objectServerPortNum = flag.Uint("objectServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
+	showHashes = flag.Bool("showHashes", false,
+		"If true, show the hashes of added files")
 	testDuration = flag.Duration("testDuration", time.Second*10,
 		"Duration of bandwidth test")
 

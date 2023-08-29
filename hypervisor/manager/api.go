@@ -34,7 +34,7 @@ type Manager struct {
 	StartOptions
 	rootCookie        []byte
 	memTotalInMiB     uint64
-	numCPU            int
+	numCPUs           uint
 	serialNumber      string
 	volumeDirectories []string
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
@@ -47,6 +47,7 @@ type Manager struct {
 	ownerUsers        map[string]struct{}
 	subnets           map[string]proto.Subnet // Key: Subnet ID.
 	subnetChannels    []chan<- proto.Subnet
+	totalVolumeBytes  uint64
 	vms               map[string]*vmInfoType // Key: IP address.
 	vsocketsEnabled   bool
 	uuid              string
@@ -143,6 +144,11 @@ func (m *Manager) ChangeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return m.changeVmTags(ipAddr, authInfo, tgs)
 }
 
+func (m *Manager) ChangeVmVolumeSize(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, index uint, size uint64) error {
+	return m.changeVmVolumeSize(ipAddr, authInfo, index, size)
+}
+
 func (m *Manager) CheckOwnership(authInfo *srpc.AuthInformation) bool {
 	return m.checkOwnership(authInfo)
 }
@@ -181,6 +187,11 @@ func (m *Manager) CopyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 
 func (m *Manager) CreateVm(conn *srpc.Conn) error {
 	return m.createVm(conn)
+}
+
+func (m *Manager) DebugVmImage(conn *srpc.Conn,
+	authInfo *srpc.AuthInformation) error {
+	return m.debugVmImage(conn, authInfo)
 }
 
 func (m *Manager) DeleteVmVolume(ipAddr net.IP, authInfo *srpc.AuthInformation,
@@ -327,6 +338,11 @@ func (m *Manager) PrepareVmForMigration(ipAddr net.IP,
 	return m.prepareVmForMigration(ipAddr, authInfo, accessToken, enable)
 }
 
+func (m *Manager) RebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
+	dhcpTimeout time.Duration) (bool, error) {
+	return m.rebootVm(ipAddr, authInfo, dhcpTimeout)
+}
+
 func (m *Manager) RemoveAddressesFromPool(addresses []proto.Address) error {
 	return m.removeAddressesFromPool(addresses)
 }
@@ -363,6 +379,12 @@ func (m *Manager) RestoreVmImage(ipAddr net.IP,
 func (m *Manager) RestoreVmUserData(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) error {
 	return m.restoreVmUserData(ipAddr, authInfo)
+}
+
+func (m *Manager) ReorderVmVolumes(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte,
+	volumeIndices []uint) error {
+	return m.reorderVmVolumes(ipAddr, authInfo, accessToken, volumeIndices)
 }
 
 func (m *Manager) ScanVmRoot(ipAddr net.IP, authInfo *srpc.AuthInformation,

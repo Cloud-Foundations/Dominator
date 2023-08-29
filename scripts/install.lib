@@ -2,30 +2,54 @@
 
 echo=
 
-if [ -x /bin/systemctl -a -d /lib/systemd/system ]; then
-    readonly init='systemd'
-    readonly destdir='/lib/systemd/system'
-elif [ -x /usr/bin/systemctl -a -d /usr/lib/systemd/system ]; then
-    readonly init='systemd'
-    readonly destdir='/usr/lib/systemd/system'
-elif [ -x /usr/sbin/update-rc.d ]; then
-    readonly init='update-rc.d'
-    if [ -d /etc/init.d ]; then
-	readonly destdir='/etc/init.d'
-    elif [ -d /etc/rc.d/init.d ]; then
-	readonly destdir='/etc/rc.d/init.d'
+readonly service_tool='/usr/sbin/service'
+service_is_initscripts='false'
+
+if [ -s "$service_tool" ] && [ -x "$service_tool" ]; then
+    if [ "$(dd if=$service_tool bs=1 count=2 2> /dev/null)" == "#!" ]; then
+	if ! fgrep -q systemctl "$service_tool"; then
+	    service_is_initscripts='true'
+	fi
     fi
-elif [ -x /sbin/chkconfig ]; then
-    readonly init='chkconfig'
-    if [ -d /etc/init.d ]; then
-	readonly destdir='/etc/init.d'
-    elif [ -d /etc/rc.d/init.d ]; then
-	readonly destdir='/etc/rc.d/init.d'
+fi
+
+get_init_system ()
+{
+    if [ -x /bin/systemctl -a -d /lib/systemd/system ]; then
+	if [ "$service_is_initscripts" != "true" ]; then
+	    readonly init='systemd'
+	    readonly destdir='/lib/systemd/system'
+	    return 0
+	fi
     fi
-else
+    if [ -x /usr/bin/systemctl -a -d /usr/lib/systemd/system ]; then
+	if [ "$service_is_initscripts" != "true" ]; then
+	    readonly init='systemd'
+	    readonly destdir='/usr/lib/systemd/system'
+	    return 0
+	fi
+    fi
+    if [ -x /usr/sbin/update-rc.d ]; then
+	readonly init='update-rc.d'
+	if [ -d /etc/init.d ]; then
+	    readonly destdir='/etc/init.d'
+	elif [ -d /etc/rc.d/init.d ]; then
+	    readonly destdir='/etc/rc.d/init.d'
+	fi
+	return 0
+    fi
+    if [ -x /sbin/chkconfig ]; then
+	readonly init='chkconfig'
+	if [ -d /etc/init.d ]; then
+	    readonly destdir='/etc/init.d'
+	elif [ -d /etc/rc.d/init.d ]; then
+	    readonly destdir='/etc/rc.d/init.d'
+	fi
+	return 0
+    fi
     echo 'Unknown init system' 2>&1
     exit 1
-fi
+}
 
 get_os ()
 {
@@ -85,3 +109,6 @@ install_all ()
     $echo cp -p health-check.yml "/etc/health-agent/tests.d/$service.yml" || exit
     install_service $service || exit
 }
+
+# Run get_init_system only once because it defines read-only variables.
+get_init_system

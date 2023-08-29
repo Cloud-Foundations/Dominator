@@ -45,6 +45,21 @@ func changeVmSize(client *srpc.Client,
 	return errors.New(reply.Error)
 }
 
+func changeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+	size uint64) error {
+	request := proto.ChangeVmVolumeSizeRequest{
+		IpAddress:   ipAddress,
+		VolumeIndex: index,
+		VolumeSize:  size,
+	}
+	var reply proto.ChangeVmVolumeSizeResponse
+	err := client.RequestReply("Hypervisor.ChangeVmVolumeSize", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func connectToVmConsole(client *srpc.Client, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	serverConn, err := client.Call("Hypervisor.ConnectToVmConsole")
@@ -254,6 +269,20 @@ func registerExternalLeases(client *srpc.Client, addressList proto.AddressList,
 	var reply proto.RegisterExternalLeasesResponse
 	err := client.RequestReply("Hypervisor.RegisterExternalLeases",
 		request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func reorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+	volumeIndices []uint) error {
+	request := proto.ReorderVmVolumesRequest{
+		IpAddress:     ipAddr,
+		VolumeIndices: volumeIndices,
+	}
+	var reply proto.ReorderVmVolumesResponse
+	err := client.RequestReply("Hypervisor.ReorderVmVolumes", request, &reply)
 	if err != nil {
 		return err
 	}

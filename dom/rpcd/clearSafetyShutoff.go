@@ -14,5 +14,6 @@ func (t *rpcType) ClearSafetyShutoff(conn *srpc.Conn,
 		t.logger.Printf("ClearSafetyShutoff(%s): by %s\n",
 			request.Hostname, conn.Username())
 	}
-	return t.herd.ClearSafetyShutoff(request.Hostname)
+	return t.herd.ClearSafetyShutoff(request.Hostname,
+		conn.GetAuthInformation())
 }

@@ -1,9 +1,13 @@
 package rpcd
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"sync"
+	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
@@ -16,32 +20,44 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type Config struct {
+	NetworkBenchmarkFilename string
+	NoteGeneratorCommand     string
+	ObjectsDirectoryName     string
+	OldTriggersFilename      string
+	RootDirectoryName        string
+	SubConfiguration         proto.Configuration
+}
+
+type Params struct {
+	DisableScannerFunction    func(disableScanner bool)
+	FileSystemHistory         *scanner.FileSystemHistory
+	Logger                    log.DebugLogger
+	NetworkReaderContext      *rateio.ReaderContext
+	RescanObjectCacheFunction func()
+	ScannerConfiguration      *scanner.Configuration
+	WorkdirGoroutine          *goroutine.Goroutine
+}
+
 type rpcType struct {
-	subConfiguration          proto.Configuration
-	scannerConfiguration      *scanner.Configuration
-	fileSystemHistory         *scanner.FileSystemHistory
-	objectsDir                string
-	rootDir                   string
-	networkReaderContext      *rateio.ReaderContext
-	netbenchFilename          string
-	oldTriggersFilename       string
-	rescanObjectCacheFunction func()
-	disableScannerFunc        func(disableScanner bool)
-	systemGoroutine           *goroutine.Goroutine
-	workdirGoroutine          *goroutine.Goroutine
-	logger                    log.Logger
+	config          Config
+	params          Params
+	systemGoroutine *goroutine.Goroutine
 	*serverutil.PerUserMethodLimiter
 	ownerUsers                   map[string]struct{}
-	rwLock                       sync.RWMutex
+	rwLock                       sync.RWMutex // Protect everything below.
 	getFilesLock                 sync.Mutex
 	fetchInProgress              bool // Fetch() & Update() mutually exclusive.
 	updateInProgress             bool
 	startTimeNanoSeconds         int32 // For Fetch() or Update().
 	startTimeSeconds             int64
 	lastFetchError               error
+	lastNote                     string
 	lastUpdateError              error
 	lastUpdateHadTriggerFailures bool
 	lastSuccessfulImageName      string
+	lockedBy                     *srpc.Conn
+	lockedUntil                  time.Time
 }
 
 type addObjectsHandlerType struct {
@@ -52,55 +68,63 @@ type addObjectsHandlerType struct {
 }
 
 type HtmlWriter struct {
+	lastNote                *string
 	lastSuccessfulImageName *string
 }
 
-func Setup(subConfiguration proto.Configuration,
-	scannerConfiguration *scanner.Configuration, fsh *scanner.FileSystemHistory,
-	objectsDirname string, rootDirname string,
-	netReaderContext *rateio.ReaderContext,
-	netbenchFname string, oldTriggersFname string,
-	disableScannerFunction func(disableScanner bool),
-	rescanObjectCacheFunction func(), workdirGoroutine *goroutine.Goroutine,
-	logger log.Logger) *HtmlWriter {
+func Setup(config Config, params Params) *HtmlWriter {
 	rpcObj := &rpcType{
-		subConfiguration:          subConfiguration,
-		scannerConfiguration:      scannerConfiguration,
-		fileSystemHistory:         fsh,
-		objectsDir:                objectsDirname,
-		rootDir:                   rootDirname,
-		networkReaderContext:      netReaderContext,
-		netbenchFilename:          netbenchFname,
-		oldTriggersFilename:       oldTriggersFname,
-		rescanObjectCacheFunction: rescanObjectCacheFunction,
-		disableScannerFunc:        disableScannerFunction,
-		systemGoroutine:           goroutine.New(),
-		workdirGoroutine:          workdirGoroutine,
-		logger:                    logger,
+		config:                  config,
+		params:                  params,
+		systemGoroutine:         goroutine.New(),
+		lastSuccessfulImageName: readPatchedImageFile(),
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"Poll": 1,
 			}),
 	}
-	rpcObj.ownerUsers = stringutil.ConvertListToMap(subConfiguration.OwnerUsers,
-		false)
+	rpcObj.ownerUsers = stringutil.ConvertListToMap(
+		config.SubConfiguration.OwnerUsers, false)
 	srpc.RegisterNameWithOptions("Subd", rpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
+				"GetConfiguration",
 				"Poll",
 			}})
 	addObjectsHandler := &addObjectsHandlerType{
-		objectsDir:           objectsDirname,
-		scannerConfiguration: scannerConfiguration,
-		logger:               logger,
+		objectsDir:           config.ObjectsDirectoryName,
+		scannerConfiguration: params.ScannerConfiguration,
+		logger:               params.Logger,
 		rpcObj:               rpcObj,
 	}
 	srpc.RegisterName("ObjectServer", addObjectsHandler)
 	tricorder.RegisterMetric("/image-name", &rpcObj.lastSuccessfulImageName,
 		units.None, "name of the image for the last successful update")
-	return &HtmlWriter{&rpcObj.lastSuccessfulImageName}
+	if note, err := rpcObj.generateNote(); err != nil {
+		params.Logger.Println(err)
+	} else if note != "" {
+		rpcObj.lastNote = note
+	}
+	return &HtmlWriter{
+		lastNote:                &rpcObj.lastNote,
+		lastSuccessfulImageName: &rpcObj.lastSuccessfulImageName,
+	}
 }
 
 func (hw *HtmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
+}
+
+func readPatchedImageFile() string {
+	if file, err := os.Open(constants.PatchedImageNameFile); err != nil {
+		return ""
+	} else {
+		defer file.Close()
+		var imageName string
+		num, err := fmt.Fscanf(file, "%s", &imageName)
+		if err == nil && num == 1 {
+			return imageName
+		}
+		return ""
+	}
 }

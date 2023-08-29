@@ -36,7 +36,7 @@ func (objSrv *objectServer) AddObject(reader io.Reader, length uint64,
 		return hashVal, false, err
 	}
 	filename := path.Join(objSrv.baseDir, objectcache.HashToFilename(hashVal))
-	objSrv.rpcObj.workdirGoroutine.Run(func() {
+	objSrv.rpcObj.params.WorkdirGoroutine.Run(func() {
 		err = os.MkdirAll(path.Dir(filename), dirPerms)
 		if err != nil {
 			return

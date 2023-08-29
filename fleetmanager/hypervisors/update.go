@@ -592,6 +592,15 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	update hyper_proto.Update, firstUpdate bool) {
 	h.mutex.Lock()
+	if update.MemoryInMiB != nil {
+		h.memoryInMiB = *update.MemoryInMiB
+	}
+	if update.NumCPUs != nil {
+		h.numCPUs = *update.NumCPUs
+	}
+	if update.TotalVolumeBytes != nil {
+		h.totalVolumeBytes = *update.TotalVolumeBytes
+	}
 	oldHealthStatus := h.healthStatus
 	h.healthStatus = update.HealthStatus
 	oldSerialNumber := h.serialNumber

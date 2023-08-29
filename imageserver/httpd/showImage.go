@@ -65,6 +65,9 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 	if image.CreatedBy != "" {
 		fmt.Fprintf(writer, "Created by: %s\n<br>", image.CreatedBy)
 	}
+	if image.CreatedFor != "" {
+		fmt.Fprintf(writer, "Created for: %s\n<br>", image.CreatedFor)
+	}
 	if !image.CreatedOn.IsZero() {
 		fmt.Fprintf(writer, "Created on: %s (%s old)\n<br>",
 			image.CreatedOn.In(time.Local).Format(timeFormat),

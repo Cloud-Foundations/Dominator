@@ -5,6 +5,7 @@ After=network.target
 [Service]
 ExecStart=/usr/local/sbin/dominator
 ExecReload=/bin/kill -HUP $MAINPID
+LimitNOFILE=infinity
 Restart=always
 RestartSec=5
 StartLimitIntervalSec=0

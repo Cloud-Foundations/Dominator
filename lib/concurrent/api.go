@@ -17,6 +17,7 @@ type putter interface {
 // State maintains state needed to manage running functions concurrently.
 type State struct {
 	entered      bool
+	error        error
 	errorChannel chan error
 	pending      uint64
 	putter       putter
@@ -37,7 +38,7 @@ func NewStateWithLinearConcurrencyIncrease(initialNumConcurrent uint,
 
 // GoRun will run the provided function in a goroutine. If the function returns
 // a non-nil error, this will be returned in a future call to GoRun or by
-// Reap.
+// Reap. GoRun cannot be called concurrently with GoRun or Reap.
 func (state *State) GoRun(doFunc func() error) error {
 	return state.goRun(doFunc)
 }

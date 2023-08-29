@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	net_url "net/url"
 	"strings"
 	"time"
 
@@ -20,11 +21,30 @@ func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
 }
 
 func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "", nil)
+	parsedQuery := url.ParseQuery(req.URL)
+	var statusToMatch string
+	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
+		statusToMatch = uesc
+	}
+	var selectFunc func(*Sub) bool
+	if statusToMatch != "" {
+		selectFunc = func(sub *Sub) bool {
+			if sub.status.String() == statusToMatch {
+				return true
+			}
+			return false
+		}
+	}
+	herd.showSubs(w, "", selectFunc)
 }
 
 func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {
 	herd.showSubs(w, "compliant ", selectCompliantSub)
+}
+
+func (herd *Herd) showLikelyCompliantSubsHandler(w io.Writer,
+	req *http.Request) {
+	herd.showSubs(w, "likely compliant ", selectLikelyCompliantSub)
 }
 
 func (herd *Herd) showDeviantSubsHandler(w io.Writer, req *http.Request) {
@@ -155,6 +175,12 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 	sub.herd.showImage(tw, sub.mdb.RequiredImage, true)
 	newRow(w, "Planned Image", false)
 	sub.herd.showImage(tw, sub.mdb.PlannedImage, false)
+	newRow(w, "Last successful image update", false)
+	sub.herd.showImage(tw, sub.lastSuccessfulImageName, false)
+	if sub.lastNote != "" {
+		newRow(w, "Last note", false)
+		tw.WriteData("", sub.lastNote)
+	}
 	newRow(w, "Busy time", false)
 	sub.showBusy(tw)
 	newRow(w, "Status", false)

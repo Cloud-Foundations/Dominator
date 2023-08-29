@@ -71,6 +71,8 @@ var (
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
+	registerBuiltin              sync.Once
+	registerBuiltinError         error
 )
 
 // Precompute some reflect types. Can't use the types directly because Typeof
@@ -87,9 +89,6 @@ func init() {
 	http.HandleFunc(jsonTlsRpcPath, jsonTlsHttpHandler)
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
 	registerServerMetrics()
-	if err := RegisterName("", &builtinReceiver{}); err != nil {
-		panic(err)
-	}
 }
 
 func registerServerMetrics() {
@@ -128,6 +127,18 @@ func defaultMethodGranter(serviceMethod string,
 }
 
 func registerName(name string, rcvr interface{},
+	options ReceiverOptions) error {
+	registerBuiltin.Do(func() {
+		registerBuiltinError = _registerName("", &builtinReceiver{},
+			ReceiverOptions{})
+	})
+	if registerBuiltinError != nil {
+		return registerBuiltinError
+	}
+	return _registerName(name, rcvr, options)
+}
+
+func _registerName(name string, rcvr interface{},
 	options ReceiverOptions) error {
 	if _, ok := receivers[name]; ok {
 		return fmt.Errorf("SRPC receiver already registered: %s", name)
@@ -173,6 +184,7 @@ func registerName(name string, rcvr interface{},
 		receiver.grantMethod = defaultMethodGranter
 	}
 	receivers[name] = receiver
+	startReadingSmallStackMetaData()
 	return nil
 }
 
@@ -544,7 +556,8 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	return method, nil
 }
 
-// Returns true if the method is permitted, else false if denied.
+// checkMethodAccess implements the built-in authorisation checks. It returns
+// true if the method is permitted, else false if denied.
 func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
 	if conn.permittedMethods == nil {
 		return true
@@ -552,6 +565,19 @@ func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
 	for sm := range conn.permittedMethods {
 		if matched, _ := filepath.Match(sm, serviceMethod); matched {
 			return true
+		}
+	}
+	if conn.username != "" {
+		smallStackOwners := getSmallStackOwners()
+		if smallStackOwners != nil {
+			if _, ok := smallStackOwners.users[conn.username]; ok {
+				return true
+			}
+			for _, group := range smallStackOwners.groups {
+				if _, ok := conn.groupList[group]; ok {
+					return true
+				}
+			}
 		}
 	}
 	return false

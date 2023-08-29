@@ -14,6 +14,7 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		return err
 	}
 	html.HandleFunc("/", herd.statusHandler)
+	html.HandleFunc("/listImagesForSubs", herd.listImagesForSubsHandler)
 	html.HandleFunc("/listReachableSubs", herd.listReachableSubsHandler)
 	html.HandleFunc("/listSubs", herd.listSubsHandler)
 	html.HandleFunc("/showAliveSubs",
@@ -22,8 +23,12 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		html.BenchmarkedHandler(herd.showAllSubsHandler))
 	html.HandleFunc("/showCompliantSubs",
 		html.BenchmarkedHandler(herd.showCompliantSubsHandler))
+	html.HandleFunc("/showLikelyCompliantSubs",
+		html.BenchmarkedHandler(herd.showLikelyCompliantSubsHandler))
 	html.HandleFunc("/showDeviantSubs",
 		html.BenchmarkedHandler(herd.showDeviantSubsHandler))
+	html.HandleFunc("/showImagesForSubs",
+		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
 	html.HandleFunc("/showReachableSubs",
 		html.BenchmarkedHandler(herd.showReachableSubsHandler))
 	html.HandleFunc("/showSub", html.BenchmarkedHandler(herd.showSubHandler))

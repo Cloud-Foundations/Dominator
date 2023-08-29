@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -12,8 +14,10 @@ import (
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/images/virtualbox"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -22,6 +26,11 @@ import (
 )
 
 var sysfsDirectory = "/sys/block"
+
+type volumeInitParams struct {
+	hyper_proto.VolumeInitialisationInfo
+	MountPoint string
+}
 
 type wrappedReadCloser struct {
 	real io.Closer
@@ -124,6 +133,7 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		EnableNetboot:    *enableNetboot,
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
+		SkipMemoryCheck:  *skipMemoryCheck,
 		VmInfo:           createVmInfoFromFlags(),
 	}
 	if request.VmInfo.MemoryInMiB < 1 {
@@ -159,15 +169,53 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 				IpAddress: ipAddr}
 		}
 	}
-	for _, size := range secondaryVolumeSizes {
+	secondaryFstab := &bytes.Buffer{}
+	var vinitParams []volumeInitParams
+	if *secondaryVolumesInitParams == "" {
+		vinitParams = makeVolumeInitParams(uint(len(secondaryVolumeSizes)))
+	} else {
+		err := json.ReadFromFile(*secondaryVolumesInitParams, &vinitParams)
+		if err != nil {
+			return err
+		}
+	}
+	for index, size := range secondaryVolumeSizes {
 		request.SecondaryVolumes = append(request.SecondaryVolumes,
 			hyper_proto.Volume{Size: uint64(size)})
+		if *initialiseSecondaryVolumes &&
+			index < len(vinitParams) {
+			vinit := vinitParams[index]
+			if vinit.Label == "" {
+				return fmt.Errorf("VolumeInit[%d] missing Label", index)
+			}
+			if vinit.MountPoint == "" {
+				return fmt.Errorf("VolumeInit[%d] missing MountPoint", index)
+			}
+			request.OverlayDirectories = append(request.OverlayDirectories,
+				vinit.MountPoint)
+			request.SecondaryVolumesInit = append(request.SecondaryVolumesInit,
+				vinit.VolumeInitialisationInfo)
+			util.WriteFstabEntry(secondaryFstab, "LABEL="+vinit.Label,
+				vinit.MountPoint, "ext4", "discard", 0, 2)
+		}
 	}
 	var imageReader, userDataReader io.Reader
 	if *imageName != "" {
 		request.ImageName = *imageName
 		request.ImageTimeout = *imageTimeout
 		request.SkipBootloader = *skipBootloader
+		if overlayFiles, err := loadOverlayFiles(); err != nil {
+			return err
+		} else {
+			request.OverlayFiles = overlayFiles
+		}
+		secondaryFstab.Write(request.OverlayFiles["/etc/fstab"])
+		if secondaryFstab.Len() > 0 {
+			if request.OverlayFiles == nil {
+				request.OverlayFiles = make(map[string][]byte)
+			}
+			request.OverlayFiles["/etc/fstab"] = secondaryFstab.Bytes()
+		}
 	} else if *imageURL != "" {
 		request.ImageURL = *imageURL
 	} else if *imageFile != "" {
@@ -287,6 +335,39 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 			return nil, -1, errors.New("unsupported file type")
 		}
 	}
+}
+
+func loadOverlayFiles() (map[string][]byte, error) {
+	if *overlayDirectory == "" {
+		return nil, nil
+	}
+	overlayFiles := make(map[string][]byte)
+	err := filepath.Walk(*overlayDirectory,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			overlayFiles[path[len(*overlayDirectory):]] = data
+			return nil
+		})
+	return overlayFiles, err
+}
+
+func makeVolumeInitParams(numVolumes uint) []volumeInitParams {
+	vinitParams := make([]volumeInitParams, numVolumes)
+	for index := 0; index < int(numVolumes); index++ {
+		label := fmt.Sprintf("/data/%d", index)
+		vinitParams[index].Label = label
+		vinitParams[index].MountPoint = label
+	}
+	return vinitParams
 }
 
 func processCreateVmResponses(conn *srpc.Conn,

@@ -59,4 +59,10 @@ func (imageObjectServers *imageObjectServersType) WriteHtml(writer io.Writer) {
 			"consuming %s (%.1f%%)<br>\n",
 		numUnreferencedObjects, unreferencedObjectsPercent,
 		format.FormatBytes(unreferencedBytes), unreferencedBytesPercent)
+	if imageObjectServers.imageServerAddress != "" {
+		fmt.Fprintf(writer,
+			"Replication master: <a href=\"http://%s/\">%s</a><br>\n",
+			imageObjectServers.imageServerAddress,
+			imageObjectServers.imageServerAddress)
+	}
 }

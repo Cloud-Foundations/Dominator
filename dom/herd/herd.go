@@ -16,6 +16,7 @@ import (
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/reverseconnection"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -28,6 +29,12 @@ var (
 		"Number of poll slots per CPU")
 	subConnectTimeout = flag.Uint("subConnectTimeout", 15,
 		"Timeout in seconds for sub connections. If zero, OS timeout is used")
+	subdInstallDelay = flag.Duration("subdInstallDelay", 5*time.Minute,
+		"Time to wait before attempting to install subd")
+	subdInstallRetryDelay = flag.Duration("subdInstallRetryDelay", time.Hour,
+		"Time to wait before reattempting to install subd")
+	subdInstaller = flag.String("subdInstaller", "",
+		"Path to programme used to install subd if connections fail")
 )
 
 func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
@@ -54,17 +61,19 @@ func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
 		herd.cpuSharer)
 	herd.currentScanStartTime = time.Now()
 	herd.setupMetrics(metricsDir)
+	go herd.subdInstallerLoop()
 	return &herd
 }
 
-func (herd *Herd) clearSafetyShutoff(hostname string) error {
+func (herd *Herd) clearSafetyShutoff(hostname string,
+	authInfo *srpc.AuthInformation) error {
 	herd.Lock()
 	sub, ok := herd.subsByName[hostname]
 	herd.Unlock()
 	if !ok {
 		return errors.New("unknown sub: " + hostname)
 	}
-	return sub.clearSafetyShutoff()
+	return sub.clearSafetyShutoff(authInfo)
 }
 
 func (herd *Herd) configureSubs(configuration subproto.Configuration) error {

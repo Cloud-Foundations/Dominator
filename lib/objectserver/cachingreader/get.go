@@ -68,26 +68,26 @@ func (objSrv *ObjectServer) fetchObjects(hashes []hash.Hash) error {
 		return err
 	}
 	for range hashes {
-		length, reader, err := or.NextObject()
+		length, reader, err := or.nextObject(true)
 		if err != nil {
 			return err
 		}
-		if _, ok := reader.(*os.File); !ok {
+		if reader != nil {
 			_, err := io.CopyN(ioutil.Discard, reader, int64(length))
 			if err != nil {
 				reader.Close()
 				return err
 			}
-		}
-		if err := reader.Close(); err != nil {
-			return err
+			if err := reader.Close(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
-	objectserver.ObjectsReader, error) {
+	*objectsReader, error) {
 	or := objectsReader{
 		completionChannels: make(map[<-chan struct{}]chan<- struct{},
 			len(hashes)),
@@ -173,6 +173,11 @@ func (or *objectsReader) Close() error {
 }
 
 func (or *objectsReader) NextObject() (uint64, io.ReadCloser, error) {
+	return or.nextObject(false)
+}
+
+func (or *objectsReader) nextObject(skipOpen bool) (
+	uint64, io.ReadCloser, error) {
 	if len(or.objectsToRead) < 1 {
 		return 0, nil, io.EOF
 	}
@@ -211,6 +216,11 @@ func (or *objectsReader) NextObject() (uint64, io.ReadCloser, error) {
 			or.waitedObjects++
 			or.waitedBytes += object.size
 		}
+	}
+	if skipOpen {
+		or.totalObjects++
+		or.totalBytes += object.size
+		return object.size, nil, nil
 	}
 	if file, err := os.Open(filename); err != nil {
 		return 0, nil, err

@@ -146,8 +146,10 @@ func (b *Builder) generateDependencyData() (
 			continue
 		}
 		unbuildableSources[sourceName] = struct{}{}
-		b.logger.Printf("stream: %s has unbuildable source: %s\n",
-			streamName, sourceName)
+		if b.getNumBootstrapStreams() > 0 {
+			b.logger.Printf("stream: %s has unbuildable source: %s\n",
+				streamName, sourceName)
+		}
 	}
 	finishTime := time.Now()
 	fmt.Fprintf(fetchLog, "Generated dependencies in: %s\n",
@@ -158,6 +160,26 @@ func (b *Builder) generateDependencyData() (
 		streamToSource:     streamToSource,
 		unbuildableSources: unbuildableSources,
 	}, serialisedFetchTime, nil
+}
+
+func (b *Builder) getDependencies(request proto.GetDependenciesRequest) (
+	proto.GetDependenciesResult, error) {
+	dependencyData, lastAttempt, lastErr := b.getDependencyData(request.MaxAge)
+	if dependencyData == nil {
+		return proto.GetDependenciesResult{
+			LastAttemptAt:    lastAttempt,
+			LastAttemptError: errors.ErrorToString(lastErr),
+		}, nil
+	}
+	return proto.GetDependenciesResult{
+		FetchLog:           dependencyData.fetchLog,
+		GeneratedAt:        dependencyData.generatedAt,
+		LastAttemptAt:      lastAttempt,
+		LastAttemptError:   errors.ErrorToString(lastErr),
+		StreamToSource:     dependencyData.streamToSource,
+		UnbuildableSources: dependencyData.unbuildableSources,
+	}, nil
+
 }
 
 // getDependencyData returns the dependency data (possibly stale or nil), the

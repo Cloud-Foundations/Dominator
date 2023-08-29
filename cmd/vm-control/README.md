@@ -31,11 +31,16 @@ Some of the sub-commands available are:
 - **change-vm-memory**: change the memory for a VM
 - **change-vm-owner-users**: change the extra owners for a VM
 - **change-vm-tags**: change the tags for a VM
+- **change-vm-vcpus**: change the number of vCPUs for a VM
+- **change-vm-volume-size**: change the size of a specified volume on a VM
 - **connect-to-vm-console**: connect to the Virtual Network Console for the
                              specified VM
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
 - **copy-vm**: make a copy of a VM. The new VM will have a different IP address
 - **create-vm**: create a VM
+- **debug-vm-image**: (re)start a VM with a temporary debug image. The old root
+                      volume will become the first secondary volume. Debugging
+                      ends when the VM is stopped or (re)started
 - **delete-vm-volume**: delete a specified volume from a VM
 - **destroy-vm**: destroy a VM (all ephemeral data and metadata are lost)
 - **discard-vm-old-image**: discard the previous root image for a VM
@@ -57,11 +62,12 @@ Some of the sub-commands available are:
 - **list-hypervisors**: list healthy Hypervisors in the specified location
 - **list-locations**: list locations within the specified top location
 - **list-vms**: list the IP addresses for all VMs
-- **migrate-vm*: migrate a VM to another Hypervisor
+- **migrate-vm**: migrate a VM to another Hypervisor
 - **patch-vm-image**: patch the root image for a VM. Files listed in the image
                       filter are not changed. The old root image is saved. The
                       VM must not be running
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
+- **reboot-vm**: reboot a VM
 - **replace-vm-image**: replace the root image for a VM. The old root image is
                         saved. The VM must not be running
 - **replace-vm-user-data**: replace the user data for a VM. The old user data is
@@ -75,10 +81,12 @@ Some of the sub-commands available are:
 - **restore-vm-image**: restore the previously saved root image for a VM. The VM
                         must not be running
 - **restore-vm-user-data**: restore the previously saved user data for a VM
+- **reorder-vm-volumes**: re-order the volumes for a VM
 - **set-vm-migrating**: change the VM state to migrating. For debugging only
 - **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **save-vm**: save (backup) all VM data (volumes) and metadata to a storage
                destination
+- **scan-vm**: scan the root file-system of stopped VM and write to scanFilename
 - **start-vm**: start a stopped VM
 - **stop-vm**: stop a running VM. All data and metadata are preserved
 - **trace-vm-metadata**: trace the requests a VM makes to the metadata service

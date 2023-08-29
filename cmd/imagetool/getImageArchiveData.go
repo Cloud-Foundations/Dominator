@@ -11,32 +11,22 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func getImageArchiveDataSubcommand(args []string,
 	logger log.DebugLogger) error {
-	imageClient, _ := getClients()
-	err := getImageArchiveDataAndWrite(imageClient, args[0], args[1])
+	err := getImageArchiveDataAndWrite(args[0], args[1])
 	if err != nil {
 		return fmt.Errorf("error getting image: %s", err)
 	}
 	return nil
 }
 
-func getImageArchiveDataAndWrite(imageClient *srpc.Client, name,
-	outputFilename string) error {
-	request := imageserver.GetImageRequest{
-		ImageName:        name,
-		IgnoreFilesystem: true,
-		Timeout:          *timeout,
-	}
-	var reply imageserver.GetImageResponse
-	err := imageClient.RequestReply("ImageServer.GetImage", request, &reply)
+func getImageArchiveDataAndWrite(name, outputFilename string) error {
+	img, err := getImageMetadata(name)
 	if err != nil {
 		return err
 	}
-	img := reply.Image
 	img.Filter = nil
 	img.Triggers = nil
 	var encoder srpc.Encoder

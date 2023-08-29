@@ -81,7 +81,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		rootCookie:    rootCookie,
 		memTotalInMiB: memInfo.Total >> 20,
 		notifiers:     make(map[<-chan proto.Update]chan<- proto.Update),
-		numCPU:        runtime.NumCPU(),
+		numCPUs:       uint(runtime.NumCPU()),
 		serialNumber:  readProductSerial(),
 		vms:           make(map[string]*vmInfoType),
 		uuid:          uuid,

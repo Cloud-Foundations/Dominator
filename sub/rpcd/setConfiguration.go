@@ -13,22 +13,23 @@ func (t *rpcType) SetConfiguration(conn *srpc.Conn,
 		request.CpuPercent = 100
 	}
 	if request.CpuPercent > 0 {
-		t.scannerConfiguration.DefaultCpuPercent = request.CpuPercent
-		t.scannerConfiguration.CpuLimiter.SetCpuPercent(request.CpuPercent)
+		t.params.ScannerConfiguration.DefaultCpuPercent = request.CpuPercent
+		t.params.ScannerConfiguration.CpuLimiter.SetCpuPercent(
+			request.CpuPercent)
 	}
 	if request.NetworkSpeedPercent > 0 {
-		t.scannerConfiguration.NetworkReaderContext.SetSpeedPercent(
+		t.params.ScannerConfiguration.NetworkReaderContext.SetSpeedPercent(
 			request.NetworkSpeedPercent)
 	}
 	if request.ScanSpeedPercent > 0 {
-		t.scannerConfiguration.FsScanContext.GetContext().SetSpeedPercent(
+		t.params.ScannerConfiguration.FsScanContext.GetContext().SetSpeedPercent(
 			request.ScanSpeedPercent)
 	}
 	newFilter, err := filter.New(request.ScanExclusionList)
 	if err != nil {
 		return err
 	}
-	t.scannerConfiguration.ScanFilter = newFilter
-	t.logger.Printf("SetConfiguration()\n")
+	t.params.ScannerConfiguration.ScanFilter = newFilter
+	t.params.Logger.Printf("SetConfiguration()\n")
 	return nil
 }

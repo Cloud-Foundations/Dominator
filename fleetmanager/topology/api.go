@@ -12,10 +12,11 @@ import (
 
 type Directory struct {
 	Name             string
-	Directories      []*Directory          `json:",omitempty"`
-	Machines         []*fm_proto.Machine   `json:",omitempty"`
-	Subnets          []*Subnet             `json:",omitempty"`
-	Tags             tags.Tags             `json:",omitempty"`
+	Directories      []*Directory        `json:",omitempty"`
+	Machines         []*fm_proto.Machine `json:",omitempty"`
+	Subnets          []*Subnet           `json:",omitempty"`
+	Tags             tags.Tags           `json:",omitempty"`
+	logger           log.DebugLogger
 	nameToDirectory  map[string]*Directory // Key: directory name.
 	owners           *ownersType
 	parent           *Directory

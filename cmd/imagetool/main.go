@@ -80,6 +80,7 @@ var (
            d: name of directory tree to scan
            f: name of file containing a FileSystem
            i: name of an image on the imageserver
+           I: name of an image stream on the imageserver
            l: name of file containing an Image
            s: name of sub to poll
            v: hostname/IP of SmallStack VM to scan`
@@ -133,14 +134,20 @@ var subcommands = []commands.Command{
 	{"delunrefobj", "percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},
 	{"diff", diffArgs, 3, 3, diffSubcommand},
+	{"diff-package-lists", " tool left right", 3, 3,
+		diffImagePackageListsSubcommand},
 	{"estimate-usage", "     name", 1, 1, estimateImageUsageSubcommand},
 	{"find-latest-image", "  directory", 1, 1, findLatestImageSubcommand},
 	{"get", "                name directory", 2, 2, getImageSubcommand},
 	{"get-archive-data", "   name outfile", 2, 2,
 		getImageArchiveDataSubcommand},
+	{"get-build-log", "      name [outfile]", 1, 2,
+		getImageBuildLogSubcommand},
 	{"get-file-in-image", "  name imageFile [outfile]", 2, 3,
 		getFileInImageSubcommand},
 	{"get-image-expiration", "name", 1, 1, getImageExpirationSubcommand},
+	{"get-package-list", "   name [outfile]", 1, 2,
+		getImagePackageListSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
@@ -156,9 +163,12 @@ var subcommands = []commands.Command{
 		scanFilteredFilesSubcommand},
 	{"show", "                name", 1, 1, showImageSubcommand},
 	{"show-filter", "         name", 1, 1, showImageFilterSubcommand},
+	{"show-inode", "          name inodePath", 2, 2, showImageInodeSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},
+	{"trace-inode-history", " name inodePath", 2, 2,
+		traceInodeHistorySubcommand},
 }
 
 var imageSrpcClient *srpc.Client

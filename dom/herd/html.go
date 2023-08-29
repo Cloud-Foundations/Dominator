@@ -62,8 +62,18 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		numSubs)
 	numSubs = herd.countSelectedSubs(selectCompliantSub)
 	fmt.Fprintf(writer,
-		"Number of compliant subs: <a href=\"showCompliantSubs\">%d</a><br>\n",
+		"Number of compliant subs: <a href=\"showCompliantSubs\">%d</a>(verified)",
 		numSubs)
+	numSubs = herd.countSelectedSubs(selectLikelyCompliantSub)
+	fmt.Fprintf(writer,
+		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
+		numSubs)
+	fmt.Fprintf(writer,
+		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a>")
+	fmt.Fprintf(writer,
+		" (<a href=\"listImagesForSubs?output=json\">JSON</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"listImagesForSubs?output=csv\">CSV</a>)<br>\n")
 	subs := herd.getSelectedSubs(nil)
 	connectDurations := getConnectDurations(subs)
 	shortPollDurations := getPollDurations(subs, false)
@@ -142,9 +152,21 @@ func selectAliveSub(sub *Sub) bool {
 
 func selectDeviantSub(sub *Sub) bool {
 	switch sub.publishedStatus {
-	case statusComputingUpdate:
+	case statusWaitingToPoll:
 		return true
+	case statusNotEnoughFreeSpace:
+		return true
+	case statusFetching, statusFetchDenied, statusFailedToFetch:
+		return true
+	case statusPushing, statusPushDenied, statusFailedToPush:
+		return true
+	case statusFailedToGetObject:
+		return true
+	case statusComputingUpdate:
+		return sub.lastSuccessfulImageName != sub.mdb.RequiredImage
 	case statusSendingUpdate:
+		return true
+	case statusMissingComputedFile:
 		return true
 	case statusUpdatesDisabled:
 		return true
@@ -160,6 +182,18 @@ func selectDeviantSub(sub *Sub) bool {
 
 func selectCompliantSub(sub *Sub) bool {
 	if sub.publishedStatus == statusSynced {
+		return true
+	}
+	return false
+}
+
+func selectLikelyCompliantSub(sub *Sub) bool {
+	switch sub.publishedStatus {
+	case statusWaitingToPoll, statusPolling:
+		return sub.lastSuccessfulImageName == sub.mdb.RequiredImage
+	case statusWaitingForNextFullPoll:
+		return true
+	case statusSynced:
 		return true
 	}
 	return false

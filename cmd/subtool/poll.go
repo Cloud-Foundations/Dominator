@@ -64,6 +64,9 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 			fmt.Printf("Last successful image: \"%s\"\n",
 				reply.LastSuccessfulImageName)
 		}
+		if reply.LastNote != "" {
+			fmt.Printf("Last note: \"%s\"\n", reply.LastNote)
+		}
 		if reply.FreeSpace != nil {
 			fmt.Printf("Free space: %s\n", format.FormatBytes(*reply.FreeSpace))
 		}

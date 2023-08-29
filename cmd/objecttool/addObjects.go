@@ -50,6 +50,12 @@ func addObject(objQ *objectclient.ObjectAdderQueue, filename string) error {
 	if !fi.Mode().IsRegular() {
 		return nil
 	}
-	_, err = objQ.Add(bufio.NewReader(file), uint64(fi.Size()))
-	return err
+	hashVal, err := objQ.Add(bufio.NewReader(file), uint64(fi.Size()))
+	if err != nil {
+		return err
+	}
+	if *showHashes {
+		fmt.Printf("%s: %x\n", filename, hashVal)
+	}
+	return nil
 }

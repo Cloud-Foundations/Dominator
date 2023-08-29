@@ -38,6 +38,8 @@ var (
 		"Port number of image server")
 	interval = flag.Uint("interval", 1,
 		"Seconds to sleep between Polls")
+	lockDuration = flag.Duration("lockDuration", 15*time.Second,
+		"Time to lock client from mutations by other clients")
 	networkSpeedPercent = flag.Uint("networkSpeedPercent",
 		constants.DefaultNetworkSpeedPercent,
 		"Network speed as percentage of capacity")

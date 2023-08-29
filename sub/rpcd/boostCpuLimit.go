@@ -7,6 +7,6 @@ import (
 
 func (t *rpcType) BoostCpuLimit(conn *srpc.Conn,
 	request sub.BoostCpuLimitRequest, reply *sub.BoostCpuLimitResponse) error {
-	t.scannerConfiguration.BoostCpuLimit(t.logger)
+	t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
 	return nil
 }

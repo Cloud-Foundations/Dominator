@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+	net_url "net/url"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
@@ -39,13 +40,20 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
+	parsedQuery := url.ParseQuery(req.URL)
+	var statusToMatch string
+	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
+		statusToMatch = uesc
+	}
 	herd.RLock()
 	subNames := make([]string, 0, len(herd.subsByIndex))
 	for _, sub := range herd.subsByIndex {
+		if statusToMatch != "" && sub.status.String() != statusToMatch {
+			continue
+		}
 		subNames = append(subNames, sub.mdb.Hostname)
 	}
 	herd.RUnlock()
-	parsedQuery := url.ParseQuery(req.URL)
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeText:
 	case url.OutputTypeHtml:

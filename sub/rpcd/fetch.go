@@ -32,100 +32,115 @@ func (t *rpcType) Fetch(conn *srpc.Conn, request sub.FetchRequest,
 	reply *sub.FetchResponse) error {
 	if *readOnly {
 		txt := "Fetch() rejected due to read-only mode"
-		t.logger.Println(txt)
+		t.params.Logger.Println(txt)
 		return errors.New(txt)
 	}
-	if err := t.getFetchLock(); err != nil {
+	if err := t.getFetchLock(conn, request); err != nil {
 		return err
 	}
 	if request.Wait {
-		return t.fetchAndUnlock(request)
+		return t.fetchAndUnlock(conn, request, conn.Username())
 	}
-	go t.fetchAndUnlock(request)
+	go t.fetchAndUnlock(conn, request, conn.Username())
 	return nil
 }
 
-func (t *rpcType) getFetchLock() error {
+func (t *rpcType) getFetchLock(conn *srpc.Conn,
+	request sub.FetchRequest) error {
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
+	if err := t.getClientLock(conn, request.LockFor); err != nil {
+		t.params.Logger.Printf("Error: %s\n", err)
+		return err
+	}
 	if t.fetchInProgress {
-		t.logger.Println("Error: fetch already in progress")
+		t.params.Logger.Println("Error: fetch already in progress")
 		return errors.New("fetch already in progress")
 	}
 	if t.updateInProgress {
-		t.logger.Println("Error: update in progress")
+		t.params.Logger.Println("Error: update in progress")
 		return errors.New("update in progress")
 	}
 	t.fetchInProgress = true
 	return nil
 }
 
-func (t *rpcType) fetchAndUnlock(request sub.FetchRequest) error {
-	err := t.doFetch(request)
+func (t *rpcType) fetchAndUnlock(conn *srpc.Conn, request sub.FetchRequest,
+	username string) error {
+	err := t.doFetch(request, username)
 	if err != nil && *exitOnFetchFailure {
 		os.Exit(1)
 	}
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
+	t.fetchInProgress = false
 	t.lastFetchError = err
+	if err := t.getClientLock(conn, request.LockFor); err != nil {
+		return err
+	}
 	return err
 }
 
-func (t *rpcType) doFetch(request sub.FetchRequest) error {
-	defer t.clearFetchInProgress()
+func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 	objectServer := objectclient.NewObjectClient(request.ServerAddress)
 	defer objectServer.Close()
-	defer t.scannerConfiguration.BoostCpuLimit(t.logger)
+	defer t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
 	benchmark := false
 	linkSpeed, haveLinkSpeed := netspeed.GetSpeedToAddress(
 		request.ServerAddress)
 	if haveLinkSpeed {
-		t.logFetch(request, linkSpeed)
+		t.logFetch(request, linkSpeed, username)
 	} else {
-		if t.networkReaderContext.MaximumSpeed() < 1 {
+		if t.params.NetworkReaderContext.MaximumSpeed() < 1 {
 			benchmark = enoughBytesForBenchmark(objectServer, request)
 			if benchmark {
 				objectServer.SetExclusiveGetObjects(true)
-				t.logger.Printf("Fetch(%s) %d objects and benchmark speed\n",
-					request.ServerAddress, len(request.Hashes))
+				var suffix string
+				if username != "" {
+					suffix = " by " + username
+				}
+				t.params.Logger.Printf(
+					"Fetch(%s) %d objects and benchmark speed%s\n",
+					request.ServerAddress, len(request.Hashes), suffix)
 			} else {
-				t.logFetch(request, 0)
+				t.logFetch(request, 0, username)
 			}
 		} else {
-			t.logFetch(request, t.networkReaderContext.MaximumSpeed())
+			t.logFetch(request, t.params.NetworkReaderContext.MaximumSpeed(),
+				username)
 		}
 	}
 	objectsReader, err := objectServer.GetObjects(request.Hashes)
 	if err != nil {
-		t.logger.Printf("Error getting object reader: %s\n", err.Error())
+		t.params.Logger.Printf("Error getting object reader: %s\n", err.Error())
 		return err
 	}
 	defer objectsReader.Close()
 	var totalLength uint64
-	defer t.workdirGoroutine.Run(t.rescanObjectCacheFunction)
+	defer t.params.WorkdirGoroutine.Run(t.params.RescanObjectCacheFunction)
 	timeStart := time.Now()
 	for _, hash := range request.Hashes {
 		length, reader, err := objectsReader.NextObject()
 		if err != nil {
-			t.logger.Println(err)
+			t.params.Logger.Println(err)
 			return err
 		}
 		r := io.Reader(reader)
 		if haveLinkSpeed {
 			if linkSpeed > 0 {
 				r = rateio.NewReaderContext(linkSpeed,
-					uint64(t.networkReaderContext.SpeedPercent()),
+					uint64(t.params.NetworkReaderContext.SpeedPercent()),
 					&rateio.ReadMeasurer{}).NewReader(reader)
 			}
 		} else if !benchmark {
-			r = t.networkReaderContext.NewReader(reader)
+			r = t.params.NetworkReaderContext.NewReader(reader)
 		}
-		t.workdirGoroutine.Run(func() {
-			err = readOne(t.objectsDir, hash, length, r)
+		t.params.WorkdirGoroutine.Run(func() {
+			err = readOne(t.config.ObjectsDirectoryName, hash, length, r)
 		})
 		reader.Close()
 		if err != nil {
-			t.logger.Println(err)
+			t.params.Logger.Println(err)
 			return err
 		}
 		totalLength += length
@@ -133,27 +148,33 @@ func (t *rpcType) doFetch(request sub.FetchRequest) error {
 	duration := time.Since(timeStart)
 	speed := uint64(float64(totalLength) / duration.Seconds())
 	if benchmark {
-		file, err := os.Create(t.netbenchFilename)
+		file, err := os.Create(t.config.NetworkBenchmarkFilename)
 		if err == nil {
 			fmt.Fprintf(file, "%d\n", speed)
 			file.Close()
 		}
-		t.networkReaderContext.InitialiseMaximumSpeed(speed)
+		t.params.NetworkReaderContext.InitialiseMaximumSpeed(speed)
 	}
-	t.logger.Printf("Fetch() complete. Read: %s in %s (%s/s)\n",
+	t.params.Logger.Printf("Fetch() complete. Read: %s in %s (%s/s)\n",
 		format.FormatBytes(totalLength), format.Duration(duration),
 		format.FormatBytes(speed))
 	return nil
 }
 
-func (t *rpcType) logFetch(request sub.FetchRequest, speed uint64) {
+func (t *rpcType) logFetch(request sub.FetchRequest, speed uint64,
+	username string) {
 	speedString := "unlimited speed"
 	if speed > 0 {
 		speedString = format.FormatBytes(
-			speed*uint64(t.networkReaderContext.SpeedPercent())/100) + "/s"
+			speed*uint64(
+				t.params.NetworkReaderContext.SpeedPercent())/100) + "/s"
 	}
-	t.logger.Printf("Fetch(%s) %d objects at %s\n",
-		request.ServerAddress, len(request.Hashes), speedString)
+	var suffix string
+	if username != "" {
+		suffix = " by " + username
+	}
+	t.params.Logger.Printf("Fetch(%s) %d objects at %s%s\n",
+		request.ServerAddress, len(request.Hashes), speedString, suffix)
 }
 
 func enoughBytesForBenchmark(objectServer *objectclient.ObjectClient,
@@ -180,10 +201,4 @@ func readOne(objectsDir string, hash hash.Hash, length uint64,
 		return err
 	}
 	return fsutil.CopyToFile(filename, filePerms, reader, length)
-}
-
-func (t *rpcType) clearFetchInProgress() {
-	t.rwLock.Lock()
-	defer t.rwLock.Unlock()
-	t.fetchInProgress = false
 }

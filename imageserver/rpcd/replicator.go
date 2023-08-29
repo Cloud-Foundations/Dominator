@@ -60,6 +60,7 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 	if t.archiveMode {
 		initialImages = nil
 	}
+	someImagesFailed := false
 	for {
 		var imageUpdate imageserver.ImageUpdate
 		if err := conn.Decode(&imageUpdate); err != nil {
@@ -70,7 +71,7 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 		}
 		switch imageUpdate.Operation {
 		case imageserver.OperationAddImage:
-			if imageUpdate.Name == "" {
+			if imageUpdate.Name == "" { // Initial list has been sent.
 				if initialImages != nil {
 					t.deleteMissingImages(initialImages)
 					initialImages = nil
@@ -79,16 +80,34 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 					close(*finishedReplication)
 					*finishedReplication = nil
 				}
+				if someImagesFailed {
+					t.logger.Printf("Partially replicated images in %s\n",
+						format.Duration(time.Since(replicationStartTime)))
+					return nil
+				}
 				t.logger.Printf("Replicated all current images in %s\n",
 					format.Duration(time.Since(replicationStartTime)))
+				continue
+			}
+			if t.excludeFilter != nil &&
+				t.excludeFilter.Match(imageUpdate.Name) {
+				t.logger.Debugf(0, "Excluding %s from replication\n",
+					imageUpdate.Name)
+				continue
+			}
+			if t.includeFilter != nil &&
+				!t.includeFilter.Match(imageUpdate.Name) {
+				t.logger.Debugf(0, "Not including %s in replication\n",
+					imageUpdate.Name)
 				continue
 			}
 			if initialImages != nil {
 				initialImages[imageUpdate.Name] = struct{}{}
 			}
 			if err := t.addImage(imageUpdate.Name); err != nil {
-				return errors.New("error adding image: " + imageUpdate.Name +
-					": " + err.Error())
+				t.logger.Printf("error adding image: %s: %s\n",
+					imageUpdate.Name, err)
+				someImagesFailed = true
 			}
 		case imageserver.OperationDeleteImage:
 			if t.archiveMode {

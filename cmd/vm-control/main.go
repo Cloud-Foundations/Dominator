@@ -52,26 +52,34 @@ var (
 		"Time to wait before timing out on image fetch")
 	imageURL = flag.String("imageURL", "",
 		"Name of URL of image to boot with")
+	initialiseSecondaryVolumes = flag.Bool("initialiseSecondaryVolumes", false,
+		"If true, initialise secondary volumes")
 	localVmCreate = flag.String("localVmCreate", "",
 		"Command to make local VM when exporting. The VM name is given as the argument. The VM JSON is available on stdin")
 	localVmDestroy = flag.String("localVmDestroy", "",
 		"Command to destroy local VM when exporting. The VM name is given as the argument")
 	location = flag.String("location", "",
 		"Location to search for hypervisors")
-	memory       flagutil.Size
-	milliCPUs    = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
-	minFreeBytes = flagutil.Size(256 << 20)
+	memory           flagutil.Size
+	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	minFreeBytes     = flagutil.Size(256 << 20)
+	overlayDirectory = flag.String("overlayDirectory", "",
+		"Directory tree of files to overlay on top of the image")
 	ownerGroups  flagutil.StringList
 	ownerUsers   flagutil.StringList
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
-	secondarySubnetIDs   flagutil.StringList
-	secondaryVolumeSizes flagutil.SizeList
-	serialPort           = flag.Uint("serialPort", 0,
+	secondarySubnetIDs         flagutil.StringList
+	secondaryVolumeSizes       flagutil.SizeList
+	secondaryVolumesInitParams = flag.String("secondaryVolumesInitParams", "",
+		"File containing initialisation parameters for secondary volumes")
+	serialPort = flag.Uint("serialPort", 0,
 		"Serial port number on VM")
 	skipBootloader = flag.Bool("skipBootloader", false,
 		"If true, directly boot into the kernel")
+	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,
+		"If true, skip memory availability check before creating VM")
 	subnetId = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
 	requestIPs   flagutil.StringList
@@ -95,6 +103,8 @@ var (
 		"Name of file to write volume data to")
 	volumeIndex = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
+	volumeIndices flagutil.UintList
+	volumeSize    flagutil.Size
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -113,6 +123,8 @@ func init() {
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
+	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
+	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 }
 
 func printUsage() {
@@ -135,11 +147,13 @@ var subcommands = []commands.Command{
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
 	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
+	{"change-vm-volume-size", "IPaddr", 1, 1, changeVmVolumeSizeSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,
 		connectToVmSerialPortSubcommand},
 	{"copy-vm", "IPaddr", 1, 1, copyVmSubcommand},
 	{"create-vm", "", 0, 0, createVmSubcommand},
+	{"debug-vm-image", "IPaddr", 1, 1, debugVmImageSubcommand},
 	{"delete-vm-volume", "IPaddr", 1, 1, deleteVmVolumeSubcommand},
 	{"destroy-vm", "IPaddr", 1, 1, destroyVmSubcommand},
 	{"discard-vm-old-image", "IPaddr", 1, 1, discardVmOldImageSubcommand},
@@ -160,6 +174,7 @@ var subcommands = []commands.Command{
 	{"migrate-vm", "IPaddr", 1, 1, migrateVmSubcommand},
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
+	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
 	{"replace-vm-image", "IPaddr", 1, 1, replaceVmImageSubcommand},
 	{"replace-vm-user-data", "IPaddr", 1, 1, replaceVmUserDataSubcommand},
 	{"restore-vm", "source", 1, 1, restoreVmSubcommand},
@@ -167,6 +182,7 @@ var subcommands = []commands.Command{
 		restoreVmFromSnapshotSubcommand},
 	{"restore-vm-image", "IPaddr", 1, 1, restoreVmImageSubcommand},
 	{"restore-vm-user-data", "IPaddr", 1, 1, restoreVmUserDataSubcommand},
+	{"reorder-vm-volumes", "IPaddr", 1, 1, reorderVmVolumesSubcommand},
 	{"set-vm-migrating", "IPaddr", 1, 1, setVmMigratingSubcommand},
 	{"snapshot-vm", "IPaddr", 1, 1, snapshotVmSubcommand},
 	{"save-vm", "IPaddr destination", 2, 2, saveVmSubcommand},

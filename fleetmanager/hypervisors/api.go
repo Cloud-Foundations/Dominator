@@ -37,11 +37,14 @@ type hypervisorType struct {
 	localTags          tags.Tags
 	location           string
 	machine            *fm_proto.Machine
+	memoryInMiB        uint64
 	migratingVms       map[string]*vmInfoType // Key: VM IP address.
+	numCPUs            uint
 	ownerUsers         map[string]struct{}
 	probeStatus        probeStatus
 	serialNumber       string
 	subnets            []hyper_proto.Subnet
+	totalVolumeBytes   uint64
 	vms                map[string]*vmInfoType // Key: VM IP address.
 }
 

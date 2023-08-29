@@ -12,28 +12,31 @@ import (
 
 func (t *rpcType) Cleanup(conn *srpc.Conn, request sub.CleanupRequest,
 	reply *sub.CleanupResponse) error {
-	defer t.scannerConfiguration.BoostCpuLimit(t.logger)
-	t.disableScannerFunc(true)
-	defer t.disableScannerFunc(false)
+	defer t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
+	t.params.DisableScannerFunction(true)
+	defer t.params.DisableScannerFunction(false)
 	t.rwLock.Lock()
 	defer t.rwLock.Unlock()
-	t.logger.Printf("Cleanup(): %d objects\n", len(request.Hashes))
+	t.params.Logger.Printf("Cleanup(): %d objects\n", len(request.Hashes))
 	if t.fetchInProgress {
-		t.logger.Println("Error: fetch in progress")
+		t.params.Logger.Println("Error: fetch in progress")
 		return errors.New("fetch in progress")
 	}
 	if t.updateInProgress {
-		t.logger.Println("Error: update progress")
+		t.params.Logger.Println("Error: update progress")
 		return errors.New("update in progress")
 	}
 	for _, hash := range request.Hashes {
-		pathname := path.Join(t.objectsDir, objectcache.HashToFilename(hash))
+		pathname := path.Join(t.config.ObjectsDirectoryName,
+			objectcache.HashToFilename(hash))
 		var err error
-		t.workdirGoroutine.Run(func() { err = fsutil.ForceRemove(pathname) })
+		t.params.WorkdirGoroutine.Run(func() {
+			err = fsutil.ForceRemove(pathname)
+		})
 		if err == nil {
-			t.logger.Printf("Deleted: %s\n", pathname)
+			t.params.Logger.Printf("Deleted: %s\n", pathname)
 		} else {
-			t.logger.Println(err)
+			t.params.Logger.Println(err)
 		}
 	}
 	return nil

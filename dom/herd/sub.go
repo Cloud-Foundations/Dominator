@@ -54,6 +54,43 @@ func (sub *Sub) address() string {
 	return sub.mdb.Hostname + subPortNumber
 }
 
+// Returns true if the principal described by authInfo has administrative access
+// to the sub.
+func (sub *Sub) checkAdminAccess(authInfo *srpc.AuthInformation) bool {
+	if authInfo == nil {
+		return false
+	}
+	if authInfo.HaveMethodAccess {
+		return true
+	}
+	if sub.clientResource == nil {
+		return false
+	}
+	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
+		sub.herd.dialer)
+	if err != nil {
+		return false
+	}
+	defer srpcClient.Put()
+	conf, err := client.GetConfiguration(srpcClient)
+	if err != nil {
+		return false
+	}
+	for _, group := range conf.OwnerGroups {
+		if _, ok := authInfo.GroupList[group]; ok {
+			return true
+		}
+	}
+	if authInfo.Username != "" {
+		for _, user := range conf.OwnerUsers {
+			if user == authInfo.Username {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (sub *Sub) getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
 	if im == nil {
 		return nil
@@ -110,12 +147,25 @@ func (sub *Sub) connectAndPoll() {
 	}
 	sub.deletingFlagMutex.Unlock()
 	previousStatus := sub.status
+	sub.status = statusConnecting
 	timer := time.AfterFunc(time.Second, func() {
 		sub.publishedStatus = sub.status
 	})
 	defer func() {
 		timer.Stop()
 		sub.publishedStatus = sub.status
+		switch sub.status {
+		case statusUnknown:
+		case statusConnecting:
+		case statusDNSError:
+		case statusNoRouteToHost:
+		case statusConnectionRefused,
+			statusConnectTimeout,
+			statusFailedToConnect:
+			sub.herd.addSubToInstallerQueue(sub.mdb.Hostname)
+		default:
+			sub.herd.removeSubFromInstallerQueue(sub.mdb.Hostname)
+		}
 	}()
 	sub.lastConnectionStartTime = time.Now()
 	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
@@ -290,7 +340,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	request.HaveGeneration = sub.generationCount
 	var reply subproto.PollResponse
 	haveImage := false
-	if sub.requiredImage == nil {
+	if sub.requiredImage == nil && sub.plannedImage == nil {
 		request.ShortPollOnly = true
 		// Ensure a full poll when the image becomes available later. This will
 		// cover the special case when an image expiration is extended, which
@@ -318,6 +368,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	sub.lastPollSucceededTime = time.Now()
 	sub.lastSuccessfulImageName = reply.LastSuccessfulImageName
+	sub.lastNote = reply.LastNote
 	if reply.GenerationCount == 0 {
 		sub.reclaim()
 		sub.generationCount = 0
@@ -365,6 +416,11 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if reply.GenerationCount < 1 {
 		sub.status = statusSubNotReady
+		return
+	}
+	if reply.LockedByAnotherClient {
+		sub.status = statusLocked
+		sub.reclaim()
 		return
 	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
@@ -691,9 +747,12 @@ func (sub *Sub) checkForEnoughSpace(freeSpace *uint64,
 	return false
 }
 
-func (sub *Sub) clearSafetyShutoff() error {
+func (sub *Sub) clearSafetyShutoff(authInfo *srpc.AuthInformation) error {
 	if sub.status != statusUnsafeUpdate {
 		return errors.New("no pending unsafe update")
+	}
+	if !sub.checkAdminAccess(authInfo) {
+		return errors.New("no access to sub")
 	}
 	sub.pendingSafetyClear = true
 	return nil

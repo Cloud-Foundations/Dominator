@@ -41,12 +41,15 @@ Some of the sub-commands available are:
 - **delete**: delete an image
 - **delunrefobj**: delete (garbage collect) unreferenced objects
 - **diff**: compare two images
+- **diff-package-lists**: compare the package lists for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image
 - **find-latest-image**: find the latest image in a directory
 - **get**: get and unpack an image
 - **get-archive-data**: get archive (audit) data for an image
+- **get-build-log**: get build log for an image
 - **get-file-in-image**: get file in an image
 - **get-image-expiration**: get the expiration time for an image
+- **get-package-list**: get package list for an image
 - **list**: list all images
 - **listdirs**: list all directories
 - **listunrefobj**: list the unreferenced objects on the server
@@ -59,9 +62,11 @@ Some of the sub-commands available are:
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
 - **show-filter**: show the filter for an image
+- **show-inode**: show metadata for an inode in an image
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
+- **trace-inode-history**: trace the change history of an inode in an image and its sources
 
 ## Security
 *[Imageserver](../imageserver/README.md)* restricts RPC access using TLS client

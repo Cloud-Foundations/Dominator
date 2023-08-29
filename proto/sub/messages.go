@@ -13,22 +13,22 @@ type BoostCpuLimitRequest struct{}
 
 type BoostCpuLimitResponse struct{}
 
-type Configuration struct {
-	CpuPercent          uint
-	OwnerGroups         []string
-	OwnerUsers          []string
-	NetworkSpeedPercent uint
-	ScanSpeedPercent    uint
-	ScanExclusionList   []string
+type CleanupRequest struct {
+	Hashes []hash.Hash
 }
 
+type CleanupResponse struct{}
+
 type FetchRequest struct {
+	LockFor       time.Duration // Duration to lock other clients from mutating.
 	ServerAddress string
 	Wait          bool
 	Hashes        []hash.Hash
 }
 
-type FetchResponse struct{}
+type FetchResponse struct {
+	LockedUntil time.Time
+}
 
 type GetConfigurationRequest struct{}
 
@@ -47,6 +47,7 @@ type GetFileResponse struct {
 
 type PollRequest struct {
 	HaveGeneration uint64
+	LockFor        time.Duration
 	ShortPollOnly  bool // If true, do not send FileSystem or ObjectCache.
 }
 
@@ -59,6 +60,9 @@ type PollResponse struct {
 	LastUpdateError              string
 	LastUpdateHadTriggerFailures bool
 	LastSuccessfulImageName      string
+	LastNote                     string // Updated after successful Update().
+	LockedByAnotherClient        bool   // Fetch() and Update() restricted.
+	LockedUntil                  time.Time
 	FreeSpace                    *uint64
 	StartTime                    time.Time
 	PollTime                     time.Time
@@ -73,22 +77,6 @@ type PollResponse struct {
 type SetConfigurationRequest Configuration
 
 type SetConfigurationResponse struct{}
-
-type FileToCopyToCache struct {
-	Name       string
-	Hash       hash.Hash
-	DoHardlink bool
-}
-
-type Hardlink struct {
-	NewLink string
-	Target  string
-}
-
-type Inode struct {
-	Name string
-	filesystem.GenericInode
-}
 
 type UpdateRequest struct {
 	ImageName string
@@ -105,9 +93,3 @@ type UpdateRequest struct {
 }
 
 type UpdateResponse struct{}
-
-type CleanupRequest struct {
-	Hashes []hash.Hash
-}
-
-type CleanupResponse struct{}

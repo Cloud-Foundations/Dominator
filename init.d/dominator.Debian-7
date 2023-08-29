@@ -18,7 +18,7 @@ umask 022
 readonly default_log_dir='/var/log/dominator'
 
 DAEMON='/usr/local/sbin/dominator'
-FD_LIMIT=
+FD_LIMIT=unlimited
 IMAGE_SERVER_HOSTNAME=
 LOG_DIR="$default_log_dir"
 LOG_QUOTA=

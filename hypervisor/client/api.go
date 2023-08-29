@@ -23,6 +23,11 @@ func ChangeVmSize(client *srpc.Client,
 	return changeVmSize(client, request)
 }
 
+func ChangeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+	size uint64) error {
+	return changeVmVolumeSize(client, ipAddress, index, size)
+}
+
 func ConnectToVmConsole(client *srpc.Client, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	return connectToVmConsole(client, ipAddr, vncViewerCommand, logger)
@@ -71,6 +76,11 @@ func PrepareVmForMigration(client *srpc.Client, ipAddr net.IP,
 func RegisterExternalLeases(client *srpc.Client, addressList proto.AddressList,
 	hostnames []string) error {
 	return registerExternalLeases(client, addressList, hostnames)
+}
+
+func ReorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+	volumeIndices []uint) error {
+	return reorderVmVolumes(client, ipAddr, accessToken, volumeIndices)
 }
 
 func ScanVmRoot(client *srpc.Client, ipAddr net.IP,

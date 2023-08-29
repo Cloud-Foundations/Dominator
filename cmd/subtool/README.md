@@ -30,6 +30,7 @@ Some of the sub-commands available are:
 - **cleanup**: empty the object cache
 - **delete**: delete specified pathnames
 - **fetch**: tell *subd* to fetch the specified object from the objectserver
+- **fetch-image**: poll *subd* to find which objects in the specified image it is missing and tell it to fetch them from the objectserver
 - **get-config**: get the current configuration from *subd*
 - **get-file**: get a file from *subd*
 - **list-missing-objects**: list objects in the specified image that are missing

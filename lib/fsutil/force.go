@@ -51,6 +51,10 @@ func forceRename(oldpath, newpath string) error {
 	if os.IsPermission(err) {
 		// Blindly attempt to remove immutable attributes.
 		MakeMutable(oldpath, newpath)
+	} else if os.IsExist(err) {
+		if err := ForceRemoveAll(newpath); err != nil {
+			return err
+		}
 	} else if err.(*os.LinkError).Err == syscall.EISDIR {
 		if err := ForceRemoveAll(newpath); err != nil {
 			return err

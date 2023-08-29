@@ -20,6 +20,12 @@ import (
 )
 
 var (
+	allowPublicAddObjects = flag.Bool("allowPublicAddObjects", false,
+		"If true, allow all users to call AddObjects method")
+	allowPublicCheckObjects = flag.Bool("allowPublicCheckObjects", false,
+		"If true, allow all users to call CheckObjects method")
+	allowPublicGetObjects = flag.Bool("allowPublicGetObjects", false,
+		"If true, allow all users to call GetObjects method")
 	debug    = flag.Bool("debug", false, "If true, show debugging output")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
 		"Name of image server data directory.")
@@ -37,8 +43,9 @@ var (
 )
 
 type imageObjectServersType struct {
-	imdb   *scanner.ImageDataBase
-	objSrv *filesystem.ObjectServer
+	imageServerAddress string
+	imdb               *scanner.ImageDataBase
+	objSrv             *filesystem.ObjectServer
 }
 
 func main() {
@@ -84,10 +91,23 @@ func main() {
 	if err != nil {
 		logger.Fatalln(err)
 	}
-	objSrvRpcHtmlWriter := objectserverRpcd.Setup(objSrv, imageServerAddress,
-		logger)
+	objSrvRpcHtmlWriter := objectserverRpcd.Setup(
+		objectserverRpcd.Config{
+			AllowPublicAddObjects:   *allowPublicAddObjects,
+			AllowPublicCheckObjects: *allowPublicCheckObjects,
+			AllowPublicGetObjects:   *allowPublicGetObjects,
+			ReplicationMaster:       imageServerAddress,
+		},
+		objectserverRpcd.Params{
+			Logger:       logger,
+			ObjectServer: objSrv,
+		})
 	httpd.AddHtmlWriter(imdb)
-	httpd.AddHtmlWriter(&imageObjectServersType{imdb, objSrv})
+	httpd.AddHtmlWriter(&imageObjectServersType{
+		imageServerAddress: imageServerAddress,
+		imdb:               imdb,
+		objSrv:             objSrv,
+	})
 	httpd.AddHtmlWriter(imgSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(objSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)

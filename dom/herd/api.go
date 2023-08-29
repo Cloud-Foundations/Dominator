@@ -45,6 +45,7 @@ const (
 	statusImageUndefined
 	statusImageNotReady
 	statusNotEnoughFreeSpace
+	statusLocked
 	statusFetching
 	statusFetchDenied
 	statusFailedToFetch
@@ -112,6 +113,7 @@ type Sub struct {
 	lastUpdateTime               time.Time
 	lastSyncTime                 time.Time
 	lastSuccessfulImageName      string
+	lastNote                     string
 }
 
 func (sub *Sub) String() string {
@@ -119,27 +121,30 @@ func (sub *Sub) String() string {
 }
 
 type Herd struct {
-	sync.RWMutex          // Protect map and slice mutations.
-	imageManager          *images.Manager
-	objectServer          objectserver.ObjectServer
-	computedFilesManager  *filegenclient.Manager
-	logger                log.DebugLogger
-	htmlWriters           []HtmlWriter
-	updatesDisabledReason string
-	updatesDisabledBy     string
-	updatesDisabledTime   time.Time
-	defaultImageName      string
-	nextDefaultImageName  string
-	configurationForSubs  subproto.Configuration
-	nextSubToPoll         uint
-	subsByName            map[string]*Sub
-	subsByIndex           []*Sub // Sorted by Sub.hostname.
-	pollSemaphore         chan struct{}
-	pushSemaphore         chan struct{}
-	cpuSharer             *cpusharer.FifoCpuSharer
-	dialer                net.Dialer
-	currentScanStartTime  time.Time
-	previousScanDuration  time.Duration
+	sync.RWMutex             // Protect map and slice mutations.
+	imageManager             *images.Manager
+	objectServer             objectserver.ObjectServer
+	computedFilesManager     *filegenclient.Manager
+	logger                   log.DebugLogger
+	htmlWriters              []HtmlWriter
+	updatesDisabledReason    string
+	updatesDisabledBy        string
+	updatesDisabledTime      time.Time
+	defaultImageName         string
+	nextDefaultImageName     string
+	configurationForSubs     subproto.Configuration
+	nextSubToPoll            uint
+	subsByName               map[string]*Sub
+	subsByIndex              []*Sub // Sorted by Sub.hostname.
+	pollSemaphore            chan struct{}
+	pushSemaphore            chan struct{}
+	cpuSharer                *cpusharer.FifoCpuSharer
+	dialer                   net.Dialer
+	currentScanStartTime     time.Time
+	previousScanDuration     time.Duration
+	subdInstallerQueueAdd    chan<- string
+	subdInstallerQueueDelete chan<- string
+	subdInstallerQueueErase  chan<- string
 }
 
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
@@ -151,8 +156,9 @@ func (herd *Herd) AddHtmlWriter(htmlWriter HtmlWriter) {
 	herd.addHtmlWriter(htmlWriter)
 }
 
-func (herd *Herd) ClearSafetyShutoff(hostname string) error {
-	return herd.clearSafetyShutoff(hostname)
+func (herd *Herd) ClearSafetyShutoff(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	return herd.clearSafetyShutoff(hostname, authInfo)
 }
 
 func (herd *Herd) ConfigureSubs(configuration subproto.Configuration) error {

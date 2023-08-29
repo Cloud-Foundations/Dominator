@@ -200,14 +200,17 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 	if _, ok := tags["Name"]; !ok {
 		tags["Name"] = domainName
 	}
-	request := proto.ImportLocalVmRequest{VmInfo: proto.VmInfo{
-		ConsoleType:   consoleType,
-		DisableVirtIO: *disableVirtIO,
-		Hostname:      domainName,
-		OwnerGroups:   ownerGroups,
-		OwnerUsers:    ownerUsers,
-		Tags:          tags,
-	}}
+	request := proto.ImportLocalVmRequest{
+		SkipMemoryCheck: *skipMemoryCheck,
+		VmInfo: proto.VmInfo{
+			ConsoleType:   consoleType,
+			DisableVirtIO: *disableVirtIO,
+			Hostname:      domainName,
+			OwnerGroups:   ownerGroups,
+			OwnerUsers:    ownerUsers,
+			Tags:          tags,
+		},
+	}
 	hypervisor := fmt.Sprintf(":%d", *hypervisorPortNum)
 	client, err := srpc.DialHTTP("tcp", hypervisor, 0)
 	if err != nil {

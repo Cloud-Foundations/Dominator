@@ -32,11 +32,22 @@ import (
 
 const timeFormat = "2006-01-02:15:04:05"
 
-var errorTestTimedOut = errors.New("test timed out")
+var (
+	errorTestTimedOut = errors.New("test timed out")
+	tmpFilter         *filter.Filter
+)
 
 type hasher struct {
 	cache *treeCache
 	objQ  *objectclient.ObjectAdderQueue
+}
+
+func init() {
+	if filt, err := filter.New([]string{"/tmp/.*"}); err != nil {
+		panic(err)
+	} else {
+		tmpFilter = filt
+	}
 }
 
 func (h *hasher) Hash(reader io.Reader, length uint64) (
@@ -208,6 +219,9 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 	packages, err := listPackages(g, dirname)
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)
+	}
+	if err := util.DeletedFilteredFiles(dirname, tmpFilter); err != nil {
+		return nil, err
 	}
 	buildStartTime := time.Now()
 	fs, err := buildFileSystem(client, dirname, scanFilter, cache)
