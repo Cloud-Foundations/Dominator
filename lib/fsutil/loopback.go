@@ -46,7 +46,7 @@ func loopbackDeleteAndWaitForPartition(loopDevice, partition string,
 		}
 		sleeper.Sleep()
 	}
-	return fmt.Errorf("timed out waiting for partition: %s",
+	return fmt.Errorf("timed out waiting for partition to delete: %s",
 		partitionDevice)
 }
 
@@ -88,6 +88,7 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		100*time.Millisecond, 2)
 	startTime := time.Now()
 	stopTime := startTime.Add(timeout)
+	var numNonBlock uint
 	for count := 0; time.Until(stopTime) >= 0; count++ {
 		if file, err := os.Open(partitionDevice); err == nil {
 			fi, err := file.Stat()
@@ -96,17 +97,17 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 				return "", err
 			}
 			if fi.Mode()&os.ModeDevice == 0 {
-				return "", fmt.Errorf("%s is not a block device, mode: %s",
-					partitionDevice, fi.Mode())
-			}
-			if count > 0 {
+				numNonBlock++
+			} else if count > 0 {
 				if time.Since(startTime) > time.Second {
-					logger.Printf("%s valid after: %d iterations, %s\n",
-						partitionDevice, count,
+					logger.Printf(
+						"%s valid after: %d iterations (%d were not a block device), %s\n",
+						partitionDevice, count, numNonBlock,
 						format.Duration(time.Since(startTime)))
 				} else {
-					logger.Debugf(0, "%s valid after: %d iterations, %s\n",
-						partitionDevice, count,
+					logger.Debugf(0,
+						"%s valid after: %d iterations (%d were not a block device), %s\n",
+						partitionDevice, count, numNonBlock,
 						format.Duration(time.Since(startTime)))
 				}
 			}
@@ -115,6 +116,6 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		}
 		sleeper.Sleep()
 	}
-	return "", fmt.Errorf("timed out waiting for partition: %s",
-		partitionDevice)
+	return "", fmt.Errorf("timed out waiting for partition (%d non-block): %s",
+		numNonBlock, partitionDevice)
 }
