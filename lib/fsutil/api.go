@@ -14,6 +14,7 @@ import (
 const (
 	DirPerms = wsyscall.S_IRWXU | wsyscall.S_IRGRP | wsyscall.S_IXGRP |
 		wsyscall.S_IROTH | wsyscall.S_IXOTH
+	PrivateDirPerms  = wsyscall.S_IRWXU
 	PrivateFilePerms = wsyscall.S_IRUSR | wsyscall.S_IWUSR
 	PublicFilePerms  = PrivateFilePerms | wsyscall.S_IRGRP | wsyscall.S_IROTH
 )
@@ -101,6 +102,11 @@ func ForceRename(oldpath, newpath string) error {
 // attempts to reduce the performance problems of fsync(2) by potentially
 // sacrificing some file-system consistency.
 func FsyncFile(file *os.File) error { return fsyncFile(file) }
+
+// GetTreeSize will walk a directory tree and count the size of the files.
+func GetTreeSize(dirname string) (uint64, error) {
+	return getTreeSize(dirname)
+}
 
 // LoadLines will open a file and read lines from it. Comment lines (i.e. lines
 // beginning with '#') are skipped.

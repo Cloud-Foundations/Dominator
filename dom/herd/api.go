@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	filegenproto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -41,6 +42,7 @@ const (
 	statusPolling
 	statusPollDenied
 	statusFailedToPoll
+	statusUnwritable
 	statusSubNotReady
 	statusImageUndefined
 	statusImageNotReady
@@ -58,6 +60,8 @@ const (
 	statusMissingComputedFile
 	statusUpdatesDisabled
 	statusUnsafeUpdate
+	statusDisruptionRequested
+	statusDisruptionDenied
 	statusUpdating
 	statusUpdateDenied
 	statusFailedToUpdate
@@ -98,11 +102,13 @@ type Sub struct {
 	isInsecure                   bool
 	status                       subStatus
 	publishedStatus              subStatus
+	pendingForceDisruptiveUpdate bool
 	pendingSafetyClear           bool
 	lastConnectionStartTime      time.Time
 	lastReachableTime            time.Time
 	lastConnectionSucceededTime  time.Time
 	lastConnectDuration          time.Duration
+	lastDisruptionState          subproto.DisruptionState
 	lastPollStartTime            time.Time
 	lastPollSucceededTime        time.Time
 	lastShortPollDuration        time.Duration
@@ -114,6 +120,8 @@ type Sub struct {
 	lastSyncTime                 time.Time
 	lastSuccessfulImageName      string
 	lastNote                     string
+	lastWriteError               string
+	systemUptime                 *time.Duration
 }
 
 func (sub *Sub) String() string {
@@ -142,9 +150,16 @@ type Herd struct {
 	dialer                   net.Dialer
 	currentScanStartTime     time.Time
 	previousScanDuration     time.Duration
+	scanCounter              uint64
 	subdInstallerQueueAdd    chan<- string
 	subdInstallerQueueDelete chan<- string
 	subdInstallerQueueErase  chan<- string
+	totalScanDuration        time.Duration
+}
+
+type subCounter struct {
+	counter    *uint64
+	selectFunc func(*Sub) bool
 }
 
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
@@ -173,12 +188,26 @@ func (herd *Herd) EnableUpdates() error {
 	return herd.enableUpdates()
 }
 
+func (herd *Herd) ForceDisruptiveUpdate(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	return herd.forceDisruptiveUpdate(hostname, authInfo)
+}
+
 func (herd *Herd) GetDefaultImage() string {
 	return herd.defaultImageName
 }
 
 func (herd *Herd) GetSubsConfiguration() subproto.Configuration {
 	return herd.getSubsConfiguration()
+}
+
+func (herd *Herd) GetInfoForSubs(request domproto.GetInfoForSubsRequest) (
+	[]domproto.SubInfo, error) {
+	return herd.getInfoForSubs(request)
+}
+
+func (herd *Herd) ListSubs(request domproto.ListSubsRequest) ([]string, error) {
+	return herd.listSubs(request)
 }
 
 func (herd *Herd) LockWithTimeout(timeout time.Duration) {

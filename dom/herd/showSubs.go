@@ -1,10 +1,11 @@
 package herd
 
 import (
+	"bufio"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
-	net_url "net/url"
 	"strings"
 	"time"
 
@@ -12,56 +13,133 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
-func (herd *Herd) showAliveSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "alive ", selectAliveSub)
+type subInfoType struct {
+	Info proto.SubInfo
+	MDB  mdb.Machine
 }
 
-func (herd *Herd) showAllSubsHandler(w io.Writer, req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
-	var statusToMatch string
-	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
-		statusToMatch = uesc
+func makeSelector(statusesToMatch []string,
+	tagsToMatch map[string][]string) func(sub *Sub) bool {
+	if len(statusesToMatch) < 1 && len(tagsToMatch) < 1 {
+		return selectAll
 	}
-	var selectFunc func(*Sub) bool
-	if statusToMatch != "" {
-		selectFunc = func(sub *Sub) bool {
-			if sub.status.String() == statusToMatch {
-				return true
+	statusesToMatchMap := stringutil.ConvertListToMap(statusesToMatch, false)
+	return func(sub *Sub) bool {
+		if len(statusesToMatch) > 0 {
+			if _, ok := statusesToMatchMap[sub.status.String()]; !ok {
+				return false
 			}
-			return false
 		}
+		for key, values := range tagsToMatch {
+			var matchedTag bool
+			for _, value := range values {
+				if value == sub.mdb.Tags[key] {
+					matchedTag = true
+					break
+				}
+			}
+			if !matchedTag {
+				return false
+			}
+		}
+		return true
 	}
-	herd.showSubs(w, "", selectFunc)
 }
 
-func (herd *Herd) showCompliantSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "compliant ", selectCompliantSub)
+func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
+	if len(queryValues) < 1 {
+		return selectAll
+	}
+	tagsToMatch := make(map[string][]string)
+	for _, queryTag := range queryValues["tag"] {
+		split := strings.Split(queryTag, "=")
+		if len(split) != 2 {
+			continue
+		}
+		key := split[0]
+		value := split[1]
+		tagsToMatch[key] = append(tagsToMatch[key], value)
+	}
+	return makeSelector(queryValues["status"], tagsToMatch)
 }
 
-func (herd *Herd) showLikelyCompliantSubsHandler(w io.Writer,
+func selectAll(sub *Sub) bool {
+	return true
+}
+
+func (herd *Herd) makeShowSubsHandler(selectFunc func(*Sub) bool,
+	subType string) func(http.ResponseWriter, *http.Request) {
+	return func(writer http.ResponseWriter, req *http.Request) {
+		herd.showSubsHandler(writer, req, selectFunc, subType)
+	}
+}
+
+func (herd *Herd) showReachableSubsHandler(writer http.ResponseWriter,
 	req *http.Request) {
-	herd.showSubs(w, "likely compliant ", selectLikelyCompliantSub)
+	selectFunc, _ := herd.getReachableSelector(url.ParseQuery(req.URL))
+	herd.showSubsHandler(writer, req, selectFunc, "reachable ")
 }
 
-func (herd *Herd) showDeviantSubsHandler(w io.Writer, req *http.Request) {
-	herd.showSubs(w, "deviant ", selectDeviantSub)
-}
-
-func (herd *Herd) showReachableSubsHandler(w io.Writer, req *http.Request) {
-	selector, err := herd.getReachableSelector(url.ParseQuery(req.URL))
-	if err != nil {
-		fmt.Fprintln(w, err)
-		return
-	}
-	herd.showSubs(w, "reachable ", selector)
-}
-
-func (herd *Herd) showSubs(writer io.Writer, subType string,
+func (herd *Herd) showSubsCSV(writer io.Writer,
 	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
+	w := csv.NewWriter(writer)
+	defer w.Flush()
+	w.Write([]string{
+		"Hostname",
+		"Required Image",
+		"Planned Image",
+		"Status",
+		"Last Image Update",
+		"Last Note",
+	})
+	for _, sub := range subs {
+		w.Write([]string{
+			sub.mdb.Hostname,
+			sub.mdb.RequiredImage,
+			sub.mdb.PlannedImage,
+			sub.publishedStatus.String(),
+			sub.lastSuccessfulImageName,
+			sub.lastNote,
+		})
+	}
+}
+
+func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
+	req *http.Request, _selectFunc func(*Sub) bool,
+	subType string) {
+	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
+	selectFunc := func(sub *Sub) bool {
+		return _selectFunc(sub) && querySelectFunc(sub)
+	}
+	writer := bufio.NewWriter(rWriter)
+	defer writer.Flush()
+	parsedQuery := url.ParseQuery(req.URL)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeCsv:
+		herd.showSubsCSV(writer, selectFunc)
+	case url.OutputTypeHtml:
+		herd.showSubsHTML(writer, selectFunc, subType)
+	case url.OutputTypeJson:
+		herd.showSubsJSON(writer, selectFunc)
+	case url.OutputTypeText:
+		fmt.Fprintln(writer, "Text output not supported")
+	default:
+		fmt.Fprintln(writer, "Unknown output type")
+	}
+}
+
+func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
+	subType string) {
+	bd, _ := html.CreateBenchmarkData()
+	defer fmt.Fprintln(writer, "</body>")
 	fmt.Fprintf(writer, "<title>Dominator %s subs</title>", subType)
 	fmt.Fprintln(writer, `<style>
                           table, th, td {
@@ -90,6 +168,34 @@ func (herd *Herd) showSubs(writer io.Writer, subType string,
 		showSub(tw, sub)
 	}
 	fmt.Fprintln(writer, "</table>")
+	bd.Write(writer)
+}
+
+func (herd *Herd) showSubsJSON(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
+	output := make([]proto.SubInfo, 0, len(subs))
+	for _, sub := range subs {
+		output = append(output, sub.makeInfo())
+	}
+	json.WriteWithIndent(writer, "   ", output)
+}
+
+func (sub *Sub) makeInfo() proto.SubInfo {
+	return proto.SubInfo{
+		Hostname:            sub.mdb.Hostname,
+		LastDisruptionState: sub.lastDisruptionState,
+		LastNote:            sub.lastNote,
+		LastScanDuration:    sub.lastScanDuration,
+		LastSuccessfulImage: sub.lastSuccessfulImageName,
+		LastSyncTime:        sub.lastSyncTime,
+		LastUpdateTime:      sub.lastUpdateTime,
+		PlannedImage:        sub.mdb.PlannedImage,
+		RequiredImage:       sub.mdb.RequiredImage,
+		StartTime:           sub.startTime,
+		Status:              sub.publishedStatus.String(),
+		SystemUptime:        sub.systemUptime,
+	}
 }
 
 func showSub(tw *html.TableWriter, sub *Sub) {
@@ -142,8 +248,25 @@ func (herd *Herd) showImage(tw *html.TableWriter, name string,
 	}
 }
 
-func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
-	subName := req.URL.RawQuery
+func (herd *Herd) showSubHandler(writer http.ResponseWriter,
+	req *http.Request) {
+	w := bufio.NewWriter(writer)
+	defer w.Flush()
+	subName := strings.Split(req.URL.RawQuery, "&")[0]
+	parsedQuery := url.ParseQuery(req.URL)
+	sub := herd.getSub(subName)
+	if sub == nil {
+		http.NotFound(writer, req)
+		return
+	}
+	if parsedQuery.OutputType() == url.OutputTypeJson {
+		subInfo := subInfoType{
+			Info: sub.makeInfo(),
+			MDB:  sub.mdb,
+		}
+		json.WriteWithIndent(w, "    ", subInfo)
+		return
+	}
 	fmt.Fprintf(w, "<title>sub %s</title>", subName)
 	if srpc.CheckTlsRequired() {
 		fmt.Fprintln(w, "<body>")
@@ -158,16 +281,12 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 		fmt.Fprintln(w, "</center>")
 	}
 	fmt.Fprintln(w, "<h3>")
-	sub := herd.getSub(subName)
-	if sub == nil {
-		fmt.Fprintf(w, "Sub: %s UNKNOWN!\n", subName)
-		return
-	}
 	timeNow := time.Now()
 	subURL := fmt.Sprintf("http://%s:%d/",
 		strings.SplitN(sub.String(), "*", 2)[0], constants.SubPortNumber)
-	fmt.Fprintf(w, "Information for sub: <a href=\"%s\">%s</a><br>\n",
-		subURL, subName)
+	fmt.Fprintf(w,
+		"Information for sub: <a href=\"%s\">%s</a> (<a href=\"%s?%s&output=json\">JSON</a>)<br>\n",
+		subURL, subName, req.URL.Path, subName)
 	fmt.Fprintln(w, "</h3>")
 	fmt.Fprint(w, "<table border=\"0\">\n")
 	tw, _ := html.NewTableWriter(w, false)
@@ -185,6 +304,10 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 	sub.showBusy(tw)
 	newRow(w, "Status", false)
 	tw.WriteData("", sub.publishedStatus.html())
+	if sub.lastWriteError != "" {
+		newRow(w, "Last write error", false)
+		tw.WriteData("", sub.lastWriteError)
+	}
 	newRow(w, "Uptime", false)
 	showSince(tw, sub.pollTime, sub.startTime)
 	newRow(w, "Last scan duration", false)
@@ -203,6 +326,12 @@ func (herd *Herd) showSubHandler(w io.Writer, req *http.Request) {
 	showDuration(tw, sub.lastFullPollDuration, sub.lastPollWasFull)
 	newRow(w, "Last compute duration", false)
 	showDuration(tw, sub.lastComputeUpdateCpuDuration, false)
+	newRow(w, "Last disruption state", false)
+	tw.WriteData("", sub.lastDisruptionState.String())
+	if sub.systemUptime != nil {
+		newRow(w, "System uptime", false)
+		showDuration(tw, *sub.systemUptime, false)
+	}
 	fmt.Fprint(w, "  </tr>\n")
 	fmt.Fprint(w, "</table>\n")
 	fmt.Fprintln(w, "MDB Data:")

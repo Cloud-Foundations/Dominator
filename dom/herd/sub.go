@@ -336,6 +336,13 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	if previousStatus == statusUnsafeUpdate && sub.pendingSafetyClear {
 		sub.generationCount = 0 // Force a full poll.
 	}
+	// If the last update failed because disruption was not permitted and there
+	// is a pending ForceDisruption, force a full poll to re-compute the update.
+	if (previousStatus == statusDisruptionRequested ||
+		previousStatus == statusDisruptionDenied) &&
+		sub.pendingForceDisruptiveUpdate {
+		sub.generationCount = 0 // Force a full poll.
+	}
 	var request subproto.PollRequest
 	request.HaveGeneration = sub.generationCount
 	var reply subproto.PollResponse
@@ -366,9 +373,12 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		logger.Printf("Error calling %s.Poll(): %s\n", sub, err)
 		return
 	}
+	sub.lastDisruptionState = reply.DisruptionState
 	sub.lastPollSucceededTime = time.Now()
 	sub.lastSuccessfulImageName = reply.LastSuccessfulImageName
 	sub.lastNote = reply.LastNote
+	sub.lastWriteError = reply.LastWriteError
+	sub.systemUptime = reply.SystemUptime
 	if reply.GenerationCount == 0 {
 		sub.reclaim()
 		sub.generationCount = 0
@@ -414,6 +424,11 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.status = statusUpdating
 		return
 	}
+	if reply.LastWriteError != "" {
+		sub.status = statusUnwritable
+		sub.reclaim()
+		return
+	}
 	if reply.GenerationCount < 1 {
 		sub.status = statusSubNotReady
 		return
@@ -422,6 +437,12 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.status = statusLocked
 		sub.reclaim()
 		return
+	}
+	if previousStatus == statusLocked { // Not locked anymore, but was locked.
+		if sub.fileSystem == nil {
+			sub.generationCount = 0 // Force a full poll next cycle.
+			return
+		}
 	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
 		logger.Printf("Fetch failure for: %s: %s\n", sub, reply.LastFetchError)
@@ -433,12 +454,17 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if previousStatus == statusUpdating {
 		// Transition from updating to update ended (may be partial/failed).
-		if reply.LastUpdateError != "" {
+		switch reply.LastUpdateError {
+		case "":
+			sub.status = statusWaitingForNextFullPoll
+		case subproto.ErrorDisruptionPending:
+			sub.status = statusDisruptionRequested
+		case subproto.ErrorDisruptionDenied:
+			sub.status = statusDisruptionDenied
+		default:
 			logger.Printf("Update failure for: %s: %s\n",
 				sub, reply.LastUpdateError)
 			sub.status = statusFailedToUpdate
-		} else {
-			sub.status = statusWaitingForNextFullPoll
 		}
 		sub.scanCountAtLastUpdateEnd = reply.ScanCount
 		sub.reclaim()
@@ -473,6 +499,19 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 			sub.generationCount = 0
 			sub.status = previousStatus
 			return
+		}
+	}
+	if previousStatus == statusDisruptionRequested ||
+		previousStatus == statusDisruptionDenied {
+		switch reply.DisruptionState {
+		case subproto.DisruptionStateAnytime:
+			sub.generationCount = 0
+		case subproto.DisruptionStatePermitted:
+			sub.generationCount = 0
+		case subproto.DisruptionStateRequested:
+			previousStatus = statusDisruptionRequested
+		case subproto.DisruptionStateDenied:
+			previousStatus = statusDisruptionDenied
 		}
 	}
 	if sub.fileSystem == nil {
@@ -654,6 +693,12 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 			return false, statusUnsafeUpdate
 		}
 	}
+	if _, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
+		request.ForceDisruption = true
+	}
+	if sub.pendingForceDisruptiveUpdate {
+		request.ForceDisruption = true
+	}
 	sub.status = statusSendingUpdate
 	sub.lastUpdateTime = time.Now()
 	logger.Printf("Calling %s:Subd.Update() for image: %s\n",
@@ -667,6 +712,7 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 		return false, statusFailedToUpdate
 	}
 	sub.pendingSafetyClear = false
+	sub.pendingForceDisruptiveUpdate = false
 	return false, statusUpdating
 }
 
@@ -674,6 +720,9 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	if sub.requiredImage.Filter == nil {
 		return false // Sparse image: no deletions.
+	}
+	if _, ok := sub.mdb.Tags["DisableSafetyCheck"]; ok {
+		return false // This sub doesn't need a safety check.
 	}
 	if len(sub.requiredImage.FileSystem.InodeTable) <
 		len(sub.fileSystem.InodeTable)>>1 {
@@ -685,6 +734,8 @@ func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	return false
 }
 
+// cleanup will tell the Sub to remove unused objects and that and disruptive
+// updates have completed.
 func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 	logger := sub.herd.logger
 	unusedObjects := make(map[hash.Hash]bool)
@@ -712,7 +763,8 @@ func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 			}
 		}
 	}
-	if len(unusedObjects) < 1 {
+	if len(unusedObjects) < 1 &&
+		sub.lastDisruptionState == subproto.DisruptionStateAnytime {
 		return
 	}
 	hashes := make([]hash.Hash, 0, len(unusedObjects))
@@ -765,6 +817,20 @@ func (sub *Sub) checkCancel() bool {
 	default:
 		return false
 	}
+}
+
+func (sub *Sub) forceDisruptiveUpdate(authInfo *srpc.AuthInformation) error {
+	switch sub.status {
+	case statusDisruptionRequested:
+	case statusDisruptionDenied:
+	default:
+		return errors.New("not waiting for disruptive update permission")
+	}
+	if !sub.checkAdminAccess(authInfo) {
+		return errors.New("no access to sub")
+	}
+	sub.pendingForceDisruptiveUpdate = true
+	return nil
 }
 
 func (sub *Sub) sendCancel() {

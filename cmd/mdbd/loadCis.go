@@ -9,8 +9,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-func newCisGenerator(args []string, logger log.DebugLogger) (generator, error) {
-	return sourceGenerator{loadCis, args[0]}, nil
+func newCisGenerator(params makeGeneratorParams) (generator, error) {
+	return sourceGenerator{loadCis, params.args[0]}, nil
 }
 
 func loadCis(reader io.Reader, datacentre string, logger log.Logger) (

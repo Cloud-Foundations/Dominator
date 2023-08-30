@@ -49,6 +49,29 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctimespec
 }
 
+func dup(oldfd int) (int, error) {
+	return syscall.Dup(oldfd)
+}
+
+func dup2(oldfd int, newfd int) error {
+	return syscall.Dup2(oldfd, newfd)
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	if flags == 0 {
+		return syscall.Dup2(oldfd, newfd)
+	}
+	return syscall.ENOTSUP
+}
+
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	var rlim syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+		return 0, 0, err
+	}
+	return rlim.Cur, rlim.Max, nil
+}
+
 func getrusage(who int, rusage *Rusage) error {
 	switch who {
 	case RUSAGE_CHILDREN:
@@ -109,6 +132,10 @@ func mount(source string, target string, fstype string, flags uintptr,
 	return syscall.ENOTSUP
 }
 
+func reboot() error {
+	return syscall.ENOTSUP
+}
+
 func setAllGid(gid int) error {
 	return syscall.Setregid(gid, gid)
 }
@@ -132,6 +159,10 @@ func stat(path string, statbuf *Stat_t) error {
 	}
 	convertStat(statbuf, &rawStatbuf)
 	return nil
+}
+
+func sync() error {
+	return syscall.Sync()
 }
 
 func unshareNetNamespace() (int, int, error) {

@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	net_url "net/url"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	proto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
 func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
@@ -37,23 +37,29 @@ func (herd *Herd) listReachableSubsHandler(w http.ResponseWriter,
 	}
 }
 
+func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
+	selectFunc := makeSelector(request.StatusesToMatch, request.TagsToMatch)
+	if len(request.Hostnames) < 1 {
+		return herd.selectSubs(selectFunc), nil
+	}
+	subNames := make([]string, 0, len(request.Hostnames))
+	herd.RLock()
+	defer herd.RUnlock()
+	for _, hostname := range request.Hostnames {
+		if sub, ok := herd.subsByName[hostname]; ok {
+			if selectFunc(sub) {
+				subNames = append(subNames, hostname)
+			}
+		}
+	}
+	return subNames, nil
+}
+
 func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
-	var statusToMatch string
-	if uesc, e := net_url.QueryUnescape(parsedQuery.Table["status"]); e == nil {
-		statusToMatch = uesc
-	}
-	herd.RLock()
-	subNames := make([]string, 0, len(herd.subsByIndex))
-	for _, sub := range herd.subsByIndex {
-		if statusToMatch != "" && sub.status.String() != statusToMatch {
-			continue
-		}
-		subNames = append(subNames, sub.mdb.Hostname)
-	}
-	herd.RUnlock()
+	subNames := herd.selectSubs(makeUrlQuerySelector(req.URL.Query()))
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeText:
 	case url.OutputTypeHtml:
@@ -64,4 +70,16 @@ func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 		json.WriteWithIndent(writer, "  ", subNames)
 		fmt.Fprintln(writer)
 	}
+}
+
+func (herd *Herd) selectSubs(selectFunc func(sub *Sub) bool) []string {
+	herd.RLock()
+	defer herd.RUnlock()
+	subNames := make([]string, 0, len(herd.subsByIndex))
+	for _, sub := range herd.subsByIndex {
+		if selectFunc(sub) {
+			subNames = append(subNames, sub.mdb.Hostname)
+		}
+	}
+	return subNames
 }

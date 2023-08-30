@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 )
 
 // Open will open the URL given by url. A io.ReadCloser is returned, which must
@@ -40,7 +41,7 @@ func (rc *CachedReadCloser) SaveCache() error {
 // Any errors are logged to the logger.
 func WatchUrl(url string, checkInterval time.Duration,
 	logger log.Logger) (<-chan io.ReadCloser, error) {
-	return watchUrl(url, checkInterval, logger)
+	return watchUrl(url, checkInterval, debuglogger.Upgrade(logger))
 }
 
 // WatchUrlWithCache is similar to WatchUrl, except that data are cached.
@@ -52,5 +53,5 @@ func WatchUrlWithCache(url string, checkInterval time.Duration,
 	cacheFilename string, initialTimeout time.Duration,
 	logger log.Logger) (<-chan *CachedReadCloser, error) {
 	return watchUrlWithCache(url, checkInterval, cacheFilename, initialTimeout,
-		logger)
+		debuglogger.Upgrade(logger))
 }

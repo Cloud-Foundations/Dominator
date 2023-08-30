@@ -2,14 +2,31 @@ package rpcd
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
 const (
 	maximumClientLockDuration = 15 * time.Second
 )
+
+func readPatchedImageFile() string {
+	if file, err := os.Open(constants.PatchedImageNameFile); err != nil {
+		return ""
+	} else {
+		defer file.Close()
+		var imageName string
+		num, err := fmt.Fscanf(file, "%s", &imageName)
+		if err == nil && num == 1 {
+			return imageName
+		}
+		return ""
+	}
+}
 
 // Check if another client has the client lock. The object lock must be
 // held. Returns an error if another client has the lock.

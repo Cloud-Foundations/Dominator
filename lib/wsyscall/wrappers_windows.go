@@ -30,8 +30,24 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 )
 
+func dup(oldfd int) (int, error) {
+	return 0, syscall.ENOTSUP
+}
+
+func dup2(oldfd int, newfd int) error {
+	return syscall.ENOTSUP
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	return syscall.ENOTSUP
+}
+
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
+}
+
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	return 0, 0, syscall.ENOTSUP
 }
 
 func getrusage(who int, rusage *Rusage) error {
@@ -48,6 +64,10 @@ func lstat(path string, statbuf *Stat_t) error {
 
 func mount(source string, target string, fstype string, flags uintptr,
 	data string) error {
+	return syscall.ENOTSUP
+}
+
+func reboot() error {
 	return syscall.ENOTSUP
 }
 
@@ -68,6 +88,10 @@ func setNetNamespace(namespaceFd int) error {
 }
 
 func stat(path string, statbuf *Stat_t) error {
+	return syscall.ENOTSUP
+}
+
+func sync() error {
 	return syscall.ENOTSUP
 }
 

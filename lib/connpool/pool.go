@@ -2,9 +2,9 @@ package connpool
 
 import (
 	"sync"
-	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/resourcepool"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 var (
@@ -13,11 +13,11 @@ var (
 )
 
 func getConnectionLimit() uint {
-	var rlim syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+	maxFD, _, err := wsyscall.GetFileDescriptorLimit()
+	if err != nil {
 		return 900
 	}
-	maxConnAttempts := rlim.Cur - 50
+	maxConnAttempts := maxFD - 50
 	maxConnAttempts = (maxConnAttempts / 100)
 	if maxConnAttempts < 1 {
 		maxConnAttempts = 1

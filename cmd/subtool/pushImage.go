@@ -107,7 +107,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	if err := srpcClient.SetKeepAlivePeriod(time.Second); err != nil {
 		return fmt.Errorf("error setting keep-alive period: %s", err)
 	}
-	var updateRequest sub.UpdateRequest
+	updateRequest := sub.UpdateRequest{
+		ForceDisruption: *forceDisruption,
+	}
 	var updateReply sub.UpdateResponse
 	startTime = showStart("lib.BuildUpdateRequest()")
 	if lib.BuildUpdateRequest(subObj, img, &updateRequest,
@@ -134,7 +136,12 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 		logger.Println("Subd.Update() complete")
 	}
 	showTimeTaken(startTime)
-	return nil
+	pollRequest := sub.PollRequest{ShortPollOnly: true}
+	var pollReply sub.PollResponse
+	if err := client.CallPoll(srpcClient, pollRequest, &pollReply); err != nil {
+		return err
+	}
+	return cleanup(srpcClient, pollReply.GenerationCount, true)
 }
 
 func getImageChannel(clientName, imageName string,

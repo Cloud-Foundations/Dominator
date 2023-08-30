@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package fsutil
 
 import (
@@ -7,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 var stopped bool
@@ -50,7 +54,7 @@ func watchFileForever(pathname string, channel chan<- io.ReadCloser,
 				if lastFd >= 0 {
 					syscall.Close(lastFd)
 				}
-				lastFd, _ = syscall.Dup(int(file.Fd()))
+				lastFd, _ = wsyscall.Dup(int(file.Fd()))
 				channel <- file // Must happen after FD is duplicated.
 				lastStat = stat
 			}

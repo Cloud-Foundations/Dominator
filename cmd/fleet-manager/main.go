@@ -43,15 +43,18 @@ var (
 	stateDir = flag.String("stateDir", "/var/lib/fleet-manager",
 		"Name of state directory")
 	topologyDir = flag.String("topologyDir", "",
-		"Name of local topology directory or direcory in Git repository")
+		"Name of local topology directory or directory in Git repository")
 	topologyRepository = flag.String("topologyRepository", "",
 		"URL of Git repository containing repository")
+	variablesDir = flag.String("variablesDir", "",
+		"Name of local variables directory or directory in Git repository")
 )
 
 func doCheck(logger log.DebugLogger) {
 	topo, err := topology.LoadWithParams(topology.Params{
-		Logger:      logger,
-		TopologyDir: *topologyDir,
+		Logger:       logger,
+		TopologyDir:  *topologyDir,
+		VariablesDir: *variablesDir,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -86,9 +89,17 @@ func main() {
 	if err := os.MkdirAll(*stateDir, dirPerms); err != nil {
 		logger.Fatalf("Cannot create state directory: %s\n", err)
 	}
-	topologyChannel, err := topology.Watch(*topologyRepository,
-		filepath.Join(*stateDir, "topology"), *topologyDir,
-		*topologyCheckInterval, logger)
+	topologyChannel, err := topology.WatchWithParams(topology.WatchParams{
+		Params: topology.Params{
+			Logger:       logger,
+			TopologyDir:  *topologyDir,
+			VariablesDir: *variablesDir,
+		},
+		CheckInterval:      *topologyCheckInterval,
+		LocalRepositoryDir: filepath.Join(*stateDir, "topology"),
+		TopologyRepository: *topologyRepository,
+	},
+	)
 	if err != nil {
 		logger.Fatalf("Cannot watch for topology: %s\n", err)
 	}

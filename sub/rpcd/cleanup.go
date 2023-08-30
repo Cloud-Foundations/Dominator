@@ -39,5 +39,6 @@ func (t *rpcType) Cleanup(conn *srpc.Conn, request sub.CleanupRequest,
 			t.params.Logger.Println(err)
 		}
 	}
+	t.disruptionCancel()
 	return nil
 }

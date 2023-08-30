@@ -26,9 +26,11 @@ func (pq ParsedQuery) last() (time.Duration, error) {
 	case 'h':
 		unit = time.Hour
 	case 'd':
-		unit = time.Hour * 24
+		unit = 24 * time.Hour
 	case 'w':
-		unit = time.Hour * 24 * 7
+		unit = 7 * 24 * time.Hour
+	case 'M':
+		unit = 730 * time.Hour
 	default:
 		return 0, errors.New("unknown unit in query")
 	}

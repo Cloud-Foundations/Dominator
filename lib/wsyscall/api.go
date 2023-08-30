@@ -51,8 +51,26 @@ type Timeval struct {
 	Usec int64
 }
 
+func Dup(oldfd int) (int, error) {
+	return dup(oldfd)
+}
+
+func Dup2(oldfd int, newfd int) error {
+	return dup2(oldfd, newfd)
+}
+
+func Dup3(oldfd int, newfd int, flags int) error {
+	return dup3(oldfd, newfd, flags)
+}
+
 func Fallocate(fd int, mode uint32, off int64, len int64) error {
 	return fallocate(fd, mode, off, len)
+}
+
+// GetFileDescriptorLimit returns the current limit and maximum limit on number
+// of open file descriptors.
+func GetFileDescriptorLimit() (uint64, uint64, error) {
+	return getFileDescriptorLimit()
 }
 
 func Ioctl(fd int, request, argp uintptr) error {
@@ -70,6 +88,10 @@ func Mount(source string, target string, fstype string, flags uintptr,
 
 func Getrusage(who int, rusage *Rusage) error {
 	return getrusage(who, rusage)
+}
+
+func Reboot() error {
+	return reboot()
 }
 
 func SetAllGid(gid int) error {
@@ -97,6 +119,10 @@ func SetNetNamespace(fd int) error {
 
 func Stat(path string, statbuf *Stat_t) error {
 	return stat(path, statbuf)
+}
+
+func Sync() error {
+	return sync()
 }
 
 // UnshareMountNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNS)

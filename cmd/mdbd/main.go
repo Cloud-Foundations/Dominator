@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
@@ -90,15 +92,19 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    Query Hypervisor on this machine")
 	fmt.Fprintln(os.Stderr,
+		"  json: url")
+	fmt.Fprintln(os.Stderr,
+		"    url: URL which yields a JSON-formatted list of machines and tags")
+	fmt.Fprintln(os.Stderr,
 		"  text: url")
 	fmt.Fprintln(os.Stderr,
 		"    url: URL which yields lines. Each line contains:")
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
 	fmt.Fprintln(os.Stderr,
-		"  topology: url [dir]")
+		"  topology: url [location]")
 	fmt.Fprintln(os.Stderr,
-		"    Load Topology")
+		"    Load Topology (only one permitted)")
 	fmt.Fprintln(os.Stderr,
 		"    url: directory or Git URL containing the Topology")
 	fmt.Fprintln(os.Stderr,
@@ -120,6 +126,7 @@ var drivers = []driver{
 	{"ds.host.fqdn", 1, 1, newDsHostFqdnGenerator},
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
+	{"json", 1, 1, newJsonGenerator},
 	{"text", 1, 1, newTextGenerator},
 	{"topology", 1, 2, newTopologyGenerator},
 }
@@ -188,7 +195,14 @@ func main() {
 		showErrorAndDie(err)
 	}
 	(<-readerChannel).Close()
-	generators, err := setupGenerators(file, drivers, logger)
+	eventChannel := make(chan struct{}, 1)
+	waitGroup := &sync.WaitGroup{}
+	generatorParams := makeGeneratorParams{
+		eventChannel: eventChannel,
+		logger:       logger,
+		waitGroup:    waitGroup,
+	}
+	generators, err := setupGenerators(file, drivers, generatorParams)
 	file.Close()
 	if err != nil {
 		showErrorAndDie(err)
@@ -198,9 +212,22 @@ func main() {
 		showErrorAndDie(err)
 	}
 	httpSrv.AddHtmlWriter(logger)
+	// Wait a minute for any asynronous generators to yield first data.
+	waitTimer := time.NewTimer(time.Minute)
+	waitChannel := make(chan struct{}, 1)
+	go func() {
+		waitGroup.Wait()
+		waitChannel <- struct{}{}
+	}()
+	select {
+	case <-waitChannel:
+		logger.Println("Asynchronous generators completed initial generation")
+	case <-waitTimer.C:
+		logger.Println("Timed out waiting for initial data")
+	}
 	rpcd := startRpcd(logger)
-	go runDaemon(generators, *mdbFile, *hostnameRegex, *datacentre,
-		*fetchInterval, func(old, new *mdb.Mdb) {
+	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
+		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {
 			rpcd.pushUpdateToAll(old, new)
 			httpSrv.UpdateMdb(new)
 		},

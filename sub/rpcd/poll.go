@@ -1,6 +1,8 @@
 package rpcd
 
 import (
+	"fmt"
+	"os"
 	"syscall"
 	"time"
 
@@ -8,7 +10,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
-var startTime time.Time = time.Now()
+var (
+	filename  string    = "/proc/uptime"
+	startTime time.Time = time.Now()
+)
 
 func (t *rpcType) Poll(conn *srpc.Conn) error {
 	defer conn.Flush()
@@ -41,10 +46,12 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 	}
 	response.LastSuccessfulImageName = t.lastSuccessfulImageName
 	response.LastNote = t.lastNote
+	response.LastWriteError = t.lastWriteError
 	response.LockedByAnotherClient =
 		t.getClientLock(conn, request.LockFor) != nil
 	response.LockedUntil = t.lockedUntil
 	response.FreeSpace = t.getFreeSpace()
+	response.DisruptionState = t.disruptionState
 	t.rwLock.RUnlock()
 	response.StartTime = startTime
 	response.PollTime = time.Now()
@@ -52,6 +59,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 	response.DurationOfLastScan =
 		t.params.FileSystemHistory.DurationOfLastScan()
 	response.GenerationCount = t.params.FileSystemHistory.GenerationCount()
+	response.SystemUptime = t.getSystemUptime()
 	fs := t.params.FileSystemHistory.FileSystem()
 	if fs != nil &&
 		!request.ShortPollOnly &&
@@ -87,4 +95,30 @@ func (t *rpcType) getFreeSpace() *uint64 {
 		retval := uint64(statbuf.Bfree * uint64(statbuf.Bsize))
 		return &retval
 	}
+}
+
+func (t *rpcType) getSystemUptime() *time.Duration {
+	if uptime, err := getSystemUptime(); err != nil {
+		t.params.Logger.Printf("error getting system uptime: %s\n", err)
+		return nil
+	} else {
+		return &uptime
+	}
+}
+
+func getSystemUptime() (time.Duration, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	var idleTime, upTime float64
+	nScanned, err := fmt.Fscanf(file, "%f %f", &upTime, &idleTime)
+	if err != nil {
+		return 0, err
+	}
+	if nScanned < 2 {
+		return 0, fmt.Errorf("only read %d values from %s", nScanned, filename)
+	}
+	return time.Duration(upTime * float64(time.Second)), nil
 }

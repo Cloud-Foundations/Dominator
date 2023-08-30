@@ -17,6 +17,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 const (
@@ -192,8 +193,8 @@ func (lb *LogBuffer) openNewFile() error {
 		return err
 	}
 	if lb.options.RedirectStderr {
-		localDup(int(file.Fd()), int(os.Stdout.Fd()))
-		localDup(int(file.Fd()), int(os.Stderr.Fd()))
+		wsyscall.Dup2(int(file.Fd()), int(os.Stdout.Fd()))
+		wsyscall.Dup2(int(file.Fd()), int(os.Stderr.Fd()))
 	}
 	lb.file = file
 	lb.writer = bufwriter.NewWriter(file, time.Second)

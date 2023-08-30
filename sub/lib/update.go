@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -22,24 +24,30 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
-func (t *uType) update(request sub.UpdateRequest,
-	oldTriggers *triggers.Triggers) error {
+func (t *uType) update(request sub.UpdateRequest) error {
 	if request.Triggers == nil {
 		request.Triggers = triggers.New()
 	}
+	if t.SkipFilter == nil {
+		t.SkipFilter = new(filter.Filter)
+	}
 	t.copyFilesToCache(request.FilesToCopyToCache)
 	t.makeObjectCopies(request.MultiplyUsedObjects)
-	if t.runTriggers != nil &&
-		oldTriggers != nil && len(oldTriggers.Triggers) > 0 {
+	if t.RunTriggers != nil &&
+		t.OldTriggers != nil && len(t.OldTriggers.Triggers) > 0 {
 		t.makeDirectories(request.DirectoriesToMake,
-			oldTriggers, false)
+			t.OldTriggers, false)
 		t.makeInodes(request.InodesToMake, request.MultiplyUsedObjects,
-			oldTriggers, false)
-		t.makeHardlinks(request.HardlinksToMake, oldTriggers, false)
-		t.doDeletes(request.PathsToDelete, oldTriggers, false)
-		t.changeInodes(request.InodesToChange, oldTriggers, false)
-		matchedOldTriggers := oldTriggers.GetMatchedTriggers()
-		if t.runTriggers(matchedOldTriggers, "stop", t.logger) {
+			t.OldTriggers, false)
+		t.makeHardlinks(request.HardlinksToMake, t.OldTriggers, false)
+		t.doDeletes(request.PathsToDelete, t.OldTriggers, false)
+		t.changeInodes(request.InodesToChange, t.OldTriggers, false)
+		matchedOldTriggers := t.OldTriggers.GetMatchedTriggers()
+		err := t.checkDisruption(matchedOldTriggers, request.ForceDisruption)
+		if err != nil {
+			return err
+		}
+		if t.RunTriggers(matchedOldTriggers, "stop", t.Logger) {
 			t.hadTriggerFailures = true
 		}
 	}
@@ -51,21 +59,64 @@ func (t *uType) update(request sub.UpdateRequest,
 	t.doDeletes(request.PathsToDelete, request.Triggers, true)
 	t.changeInodes(request.InodesToChange, request.Triggers, true)
 	if err := t.writePatchedImageName(request.ImageName); err != nil {
-		t.logger.Println(err)
+		t.Logger.Println(err)
 	}
 	t.fsChangeDuration = time.Since(fsChangeStartTime)
 	matchedNewTriggers := request.Triggers.GetMatchedTriggers()
-	if t.runTriggers != nil &&
-		t.runTriggers(matchedNewTriggers, "start", t.logger) {
+	if t.RunTriggers != nil &&
+		t.RunTriggers(matchedNewTriggers, "start", t.Logger) {
 		t.hadTriggerFailures = true
 	}
 	return t.lastError
 }
 
+func (t *uType) checkDisruption(matchedTriggers []*triggers.Trigger,
+	force bool) error {
+	if t.DisruptionRequest == nil && t.DisruptionCancel == nil {
+		return nil
+	}
+	if !isHighImpact(matchedTriggers) {
+		if t.DisruptionCancel != nil {
+			t.DisruptionCancel()
+		}
+		return nil
+	}
+	if force {
+		return nil
+	}
+	if t.DisruptionRequest == nil {
+		return nil
+	}
+	switch t.DisruptionRequest() {
+	case sub.DisruptionStateAnytime:
+		return nil
+	case sub.DisruptionStatePermitted:
+		return nil
+	case sub.DisruptionStateRequested:
+		return errors.New(sub.ErrorDisruptionPending)
+	case sub.DisruptionStateDenied:
+		return errors.New(sub.ErrorDisruptionDenied)
+	default:
+		return nil
+	}
+}
+
+func isHighImpact(matchedTriggers []*triggers.Trigger) bool {
+	if len(matchedTriggers) < 1 {
+		return false
+	}
+	for _, trigger := range matchedTriggers {
+		if trigger.HighImpact {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *uType) copyFilesToCache(filesToCopyToCache []sub.FileToCopyToCache) {
 	for _, fileToCopy := range filesToCopyToCache {
-		sourcePathname := filepath.Join(t.rootDirectoryName, fileToCopy.Name)
-		destPathname := filepath.Join(t.objectsDir,
+		sourcePathname := filepath.Join(t.RootDirectoryName, fileToCopy.Name)
+		destPathname := filepath.Join(t.ObjectsDir,
 			objectcache.HashToFilename(fileToCopy.Hash))
 		prefix := "Copied"
 		if fileToCopy.DoHardlink {
@@ -74,9 +125,9 @@ func (t *uType) copyFilesToCache(filesToCopyToCache []sub.FileToCopyToCache) {
 		if err := copyFile(destPathname, sourcePathname,
 			fileToCopy.DoHardlink); err != nil {
 			t.lastError = err
-			t.logger.Println(err)
+			t.Logger.Println(err)
 		} else {
-			t.logger.Printf("%s: %s to cache\n", prefix, sourcePathname)
+			t.Logger.Printf("%s: %s to cache\n", prefix, sourcePathname)
 		}
 	}
 }
@@ -108,16 +159,16 @@ func (t *uType) makeObjectCopies(multiplyUsedObjects map[hash.Hash]uint64) {
 		if numCopies < 2 {
 			continue
 		}
-		objectPathname := filepath.Join(t.objectsDir,
+		objectPathname := filepath.Join(t.ObjectsDir,
 			objectcache.HashToFilename(hash))
 		for numCopies--; numCopies > 0; numCopies-- {
 			ext := fmt.Sprintf("~%d~", numCopies)
 			if err := copyFile(objectPathname+ext, objectPathname,
 				false); err != nil {
 				t.lastError = err
-				t.logger.Println(err)
+				t.Logger.Println(err)
 			} else {
-				t.logger.Printf("Copied object: %x%s\n", hash, ext)
+				t.Logger.Printf("Copied object: %x%s\n", hash, ext)
 			}
 		}
 	}
@@ -127,18 +178,18 @@ func (t *uType) makeInodes(inodesToMake []sub.Inode,
 	multiplyUsedObjects map[hash.Hash]uint64, triggers *triggers.Triggers,
 	takeAction bool) {
 	for _, inode := range inodesToMake {
-		fullPathname := filepath.Join(t.rootDirectoryName, inode.Name)
 		triggers.Match(inode.Name)
 		if takeAction {
+			fullPathname := filepath.Join(t.RootDirectoryName, inode.Name)
 			var err error
 			switch inode := inode.GenericInode.(type) {
 			case *filesystem.RegularInode:
 				err = makeRegularInode(fullPathname, inode, multiplyUsedObjects,
-					t.objectsDir, t.logger)
+					t.ObjectsDir, t.Logger)
 			case *filesystem.SymlinkInode:
-				err = makeSymlinkInode(fullPathname, inode, t.logger)
+				err = makeSymlinkInode(fullPathname, inode, t.Logger)
 			case *filesystem.SpecialInode:
-				err = makeSpecialInode(fullPathname, inode, t.logger)
+				err = makeSpecialInode(fullPathname, inode, t.Logger)
 			}
 			if err != nil {
 				t.lastError = err
@@ -213,28 +264,28 @@ func makeSpecialInode(fullPathname string, inode *filesystem.SpecialInode,
 
 func (t *uType) makeHardlinks(hardlinksToMake []sub.Hardlink,
 	triggers *triggers.Triggers, takeAction bool) {
-	tmpName := filepath.Join(t.objectsDir, "temporaryHardlink")
+	tmpName := filepath.Join(t.ObjectsDir, "temporaryHardlink")
 	for _, hardlink := range hardlinksToMake {
 		triggers.Match(hardlink.NewLink)
 		if takeAction {
-			targetPathname := filepath.Join(t.rootDirectoryName,
+			targetPathname := filepath.Join(t.RootDirectoryName,
 				hardlink.Target)
-			linkPathname := filepath.Join(t.rootDirectoryName, hardlink.NewLink)
+			linkPathname := filepath.Join(t.RootDirectoryName, hardlink.NewLink)
 			// A Link directly to linkPathname will fail if it exists, so do a
 			// Link+Rename using a temporary filename.
 			if err := fsutil.ForceLink(targetPathname, tmpName); err != nil {
 				t.lastError = err
-				t.logger.Println(err)
+				t.Logger.Println(err)
 				continue
 			}
 			if err := fsutil.ForceRename(tmpName, linkPathname); err != nil {
-				t.logger.Println(err)
+				t.Logger.Println(err)
 				if err := fsutil.ForceRemove(tmpName); err != nil {
 					t.lastError = err
-					t.logger.Println(err)
+					t.Logger.Println(err)
 				}
 			} else {
-				t.logger.Printf("Linked: %s => %s\n",
+				t.Logger.Printf("Linked: %s => %s\n",
 					linkPathname, targetPathname)
 			}
 		}
@@ -244,14 +295,14 @@ func (t *uType) makeHardlinks(hardlinksToMake []sub.Hardlink,
 func (t *uType) doDeletes(pathsToDelete []string, triggers *triggers.Triggers,
 	takeAction bool) {
 	for _, pathname := range pathsToDelete {
-		fullPathname := filepath.Join(t.rootDirectoryName, pathname)
 		triggers.Match(pathname)
 		if takeAction {
+			fullPathname := filepath.Join(t.RootDirectoryName, pathname)
 			if err := fsutil.ForceRemoveAll(fullPathname); err != nil {
 				t.lastError = err
-				t.logger.Println(err)
+				t.Logger.Println(err)
 			} else {
-				t.logger.Printf("Deleted: %s\n", fullPathname)
+				t.Logger.Printf("Deleted: %s\n", fullPathname)
 			}
 		}
 	}
@@ -263,19 +314,19 @@ func (t *uType) makeDirectories(directoriesToMake []sub.Inode,
 		if t.skipPath(newdir.Name) {
 			continue
 		}
-		fullPathname := filepath.Join(t.rootDirectoryName, newdir.Name)
 		triggers.Match(newdir.Name)
 		if takeAction {
+			fullPathname := filepath.Join(t.RootDirectoryName, newdir.Name)
 			inode, ok := newdir.GenericInode.(*filesystem.DirectoryInode)
 			if !ok {
-				t.logger.Println("%s is not a directory!\n", newdir.Name)
+				t.Logger.Println("%s is not a directory!\n", newdir.Name)
 				continue
 			}
 			if err := inode.Write(fullPathname); err != nil {
 				t.lastError = err
-				t.logger.Println(err)
+				t.Logger.Println(err)
 			} else {
-				t.logger.Printf("Made directory: %s (mode=%s)\n",
+				t.Logger.Printf("Made directory: %s (mode=%s)\n",
 					fullPathname, inode.Mode)
 			}
 		}
@@ -285,7 +336,7 @@ func (t *uType) makeDirectories(directoriesToMake []sub.Inode,
 func (t *uType) changeInodes(inodesToChange []sub.Inode,
 	triggers *triggers.Triggers, takeAction bool) {
 	for _, inode := range inodesToChange {
-		fullPathname := filepath.Join(t.rootDirectoryName, inode.Name)
+		fullPathname := filepath.Join(t.RootDirectoryName, inode.Name)
 		if checkNonMtimeChange(fullPathname, inode.GenericInode) {
 			triggers.Match(inode.Name)
 		}
@@ -293,10 +344,10 @@ func (t *uType) changeInodes(inodesToChange []sub.Inode,
 			if err := filesystem.ForceWriteMetadata(inode,
 				fullPathname); err != nil {
 				t.lastError = err
-				t.logger.Println(err)
+				t.Logger.Println(err)
 				continue
 			}
-			t.logger.Printf("Changed inode: %s\n", fullPathname)
+			t.Logger.Printf("Changed inode: %s\n", fullPathname)
 		}
 	}
 }
@@ -336,7 +387,7 @@ func checkNonMtimeChange(filename string, inode filesystem.GenericInode) bool {
 }
 
 func (t *uType) skipPath(pathname string) bool {
-	if t.skipFilter.Match(pathname) {
+	if t.SkipFilter.Match(pathname) {
 		return true
 	}
 	if pathname == "/.subd" {
@@ -349,7 +400,7 @@ func (t *uType) skipPath(pathname string) bool {
 }
 
 func (t *uType) writePatchedImageName(imageName string) error {
-	pathname := filepath.Join(t.rootDirectoryName,
+	pathname := filepath.Join(t.RootDirectoryName,
 		constants.PatchedImageNameFile)
 	if imageName == "" {
 		if err := os.Remove(pathname); err != nil {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 )
@@ -239,7 +240,7 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
 		return
 	}
-	if size, err := getTreeSize(manifestDirectory); err != nil {
+	if size, err := fsutil.GetTreeSize(manifestDirectory); err != nil {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
 		return
 	} else {

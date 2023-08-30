@@ -14,41 +14,44 @@ import (
 )
 
 type fleetManagerGeneratorType struct {
+	eventChannel chan<- struct{}
 	fleetManager string
 	location     string
 	logger       log.DebugLogger
-	eventChannel chan<- struct{}
 	mutex        sync.Mutex
 	machines     map[string]*fm_proto.Machine
 	vms          map[string]*hyper_proto.VmInfo
 }
 
-func newFleetManagerGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newFleetManagerGenerator(params makeGeneratorParams) (generator, error) {
 	g := &fleetManagerGeneratorType{
+		eventChannel: params.eventChannel,
 		fleetManager: fmt.Sprintf("%s:%d",
-			args[0], constants.FleetManagerPortNumber),
-		logger:   logger,
+			params.args[0], constants.FleetManagerPortNumber),
+		logger:   params.logger,
 		machines: make(map[string]*fm_proto.Machine),
 		vms:      make(map[string]*hyper_proto.VmInfo),
 	}
-	if len(args) > 1 {
-		g.location = args[1]
+	if len(params.args) > 1 {
+		g.location = params.args[1]
 	}
-	go g.daemon()
+	params.waitGroup.Add(1)
+	go g.daemon(params.waitGroup)
 	return g, nil
 }
 
-func (g *fleetManagerGeneratorType) daemon() {
+func (g *fleetManagerGeneratorType) daemon(waitGroup *sync.WaitGroup) {
 	for {
-		if err := g.getUpdates(g.fleetManager); err != nil {
+		if err := g.getUpdates(g.fleetManager, waitGroup); err != nil {
 			g.logger.Println(err)
 			time.Sleep(time.Second)
 		}
+		waitGroup = nil
 	}
 }
 
-func (g *fleetManagerGeneratorType) getUpdates(fleetManager string) error {
+func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
+	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", g.fleetManager, 0)
 	if err != nil {
 		return err
@@ -74,6 +77,10 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string) error {
 		}
 		g.update(update, initialUpdate)
 		initialUpdate = false
+		if waitGroup != nil {
+			waitGroup.Done()
+			waitGroup = nil
+		}
 		select {
 		case g.eventChannel <- struct{}{}:
 		default:
@@ -128,11 +135,6 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 		}
 	}
 	return &newMdb, nil
-}
-
-func (g *fleetManagerGeneratorType) RegisterEventChannel(
-	events chan<- struct{}) {
-	g.eventChannel = events
 }
 
 func (g *fleetManagerGeneratorType) update(update fm_proto.Update,

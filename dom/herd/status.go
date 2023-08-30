@@ -14,6 +14,7 @@ func (herd *Herd) statusHandler(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
+	bd, _ := html.CreateBenchmarkData()
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	fmt.Fprintln(writer, "<title>Dominator status page</title>")
@@ -34,5 +35,6 @@ func (herd *Herd) statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "</h3>")
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
+	bd.Write(writer)
 	fmt.Fprintln(writer, "</body>")
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+var setupTopology bool
+
 type topologyGeneratorType struct {
 	eventChannel chan<- struct{}
 	logger       log.DebugLogger
@@ -19,14 +22,16 @@ type topologyGeneratorType struct {
 	topology     *topology.Topology
 }
 
-func newTopologyGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newTopologyGenerator(params makeGeneratorParams) (generator, error) {
+	if setupTopology {
+		return nil, errors.New("only one Topology driver permitted")
+	}
 	var topologyUrl, localRepositoryDir, topologyDir string
 	interval := time.Duration(*fetchInterval) * time.Second
-	if fi, err := os.Stat(args[0]); err == nil && fi.IsDir() {
-		localRepositoryDir = args[0]
+	if fi, err := os.Stat(params.args[0]); err == nil && fi.IsDir() {
+		localRepositoryDir = params.args[0]
 	} else {
-		topologyUrl = args[0]
+		topologyUrl = params.args[0]
 		localRepositoryDir = filepath.Join(*stateDir, "topology")
 		if strings.HasPrefix(topologyUrl, "git@") {
 			if interval < 59*time.Second {
@@ -34,23 +39,37 @@ func newTopologyGenerator(args []string,
 			}
 		}
 	}
-	if len(args) > 1 {
-		topologyDir = args[1]
+	if len(params.args) > 1 {
+		topologyDir = params.args[1]
 	}
 	topoChannel, err := topology.Watch(topologyUrl, localRepositoryDir,
-		topologyDir, interval, logger)
+		topologyDir, interval, params.logger)
 	if err != nil {
 		return nil, err
 	}
 	g := &topologyGeneratorType{
-		logger: logger,
+		eventChannel: params.eventChannel,
+		logger:       params.logger,
 	}
-	go g.daemon(topoChannel)
+	params.waitGroup.Add(1)
+	go g.daemon(topoChannel, params.waitGroup)
+	setupTopology = true
 	return g, nil
 }
 
-func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology) {
+func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology,
+	waitGroup *sync.WaitGroup) {
+	firstTopo := <-topoChannel
+	g.mutex.Lock()
+	g.topology = firstTopo
+	g.mutex.Unlock()
+	waitGroup.Done()
+	select {
+	case g.eventChannel <- struct{}{}:
+	default:
+	}
 	for topo := range topoChannel {
+		g.logger.Println("Received new topology")
 		g.mutex.Lock()
 		g.topology = topo
 		g.mutex.Unlock()
@@ -96,7 +115,9 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 	return &newMdb, nil
 }
 
-func (g *topologyGeneratorType) RegisterEventChannel(
-	events chan<- struct{}) {
-	g.eventChannel = events
+func (g *topologyGeneratorType) GetVariables() (map[string]string, error) {
+	g.mutex.Lock()
+	topo := g.topology
+	g.mutex.Unlock()
+	return topo.Variables, nil
 }

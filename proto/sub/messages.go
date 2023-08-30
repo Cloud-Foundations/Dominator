@@ -9,6 +9,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 )
 
+const (
+	DisruptionStateAnytime   = 0 // Not implemented or configured.
+	DisruptionStatePermitted = 1
+	DisruptionStateRequested = 2
+	DisruptionStateDenied    = 3
+
+	ErrorDisruptionPending = "disruption pending"
+	ErrorDisruptionDenied  = "disruption denied"
+)
+
 type BoostCpuLimitRequest struct{}
 
 type BoostCpuLimitResponse struct{}
@@ -18,6 +28,8 @@ type CleanupRequest struct {
 }
 
 type CleanupResponse struct{}
+
+type DisruptionState uint
 
 type FetchRequest struct {
 	LockFor       time.Duration // Duration to lock other clients from mutating.
@@ -57,11 +69,12 @@ type PollResponse struct {
 	FetchInProgress              bool // Fetch() and Update() mutually exclusive
 	UpdateInProgress             bool
 	LastFetchError               string
+	LastNote                     string // Updated after successful Update().
+	LastSuccessfulImageName      string
 	LastUpdateError              string
 	LastUpdateHadTriggerFailures bool
-	LastSuccessfulImageName      string
-	LastNote                     string // Updated after successful Update().
-	LockedByAnotherClient        bool   // Fetch() and Update() restricted.
+	LastWriteError               string
+	LockedByAnotherClient        bool // Fetch() and Update() restricted.
 	LockedUntil                  time.Time
 	FreeSpace                    *uint64
 	StartTime                    time.Time
@@ -69,6 +82,8 @@ type PollResponse struct {
 	ScanCount                    uint64
 	DurationOfLastScan           time.Duration
 	GenerationCount              uint64
+	SystemUptime                 *time.Duration
+	DisruptionState              DisruptionState
 	FileSystemFollows            bool
 	FileSystem                   *filesystem.FileSystem  // Streamed separately.
 	ObjectCache                  objectcache.ObjectCache // Streamed separately.
@@ -79,8 +94,9 @@ type SetConfigurationRequest Configuration
 type SetConfigurationResponse struct{}
 
 type UpdateRequest struct {
-	ImageName string
-	Wait      bool
+	ForceDisruption bool
+	ImageName       string
+	Wait            bool
 	// The ordering here reflects the ordering that the sub is expected to use.
 	FilesToCopyToCache  []FileToCopyToCache
 	DirectoriesToMake   []Inode

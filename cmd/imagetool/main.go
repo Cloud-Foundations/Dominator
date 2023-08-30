@@ -59,10 +59,14 @@ var (
 		"If true, make raw image bootable by installing GRUB")
 	minFreeBytes = flag.Uint64("minFreeBytes", 4<<20,
 		"minimum number of free bytes in raw image")
+	overlayDirectory = flag.String("overlayDirectory", "",
+		"Directory tree of files to overlay on top of the image when making raw image")
 	releaseNotes = flag.String("releaseNotes", "",
 		"Filename or URL containing release notes")
 	requiredPaths = flagutil.StringToRuneMap(constants.RequiredPaths)
-	roundupPower  = flag.Uint64("roundupPower", 24,
+	rootLabel     = flag.String("rootLabel", "",
+		"Label to write for root file-system when making raw image")
+	roundupPower = flag.Uint64("roundupPower", 24,
 		"power of 2 to round up raw image size")
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
 	skipFields                          = flag.String("skipFields", "",
@@ -164,6 +168,7 @@ var subcommands = []commands.Command{
 	{"show", "                name", 1, 1, showImageSubcommand},
 	{"show-filter", "         name", 1, 1, showImageFilterSubcommand},
 	{"show-inode", "          name inodePath", 2, 2, showImageInodeSubcommand},
+	{"show-metadata", "       name", 1, 1, showImageMetadataSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -30,7 +29,8 @@ func (objSrv *ObjectServer) commitObject(hashVal hash.Hash) error {
 		fsutil.ForceRemove(stashFilename)
 		return errors.New("existing non-file: " + stashFilename)
 	}
-	if err = os.MkdirAll(path.Dir(filename), syscall.S_IRWXU); err != nil {
+	err = os.MkdirAll(path.Dir(filename), fsutil.PrivateDirPerms)
+	if err != nil {
 		return err
 	}
 	objSrv.rwLock.Lock()

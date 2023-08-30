@@ -82,6 +82,9 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 	debugLogger = logger
 	_ = debugLogger
 	loggerMap.loggerMap[name] = logger
+	if *logAtStartup {
+		logger.Println("Startup")
+	}
 	return logger
 }
 

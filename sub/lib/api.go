@@ -9,16 +9,26 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
+type DisruptionCancelor func()
+type DisruptionRequestor func() sub.DisruptionState
+
 type TriggersRunner func(triggers []*triggers.Trigger, action string,
 	logger log.Logger) bool
 
+type UpdateOptions struct {
+	DisruptionCancel  DisruptionCancelor
+	DisruptionRequest DisruptionRequestor
+	Logger            log.Logger
+	ObjectsDir        string
+	OldTriggers       *triggers.Triggers
+	RootDirectoryName string
+	RunTriggers       TriggersRunner
+	SkipFilter        *filter.Filter
+}
+
 type uType struct {
-	rootDirectoryName  string
-	objectsDir         string
-	skipFilter         *filter.Filter
-	runTriggers        TriggersRunner
+	UpdateOptions
 	disableTriggers    bool
-	logger             log.Logger
 	lastError          error
 	hadTriggerFailures bool
 	fsChangeDuration   time.Duration
@@ -29,16 +39,20 @@ func Update(request sub.UpdateRequest, rootDirectoryName string,
 	skipFilter *filter.Filter, triggersRunner TriggersRunner,
 	logger log.Logger) (
 	bool, time.Duration, error) {
-	if skipFilter == nil {
-		skipFilter = new(filter.Filter)
+	options := UpdateOptions{
+		Logger:            logger,
+		ObjectsDir:        objectsDir,
+		OldTriggers:       oldTriggers,
+		RootDirectoryName: rootDirectoryName,
+		RunTriggers:       triggersRunner,
+		SkipFilter:        skipFilter,
 	}
-	updateObj := &uType{
-		rootDirectoryName: rootDirectoryName,
-		objectsDir:        objectsDir,
-		skipFilter:        skipFilter,
-		runTriggers:       triggersRunner,
-		logger:            logger,
-	}
-	err := updateObj.update(request, oldTriggers)
+	return UpdateWithOptions(request, options)
+}
+
+func UpdateWithOptions(request sub.UpdateRequest, options UpdateOptions) (
+	bool, time.Duration, error) {
+	updateObj := &uType{UpdateOptions: options}
+	err := updateObj.update(request)
 	return updateObj.hadTriggerFailures, updateObj.fsChangeDuration, err
 }

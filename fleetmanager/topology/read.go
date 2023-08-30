@@ -66,6 +66,9 @@ func load(params Params) (*Topology, error) {
 		return nil, err
 	}
 	topology.Root = directory
+	if err := topology.readVariables(params.VariablesDir, ""); err != nil {
+		return nil, err
+	}
 	return topology, nil
 }
 
@@ -301,7 +304,7 @@ func (t *Topology) readDirectory(topDir, dirname string,
 		return nil, err
 	}
 	for _, name := range dirnames {
-		if name == ".git" {
+		if name[0] == '.' {
 			continue
 		}
 		path := filepath.Join(dirname, name)
@@ -448,6 +451,44 @@ func (t *Topology) loadMachines(directory *Directory, dirname string,
 			return fmt.Errorf("error adding: %s: %s", machine.Hostname, err)
 		}
 		t.machineParents[machine.Hostname] = directory
+	}
+	return nil
+}
+
+func (t *Topology) readVariables(topDir, dirname string) error {
+	variables := make(map[string]string)
+	filename := filepath.Join(topDir, dirname, "variables.json")
+	if err := json.ReadFromFile(filename, &variables); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if len(variables) > 0 && t.Variables == nil {
+		t.Variables = make(map[string]string)
+	}
+	for key, value := range variables {
+		t.Variables[filepath.Join(dirname, key)] = value
+	}
+	dirpath := filepath.Join(topDir, dirname)
+	dirnames, err := fsutil.ReadDirnames(dirpath, true)
+	if err != nil {
+		return err
+	}
+	for _, name := range dirnames {
+		if name[0] == '.' {
+			continue
+		}
+		path := filepath.Join(dirname, name)
+		fi, err := os.Lstat(filepath.Join(topDir, path))
+		if err != nil {
+			return err
+		}
+		if !fi.IsDir() {
+			continue
+		}
+		if err := t.readVariables(topDir, path); err != nil {
+			return err
+		}
 	}
 	return nil
 }

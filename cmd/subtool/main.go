@@ -29,6 +29,8 @@ var (
 		"If true, delete prior to Fetch rather than during Update")
 	file = flag.String("file", "",
 		"Name of file to write encoded data to")
+	forceDisruption = flag.Bool("forceDisruption", false,
+		"If true, force an upgrade regardless of DisruptionManager state")
 	filterFile = flag.String("filterFile", "",
 		"Replacement filter file to apply when pushing image")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",

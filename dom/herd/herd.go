@@ -98,6 +98,17 @@ func (herd *Herd) enableUpdates() error {
 	return nil
 }
 
+func (herd *Herd) forceDisruptiveUpdate(hostname string,
+	authInfo *srpc.AuthInformation) error {
+	herd.Lock()
+	sub, ok := herd.subsByName[hostname]
+	herd.Unlock()
+	if !ok {
+		return errors.New("unknown sub: " + hostname)
+	}
+	return sub.forceDisruptiveUpdate(authInfo)
+}
+
 func (herd *Herd) getSubsConfiguration() subproto.Configuration {
 	herd.RLockWithTimeout(time.Minute)
 	defer herd.RUnlock()
@@ -112,6 +123,8 @@ func (herd *Herd) pollNextSub() bool {
 	if herd.nextSubToPoll >= uint(len(herd.subsByIndex)) {
 		herd.nextSubToPoll = 0
 		herd.previousScanDuration = time.Since(herd.currentScanStartTime)
+		herd.scanCounter++
+		herd.totalScanDuration += herd.previousScanDuration
 		return true
 	}
 	if herd.nextSubToPoll == 0 {
@@ -132,19 +145,20 @@ func (herd *Herd) pollNextSub() bool {
 	return false
 }
 
-func (herd *Herd) countSelectedSubs(selectFunc func(*Sub) bool) uint64 {
+func (herd *Herd) countSelectedSubs(subCounters []subCounter) uint64 {
 	herd.RLock()
 	defer herd.RUnlock()
-	if selectFunc == nil {
+	if len(subCounters) < 1 {
 		return uint64(len(herd.subsByIndex))
 	}
-	count := 0
 	for _, sub := range herd.subsByIndex {
-		if selectFunc(sub) {
-			count++
+		for _, subCounter := range subCounters {
+			if subCounter.selectFunc(sub) {
+				*subCounter.counter++
+			}
 		}
 	}
-	return uint64(count)
+	return uint64(len(herd.subsByIndex))
 }
 
 func (herd *Herd) getSelectedSubs(selectFunc func(*Sub) bool) []*Sub {

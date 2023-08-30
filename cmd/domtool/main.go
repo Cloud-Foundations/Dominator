@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 var (
@@ -28,6 +29,10 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
+	statusesToMatch flagutil.StringList
+	subsList        = flag.String("subsList", "",
+		"Name of file containing list of subs")
+	tagsToMatch tags.MatchTags
 
 	dominatorSrpcClient *srpc.Client
 )
@@ -35,6 +40,9 @@ var (
 func init() {
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		"Comma separated list of patterns to exclude from scanning")
+	flag.Var(&statusesToMatch, "statusesToMatch",
+		"Sub statuses to match when listing")
+	flag.Var(&tagsToMatch, "tagsToMatch", "Tags to match when listing")
 }
 
 func printUsage() {
@@ -51,8 +59,11 @@ var subcommands = []commands.Command{
 	{"configure-subs", "", 0, 0, configureSubsSubcommand},
 	{"disable-updates", "reason", 1, 1, disableUpdatesSubcommand},
 	{"enable-updates", "reason", 1, 1, enableUpdatesSubcommand},
+	{"force-disruptive-update", "sub", 1, 1, forceDisruptiveUpdateSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
+	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
+	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"set-default-image", "", 1, 1, setDefaultImageSubcommand},
 }
 

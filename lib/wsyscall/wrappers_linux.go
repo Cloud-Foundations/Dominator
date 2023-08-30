@@ -1,3 +1,4 @@
+//go:build go1.11.6 || go1.12
 // +build go1.11.6 go1.12
 
 // Go versions prior to 1.10 would re-use a thread that was locked to a
@@ -61,8 +62,31 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctim
 }
 
+func dup(oldfd int) (int, error) {
+	return syscall.Dup(oldfd)
+}
+
+// Arm64 linux does NOT support the Dup2 syscall
+// https://marcin.juszkiewicz.com.pl/download/tables/syscalls.html
+// and dup3 is more supported so doing it here:
+func dup2(oldfd int, newfd int) error {
+	return syscall.Dup3(oldfd, newfd, 0)
+}
+
+func dup3(oldfd int, newfd int, flags int) error {
+	return syscall.Dup3(oldfd, newfd, flags)
+}
+
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.Fallocate(fd, mode, off, len)
+}
+
+func getFileDescriptorLimit() (uint64, uint64, error) {
+	var rlim syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+		return 0, 0, err
+	}
+	return rlim.Cur, rlim.Max, nil
 }
 
 func getrusage(who int, rusage *Rusage) error {
@@ -128,6 +152,10 @@ func mount(source string, target string, fstype string, flags uintptr,
 		linuxFlags |= syscall.MS_RDONLY
 	}
 	return syscall.Mount(source, target, fstype, linuxFlags, data)
+}
+
+func reboot() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART)
 }
 
 func setAllGid(gid int) error {
@@ -199,6 +227,11 @@ func unshareMountNamespace() error {
 	if err != nil {
 		return errors.New("error making mounts private: " + err.Error())
 	}
+	return nil
+}
+
+func sync() error {
+	syscall.Sync()
 	return nil
 }
 

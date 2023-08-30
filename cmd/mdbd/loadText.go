@@ -9,9 +9,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-func newTextGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
-	return sourceGenerator{loadText, args[0]}, nil
+func newTextGenerator(params makeGeneratorParams) (generator, error) {
+	return sourceGenerator{loadText, params.args[0]}, nil
 }
 
 func loadText(reader io.Reader, datacentre string, logger log.Logger) (

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type cpuStats struct {
@@ -110,4 +111,11 @@ func getCpuStats() *cpuStats {
 		userTime: uTime,
 		sysTime:  sTime,
 	}
+}
+
+func getRusage() (time.Time, time.Time) {
+	var rusage wsyscall.Rusage
+	wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage)
+	return time.Unix(int64(rusage.Utime.Sec), int64(rusage.Utime.Usec)*1000),
+		time.Unix(int64(rusage.Stime.Sec), int64(rusage.Stime.Usec)*1000)
 }

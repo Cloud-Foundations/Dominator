@@ -52,3 +52,36 @@ accidental deployments without access control.
 ## Control and debugging
 The *[subtool](../subtool/README.md)* utility may be used to manipulate various
 operating parameters of a running *subd* and perform RPC requests.
+
+## DisruptionManager
+Disruptive updates can be controlled using an optional *Disruption Manager*
+which *subd* can run to request, check and cancel requests to perform a
+disruptive upgrade (an upgrade where a *HighImpact* trigger is called). This may
+be used to request that new work will not be scheduled on the machine and wait
+for existing work to complete before performing the upgrade.
+
+The *Disruption Manager* is a simple tool which takes one of the following
+arguments:
+- **cancel**: cancel a request to disrupt
+- **check**: check whether disruptions are permitted
+- **request**: request to perform disruption
+
+Regardless of the argument provided, the tool must return one of the following
+exit codes:
+- **0**: disruption is permitted
+- **1**: disruption has been requested (and acknowledged) but not yet permitted
+- **2**: disruption is denied (not currently permitted)
+
+Any other exit code is considered an error, and *subd* may retry again soon.
+
+After a **request** to perform a disruptive upgrade, if the exit code is **1**
+(disruption requested and acknowledged), the **request** will be re-issued
+periodically. If however the exit code is **2** (upgrade is not permitted), the
+**request** will be re-issued more frequently.
+
+Once a machine enters the `disruption is permitted state`, it must remain in
+that state until a `cancel` command is made, or more than one hour has passed
+since the last `request` is made.
+
+The *DisruptionManager* may be called frequently (up to every second) by every
+machine in the fleet.

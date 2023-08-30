@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -12,6 +14,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/client"
 )
+
+type encoderType interface {
+	Encode(v interface{}) error
+}
 
 func pollSubcommand(args []string, logger log.DebugLogger) error {
 	var err error
@@ -55,7 +61,14 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 				if err != nil {
 					logger.Fatalf("Error creating: %s: %s\n", *file, err)
 				}
-				encoder := gob.NewEncoder(f)
+				var encoder encoderType
+				if filepath.Ext(*file) == ".json" {
+					e := json.NewEncoder(f)
+					e.SetIndent("", "    ")
+					encoder = e
+				} else {
+					encoder = gob.NewEncoder(f)
+				}
 				encoder.Encode(fs)
 				f.Close()
 			}
@@ -67,9 +80,26 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 		if reply.LastNote != "" {
 			fmt.Printf("Last note: \"%s\"\n", reply.LastNote)
 		}
+		if reply.LastWriteError != "" {
+			fmt.Printf("Last write error: %s\n", reply.LastWriteError)
+		}
 		if reply.FreeSpace != nil {
 			fmt.Printf("Free space: %s\n", format.FormatBytes(*reply.FreeSpace))
 		}
+		if reply.SystemUptime != nil {
+			fmt.Printf("System uptime: %s\n",
+				format.Duration(*reply.SystemUptime))
+		}
+		if reply.DisruptionState != sub.DisruptionStateAnytime {
+			fmt.Printf("Disruption state: %s\n", reply.DisruptionState)
+		}
+		if reply.LockedByAnotherClient {
+			fmt.Printf("Locked by another client\n")
+		}
+		if lockedFor := time.Until(reply.LockedUntil); lockedFor > 0 {
+			fmt.Printf("Locked for: %s\n", format.Duration(lockedFor))
+		}
+
 	}
 	time.Sleep(time.Duration(*wait) * time.Second)
 	return nil

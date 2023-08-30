@@ -1,10 +1,18 @@
 package html
 
 import (
+	"bufio"
 	"io"
 	"net/http"
+	"time"
+
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
+type BenchmarkData struct {
+	startRusage wsyscall.Rusage
+	startTime   time.Time
+}
 type HtmlWriter interface {
 	WriteHtml(writer io.Writer)
 }
@@ -18,6 +26,14 @@ type TableWriter struct {
 func BenchmarkedHandler(handler func(io.Writer,
 	*http.Request)) func(http.ResponseWriter, *http.Request) {
 	return benchmarkedHandler(handler)
+}
+
+func CreateBenchmarkData() (*BenchmarkData, error) {
+	return createBenchmarkData()
+}
+
+func (bd *BenchmarkData) Write(w *bufio.Writer) error {
+	return bd.write(w)
 }
 
 func HandleFunc(pattern string,

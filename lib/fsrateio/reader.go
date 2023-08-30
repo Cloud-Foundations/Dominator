@@ -2,10 +2,10 @@ package fsrateio
 
 import (
 	"fmt"
-	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type ReadMeasurer struct {
@@ -19,8 +19,8 @@ func newReadMeasurer() *ReadMeasurer {
 
 func (measurer *ReadMeasurer) MeasureReadIO(bytesSinceLastMeasurement uint64) (
 	uint64, error) {
-	var rusage syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage); err != nil {
+	var rusage wsyscall.Rusage
+	if err := wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage); err != nil {
 		return 0, err
 	}
 	blocks := uint64(rusage.Inblock)
@@ -30,8 +30,8 @@ func (measurer *ReadMeasurer) MeasureReadIO(bytesSinceLastMeasurement uint64) (
 }
 
 func (measurer *ReadMeasurer) Reset() {
-	var rusage syscall.Rusage
-	syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
+	var rusage wsyscall.Rusage
+	wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage)
 	measurer.blocksAtLastMeasurement = uint64(rusage.Inblock)
 }
 

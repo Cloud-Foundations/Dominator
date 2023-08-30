@@ -28,6 +28,7 @@ type Directory struct {
 type Image struct {
 	BuildBranch   string
 	BuildCommitId string
+	BuildGitUrl   string
 	CreatedBy     string // Username. Set by imageserver. Empty: unauthenticated
 	CreatedFor    string // Username. Set by imaginator.
 	Filter        *filter.Filter

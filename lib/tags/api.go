@@ -1,5 +1,15 @@
 package tags
 
+type MatchTags map[string][]string // Key: tag key, value: values to OR match.
+
+func (mtags *MatchTags) String() string {
+	return mtags.string()
+}
+
+func (mtags *MatchTags) Set(value string) error {
+	return mtags.set(value)
+}
+
 type Tag struct {
 	Key   string
 	Value string

@@ -40,31 +40,30 @@ func loadCredentials() error {
 	return nil
 }
 
-func newAwsGenerator(args []string, logger log.DebugLogger) (generator, error) {
+func newAwsGenerator(params makeGeneratorParams) (generator, error) {
 	if err := loadCredentials(); err != nil {
 		return nil, err
 	}
 	return &awsGeneratorType{
-			targets: awsutil.TargetList{awsutil.Target{args[1], args[0]}}},
+			targets: awsutil.TargetList{awsutil.Target{params.args[1],
+				params.args[0]}}},
 		nil
 }
 
-func newAwsFilteredGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newAwsFilteredGenerator(params makeGeneratorParams) (generator, error) {
 	if err := loadCredentials(); err != nil {
 		return nil, err
 	}
 	gen := awsGeneratorType{
-		filterTagsFile: args[1],
+		filterTagsFile: params.args[1],
 	}
-	if err := gen.targets.Set(args[0]); err != nil {
+	if err := gen.targets.Set(params.args[0]); err != nil {
 		return nil, err
 	}
 	return &gen, nil
 }
 
-func newAwsLocalGenerator(args []string,
-	logger log.DebugLogger) (generator, error) {
+func newAwsLocalGenerator(params makeGeneratorParams) (generator, error) {
 	if err := loadCredentials(); err != nil {
 		return nil, err
 	}
