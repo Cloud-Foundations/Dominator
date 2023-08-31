@@ -501,6 +501,7 @@ type PatchVmImageRequest struct {
 	ImageName    string
 	ImageTimeout time.Duration
 	IpAddress    net.IP
+	SkipBackup   bool
 }
 
 type PatchVmImageResponse struct { // Multiple responses are sent.
