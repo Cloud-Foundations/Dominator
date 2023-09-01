@@ -2410,13 +2410,19 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	}
 	rootFilename := vm.VolumeLocations[0].Filename
 	tmpRootFilename := rootFilename + ".new"
-	if err := sendVmPatchImageMessage(conn, "copying root"); err != nil {
-		return err
-	}
-	err = fsutil.CopyFile(tmpRootFilename, rootFilename,
-		fsutil.PrivateFilePerms)
-	if err != nil {
-		return err
+	if request.SkipBackup {
+		if err := os.Link(rootFilename, tmpRootFilename); err != nil {
+			return err
+		}
+	} else {
+		if err := sendVmPatchImageMessage(conn, "copying root"); err != nil {
+			return err
+		}
+		err = fsutil.CopyFile(tmpRootFilename, rootFilename,
+			fsutil.PrivateFilePerms)
+		if err != nil {
+			return err
+		}
 	}
 	defer os.Remove(tmpRootFilename)
 	rootDir, err := ioutil.TempDir(vm.dirname, "root")
@@ -2540,17 +2546,19 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 			return err
 		}
 	}
-	oldRootFilename := rootFilename + ".old"
-	if err := os.Rename(rootFilename, oldRootFilename); err != nil {
-		return err
+	if !request.SkipBackup {
+		oldRootFilename := rootFilename + ".old"
+		if err := os.Rename(rootFilename, oldRootFilename); err != nil {
+			return err
+		}
+		if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
+			os.Rename(oldRootFilename, rootFilename)
+			return err
+		}
+		os.Rename(initrdFilename, initrdFilename+".old")
+		os.Rename(kernelFilename, kernelFilename+".old")
 	}
-	if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
-		os.Rename(oldRootFilename, rootFilename)
-		return err
-	}
-	os.Rename(initrdFilename, initrdFilename+".old")
 	os.Rename(tmpInitrdFilename, initrdFilename)
-	os.Rename(kernelFilename, kernelFilename+".old")
 	os.Rename(tmpKernelFilename, kernelFilename)
 	vm.ImageName = imageName
 	vm.writeAndSendInfo()
