@@ -7,11 +7,14 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
-func makeNonzeroMachine(t *testing.T) Machine {
+func makeNonzeroMachine(t *testing.T, zeroIndex int) Machine {
 	var machine Machine
 	machineValue := reflect.ValueOf(&machine).Elem()
 	machineType := reflect.TypeOf(machine)
 	for index := 0; index < machineValue.NumField(); index++ {
+		if index == zeroIndex {
+			continue
+		}
 		fieldValue := machineValue.Field(index)
 		fieldKind := fieldValue.Kind()
 		switch fieldKind {
@@ -34,12 +37,12 @@ func makeNonzeroMachine(t *testing.T) Machine {
 }
 
 func TestCompare(t *testing.T) {
-	left := makeNonzeroMachine(t)
+	left := makeNonzeroMachine(t, -1)
 	right := Machine{Hostname: left.Hostname}
 	if got := left.Compare(right); got != false {
 		t.Errorf("Compare(%v, %v) = %v", left, right, got)
 	}
-	right = makeNonzeroMachine(t)
+	right = makeNonzeroMachine(t, -1)
 	if got := left.Compare(right); got != true {
 		t.Errorf("Compare(%v, %v) = %v", left, right, got)
 	}
@@ -112,6 +115,16 @@ func TestCompareAwsMetadata(t *testing.T) {
 	for _, test := range tests {
 		if got := compareAwsMetadata(test.left, test.right); got != test.want {
 			t.Errorf("Less(%q, %q) = %v", test.left, test.right, got)
+		}
+	}
+}
+
+func TestCompareEachField(t *testing.T) {
+	left := makeNonzeroMachine(t, -1)
+	for index := 0; index < reflect.TypeOf(left).NumField(); index++ {
+		right := makeNonzeroMachine(t, index)
+		if got := left.Compare(right); got != false {
+			t.Errorf("Compare(%v, %v) = %v", left, right, got)
 		}
 	}
 }

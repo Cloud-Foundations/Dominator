@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"io"
 	"regexp"
 
@@ -77,4 +78,13 @@ func (filter *Filter) replaceStrings(replaceFunc func(string) string) {
 			filter.FilterLines[index] = replaceFunc(str)
 		}
 	}
+}
+
+func (filter *Filter) write(writer io.Writer) error {
+	for _, line := range filter.FilterLines {
+		if _, err := fmt.Fprintln(writer, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }

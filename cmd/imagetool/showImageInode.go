@@ -26,7 +26,7 @@ func listInode(inode filesystem.GenericInode, inodePath string,
 }
 
 func showImageInode(image, inodePath string) error {
-	fs, _, err := getTypedImage(image)
+	fs, err := getTypedFileSystem(image)
 	if err != nil {
 		return err
 	}

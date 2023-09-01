@@ -338,6 +338,7 @@ func (directory *Directory) loadMachines(dirname string) error {
 		return err
 	}
 	for _, machine := range directory.Machines {
+		machine.Location = directory.path
 		mergedOwners := ownersType{
 			OwnerGroups: machine.OwnerGroups,
 			OwnerUsers:  machine.OwnerUsers,

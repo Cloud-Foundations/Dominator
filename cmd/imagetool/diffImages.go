@@ -2,26 +2,14 @@ package main
 
 import (
 	"bufio"
-	"encoding/gob"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
-	"time"
 
-	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
-	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
-	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
-	"github.com/Cloud-Foundations/Dominator/proto/sub"
-	subclient "github.com/Cloud-Foundations/Dominator/sub/client"
 )
 
 func diffSubcommand(args []string, logger log.DebugLogger) error {
@@ -29,11 +17,11 @@ func diffSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func diffTypedImages(tool string, lName string, rName string) error {
-	lfs, lFilter, err := getTypedImage(lName)
+	lfs, lFilter, err := getTypedFileSystemAndFilter(lName)
 	if err != nil {
 		return fmt.Errorf("error getting left image: %s", err)
 	}
-	rfs, rFilter, err := getTypedImage(rName)
+	rfs, rFilter, err := getTypedFileSystemAndFilter(rName)
 	if err != nil {
 		return fmt.Errorf("error getting right image: %s", err)
 	}
@@ -42,6 +30,8 @@ func diffTypedImages(tool string, lName string, rName string) error {
 		filt = lFilter
 	} else if lFilter == nil && rFilter != nil {
 		filt = rFilter
+	} else if lFilter.Equal(rFilter) {
+		filt = lFilter
 	}
 	if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
 		return fmt.Errorf("error filtering left image: %s", err)
@@ -54,207 +44,6 @@ func diffTypedImages(tool string, lName string, rName string) error {
 		return fmt.Errorf("error diffing images: %s", err)
 	}
 	return nil
-}
-
-func getTypedImage(typedName string) (
-	*filesystem.FileSystem, *filter.Filter, error) {
-	if len(typedName) < 3 || typedName[1] != ':' {
-		typedName = "i:" + typedName
-	}
-	switch name := typedName[2:]; typedName[0] {
-	case 'd':
-		fs, err := scanDirectory(name)
-		return fs, nil, err
-	case 'f':
-		fs, err := readFileSystem(name)
-		return fs, nil, err
-	case 'i':
-		imageSClient, _ := getClients()
-		if img, err := getImage(imageSClient, name); err != nil {
-			return nil, nil, err
-		} else {
-			return img.FileSystem, img.Filter, nil
-		}
-	case 'I':
-		imageSClient, _ := getClients()
-		if img, err := getLatestImage(imageSClient, name); err != nil {
-			return nil, nil, err
-		} else {
-			return img.FileSystem, img.Filter, nil
-		}
-	case 'l':
-		if img, err := readImage(name); err != nil {
-			return nil, nil, err
-		} else {
-			return img.FileSystem, img.Filter, nil
-		}
-	case 's':
-		fs, err := pollImage(name)
-		return fs, nil, err
-	case 'v':
-		fs, err := scanVm(name)
-		return fs, nil, err
-	default:
-		return nil, nil, errors.New("unknown image type: " + typedName[:1])
-	}
-}
-
-func scanDirectory(name string) (*filesystem.FileSystem, error) {
-	fs, err := buildImageWithHasher(nil, nil, name, nil)
-	if err != nil {
-		return nil, err
-	}
-	return fs, nil
-}
-
-func readFileSystem(name string) (*filesystem.FileSystem, error) {
-	file, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	var fileSystem filesystem.FileSystem
-	if err := gob.NewDecoder(file).Decode(&fileSystem); err != nil {
-		return nil, err
-	}
-	fileSystem.RebuildInodePointers()
-	return &fileSystem, nil
-}
-
-func getImage(client *srpc.Client, name string) (*image.Image, error) {
-	img, err := imgclient.GetImageWithTimeout(client, name, *timeout)
-	if err != nil {
-		return nil, err
-	}
-	if img == nil {
-		return nil, errors.New(name + ": not found")
-	}
-	if err := img.FileSystem.RebuildInodePointers(); err != nil {
-		return nil, err
-	}
-	return img, nil
-}
-
-func getLatestImage(client *srpc.Client, name string) (*image.Image, error) {
-	imageName, err := imgclient.FindLatestImage(client, name, *ignoreExpiring)
-	if err != nil {
-		return nil, err
-	}
-	return getImage(client, imageName)
-}
-
-func getFsOfImage(client *srpc.Client, name string) (
-	*filesystem.FileSystem, error) {
-	if image, err := getImage(client, name); err != nil {
-		return nil, err
-	} else {
-		return image.FileSystem, nil
-	}
-}
-
-func readImage(name string) (*image.Image, error) {
-	file, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	var img image.Image
-	if err := gob.NewDecoder(file).Decode(&img); err != nil {
-		return nil, err
-	}
-	img.FileSystem.RebuildInodePointers()
-	return &img, nil
-}
-
-func pollImage(name string) (*filesystem.FileSystem, error) {
-	clientName := fmt.Sprintf("%s:%d", name, constants.SubPortNumber)
-	srpcClient, err := srpc.DialHTTP("tcp", clientName, 0)
-	if err != nil {
-		return nil, fmt.Errorf("error dialing %s", err)
-	}
-	defer srpcClient.Close()
-	var request sub.PollRequest
-	var reply sub.PollResponse
-	if err = subclient.CallPoll(srpcClient, request, &reply); err != nil {
-		return nil, err
-	}
-	if reply.FileSystem == nil {
-		return nil, errors.New("no poll data")
-	}
-	reply.FileSystem.RebuildInodePointers()
-	return reply.FileSystem, nil
-}
-
-func scanVm(name string) (*filesystem.FileSystem, error) {
-	vmIpAddr, srpcClient, err := getVmIpAndHypervisor(name)
-	if err != nil {
-		return nil, err
-	}
-	defer srpcClient.Close()
-	fs, err := hyperclient.ScanVmRoot(srpcClient, vmIpAddr, nil)
-	if err != nil {
-		return nil, err
-	}
-	fs.RebuildInodePointers()
-	return fs, nil
-}
-
-func getVmIpAndHypervisor(vmHostname string) (net.IP, *srpc.Client, error) {
-	vmIpAddr, err := lookupIP(vmHostname)
-	if err != nil {
-		return nil, nil, err
-	}
-	hypervisorAddress, err := findHypervisor(vmIpAddr)
-	if err != nil {
-		return nil, nil, err
-	}
-	client, err := srpc.DialHTTP("tcp", hypervisorAddress, time.Second*10)
-	if err != nil {
-		return nil, nil, err
-	}
-	return vmIpAddr, client, nil
-}
-
-func findHypervisor(vmIpAddr net.IP) (string, error) {
-	if *hypervisorHostname != "" {
-		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
-			nil
-	} else if *fleetManagerHostname != "" {
-		fm := fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum)
-		client, err := srpc.DialHTTP("tcp", fm, time.Second*10)
-		if err != nil {
-			return "", err
-		}
-		defer client.Close()
-		return findHypervisorClient(client, vmIpAddr)
-	} else {
-		return fmt.Sprintf("localhost:%d", *hypervisorPortNum), nil
-	}
-}
-
-func findHypervisorClient(client *srpc.Client,
-	vmIpAddr net.IP) (string, error) {
-	request := fm_proto.GetHypervisorForVMRequest{vmIpAddr}
-	var reply fm_proto.GetHypervisorForVMResponse
-	err := client.RequestReply("FleetManager.GetHypervisorForVM", request,
-		&reply)
-	if err != nil {
-		return "", err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return "", err
-	}
-	return reply.HypervisorAddress, nil
-}
-
-func lookupIP(vmHostname string) (net.IP, error) {
-	if ips, err := net.LookupIP(vmHostname); err != nil {
-		return nil, err
-	} else if len(ips) != 1 {
-		return nil, fmt.Errorf("num IPs: %d != 1", len(ips))
-	} else {
-		return ips[0], nil
-	}
 }
 
 func diffImages(tool string, lfs, rfs *filesystem.FileSystem) error {

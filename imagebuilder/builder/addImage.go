@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -9,9 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
@@ -139,65 +136,9 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 
 func listPackages(g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
-	output := new(bytes.Buffer)
-	err := runInTarget(g, nil, output, rootDir, nil, packagerPathname,
-		"show-size-multiplier")
-	if err != nil {
-		return nil, fmt.Errorf("error getting size multiplier: %s", err)
-	}
-	sizeMultiplier := uint64(1)
-	nScanned, err := fmt.Fscanf(output, "%d", &sizeMultiplier)
-	if err != nil {
-		if err != io.EOF {
-			return nil, fmt.Errorf(
-				"error decoding size multiplier: %s", err)
-		}
-	} else if nScanned != 1 {
-		return nil, errors.New("malformed size multiplier")
-	}
-	output.Reset()
-	err = runInTarget(g, nil, output, rootDir, nil, packagerPathname, "list")
-	if err != nil {
-		return nil, fmt.Errorf("error running package lister: %s", err)
-	}
-	packageMap := make(map[string]image.Package)
-	scanner := bufio.NewScanner(output)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			return nil, fmt.Errorf("malformed line: %s", line)
-		}
-		name := fields[0]
-		version := fields[1]
-		pkg := image.Package{
-			Name:    name,
-			Version: version,
-		}
-		if len(fields) > 2 {
-			if size, err := strconv.ParseUint(fields[2], 10, 64); err != nil {
-				return nil, fmt.Errorf("malformed size: %s", fields[2])
-			} else {
-				pkg.Size = size * sizeMultiplier
-			}
-		}
-		packageMap[name] = pkg
-	}
-	if err := scanner.Err(); err != nil {
-		if err != io.EOF {
-			fmt.Fprintln(os.Stderr, "reading standard input:", err)
-		}
-	}
-	packageNames := make([]string, 0, len(packageMap))
-	for name := range packageMap {
-		packageNames = append(packageNames, name)
-	}
-	sort.Strings(packageNames)
-	var packages []image.Package
-	for _, name := range packageNames {
-		packages = append(packages, packageMap[name])
-	}
-	return packages, nil
+	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
+		return runInTarget(g, nil, w, rootDir, nil, packagerPathname, cmd)
+	})
 }
 
 func packImage(g *goroutine.Goroutine, client *srpc.Client,

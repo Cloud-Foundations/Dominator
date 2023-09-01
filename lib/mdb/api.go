@@ -1,5 +1,5 @@
 /*
-	Package mdb implements a simple in-memory Machine DataBase.
+Package mdb implements a simple in-memory Machine DataBase.
 */
 package mdb
 
@@ -23,6 +23,7 @@ type AwsMetadata struct {
 type Machine struct {
 	Hostname       string
 	IpAddress      string       `json:",omitempty"`
+	Location       string       `json:",omitempty"`
 	RequiredImage  string       `json:",omitempty"`
 	PlannedImage   string       `json:",omitempty"`
 	DisableUpdates bool         `json:",omitempty"`

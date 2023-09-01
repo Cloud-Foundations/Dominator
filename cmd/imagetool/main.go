@@ -77,17 +77,6 @@ var (
 
 	logger            log.DebugLogger
 	minimumExpiration = 15 * time.Minute
-
-	diffArgs = `  tool left right
-         left & right are image sources. Format:
-         type:name where type is one of:
-           d: name of directory tree to scan
-           f: name of file containing a FileSystem
-           i: name of an image on the imageserver
-           I: name of an image stream on the imageserver
-           l: name of file containing an Image
-           s: name of sub to poll
-           v: hostname/IP of SmallStack VM to scan`
 )
 
 func init() {
@@ -106,7 +95,15 @@ func printUsage() {
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
 	commands.PrintCommands(w, subcommands)
-	fmt.Fprintln(w, "Fields:")
+	fmt.Fprintln(w, "Images can be specified as name:type. Supported types:")
+	fmt.Fprintln(w, "  d: name of directory tree to scan")
+	fmt.Fprintln(w, "  f: name of file containing a FileSystem")
+	fmt.Fprintln(w, "  i: name of an image on the imageserver")
+	fmt.Fprintln(w, "  I: name of an image stream on the imageserver (latest)")
+	fmt.Fprintln(w, "  l: name of file containing an Image")
+	fmt.Fprintln(w, "  s: name of sub to poll")
+	fmt.Fprintln(w, "  v: hostname/IP of SmallStack VM to scan")
+	fmt.Fprintln(w, "SkipFields:")
 	fmt.Fprintln(w, "  m: mode")
 	fmt.Fprintln(w, "  l: number of hardlinks")
 	fmt.Fprintln(w, "  u: UID")
@@ -118,61 +115,74 @@ func printUsage() {
 }
 
 var subcommands = []commands.Command{
-	{"add", "   name imagefile filterfile triggerfile", 4, 4,
+	{"add", "                    name imagefile filterfile triggerfile", 4, 4,
 		addImagefileSubcommand},
-	{"addi", "  name imagename filterfile triggerfile", 4, 4,
+	{"addi", "                   name imagename filterfile triggerfile", 4, 4,
 		addImageimageSubcommand},
-	{"addrep", "name baseimage layerimage...", 3, -1,
+	{"addrep", "                 name baseimage layerimage...", 3, -1,
 		addReplaceImageSubcommand},
-	{"adds", "  name subname filterfile triggerfile", 4, 4,
+	{"adds", "                   name subname filterfile triggerfile", 4, 4,
 		addImagesubSubcommand},
-	{"bulk-addrep", "layerimage...", 1, -1, bulkAddReplaceImagesSubcommand},
+	{"bulk-addrep", "            layerimage...", 1, -1,
+		bulkAddReplaceImagesSubcommand},
 	{"change-image-expiration", "name", 1, 1, changeImageExpirationSubcommand},
-	{"check", " name", 1, 1, checkImageSubcommand},
-	{"check-directory", "dirname", 1, 1, checkDirectorySubcommand},
-	{"chown", " dirname ownerGroup", 2, 2, chownDirectorySubcommand},
-	{"copy", "  name oldimagename", 2, 2, copyImageSubcommand},
-	{"copy-filtered-files", "name srcdir destdir", 3, 3,
+	{"check", "                  name", 1, 1, checkImageSubcommand},
+	{"check-directory", "        dirname", 1, 1, checkDirectorySubcommand},
+	{"chown", "                  dirname ownerGroup", 2, 2,
+		chownDirectorySubcommand},
+	{"copy", "                   name oldimagename", 2, 2, copyImageSubcommand},
+	{"copy-filtered-files", "    name srcdir destdir", 3, 3,
 		copyFilteredFilesSubcommand},
-	{"delete", "name", 1, 1, deleteImageSubcommand},
-	{"delunrefobj", "percentage bytes", 2, 2,
+	{"delete", "                 name", 1, 1, deleteImageSubcommand},
+	{"delunrefobj", "            percentage bytes", 2, 2,
 		deleteUnreferencedObjectsSubcommand},
-	{"diff", diffArgs, 3, 3, diffSubcommand},
-	{"diff-package-lists", " tool left right", 3, 3,
+	{"diff", "                   tool left right", 3, 3, diffSubcommand},
+	{"diff-build-logs", "        tool left right", 3, 3,
+		diffBuildLogsInImagesSubcommand},
+	{"diff-files", "             tool left right filename", 4, 4,
+		diffFileInImagesSubcommand},
+	{"diff-filters", "           tool left right", 3, 3,
+		diffFilterInImagesSubcommand},
+	{"diff-package-lists", "     tool left right", 3, 3,
 		diffImagePackageListsSubcommand},
-	{"estimate-usage", "     name", 1, 1, estimateImageUsageSubcommand},
-	{"find-latest-image", "  directory", 1, 1, findLatestImageSubcommand},
-	{"get", "                name directory", 2, 2, getImageSubcommand},
-	{"get-archive-data", "   name outfile", 2, 2,
+	{"diff-triggers", "          tool left right", 3, 3,
+		diffTriggersInImagesSubcommand},
+	{"estimate-usage", "         name", 1, 1, estimateImageUsageSubcommand},
+	{"find-latest-image", "      directory", 1, 1, findLatestImageSubcommand},
+	{"get", "                    name directory", 2, 2, getImageSubcommand},
+	{"get-archive-data", "       name outfile", 2, 2,
 		getImageArchiveDataSubcommand},
-	{"get-build-log", "      name [outfile]", 1, 2,
+	{"get-build-log", "          name [outfile]", 1, 2,
 		getImageBuildLogSubcommand},
-	{"get-file-in-image", "  name imageFile [outfile]", 2, 3,
+	{"get-file-in-image", "      name imageFile [outfile]", 2, 3,
 		getFileInImageSubcommand},
-	{"get-image-expiration", "name", 1, 1, getImageExpirationSubcommand},
-	{"get-package-list", "   name [outfile]", 1, 2,
+	{"get-image-expiration", "   name", 1, 1, getImageExpirationSubcommand},
+	{"get-package-list", "       name [outfile]", 1, 2,
 		getImagePackageListSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
-	{"make-raw-image", "      name rawfile", 2, 2, makeRawImageSubcommand},
-	{"match-triggers", "      name triggers-file", 2, 2,
+	{"make-raw-image", "         name rawfile", 2, 2, makeRawImageSubcommand},
+	{"match-triggers", "         name triggers-file", 2, 2,
 		matchTriggersSubcommand},
-	{"merge-filters", "       filter-file...", 1, -1, mergeFiltersSubcommand},
-	{"merge-triggers", "      triggers-file...", 1, -1,
+	{"merge-filters", "          filter-file...", 1, -1, mergeFiltersSubcommand},
+	{"merge-triggers", "         triggers-file...", 1, -1,
 		mergeTriggersSubcommand},
-	{"mkdir", "               name", 1, 1, makeDirectorySubcommand},
-	{"patch-directory", "     name directory", 2, 2, patchDirectorySubcommand},
-	{"scan-filtered-files", " name directory", 2, 2,
+	{"mkdir", "                  name", 1, 1, makeDirectorySubcommand},
+	{"patch-directory", "        name directory", 2, 2,
+		patchDirectorySubcommand},
+	{"scan-filtered-files", "    name directory", 2, 2,
 		scanFilteredFilesSubcommand},
-	{"show", "                name", 1, 1, showImageSubcommand},
-	{"show-filter", "         name", 1, 1, showImageFilterSubcommand},
-	{"show-inode", "          name inodePath", 2, 2, showImageInodeSubcommand},
-	{"show-metadata", "       name", 1, 1, showImageMetadataSubcommand},
+	{"show", "                   name", 1, 1, showImageSubcommand},
+	{"show-filter", "            name", 1, 1, showImageFilterSubcommand},
+	{"show-inode", "             name inodePath", 2, 2,
+		showImageInodeSubcommand},
+	{"show-metadata", "          name", 1, 1, showImageMetadataSubcommand},
+	{"show-triggers", "          name", 1, 1, showImageTriggersSubcommand},
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
-	{"tar", "                 name [file]", 1, 2, tarImageSubcommand},
-	{"test-download-speed", " name", 1, 1, testDownloadSpeedSubcommand},
-	{"trace-inode-history", " name inodePath", 2, 2,
+	{"tar", "                    name [file]", 1, 2, tarImageSubcommand},
+	{"test-download-speed", "    name", 1, 1, testDownloadSpeedSubcommand},
+	{"trace-inode-history", "    name inodePath", 2, 2,
 		traceInodeHistorySubcommand},
 }
 

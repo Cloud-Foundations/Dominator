@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -26,28 +25,15 @@ func getFileInImageSubcommand(args []string, logger log.DebugLogger) error {
 
 func getFileInImage(objectClient *objectclient.ObjectClient, imageName,
 	imageFile, outFileName string) error {
-	fs, _, err := getTypedImage(imageName)
-	if err != nil {
+	if reader, err := getTypedFileReader(imageName, imageFile); err != nil {
 		return err
-	}
-	filenameToInodeTable := fs.FilenameToInodeTable()
-	if inum, ok := filenameToInodeTable[imageFile]; !ok {
-		return fmt.Errorf("file: \"%s\" not present in image", imageFile)
-	} else if inode, ok := fs.InodeTable[inum]; !ok {
-		return fmt.Errorf("inode: %d not present in image", inum)
-	} else if inode, ok := inode.(*filesystem.RegularInode); !ok {
-		return fmt.Errorf("file: \"%s\" is not a regular file", imageFile)
 	} else {
-		size, reader, err := objectClient.GetObject(inode.Hash)
-		if err != nil {
-			return err
-		}
 		defer reader.Close()
 		if outFileName == "" {
 			_, err := io.Copy(os.Stdout, reader)
 			return err
 		} else {
-			return fsutil.CopyToFile(outFileName, filePerms, reader, size)
+			return fsutil.CopyToFile(outFileName, filePerms, reader, 0)
 		}
 	}
 }

@@ -5,7 +5,7 @@ import (
 )
 
 func TestUpdateFrom(t *testing.T) {
-	source := makeNonzeroMachine(t)
+	source := makeNonzeroMachine(t, -1)
 	dest := &Machine{Hostname: "some.host"}
 	dest.UpdateFrom(source)
 	defaultMachine := &Machine{Hostname: "some.host"}

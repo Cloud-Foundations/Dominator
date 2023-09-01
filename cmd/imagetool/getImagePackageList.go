@@ -27,11 +27,11 @@ func getImagePackageListSubcommand(args []string,
 }
 
 func getImagePackageList(imageName, outFileName string) error {
-	img, err := getImageMetadata(imageName)
+	packages, err := getTypedPackageList(imageName)
 	if err != nil {
 		return err
 	}
-	if len(img.Packages) < 1 {
+	if len(packages) < 1 {
 		return errors.New("no package data")
 	}
 	var writer io.Writer
@@ -49,8 +49,8 @@ func getImagePackageList(imageName, outFileName string) error {
 		writer = bw
 	}
 	var nameWidth, versionWidth int
-	getWidthsForPackages(img.Packages, &nameWidth, &versionWidth)
-	listPackages(writer, img.Packages, nameWidth, versionWidth)
+	getWidthsForPackages(packages, &nameWidth, &versionWidth)
+	listPackages(writer, packages, nameWidth, versionWidth)
 	return nil
 }
 

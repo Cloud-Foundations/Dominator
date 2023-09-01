@@ -58,7 +58,7 @@ func copyMtimes(imageSClient *srpc.Client, img *image.Image,
 		return nil
 	}
 	fs := img.FileSystem
-	oldFs, err := getFsOfImage(imageSClient, oldImageName)
+	oldFs, err := getTypedFileSystem(oldImageName)
 	if err != nil {
 		return err
 	}

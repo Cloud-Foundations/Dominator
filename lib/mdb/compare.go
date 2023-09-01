@@ -11,6 +11,9 @@ func (left Machine) compare(right Machine) bool {
 	if left.IpAddress != right.IpAddress {
 		return false
 	}
+	if left.Location != right.Location {
+		return false
+	}
 	if left.RequiredImage != right.RequiredImage {
 		return false
 	}

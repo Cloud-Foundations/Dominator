@@ -41,7 +41,11 @@ Some of the sub-commands available are:
 - **delete**: delete an image
 - **delunrefobj**: delete (garbage collect) unreferenced objects
 - **diff**: compare two images
+- **diff-build-logs**: compare the build logs for two images
+- **diff-files**: compare the specified file in two images
+- **diff-filters**: compare the filters for two images
 - **diff-package-lists**: compare the package lists for two images
+- **diff-triggers**: compare the triggers for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image
 - **find-latest-image**: find the latest image in a directory
 - **get**: get and unpack an image
@@ -63,6 +67,8 @@ Some of the sub-commands available are:
 - **show**: show (list) an image
 - **show-filter**: show the filter for an image
 - **show-inode**: show metadata for an inode in an image
+- **show-metadata**: show metadata for an image
+- **show-triggers**: show triggers for an image
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
