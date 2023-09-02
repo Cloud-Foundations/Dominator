@@ -62,6 +62,7 @@ func patchVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		ImageName:    *imageName,
 		ImageTimeout: *imageTimeout,
 		IpAddress:    ipAddr,
+		SkipBackup:   *skipBackup,
 	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
