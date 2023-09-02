@@ -209,6 +209,7 @@ func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
 	}
 	machines := make([]*fm_proto.Machine, 0)
 	vms := make(map[string]*hyper_proto.VmInfo, len(m.vms))
+	vmToHypervisor := make(map[string]string, len(m.vms))
 	for _, h := range m.hypervisors {
 		if !testInLocation(h.location, locationStr) {
 			continue
@@ -216,11 +217,13 @@ func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
 		machines = append(machines, h.getMachine())
 		for addr, vm := range h.vms {
 			vms[addr] = &vm.VmInfo
+			vmToHypervisor[addr] = h.machine.Hostname
 		}
 	}
 	channel <- fm_proto.Update{
 		ChangedMachines: machines,
 		ChangedVMs:      vms,
+		VmToHypervisor:  vmToHypervisor,
 	}
 	return channel
 }
@@ -731,7 +734,10 @@ func (m *Manager) processVmUpdates(h *hypervisorType,
 
 func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 	updateVMs map[string]*hyper_proto.VmInfo) {
-	update := fm_proto.Update{ChangedVMs: make(map[string]*hyper_proto.VmInfo)}
+	update := fm_proto.Update{
+		ChangedVMs:     make(map[string]*hyper_proto.VmInfo),
+		VmToHypervisor: make(map[string]string),
+	}
 	vmsToDelete := make(map[string]struct{})
 	for ipAddr, protoVm := range updateVMs {
 		if protoVm == nil {
@@ -762,6 +768,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				}
 				vm.VmInfo = *protoVm
 				update.ChangedVMs[ipAddr] = protoVm
+				update.VmToHypervisor[ipAddr] = h.machine.Hostname
 			} else {
 				if _, ok := h.migratingVms[ipAddr]; ok {
 					delete(h.migratingVms, ipAddr)

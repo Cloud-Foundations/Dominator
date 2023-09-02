@@ -51,6 +51,7 @@ type Update struct {
 	DeletedMachines []string                 `json:",omitempty"` // Hostname
 	DeletedVMs      []string                 `json:",omitempty"` // IPaddr
 	Error           string                   `json:",omitempty"`
+	VmToHypervisor  map[string]string        `json:",omitempty"` // IP:hostname
 }
 
 type HardwareAddr net.HardwareAddr

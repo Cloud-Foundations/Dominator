@@ -82,16 +82,20 @@ func (m *Manager) manager(imageInterestChannel <-chan map[string]struct{},
 		case <-timer.C:
 			// Loop over missing (pending) images. First obtain a copy.
 			missingImages := make(map[string]struct{})
+			m.RLock()
 			for name := range m.missingImages {
 				missingImages[name] = struct{}{}
 			}
+			m.RUnlock()
 			for name := range missingImages {
 				imageClient = m.requestImage(imageClient, name)
 			}
 		}
+		m.RLock()
 		if len(m.missingImages) > 0 {
 			timer.Reset(time.Second)
 		}
+		m.RUnlock()
 	}
 }
 
@@ -184,10 +188,10 @@ func (m *Manager) loadImage(imageClient *srpc.Client, name string) (
 }
 
 func (m *Manager) rebuildDeDuper() {
-	m.deduper.Clear()
 	for _, image := range m.imagesByName {
-		image.ReplaceStrings(m.deduper.DeDuplicate)
+		image.RegisterStrings(m.deduper.Register)
 	}
+	m.deduper.DeleteUnregistered()
 }
 
 func (m *Manager) scheduleExpiration(image *image.Image, name string) bool {

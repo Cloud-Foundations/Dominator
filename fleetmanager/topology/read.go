@@ -207,6 +207,12 @@ func (cState *commonStateType) addMachine(machine *proto.Machine,
 	if err != nil {
 		return err
 	}
+	if machine.Hostname == "" {
+		machine.Hostname = machine.HostIpAddress.String()
+		if err := cState.addHostname(machine.Hostname); err != nil {
+			return err
+		}
+	}
 	if err := cState.addNetworkEntry(machine.IPMI, nil); err != nil {
 		return err
 	}

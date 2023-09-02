@@ -72,6 +72,14 @@ func (filter *Filter) match(pathname string) bool {
 	return defaultRetval
 }
 
+func (filter *Filter) registerStrings(registerFunc func(string)) {
+	if filter != nil {
+		for _, str := range filter.FilterLines {
+			registerFunc(str)
+		}
+	}
+}
+
 func (filter *Filter) replaceStrings(replaceFunc func(string) string) {
 	if filter != nil {
 		for index, str := range filter.FilterLines {

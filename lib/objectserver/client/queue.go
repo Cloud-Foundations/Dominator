@@ -111,13 +111,10 @@ func readResponses(conn *srpc.Conn, getResponseChan <-chan struct{},
 	defer close(errorChan)
 	for range getResponseChan {
 		var reply objectserver.AddObjectResponse
-		err := conn.Decode(&reply)
-		if err == nil {
-			err = errors.New(reply.ErrorString)
+		if err := conn.Decode(&reply); err != nil {
+			errorChan <- err
+			break // Transport error: abandon ship.
 		}
-		errorChan <- err
-		if err != nil {
-			break
-		}
+		errorChan <- errors.New(reply.ErrorString)
 	}
 }

@@ -148,6 +148,10 @@ func (inode *DirectoryInode) List(w io.Writer, name string,
 	return inode.list(w, name, numLinksTable, numLinks, listSelector, filter)
 }
 
+func (inode *DirectoryInode) RegisterStrings(registerFunc func(string)) {
+	inode.registerStrings(registerFunc)
+}
+
 func (inode *DirectoryInode) ReplaceStrings(replaceFunc func(string) string) {
 	inode.replaceStrings(replaceFunc)
 }

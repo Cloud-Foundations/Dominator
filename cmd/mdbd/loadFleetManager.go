@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -14,13 +15,14 @@ import (
 )
 
 type fleetManagerGeneratorType struct {
-	eventChannel chan<- struct{}
-	fleetManager string
-	location     string
-	logger       log.DebugLogger
-	mutex        sync.Mutex
-	machines     map[string]*fm_proto.Machine
-	vms          map[string]*hyper_proto.VmInfo
+	eventChannel   chan<- struct{}
+	fleetManager   string
+	location       string
+	logger         log.DebugLogger
+	mutex          sync.Mutex
+	machines       map[string]*fm_proto.Machine // Key: Hostname
+	vmToHypervisor map[string]string            // Key: VM IP, Value: Hostname
+	vms            map[string]*hyper_proto.VmInfo
 }
 
 func newFleetManagerGenerator(params makeGeneratorParams) (generator, error) {
@@ -28,9 +30,10 @@ func newFleetManagerGenerator(params makeGeneratorParams) (generator, error) {
 		eventChannel: params.eventChannel,
 		fleetManager: fmt.Sprintf("%s:%d",
 			params.args[0], constants.FleetManagerPortNumber),
-		logger:   params.logger,
-		machines: make(map[string]*fm_proto.Machine),
-		vms:      make(map[string]*hyper_proto.VmInfo),
+		logger:         params.logger,
+		machines:       make(map[string]*fm_proto.Machine),
+		vmToHypervisor: make(map[string]string),
+		vms:            make(map[string]*hyper_proto.VmInfo),
 	}
 	if len(params.args) > 1 {
 		g.location = params.args[1]
@@ -124,7 +127,7 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 			if len(vm.OwnerGroups) > 0 {
 				ownerGroup = vm.OwnerGroups[0]
 			}
-			newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+			machine := mdb.Machine{
 				Hostname:       ipAddr,
 				IpAddress:      ipAddr,
 				RequiredImage:  tags["RequiredImage"],
@@ -132,7 +135,11 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 				DisableUpdates: disableUpdates,
 				OwnerGroup:     ownerGroup,
 				Tags:           vm.Tags,
-			})
+			}
+			if h := g.machines[g.vmToHypervisor[ipAddr]]; h != nil {
+				machine.Location = filepath.Join(h.Location, h.Hostname)
+			}
+			newMdb.Machines = append(newMdb.Machines, machine)
 		}
 	}
 	return &newMdb, nil
@@ -163,6 +170,7 @@ func (g *fleetManagerGeneratorType) update(update fm_proto.Update,
 		delete(g.machines, hostname)
 	}
 	for ipAddr, vm := range update.ChangedVMs {
+		g.vmToHypervisor[ipAddr] = update.VmToHypervisor[ipAddr]
 		g.vms[ipAddr] = vm
 		delete(vmsToDelete, ipAddr)
 	}
@@ -170,6 +178,7 @@ func (g *fleetManagerGeneratorType) update(update fm_proto.Update,
 		delete(g.vms, ipAddr)
 	}
 	for ipAddr := range vmsToDelete {
+		delete(g.vmToHypervisor, ipAddr)
 		delete(g.vms, ipAddr)
 	}
 }

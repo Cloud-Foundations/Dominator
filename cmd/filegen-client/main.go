@@ -23,7 +23,7 @@ var (
 		"If true, perform benchmark timing")
 	debug = flag.Bool("debug", false,
 		"If true, show debugging output")
-	mdbFile = flag.String("mdbFile", "/var/lib/Dominator/mdb",
+	mdbFile = flag.String("mdbFile", "/var/lib/mdbd/mdb.json",
 		"File to read MDB data from (default format is JSON)")
 
 	numMachines int

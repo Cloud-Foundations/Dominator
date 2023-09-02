@@ -106,6 +106,12 @@ func (herd *Herd) showReachableSubsHandler(writer http.ResponseWriter,
 	herd.showSubsHandler(writer, req, selectFunc, "reachable ")
 }
 
+func (herd *Herd) showUnreachableSubsHandler(writer http.ResponseWriter,
+	req *http.Request) {
+	selectFunc, _ := herd.getUnreachableSelector(url.ParseQuery(req.URL))
+	herd.showSubsHandler(writer, req, selectFunc, "unreachable ")
+}
+
 func (herd *Herd) showSubsCSV(writer io.Writer,
 	selectFunc func(*Sub) bool) {
 	subs := herd.getSelectedSubs(selectFunc)

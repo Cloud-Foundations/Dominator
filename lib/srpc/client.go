@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -308,6 +309,9 @@ func (client *Client) callWithLock(serviceMethod string) (*Conn, error) {
 }
 
 func (client *Client) close() error {
+	if client.conn == nil {
+		return os.ErrClosed
+	}
 	client.bufrw.Flush()
 	if client.resource == nil {
 		clientMetricsMutex.Lock()
@@ -318,6 +322,7 @@ func (client *Client) close() error {
 		return err
 	}
 	client.resource.resource.Release()
+	client.conn = nil
 	clientMetricsMutex.Lock()
 	if client.resource.inUse {
 		numInUseClientConnections--

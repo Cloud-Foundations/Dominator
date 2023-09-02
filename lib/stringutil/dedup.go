@@ -48,10 +48,34 @@ func (d *StringDeduplicator) deDuplicate(str string) string {
 	}
 }
 
+func (d *StringDeduplicator) deleteUnregistered() {
+	if d.lock {
+		d.mutex.Lock()
+		defer d.mutex.Unlock()
+	}
+	for str := range d.mapping {
+		if _, registered := d.registered[str]; !registered {
+			delete(d.mapping, str)
+		}
+	}
+	d.registered = nil
+}
+
 func (d *StringDeduplicator) getStatistics() StringDuplicationStatistics {
 	if d.lock {
 		d.mutex.Lock()
 		defer d.mutex.Unlock()
 	}
 	return d.statistics
+}
+
+func (d *StringDeduplicator) register(str string) {
+	if d.lock {
+		d.mutex.Lock()
+		defer d.mutex.Unlock()
+	}
+	if d.registered == nil {
+		d.registered = make(map[string]struct{})
+	}
+	d.registered[str] = struct{}{}
 }

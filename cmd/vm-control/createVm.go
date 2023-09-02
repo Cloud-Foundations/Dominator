@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -16,6 +15,7 @@ import (
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/images/virtualbox"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -341,23 +341,7 @@ func loadOverlayFiles() (map[string][]byte, error) {
 	if *overlayDirectory == "" {
 		return nil, nil
 	}
-	overlayFiles := make(map[string][]byte)
-	err := filepath.Walk(*overlayDirectory,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			data, err := ioutil.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			overlayFiles[path[len(*overlayDirectory):]] = data
-			return nil
-		})
-	return overlayFiles, err
+	return fsutil.ReadFileTree(*overlayDirectory, *overlayPrefix)
 }
 
 func makeVolumeInitParams(numVolumes uint) []volumeInitParams {

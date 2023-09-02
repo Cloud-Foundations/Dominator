@@ -11,6 +11,11 @@ type ShallowCloneParams struct {
 	RepoURL   string   // Real URL of repository.
 }
 
+// GetCommitIdOfRef will return the Commit ID of the specified reference.
+func GetCommitIdOfRef(topdir, ref string) (string, error) {
+	return getCommitIdOfRef(topdir, ref)
+}
+
 // ShallowClone will make a shallow clone of a Git repository. The repository
 // will be written to the directory specified by topdir.
 func ShallowClone(topdir string, params ShallowCloneParams,

@@ -65,6 +65,8 @@ var (
 	minFreeBytes     = flagutil.Size(256 << 20)
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
+	overlayPrefix = flag.String("overlayPrefix", "/",
+		"Prefix to add to overlay filenames")
 	ownerGroups  flagutil.StringList
 	ownerUsers   flagutil.StringList
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")

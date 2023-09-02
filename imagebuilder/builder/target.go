@@ -26,8 +26,9 @@ func newNamespaceTarget() (*goroutine.Goroutine, error) {
 	return g, nil
 }
 
-// newNamespaceTarget will create a goroutine which is locked to an OS
-// thread with a separate mount namespace which and mounts.
+// newNamespaceTargetWithMounts will create a goroutine which is locked to an OS
+// thread with a separate mount namespace. The directories specified by
+// bindMounts will be mounted into the new namespace.
 func newNamespaceTargetWithMounts(rootDir string, bindMounts []string) (
 	*goroutine.Goroutine, error) {
 	g, err := newNamespaceTarget()

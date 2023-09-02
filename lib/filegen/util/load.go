@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filegen"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -19,6 +20,7 @@ type configType struct {
 var configs = map[string]configType{
 	"DynamicTemplateFile": {1, 1, dynamicTemplateFileGenerator},
 	"File":                {1, 1, fileGenerator},
+	"MdbFieldDirectory":   {2, 3, mdbFieldDirectoryGenerator},
 	"MDB":                 {0, 0, mdbGenerator},
 	"StaticTemplateFile":  {1, 1, staticTemplateFileGenerator},
 }
@@ -61,6 +63,23 @@ func fileGenerator(manager *filegen.Manager, pathname string,
 	params []string) error {
 	manager.RegisterFileForPath(pathname, params[0])
 	return nil
+}
+
+func mdbFieldDirectoryGenerator(manager *filegen.Manager, pathname string,
+	params []string) error {
+	interval := time.Duration(-1)
+	if len(params) > 2 {
+		duration, err := time.ParseDuration(params[2])
+		if err != nil {
+			return err
+		}
+		interval = duration
+		if interval < time.Second {
+			interval = time.Second
+		}
+	}
+	return manager.RegisterMdbFieldDirectoryForPath(pathname, params[0],
+		params[1], interval)
 }
 
 func mdbGenerator(manager *filegen.Manager, pathname string,

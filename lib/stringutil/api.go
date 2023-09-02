@@ -6,6 +6,7 @@ type StringDeduplicator struct {
 	lock       bool
 	mutex      sync.Mutex
 	mapping    map[string]string
+	registered map[string]struct{}
 	statistics StringDuplicationStatistics
 }
 
@@ -55,7 +56,21 @@ func (d *StringDeduplicator) DeDuplicate(str string) string {
 	return d.deDuplicate(str)
 }
 
+// DeleteUnregistered will delete all strings not previously registered with
+// Register. This will also delete the previously registered strings. This may
+// be used for garbage collection.
+func (d *StringDeduplicator) DeleteUnregistered() {
+	d.deleteUnregistered()
+}
+
 // GetStatistics will return de-duplication statistics.
 func (d *StringDeduplicator) GetStatistics() StringDuplicationStatistics {
 	return d.getStatistics()
+}
+
+// Register will register the specified string to indicate it is used, so that
+// a later call to DeleteUnregistered will not delete it. This method should be
+// called for every string in the application.
+func (d *StringDeduplicator) Register(str string) {
+	d.register(str)
 }

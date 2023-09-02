@@ -74,6 +74,10 @@ func (image *Image) ListObjects() []hash.Hash {
 	return image.listObjects()
 }
 
+func (image *Image) RegisterStrings(registerFunc func(string)) {
+	image.registerStrings(registerFunc)
+}
+
 func (image *Image) ReplaceStrings(replaceFunc func(string) string) {
 	image.replaceStrings(replaceFunc)
 }

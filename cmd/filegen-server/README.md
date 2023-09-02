@@ -82,6 +82,13 @@ supported:
 - **MDB** pathname: the file data are the JSON encoding the MDB data for the
   host
 
+- **MdbFieldDirectory** pathname *field* *directory* [*interval*]: the named
+  *field* of the MDB data for the host is used as the filename under the
+  specified *directory*. This file contains the data for the host. For example,
+  the `Hostname` field would be used to specify a file for every host. If the
+  file does not exist the '*' file is read to load default data. An optional
+  reload *interval* may be specified
+
 - **StaticTemplateFile** pathname *filename*: the contents of *filename* are
   used as a template to generate the file data. If the file contains sections of
   the form `{{.MyVar}}` then the value of the `MyVar` variable from the MDB for
