@@ -3,14 +3,15 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
+	"github.com/Cloud-Foundations/Dominator/lib/decoders"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -34,6 +35,13 @@ func buildRawFromManifestSubcommand(args []string,
 
 func buildRawFromManifest(manifestDir, rawFilename string,
 	logger log.DebugLogger) error {
+	var variables map[string]string
+	if *variablesFilename != "" {
+		err := decoders.DecodeFile(*variablesFilename, &variables)
+		if err != nil {
+			return err
+		}
+	}
 	if rawSize < 1<<20 {
 		return fmt.Errorf("rawSize: %d too small", rawSize)
 	}
@@ -42,7 +50,6 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 		return fmt.Errorf("error making mounts private: %s", err)
 	}
 	srpcClient := getImageServerClient()
-	buildLog := &bytes.Buffer{}
 	tmpFilename := rawFilename + "~"
 	file, err := os.OpenFile(tmpFilename, createFlags, fsutil.PrivateFilePerms)
 	if err != nil {
@@ -56,12 +63,14 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 	if err := mbr.WriteDefault(tmpFilename, mbr.TABLE_TYPE_MSDOS); err != nil {
 		return err
 	}
-	loopDevice, err := fsutil.LoopbackSetup(tmpFilename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
+		partition, time.Minute, logger)
 	if err != nil {
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	rootDevice := loopDevice + "p1"
+	rootDevice := loopDevice + partition
 	rootLabel := "root@test"
 	err = util.MakeExt4fs(rootDevice, rootLabel, nil, 0, logger)
 	if err != nil {
@@ -77,12 +86,36 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
 	defer syscall.Unmount(rootDir, 0)
-	err = builder.UnpackImageAndProcessManifest(srpcClient, manifestDir,
-		rootDir, bindMounts, buildLog)
+	logWriter := &logWriterType{}
+	if *alwaysShowBuildLog {
+		fmt.Fprintln(os.Stderr, "Start of build log ==========================")
+	}
+	err = builder.UnpackImageAndProcessManifestWithOptions(
+		srpcClient,
+		builder.BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: manifestDir,
+			Variables:         variables,
+		},
+		rootDir,
+		logWriter)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error processing manifest: %s\n", err)
-		io.Copy(os.Stderr, buildLog)
-		os.Exit(1)
+		if !*alwaysShowBuildLog {
+			fmt.Fprintln(os.Stderr,
+				"Start of build log ==========================")
+			os.Stderr.Write(logWriter.Bytes())
+		}
+		fmt.Fprintln(os.Stderr, "End of build log ============================")
+		return fmt.Errorf("error processing manifest: %s", err)
+	}
+	if *alwaysShowBuildLog {
+		fmt.Fprintln(os.Stderr, "End of build log ============================")
+	} else {
+		err := fsutil.CopyToFile("build.log", filePerms, &logWriter.buffer,
+			uint64(logWriter.buffer.Len()))
+		if err != nil {
+			return fmt.Errorf("error writing build log: %s", err)
+		}
 	}
 	fs, err := scanner.ScanFileSystem(rootDir, nil, nil, nil, &dummyHasher{},
 		nil)
@@ -90,12 +123,6 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 		"net.ifnames=0", false, logger)
 	if err != nil {
 		return err
-	}
-	err = fsutil.CopyToFile("build.log", filePerms, buildLog,
-		uint64(buildLog.Len()))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing build log: %s\n", err)
-		os.Exit(1)
 	}
 	return os.Rename(tmpFilename, rawFilename)
 }

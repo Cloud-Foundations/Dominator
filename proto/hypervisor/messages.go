@@ -27,6 +27,9 @@ const (
 
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
+
+	VolumeTypePersistent = 0
+	VolumeTypeMemory     = 1
 )
 
 type AcknowledgeVmRequest struct {
@@ -187,7 +190,10 @@ type CopyVmResponse struct { // Multiple responses are sent.
 
 type CreateVmRequest struct {
 	DhcpTimeout          time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
+	DoNotStart           bool
 	EnableNetboot        bool
+	IdentityCertificate  []byte // PEM encoded.
+	IdentityKey          []byte // PEM encoded.
 	ImageDataSize        uint64
 	ImageTimeout         time.Duration
 	MinimumFreeBytes     uint64
@@ -517,6 +523,16 @@ type RegisterExternalLeasesResponse struct {
 	Error string
 }
 
+type ReplaceVmCredentialsRequest struct {
+	IdentityCertificate []byte // PEM encoded.
+	IdentityKey         []byte // PEM encoded.
+	IpAddress           net.IP
+}
+
+type ReplaceVmCredentialsResponse struct {
+	Error string
+}
+
 type ReplaceVmImageRequest struct {
 	DhcpTimeout      time.Duration
 	ImageDataSize    uint64
@@ -658,10 +674,14 @@ type UpdateSubnetsResponse struct {
 
 type VmInfo struct {
 	Address            Address
+	ChangedStateOn     time.Time   `json:",omitempty"`
 	ConsoleType        ConsoleType `json:",omitempty"`
+	CreatedOn          time.Time   `json:",omitempty"`
+	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
+	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`
 	ImageURL           string      `json:",omitempty"`
 	MemoryInMiB        uint64
@@ -670,18 +690,19 @@ type VmInfo struct {
 	OwnerUsers         []string `json:",omitempty"`
 	SpreadVolumes      bool     `json:",omitempty"`
 	State              State
-	Tags               tags.Tags `json:",omitempty"`
 	SecondaryAddresses []Address `json:",omitempty"`
 	SecondarySubnetIDs []string  `json:",omitempty"`
 	SubnetId           string    `json:",omitempty"`
+	Tags               tags.Tags `json:",omitempty"`
 	Uncommitted        bool      `json:",omitempty"`
 	VirtualCPUs        uint      `json:",omitempty"`
 	Volumes            []Volume  `json:",omitempty"`
 }
 
 type Volume struct {
-	Size   uint64
 	Format VolumeFormat
+	Size   uint64
+	Type   VolumeType
 }
 
 type VolumeFormat uint
@@ -691,3 +712,5 @@ type VolumeInitialisationInfo struct {
 	Label                    string
 	ReservedBlocksPercentage uint16
 }
+
+type VolumeType uint

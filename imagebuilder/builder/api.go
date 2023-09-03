@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
@@ -59,8 +60,9 @@ type buildResultType struct {
 }
 
 type currentBuildInfo struct {
-	buffer    *bytes.Buffer
-	startedAt time.Time
+	buffer       *bytes.Buffer
+	slaveAddress string
+	startedAt    time.Time
 }
 
 type dependencyDataType struct {
@@ -153,7 +155,14 @@ type treeCache struct {
 	pathToInode map[string]uint64
 }
 
+type BuildLocalOptions struct {
+	BindMounts        []string
+	ManifestDirectory string
+	Variables         map[string]string
+}
+
 type Builder struct {
+	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
 	generateDependencyTrigger chan<- struct{}
 	stateDir                  string
@@ -177,11 +186,40 @@ type Builder struct {
 	dependencyDataError       error
 }
 
+type BuilderOptions struct {
+	ConfigurationURL     string
+	ImageRebuildInterval time.Duration
+	ImageServerAddress   string
+	StateDirectory       string
+	VariablesFile        string
+}
+
+type BuilderParams struct {
+	BuildLogArchiver logarchiver.BuildLogArchiver
+	Logger           log.DebugLogger
+	SlaveDriver      *slavedriver.SlaveDriver
+}
+
 func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
 	imageRebuildInterval time.Duration, slaveDriver *slavedriver.SlaveDriver,
 	logger log.DebugLogger) (*Builder, error) {
-	return load(confUrl, variablesFile, stateDir, imageServerAddress,
-		imageRebuildInterval, slaveDriver, logger)
+	return LoadWithOptionsAndParams(
+		BuilderOptions{
+			ConfigurationURL:     confUrl,
+			ImageRebuildInterval: imageRebuildInterval,
+			ImageServerAddress:   imageServerAddress,
+			StateDirectory:       stateDir,
+			VariablesFile:        variablesFile,
+		},
+		BuilderParams{
+			Logger:      logger,
+			SlaveDriver: slaveDriver,
+		})
+}
+
+func LoadWithOptionsAndParams(options BuilderOptions,
+	params BuilderParams) (*Builder, error) {
+	return load(options, params)
 }
 
 func (b *Builder) BuildImage(request proto.BuildImageRequest,
@@ -208,6 +246,10 @@ func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
 }
 
+func (b *Builder) ReplaceIdleSlaves(immediateGetNew bool) error {
+	return b.replaceIdleSlaves(immediateGetNew)
+}
+
 func (b *Builder) ShowImageStream(writer io.Writer, streamName string) {
 	b.showImageStream(writer, streamName)
 }
@@ -224,19 +266,40 @@ func BuildImageFromManifest(client *srpc.Client, manifestDir, streamName string,
 	expiresIn time.Duration, bindMounts []string, buildLog buildLogger,
 	logger log.Logger) (
 	string, error) {
-	_, name, err := buildImageFromManifestAndUpload(client, manifestDir,
-		proto.BuildImageRequest{
-			StreamName: streamName,
-			ExpiresIn:  expiresIn,
+	return BuildImageFromManifestWithOptions(
+		client,
+		BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: manifestDir,
 		},
-		bindMounts, nil, buildLog)
+		streamName,
+		expiresIn,
+		buildLog)
+}
+
+func BuildImageFromManifestWithOptions(client *srpc.Client,
+	options BuildLocalOptions, streamName string, expiresIn time.Duration,
+	buildLog buildLogger) (string, error) {
+	_, name, err := buildImageFromManifestAndUpload(client, options, streamName,
+		expiresIn, buildLog)
 	return name, err
 }
 
 func BuildTreeFromManifest(client *srpc.Client, manifestDir string,
 	bindMounts []string, buildLog io.Writer,
 	logger log.Logger) (string, error) {
-	return buildTreeFromManifest(client, manifestDir, bindMounts, nil, buildLog)
+	return BuildTreeFromManifestWithOptions(
+		client,
+		BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: manifestDir,
+		},
+		buildLog)
+}
+
+func BuildTreeFromManifestWithOptions(client *srpc.Client,
+	options BuildLocalOptions, buildLog io.Writer) (string, error) {
+	return buildTreeFromManifest(client, options, buildLog)
 }
 
 func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
@@ -244,9 +307,23 @@ func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 	return processManifest(manifestDir, rootDir, bindMounts, nil, buildLog)
 }
 
+func ProcessManifestWithOptions(options BuildLocalOptions,
+	rootDir string, buildLog io.Writer) error {
+	return processManifest(options.ManifestDirectory, rootDir,
+		options.BindMounts, variablesGetter(options.Variables), buildLog)
+}
+
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
 	_, err := unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
 		bindMounts, true, nil, buildLog)
+	return err
+}
+
+func UnpackImageAndProcessManifestWithOptions(client *srpc.Client,
+	options BuildLocalOptions, rootDir string, buildLog io.Writer) error {
+	_, err := unpackImageAndProcessManifest(client,
+		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
+		variablesGetter(options.Variables), buildLog)
 	return err
 }

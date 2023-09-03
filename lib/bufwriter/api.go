@@ -31,6 +31,7 @@ func NewAutoFlushWriter(w FlushWriter) io.Writer {
 // NewWriter wraps a io.Writer and returns a *Writer. Written data are flushed
 // within the time specified by flushDelay. If writer does not implement the
 // FlushWriter interface then a bufio.Writer is created.
+// The Flush and Write methods of writer must not be called directly.
 func NewWriter(writer io.Writer, flushDelay time.Duration) *Writer {
 	return newWriter(writer, flushDelay)
 }

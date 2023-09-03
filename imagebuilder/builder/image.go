@@ -315,12 +315,24 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	return img, nil
 }
 
-func buildImageFromManifestAndUpload(client *srpc.Client, manifestDir string,
-	request proto.BuildImageRequest, bindMounts []string,
-	envGetter environmentGetter,
+func buildImageFromManifestAndUpload(client *srpc.Client,
+	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (*image.Image, string, error) {
-	img, err := buildImageFromManifest(client, manifestDir, request, bindMounts,
-		envGetter, nil, buildLog)
+	request := proto.BuildImageRequest{
+		StreamName: streamName,
+		ExpiresIn:  expiresIn,
+	}
+	img, err := buildImageFromManifest(
+		client,
+		options.ManifestDirectory,
+		request,
+		options.BindMounts,
+		&imageStreamType{
+			name:      streamName,
+			Variables: options.Variables,
+		},
+		nil,
+		buildLog)
 	if err != nil {
 		return nil, "", err
 	}
@@ -378,15 +390,15 @@ func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
 	return &cache, nil
 }
 
-func buildTreeFromManifest(client *srpc.Client, manifestDir string,
-	bindMounts []string, envGetter environmentGetter,
+func buildTreeFromManifest(client *srpc.Client, options BuildLocalOptions,
 	buildLog io.Writer) (string, error) {
 	rootDir, err := makeTempDirectory("", "tree")
 	if err != nil {
 		return "", err
 	}
-	_, err = unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
-		bindMounts, true, envGetter, buildLog)
+	_, err = unpackImageAndProcessManifest(client,
+		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
+		variablesGetter(options.Variables), buildLog)
 	if err != nil {
 		os.RemoveAll(rootDir)
 		return "", err

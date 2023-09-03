@@ -121,9 +121,19 @@ func LoopbackDelete(loopDevice string) error {
 }
 
 // LoopbackSetup will associate a loopback block device with a regular file
-// named filename. The name of the block device is returned.
+// named filename. The name of the loop block device is returned.
 func LoopbackSetup(filename string) (string, error) {
 	return loopbackSetup(filename)
+}
+
+// LoopbackSetupAndWaitForPartition will associate a loopback block device with
+// a regular file named filename and wait for the specified partition block
+// device node to become available. The timeout is limited to one hour.
+// The name of the loop block device (excluding the partition) is returned.
+func LoopbackSetupAndWaitForPartition(filename, partition string,
+	timeout time.Duration, logger log.DebugLogger) (string, error) {
+	return loopbackSetupAndWaitForPartition(filename, partition, timeout,
+		logger)
 }
 
 // MakeMutable attempts to remove the "immutable" and "append-only" ext2

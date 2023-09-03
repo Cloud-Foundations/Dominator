@@ -7,14 +7,13 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-var metadataServer = "http://169.254.169.254/"
-var awsInstanceTypePath = "latest/meta-data/instance-type"
-
 func getAwsInstanceType() (string, error) {
-	resp, err := http.Get(metadataServer + awsInstanceTypePath)
+	resp, err := http.Get(constants.MetadataUrl +
+		constants.MetadataAwsInstanceType)
 	if err != nil {
 		return "", err
 	}

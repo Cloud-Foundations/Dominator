@@ -1,24 +1,37 @@
 package smallstack
 
 import (
-	"sync"
-
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type closeRequestMessage struct {
+	errorChannel chan<- error
+}
+
 type SlaveTrader struct {
-	createRequest hyper_proto.CreateVmRequest
-	logger        log.DebugLogger
-	mutex         sync.Mutex // Lock everything below (those can change).
-	hypervisor    *srpc.Client
+	closeChannel      chan<- closeRequestMessage
+	hypervisorChannel <-chan *srpc.Client
+	logger            log.DebugLogger
+	options           SlaveTraderOptions
+}
+
+type SlaveTraderOptions struct {
+	CreateRequest     hyper_proto.CreateVmRequest
+	HypervisorAddress string // Default: local Hypervisor.
 }
 
 func NewSlaveTrader(createRequest hyper_proto.CreateVmRequest,
 	logger log.DebugLogger) (*SlaveTrader, error) {
-	return newSlaveTrader(createRequest, logger)
+	return newSlaveTrader(SlaveTraderOptions{CreateRequest: createRequest},
+		logger)
+}
+
+func NewSlaveTraderWithOptions(options SlaveTraderOptions,
+	logger log.DebugLogger) (*SlaveTrader, error) {
+	return newSlaveTrader(options, logger)
 }
 
 func (trader *SlaveTrader) Close() error {

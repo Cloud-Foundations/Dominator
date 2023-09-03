@@ -10,17 +10,26 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const (
 	sysClassBlock = "/sys/class/block"
+)
+
+var (
+	memoryVolumeDirectory      string
+	memoryVolumeDirectoryMutex sync.Mutex
 )
 
 type mountInfo struct {
@@ -74,6 +83,43 @@ func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	return freeSpace, nil
 }
 
+func getMemoryVolumeDirectory(logger log.Logger) (string, error) {
+	memoryVolumeDirectoryMutex.Lock()
+	defer memoryVolumeDirectoryMutex.Unlock()
+	if memoryVolumeDirectory != "" {
+		return memoryVolumeDirectory, nil
+	}
+	dirname := "/tmp/hyper-volumes"
+	var statbuf wsyscall.Stat_t
+	if err := wsyscall.Lstat(dirname, &statbuf); err == nil {
+		if statbuf.Mode&wsyscall.S_IFMT != wsyscall.S_IFDIR {
+			return "", fmt.Errorf("%s is not a directory", dirname)
+		}
+		if statbuf.Uid != 0 {
+			return "", fmt.Errorf("%s is not owned by root, UID=%d",
+				dirname, statbuf.Uid)
+		}
+	} else if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
+		return "", err
+	}
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return "", err
+	}
+	if mountEntry := mountTable.FindEntry(dirname); mountEntry == nil {
+		return "", fmt.Errorf("%s: no match in mount table", dirname)
+	} else if mountEntry.Type == "tmpfs" {
+		memoryVolumeDirectory = dirname
+		return memoryVolumeDirectory, nil
+	}
+	if err := wsyscall.Mount("none", dirname, "tmpfs", 0, ""); err != nil {
+		return "", err
+	}
+	logger.Printf("mounted tmpfs on: %s\n", dirname)
+	memoryVolumeDirectory = dirname
+	return memoryVolumeDirectory, nil
+}
+
 func getMounts(mountTable *mounts.MountTable) (
 	map[string]*mounts.MountEntry, error) {
 	mountMap := make(map[string]*mounts.MountEntry)
@@ -108,7 +154,7 @@ func getMounts(mountTable *mounts.MountTable) (
 
 // grow2fs will try and grow an ext{2,3,4} file-system to fit the volume size,
 // expanding the partition first if appropriate.
-func grow2fs(volume string) error {
+func grow2fs(volume string, logger log.DebugLogger) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
 		return resize2fs(volume, 0)
@@ -144,7 +190,8 @@ func grow2fs(volume string) error {
 			volume, err, string(output))
 	}
 	// Try and resize the file-system in the partition (need a loop device).
-	device, err := fsutil.LoopbackSetup(volume)
+	device, err := fsutil.LoopbackSetupAndWaitForPartition(volume, "p1",
+		time.Minute, logger)
 	if err != nil {
 		return err
 	}
@@ -193,7 +240,7 @@ func resize2fs(device string, size uint64) error {
 
 // shrink2fs will try and shrink an ext{2,3,4} file-system on a volume,
 // shrinking the partition afterwards if appropriate.
-func shrink2fs(volume string, size uint64) error {
+func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	if check2fs(volume) {
 		// Simple case: file-system is on the raw volume, no partition table.
 		return resize2fs(volume, size)
@@ -228,7 +275,8 @@ func shrink2fs(volume string, size uint64) error {
 		return err
 	}
 	// Try and resize the file-system in the partition (need a loop device).
-	device, err := fsutil.LoopbackSetup(volume)
+	device, err := fsutil.LoopbackSetupAndWaitForPartition(volume, "p1",
+		time.Minute, logger)
 	if err != nil {
 		return err
 	}
@@ -334,12 +382,13 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 }
 
 func (m *Manager) getVolumeDirectories(rootSize uint64,
-	volumes []proto.Volume, spreadVolumes bool) ([]string, error) {
-	sizes := make([]uint64, 0, len(volumes)+1)
+	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
+	spreadVolumes bool) ([]string, error) {
+	sizes := make([]uint64, 0, len(secondaryVolumes)+1)
 	if rootSize > 0 {
 		sizes = append(sizes, rootSize)
 	}
-	for _, volume := range volumes {
+	for _, volume := range secondaryVolumes {
 		if volume.Size > 0 {
 			sizes = append(sizes, volume.Size)
 		} else {
@@ -358,6 +407,17 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 		sizes = sizes[1:]
 		if spreadVolumes {
 			position++
+		}
+	}
+	for index := range directoriesToUse {
+		if (index == 0 && rootVolumeType == proto.VolumeTypeMemory) ||
+			(index > 0 && index <= len(secondaryVolumes) &&
+				secondaryVolumes[index-1].Type == proto.VolumeTypeMemory) {
+			if dirname, err := getMemoryVolumeDirectory(m.Logger); err != nil {
+				return nil, err
+			} else {
+				directoriesToUse[index] = dirname
+			}
 		}
 	}
 	return directoriesToUse, nil

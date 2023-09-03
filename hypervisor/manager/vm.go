@@ -288,7 +288,7 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	for _, size := range volumeSizes {
 		volumes = append(volumes, proto.Volume{Size: size})
 	}
-	volumeDirectories, err := vm.manager.getVolumeDirectories(0, volumes,
+	volumeDirectories, err := vm.manager.getVolumeDirectories(0, 0, volumes,
 		vm.SpreadVolumes)
 	if err != nil {
 		return err
@@ -389,7 +389,9 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if err := m.checkSufficientCPUWithLock(req.MilliCPUs); err != nil {
 		return nil, err
 	}
-	if err := m.checkSufficientMemoryWithLock(req.MemoryInMiB); err != nil {
+	totalMemoryInMiB := getVmInfoMemoryInMiB(req.VmInfo)
+	err = m.checkSufficientMemoryWithLock(totalMemoryInMiB, nil)
+	if err != nil {
 		return nil, err
 	}
 	var ipAddress string
@@ -402,7 +404,9 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		LocalVmInfo: proto.LocalVmInfo{
 			VmInfo: proto.VmInfo{
 				Address:            address,
+				CreatedOn:          time.Now(),
 				ConsoleType:        req.ConsoleType,
+				DestroyOnPowerdown: req.DestroyOnPowerdown,
 				DestroyProtection:  req.DestroyProtection,
 				DisableVirtIO:      req.DisableVirtIO,
 				Hostname:           req.Hostname,
@@ -536,7 +540,7 @@ func (m *Manager) changeVmMemory(vm *vmInfoType,
 		changed = true
 	} else if memoryInMiB > vm.MemoryInMiB {
 		m.mutex.Lock()
-		err := m.checkSufficientMemoryWithLock(memoryInMiB - vm.MemoryInMiB)
+		err := m.checkSufficientMemoryWithLock(memoryInMiB-vm.MemoryInMiB, vm)
 		if err == nil {
 			vm.MemoryInMiB = memoryInMiB
 			changed = true
@@ -626,7 +630,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 		return errors.New("VM is not stopped")
 	}
 	if size < volume.Size {
-		if err := shrink2fs(localVolume.Filename, size); err != nil {
+		if err := shrink2fs(localVolume.Filename, size, vm.logger); err != nil {
 			return err
 		}
 		if err := setVolumeSize(localVolume.Filename, size); err != nil {
@@ -651,7 +655,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	// Try and grow an ext{2,3,4} file-system. If this fails, return the error
 	// to the caller, but the volume will have been expanded. Someone else can
 	// deal with adjusting partitions and growing file-systems.
-	return grow2fs(localVolume.Filename)
+	return grow2fs(localVolume.Filename, vm.logger)
 }
 
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {
@@ -804,8 +808,8 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 			secondaryVolumes = append(secondaryVolumes, volume)
 		}
 	}
-	err = vm.setupVolumes(vmInfo.Volumes[0].Size, secondaryVolumes,
-		vmInfo.SpreadVolumes)
+	err = vm.setupVolumes(vmInfo.Volumes[0].Size, vmInfo.Volumes[0].Type,
+		secondaryVolumes, vmInfo.SpreadVolumes)
 	if err != nil {
 		return err
 	}
@@ -849,7 +853,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 	}
 	err = migratevmUserData(hypervisor,
-		filepath.Join(vm.dirname, "user-data.raw"),
+		filepath.Join(vm.dirname, UserDataFile),
 		request.IpAddress, accessToken)
 	if err != nil {
 		return err
@@ -897,6 +901,18 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		return sendError(conn, errors.New("no authentication data"))
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
+	var identityName string
+	if len(request.IdentityCertificate) > 0 && len(request.IdentityKey) > 0 {
+		var err error
+		identityName, err = validateIdentityKeyPair(
+			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
+		if err != nil {
+			if err := maybeDrainAll(conn, request); err != nil {
+				return err
+			}
+			return sendError(conn, err)
+		}
+	}
 	vm, err := m.allocateVm(request, conn.GetAuthInformation())
 	if err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
@@ -907,9 +923,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	defer func() {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
+	vm.IdentityName = identityName
 	var memoryError <-chan error
 	if !request.SkipMemoryCheck {
-		memoryError = tryAllocateMemory(request.MemoryInMiB)
+		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
@@ -917,6 +934,19 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		return sendError(conn, err)
+	}
+	err = writeKeyPair(request.IdentityCertificate, request.IdentityKey,
+		filepath.Join(vm.dirname, IdentityCertFile),
+		filepath.Join(vm.dirname, IdentityKeyFile))
+	if err != nil {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
+		return sendError(conn, err)
+	}
+	var rootVolumeType proto.VolumeType
+	if len(request.Volumes) > 0 {
+		rootVolumeType = request.Volumes[0].Type
 	}
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
@@ -935,7 +965,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		vm.ImageName = imageName
 		size := computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			fs.EstimateUsage(0))
-		err = vm.setupVolumes(size, request.SecondaryVolumes,
+		err = vm.setupVolumes(size, rootVolumeType, request.SecondaryVolumes,
 			request.SpreadVolumes)
 		if err != nil {
 			return sendError(conn, err)
@@ -962,7 +992,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			vm.Volumes = []proto.Volume{{Size: uint64(fi.Size())}}
 		}
 	} else if request.ImageDataSize > 0 {
-		err := vm.copyRootVolume(request, conn, request.ImageDataSize)
+		err := vm.copyRootVolume(request, conn, request.ImageDataSize,
+			rootVolumeType)
 		if err != nil {
 			return err
 		}
@@ -983,20 +1014,22 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = vm.copyRootVolume(request, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), rootVolumeType)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else if request.MinimumFreeBytes > 0 { // Create empty root volume.
-		err = vm.copyRootVolume(request, nil, request.MinimumFreeBytes)
+		err = vm.copyRootVolume(request, nil, request.MinimumFreeBytes,
+			rootVolumeType)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
+	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
-		filename := filepath.Join(vm.dirname, "user-data.raw")
+		filename := filepath.Join(vm.dirname, UserDataFile)
 		if err := copyData(filename, conn, request.UserDataSize); err != nil {
 			return sendError(conn, err)
 		}
@@ -1044,21 +1077,26 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn, err)
 		}
 	}
-	if vm.ipAddress == "" {
-		ipAddressToSend = net.ParseIP(vm.ipAddress)
-		if err := sendUpdate(conn, "starting VM"); err != nil {
-			return err
-		}
+	var dhcpTimedOut bool
+	if request.DoNotStart {
+		vm.setState(proto.StateStopped)
 	} else {
-		ipAddressToSend = net.ParseIP(vm.ipAddress)
-		if err := sendUpdate(conn, "starting VM "+vm.ipAddress); err != nil {
-			return err
+		if vm.ipAddress == "" {
+			ipAddressToSend = net.ParseIP(vm.ipAddress)
+			if err := sendUpdate(conn, "starting VM"); err != nil {
+				return err
+			}
+		} else {
+			ipAddressToSend = net.ParseIP(vm.ipAddress)
+			if err := sendUpdate(conn, "starting VM "+vm.ipAddress); err != nil {
+				return err
+			}
 		}
-	}
-	dhcpTimedOut, err := vm.startManaging(request.DhcpTimeout,
-		request.EnableNetboot, false)
-	if err != nil {
-		return sendError(conn, err)
+		dhcpTimedOut, err = vm.startManaging(request.DhcpTimeout,
+			request.EnableNetboot, false)
+		if err != nil {
+			return sendError(conn, err)
+		}
 	}
 	vm.destroyTimer = time.AfterFunc(time.Second*15, vm.autoDestroy)
 	response := proto.CreateVmResponse{
@@ -1212,7 +1250,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 	vm.setState(proto.StateStarting)
 	sendUpdate(conn, "starting VM")
 	vm.mutex.Unlock()
-	_, err = vm.startManaging(-1, false, false)
+	_, err = vm.startManaging(0, false, false)
 	vm.mutex.Lock()
 	if err != nil {
 		sendError(conn, err)
@@ -1321,7 +1359,7 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(filepath.Join(vm.dirname, "user-data.old"))
+	return os.Remove(filepath.Join(vm.dirname, UserDataFile+".old"))
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
@@ -1504,6 +1542,24 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return os.Open(filename)
 }
 
+func (m *Manager) getVmFileReader(ipAddr net.IP, authInfo *srpc.AuthInformation,
+	accessToken []byte, filename string) (io.ReadCloser, uint64, error) {
+	filename = filepath.Clean(filename)
+	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, accessToken)
+	if err != nil {
+		return nil, 0, err
+	}
+	pathname := filepath.Join(vm.dirname, filename)
+	vm.mutex.RUnlock()
+	if file, err := os.Open(pathname); err != nil {
+		return nil, 0, err
+	} else if fi, err := file.Stat(); err != nil {
+		return nil, 0, err
+	} else {
+		return file, uint64(fi.Size()), nil
+	}
+}
+
 func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
 	if err != nil {
@@ -1511,23 +1567,6 @@ func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	}
 	defer vm.mutex.RUnlock()
 	return vm.VmInfo, nil
-}
-
-func (m *Manager) getVmUserData(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	accessToken []byte) (io.ReadCloser, uint64, error) {
-	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, accessToken)
-	if err != nil {
-		return nil, 0, err
-	}
-	filename := filepath.Join(vm.dirname, "user-data.raw")
-	vm.mutex.RUnlock()
-	if file, err := os.Open(filename); err != nil {
-		return nil, 0, err
-	} else if fi, err := file.Stat(); err != nil {
-		return nil, 0, err
-	} else {
-		return file, uint64(fi.Size()), nil
-	}
 }
 
 func (m *Manager) getVmVolume(conn *srpc.Conn) error {
@@ -1643,7 +1682,8 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	}
 	request.Volumes = volumes
 	if !request.SkipMemoryCheck {
-		if err := <-tryAllocateMemory(request.MemoryInMiB); err != nil {
+		err := <-tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
+		if err != nil {
 			return err
 		}
 	}
@@ -1802,7 +1842,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		return err
 	}
 	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
-		vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
+		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
 	if err != nil {
 		return err
 	}
@@ -1888,7 +1928,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		}
 	}
 	err = migratevmUserData(hypervisor,
-		filepath.Join(vm.dirname, "user-data.raw"),
+		filepath.Join(vm.dirname, UserDataFile),
 		request.IpAddress, accessToken)
 	if err != nil {
 		return err
@@ -1987,11 +2027,13 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
 	if err := m.checkSufficientCPUWithLock(vmInfo.MilliCPUs); err != nil {
 		return err
 	}
-	if err := m.checkSufficientMemoryWithLock(vmInfo.MemoryInMiB); err != nil {
+	err := m.checkSufficientMemoryWithLock(vmInfo.MemoryInMiB, nil)
+	if err != nil {
 		return err
 	}
 	if !skipMemoryCheck {
-		if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
+		err := <-tryAllocateMemory(getVmInfoMemoryInMiB(vmInfo))
+		if err != nil {
 			return err
 		}
 	}
@@ -2240,13 +2282,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer os.Remove(rootDir)
-	loopDevice, err := fsutil.LoopbackSetup(tmpRootFilename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpRootFilename,
+		partition, time.Minute, vm.logger)
 	if err != nil {
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", loopDevice, rootDir)
-	err = wsyscall.Mount(loopDevice+"p1", rootDir, "ext4", 0, "")
+	err = wsyscall.Mount(loopDevice+partition, rootDir, "ext4", 0, "")
 	if err != nil {
 		return err
 	}
@@ -2366,7 +2410,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		vm.setState(proto.StateStarting)
 		sendVmPatchImageMessage(conn, "starting VM")
 		vm.mutex.Unlock()
-		_, err := vm.startManaging(-1, false, false)
+		_, err := vm.startManaging(0, false, false)
 		vm.mutex.Lock()
 		if err != nil {
 			return err
@@ -2670,7 +2714,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		vm.setState(proto.StateStarting)
 		sendUpdate(conn, "starting VM")
 		vm.mutex.Unlock()
-		_, err := vm.startManaging(-1, false, false)
+		_, err := vm.startManaging(0, false, false)
 		vm.mutex.Lock()
 		if err != nil {
 			sendError(conn, err)
@@ -2692,7 +2736,7 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	filename := filepath.Join(vm.dirname, "user-data.raw")
+	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	newFilename := filename + ".new"
 	err = fsutil.CopyToFile(newFilename, privateFilePerms, reader, size)
@@ -2701,7 +2745,9 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	}
 	defer os.Remove(newFilename)
 	if err := os.Rename(filename, oldFilename); err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 	if err := os.Rename(newFilename, filename); err != nil {
 		os.Rename(oldFilename, filename)
@@ -2768,7 +2814,7 @@ func (m *Manager) restoreVmUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	filename := filepath.Join(vm.dirname, "user-data.raw")
+	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	return os.Rename(oldFilename, filename)
 }
@@ -2869,12 +2915,14 @@ func (vm *vmInfoType) scanVmRoot(scanFilter *filter.Filter) (
 		return nil, err
 	}
 	defer os.Remove(rootDir)
-	loopDevice, err := fsutil.LoopbackSetup(vm.VolumeLocations[0].Filename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(
+		vm.VolumeLocations[0].Filename, partition, time.Minute, vm.logger)
 	if err != nil {
 		return nil, err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	blockDevice := loopDevice + "p1"
+	blockDevice := loopDevice + partition
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", blockDevice, rootDir)
 	err = wsyscall.Mount(blockDevice, rootDir, "ext4", 0, "")
 	if err != nil {
@@ -2992,7 +3040,7 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		vm.setState(proto.StateStarting)
 		vm.mutex.Unlock()
 		doUnlock = false
-		return vm.startManaging(-1, false, false)
+		return vm.startManaging(dhcpTimeout, false, false)
 	default:
 		return false, errors.New("unknown state: " + vm.State.String())
 	}
@@ -3191,8 +3239,8 @@ func (vm *vmInfoType) cleanup() {
 }
 
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
-	reader io.Reader, dataSize uint64) error {
-	err := vm.setupVolumes(dataSize, request.SecondaryVolumes,
+	reader io.Reader, dataSize uint64, volumeType proto.VolumeType) error {
+	err := vm.setupVolumes(dataSize, volumeType, request.SecondaryVolumes,
 		request.SpreadVolumes)
 	if err != nil {
 		return err
@@ -3359,51 +3407,6 @@ func (vm *vmInfoType) probeHealthAgent(cancel <-chan struct{}) {
 	}
 }
 
-func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
-	io.Copy(ioutil.Discard, monitorSock) // Read all and drop.
-	vm.mutex.Lock()
-	defer vm.mutex.Unlock()
-	close(vm.commandChannel)
-	vm.commandChannel = nil
-	switch vm.State {
-	case proto.StateStarting:
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-		return
-	case proto.StateRunning, proto.StateDebugging:
-		vm.setState(proto.StateCrashed)
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-		return
-	case proto.StateFailedToStart:
-		return
-	case proto.StateStopping:
-		vm.setState(proto.StateStopped)
-		select {
-		case vm.stoppedNotifier <- struct{}{}:
-		default:
-		}
-	case proto.StateStopped:
-		return
-	case proto.StateDestroying:
-		vm.delete()
-		return
-	case proto.StateMigrating:
-		return
-	case proto.StateExporting:
-		return
-	case proto.StateCrashed:
-		vm.logger.Println("monitor socket closed on already crashed VM")
-		return
-	default:
-		vm.logger.Println("unknown state: " + vm.State.String())
-	}
-}
-
 func (vm *vmInfoType) rootLabel(debug bool) string {
 	ipAddr := vm.Address.IpAddress
 	var prefix string
@@ -3466,42 +3469,20 @@ func (vm *vmInfoType) serialManager() {
 }
 
 func (vm *vmInfoType) setState(state proto.State) {
-	vm.State = state
+	if state != vm.State {
+		vm.ChangedStateOn = time.Now()
+		vm.State = state
+	}
 	if !vm.doNotWriteOrSend {
 		vm.writeAndSendInfo()
 	}
 }
 
-func (vm *vmInfoType) setupVolumes(rootSize uint64,
-	secondaryVolumes []proto.Volume, spreadVolumes bool) error {
-	volumeDirectories, err := vm.manager.getVolumeDirectories(rootSize,
-		secondaryVolumes, spreadVolumes)
-	if err != nil {
-		return err
-	}
-	volumeDirectory := filepath.Join(volumeDirectories[0], vm.ipAddress)
-	os.RemoveAll(volumeDirectory)
-	if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
-		return err
-	}
-	filename := filepath.Join(volumeDirectory, "root")
-	vm.VolumeLocations = append(vm.VolumeLocations,
-		proto.LocalVolume{volumeDirectory, filename})
-	for index := range secondaryVolumes {
-		volumeDirectory := filepath.Join(volumeDirectories[index+1],
-			vm.ipAddress)
-		os.RemoveAll(volumeDirectory)
-		if err := os.MkdirAll(volumeDirectory, dirPerms); err != nil {
-			return err
-		}
-		filename := filepath.Join(volumeDirectory, indexToName(index+1))
-		vm.VolumeLocations = append(vm.VolumeLocations,
-			proto.LocalVolume{volumeDirectory, filename})
-	}
-	return nil
-}
-
-// This may grab the VM lock.
+// This may grab and release the VM lock.
+// If dhcpTimeout <0: no DHCP lease is set up, if 0, do not wait for DHCP ACK,
+// else wait for DHCP ACK.
+// It returns true if there was a timeout waiting for the DHCP request, else
+// false.
 func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	enableNetboot, haveManagerLock bool) (bool, error) {
 	vm.monitorSockname = filepath.Join(vm.dirname, "monitor.sock")
@@ -3535,6 +3516,10 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	default:
 		vm.logger.Println("unknown state: " + vm.State.String())
 		return false, nil
+	}
+	if err := vm.checkVolumes(true); err != nil {
+		vm.setState(proto.StateFailedToStart)
+		return false, err
 	}
 	if dhcpTimeout >= 0 {
 		err := vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)

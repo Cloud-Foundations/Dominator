@@ -21,7 +21,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 		numStopped)
 	fmt.Fprintln(writer, "<br>")
 	m.mutex.RLock()
-	memUnallocated := m.getUnallocatedMemoryInMiBWithLock()
+	memUnallocated := m.getUnallocatedMemoryInMiBWithLock(nil)
 	numSubnets := len(m.subnets)
 	numFreeAddresses := len(m.addressPool.Free)
 	numRegisteredAddresses := len(m.addressPool.Registered)

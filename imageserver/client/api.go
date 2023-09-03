@@ -6,6 +6,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func AddImage(client *srpc.Client, name string, img *image.Image) error {
@@ -44,7 +45,15 @@ func DeleteUnreferencedObjects(client *srpc.Client, percentage uint8,
 
 func FindLatestImage(client *srpc.Client, dirname string,
 	ignoreExpiring bool) (string, error) {
-	return findLatestImage(client, dirname, ignoreExpiring)
+	return findLatestImage(client, proto.FindLatestImageRequest{
+		DirectoryName:        dirname,
+		IgnoreExpiringImages: ignoreExpiring,
+	})
+}
+
+func FindLatestImageReq(client *srpc.Client,
+	request proto.FindLatestImageRequest) (string, error) {
+	return findLatestImage(client, request)
 }
 
 func GetImage(client *srpc.Client, name string) (*image.Image, error) {

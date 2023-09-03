@@ -11,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
@@ -163,7 +164,8 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 }
 
 func (m *Manager) listHypervisorsInLocation(
-	request proto.ListHypervisorsInLocationRequest) ([]string, error) {
+	request proto.ListHypervisorsInLocationRequest) (
+	proto.ListHypervisorsInLocationResponse, error) {
 	showFilter := showOK
 	if request.IncludeUnhealthy {
 		showFilter = showConnected
@@ -171,15 +173,31 @@ func (m *Manager) listHypervisorsInLocation(
 	hypervisors, err := m.listHypervisors(request.Location, showFilter,
 		request.SubnetId)
 	if err != nil {
-		return nil, err
+		return proto.ListHypervisorsInLocationResponse{}, err
 	}
 	addresses := make([]string, 0, len(hypervisors))
+	var tagsForHypervisors []tags.Tags
 	for _, hypervisor := range hypervisors {
 		addresses = append(addresses,
 			fmt.Sprintf("%s:%d",
 				hypervisor.machine.Hostname, constants.HypervisorPortNumber))
+		if len(request.TagsToInclude) > 0 {
+			hypervisorTags := make(tags.Tags)
+			for _, key := range request.TagsToInclude {
+				if value, ok := hypervisor.machine.Tags[key]; ok {
+					hypervisorTags[key] = value
+				}
+				if value, ok := hypervisor.localTags[key]; ok {
+					hypervisorTags[key] = value
+				}
+			}
+			tagsForHypervisors = append(tagsForHypervisors, hypervisorTags)
+		}
 	}
-	return addresses, nil
+	return proto.ListHypervisorsInLocationResponse{
+		HypervisorAddresses: addresses,
+		TagsForHypervisors:  tagsForHypervisors,
+	}, nil
 }
 
 func (list hypervisorList) Len() int {

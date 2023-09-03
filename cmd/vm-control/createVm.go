@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -111,8 +112,14 @@ func createVm(logger log.DebugLogger) error {
 }
 
 func createVmInfoFromFlags() hyper_proto.VmInfo {
+	var volumes []hyper_proto.Volume
+	if len(volumeTypes) > 0 {
+		// If provided, set for root volume. Secondaries are done later.
+		volumes = append(volumes, hyper_proto.Volume{Type: volumeTypes[0]})
+	}
 	return hyper_proto.VmInfo{
 		ConsoleType:        consoleType,
+		DestroyOnPowerdown: *destroyOnPowerdown,
 		DestroyProtection:  *destroyProtection,
 		DisableVirtIO:      *disableVirtIO,
 		Hostname:           *vmHostname,
@@ -124,12 +131,14 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		SecondarySubnetIDs: secondarySubnetIDs,
 		SubnetId:           *subnetId,
 		VirtualCPUs:        *virtualCPUs,
+		Volumes:            volumes,
 	}
 }
 
 func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 	request := hyper_proto.CreateVmRequest{
 		DhcpTimeout:      *dhcpTimeout,
+		DoNotStart:       *doNotStart,
 		EnableNetboot:    *enableNetboot,
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
@@ -180,8 +189,11 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		}
 	}
 	for index, size := range secondaryVolumeSizes {
-		request.SecondaryVolumes = append(request.SecondaryVolumes,
-			hyper_proto.Volume{Size: uint64(size)})
+		volume := hyper_proto.Volume{Size: uint64(size)}
+		if index+1 < len(volumeTypes) {
+			volume.Type = volumeTypes[index+1]
+		}
+		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
 		if *initialiseSecondaryVolumes &&
 			index < len(vinitParams) {
 			vinit := vinitParams[index]
@@ -198,6 +210,18 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 			util.WriteFstabEntry(secondaryFstab, "LABEL="+vinit.Label,
 				vinit.MountPoint, "ext4", "discard", 0, 2)
 		}
+	}
+	if *identityCertFile != "" && *identityKeyFile != "" {
+		identityCert, err := ioutil.ReadFile(*identityCertFile)
+		if err != nil {
+			return err
+		}
+		identityKey, err := ioutil.ReadFile(*identityKeyFile)
+		if err != nil {
+			return err
+		}
+		request.IdentityCertificate = identityCert
+		request.IdentityKey = identityKey
 	}
 	var imageReader, userDataReader io.Reader
 	if *imageName != "" {
@@ -255,6 +279,9 @@ func createVmOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		return fmt.Errorf("error acknowledging VM: %s", err)
 	}
 	fmt.Println(reply.IpAddress)
+	if *doNotStart {
+		return nil
+	}
 	if reply.DhcpTimedOut {
 		return errors.New("DHCP ACK timed out")
 	}

@@ -13,27 +13,51 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
-var stopped bool
+var stopChannel = make(chan struct{})
 
 func watchFile(pathname string, logger log.Logger) <-chan io.ReadCloser {
-	channel := make(chan io.ReadCloser, 1)
-	if !watchFileWithFsNotify(pathname, channel, logger) {
-		go watchFileForever(pathname, channel, logger)
-	}
-	return channel
+	readCloserChannel := make(chan io.ReadCloser, 1)
+	notifyChannel := watchFileWithFsNotify(pathname, logger)
+	go watchFileForever(pathname, readCloserChannel, notifyChannel, logger)
+	return readCloserChannel
 }
 
 func watchFileStop() {
-	if !watchFileStopWithFsNotify() {
-		stopped = true
+	watchFileStopWithFsNotify()
+	select {
+	case stopChannel <- struct{}{}:
+	default:
 	}
 }
 
-func watchFileForever(pathname string, channel chan<- io.ReadCloser,
-	logger log.Logger) {
+func watchFileForever(pathname string, readCloserChannel chan<- io.ReadCloser,
+	notifyChannel <-chan struct{}, logger log.Logger) {
+	interval := time.Second
+	if notifyChannel != nil {
+		interval = 15 * time.Second
+	}
+	intervalTimer := time.NewTimer(0)
 	var lastStat syscall.Stat_t
 	lastFd := -1
-	for ; !stopped; time.Sleep(time.Second) {
+	for {
+		select {
+		case <-intervalTimer.C:
+		case <-notifyChannel:
+			if !intervalTimer.Stop() {
+				<-intervalTimer.C
+			}
+			if lastFd >= 0 {
+				syscall.Close(lastFd)
+			}
+			lastFd = -1
+		case <-stopChannel:
+			if lastFd >= 0 {
+				syscall.Close(lastFd)
+			}
+			close(readCloserChannel)
+			return
+		}
+		intervalTimer = time.NewTimer(interval)
 		var stat syscall.Stat_t
 		if err := syscall.Stat(pathname, &stat); err != nil {
 			if logger != nil {
@@ -55,13 +79,9 @@ func watchFileForever(pathname string, channel chan<- io.ReadCloser,
 					syscall.Close(lastFd)
 				}
 				lastFd, _ = wsyscall.Dup(int(file.Fd()))
-				channel <- file // Must happen after FD is duplicated.
+				readCloserChannel <- file // Must happen after FD is duplicated.
 				lastStat = stat
 			}
 		}
 	}
-	if lastFd >= 0 {
-		syscall.Close(lastFd)
-	}
-	close(channel)
 }

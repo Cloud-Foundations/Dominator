@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 const (
@@ -334,20 +335,24 @@ func (imdb *ImageDataBase) doWithPendingImage(image *image.Image,
 	return err
 }
 
-func (imdb *ImageDataBase) findLatestImage(dirname string,
-	ignoreExpiring bool) (string, error) {
+func (imdb *ImageDataBase) findLatestImage(
+	request proto.FindLatestImageRequest) (string, error) {
 	imdb.RLock()
 	defer imdb.RUnlock()
-	if _, ok := imdb.directoryMap[dirname]; !ok {
-		return "", errors.New("unknown directory: " + dirname)
+	if _, ok := imdb.directoryMap[request.DirectoryName]; !ok {
+		return "", errors.New("unknown directory: " + request.DirectoryName)
 	}
 	var previousCreateTime time.Time
 	var imageName string
 	for name, img := range imdb.imageMap {
-		if ignoreExpiring && !img.ExpiresAt.IsZero() {
+		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
 			continue
 		}
-		if filepath.Dir(name) != dirname {
+		if filepath.Dir(name) != request.DirectoryName {
+			continue
+		}
+		if request.BuildCommitId != "" &&
+			request.BuildCommitId != img.BuildCommitId {
 			continue
 		}
 		if img.CreatedOn.After(previousCreateTime) {

@@ -149,7 +149,8 @@ func (m *Manager) GetTopology() (*topology.Topology, error) {
 }
 
 func (m *Manager) ListHypervisorsInLocation(
-	request fm_proto.ListHypervisorsInLocationRequest) ([]string, error) {
+	request fm_proto.ListHypervisorsInLocationRequest) (
+	fm_proto.ListHypervisorsInLocationResponse, error) {
 	return m.listHypervisorsInLocation(request)
 }
 

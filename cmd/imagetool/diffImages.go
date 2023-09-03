@@ -25,19 +25,21 @@ func diffTypedImages(tool string, lName string, rName string) error {
 	if err != nil {
 		return fmt.Errorf("error getting right image: %s", err)
 	}
-	var filt *filter.Filter
-	if lFilter != nil && rFilter == nil {
-		filt = lFilter
-	} else if lFilter == nil && rFilter != nil {
-		filt = rFilter
-	} else if lFilter.Equal(rFilter) {
-		filt = lFilter
-	}
-	if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
-		return fmt.Errorf("error filtering left image: %s", err)
-	}
-	if rfs, err = applyDeleteFilter(rfs, filt); err != nil {
-		return fmt.Errorf("error filtering right image: %s", err)
+	if !*ignoreFilters {
+		var filt *filter.Filter
+		if lFilter != nil && rFilter == nil {
+			filt = lFilter
+		} else if lFilter == nil && rFilter != nil {
+			filt = rFilter
+		} else if lFilter.Equal(rFilter) {
+			filt = lFilter
+		}
+		if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
+			return fmt.Errorf("error filtering left image: %s", err)
+		}
+		if rfs, err = applyDeleteFilter(rfs, filt); err != nil {
+			return fmt.Errorf("error filtering right image: %s", err)
+		}
 	}
 	err = diffImages(tool, lfs, rfs)
 	if err != nil {

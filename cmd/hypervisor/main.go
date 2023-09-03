@@ -126,20 +126,29 @@ func main() {
 	dhcpInterfaces := make([]string, 0, len(bridges))
 	vlanIdToBridge := make(map[uint]string)
 	for _, bridge := range bridges {
-		if vlanId, err := net.GetBridgeVlanId(bridge.Name); err != nil {
+		vlanId, err := net.GetBridgeVlanId(bridge.Name)
+		if err != nil {
 			logger.Fatalf("Cannot get VLAN Id for bridge: %s: %s\n",
 				bridge.Name, err)
-		} else if vlanId < 0 {
-			logger.Printf("Bridge: %s has no EtherNet port, ignoring\n",
+			continue
+		}
+		if vlanId < 0 {
+			if len(bridges) > 1 {
+				logger.Printf("Bridge: %s has no EtherNet port, ignoring\n",
+					bridge.Name)
+				continue
+			}
+			logger.Printf(
+				"Bridge: %s has no EtherNet port but is the only bridge, using in hope\n",
 				bridge.Name)
-		} else {
-			if *dhcpServerOnBridgesOnly {
-				dhcpInterfaces = append(dhcpInterfaces, bridge.Name)
-			}
-			if !strings.HasPrefix(bridge.Name, "br@") {
-				vlanIdToBridge[uint(vlanId)] = bridge.Name
-				logger.Printf("Bridge: %s, VLAN Id: %d\n", bridge.Name, vlanId)
-			}
+			vlanId = 0
+		}
+		if *dhcpServerOnBridgesOnly {
+			dhcpInterfaces = append(dhcpInterfaces, bridge.Name)
+		}
+		if !strings.HasPrefix(bridge.Name, "br@") {
+			vlanIdToBridge[uint(vlanId)] = bridge.Name
+			logger.Printf("Bridge: %s, VLAN Id: %d\n", bridge.Name, vlanId)
 		}
 	}
 	dhcpServer, err := dhcpd.New(dhcpInterfaces,

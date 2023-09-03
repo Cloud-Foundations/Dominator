@@ -1,8 +1,6 @@
 package fsutil
 
 import (
-	"io"
-	"os"
 	"path"
 	"sync"
 
@@ -15,12 +13,11 @@ var (
 	watchers []*fsnotify.Watcher
 )
 
-func watchFileWithFsNotify(pathname string, channel chan<- io.ReadCloser,
-	logger log.Logger) bool {
+func watchFileWithFsNotify(pathname string, logger log.Logger) <-chan struct{} {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		logger.Println("Error creating watcher:", err)
-		return false
+		return nil
 	}
 	lock.Lock()
 	defer lock.Unlock()
@@ -29,10 +26,11 @@ func watchFileWithFsNotify(pathname string, channel chan<- io.ReadCloser,
 	dirname := path.Dir(pathname)
 	if err := watcher.Add(dirname); err != nil {
 		logger.Println("Error adding watch:", err)
-		return false
+		return nil
 	}
+	channel := make(chan struct{}, 1)
 	go waitForNotifyEvents(watcher, pathname, channel, logger)
-	return true
+	return channel
 }
 
 func watchFileStopWithFsNotify() bool {
@@ -55,10 +53,7 @@ func watchFileStopWithFsNotify() bool {
 }
 
 func waitForNotifyEvents(watcher *fsnotify.Watcher, pathname string,
-	channel chan<- io.ReadCloser, logger log.Logger) {
-	if file, err := os.Open(pathname); err == nil {
-		channel <- file
-	}
+	channel chan<- struct{}, logger log.Logger) {
 	for {
 		select {
 		case event, ok := <-watcher.Events:
@@ -68,16 +63,7 @@ func waitForNotifyEvents(watcher *fsnotify.Watcher, pathname string,
 			if path.Clean(event.Name) != pathname {
 				continue
 			}
-			if file, err := os.Open(pathname); err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				if logger != nil {
-					logger.Printf("Error opening file: %s: %s\n", pathname, err)
-				}
-			} else {
-				channel <- file
-			}
+			channel <- struct{}{}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return

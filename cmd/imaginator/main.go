@@ -11,9 +11,11 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/httpd"
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/rpcd"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
@@ -26,6 +28,9 @@ const (
 )
 
 var (
+	buildLogDir = flag.String("buildLogDir", "/var/log/imaginator/builds",
+		"Name of directory to write build logs to")
+	buildLogQuota    = flagutil.Size(100 << 20)
 	configurationUrl = flag.String("configurationUrl",
 		"file:///etc/imaginator/conf.json", "URL containing configuration")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
@@ -44,6 +49,11 @@ var (
 	variablesFile = flag.String("variablesFile", "",
 		"A JSON encoded file containing special variables (i.e. secrets)")
 )
+
+func init() {
+	flag.Var(&buildLogQuota, "buildLogQuota",
+		"Build log quota. If exceeded, old logs are deleted")
+}
 
 func main() {
 	if err := loadflags.LoadForDaemon("imaginator"); err != nil {
@@ -73,10 +83,35 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Error starting slave driver: %s\n", err)
 	}
-	builderObj, err := builder.Load(*configurationUrl, *variablesFile,
-		*stateDir,
-		fmt.Sprintf("%s:%d", *imageServerHostname, *imageServerPortNum),
-		*imageRebuildInterval, slaveDriver, logger)
+	var buildLogArchiver logarchiver.BuildLogger
+	if *buildLogDir != "" && buildLogQuota > 1<<20 {
+		buildLogArchiver, err = logarchiver.New(
+			logarchiver.BuildLogArchiveOptions{
+				Quota:  uint64(buildLogQuota),
+				Topdir: *buildLogDir,
+			},
+			logarchiver.BuildLogArchiveParams{
+				Logger: logger,
+			},
+		)
+		if err != nil {
+			logger.Fatalf("Error starting build log archiver: %s\n", err)
+		}
+	}
+	builderObj, err := builder.LoadWithOptionsAndParams(
+		builder.BuilderOptions{
+			ConfigurationURL:     *configurationUrl,
+			ImageRebuildInterval: *imageRebuildInterval,
+			ImageServerAddress: fmt.Sprintf("%s:%d",
+				*imageServerHostname, *imageServerPortNum),
+			StateDirectory: *stateDir,
+			VariablesFile:  *variablesFile,
+		},
+		builder.BuilderParams{
+			BuildLogArchiver: buildLogArchiver,
+			Logger:           logger,
+			SlaveDriver:      slaveDriver,
+		})
 	if err != nil {
 		logger.Fatalf("Cannot start builder: %s\n", err)
 	}
@@ -90,7 +125,17 @@ func main() {
 	}
 	httpd.AddHtmlWriter(rpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
-	if err = httpd.StartServer(*portNum, builderObj, false); err != nil {
+	err = httpd.StartServerWithOptionsAndParams(
+		httpd.Options{
+			PortNumber: *portNum,
+		},
+		httpd.Params{
+			Builder:          builderObj,
+			BuildLogReporter: buildLogArchiver,
+			Logger:           logger,
+		},
+	)
+	if err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
 }

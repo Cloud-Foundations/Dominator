@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 )
 
-var externallyPatchablePath = "latest/is-externally-patchable"
-
 func checkExternallyPatchable() (bool, error) {
-	resp, err := http.Get(metadataServer + externallyPatchablePath)
+	resp, err := http.Get(constants.MetadataUrl +
+		constants.MetadataExternallyPatchable)
 	if err != nil {
 		return false, err
 	}

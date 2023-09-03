@@ -9,8 +9,7 @@ import (
 func (t *srpcType) FindLatestImage(conn *srpc.Conn,
 	request imageserver.FindLatestImageRequest,
 	reply *imageserver.FindLatestImageResponse) error {
-	imageName, err := t.imageDataBase.FindLatestImage(request.DirectoryName,
-		request.IgnoreExpiringImages)
+	imageName, err := t.imageDataBase.FindLatestImage(request)
 	*reply = imageserver.FindLatestImageResponse{
 		ImageName: imageName,
 		Error:     errors.ErrorToString(err),

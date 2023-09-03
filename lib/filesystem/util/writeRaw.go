@@ -598,27 +598,14 @@ func writeToFile(fs *filesystem.FileSystem,
 	if err := mbr.WriteDefault(tmpFilename, tableType); err != nil {
 		return err
 	}
-	loopDevice, err := fsutil.LoopbackSetup(tmpFilename)
+	partition := "p1"
+	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
+		partition, time.Minute, logger)
 	if err != nil {
 		return err
 	}
 	defer fsutil.LoopbackDelete(loopDevice)
-	rootDevice := loopDevice + "p1"
-	// Probe for partition device because it might not be immediately available.
-	// Need to open rather than just test for inode existance.
-	startTime := time.Now()
-	stopTime := startTime.Add(time.Second)
-	for count := 0; time.Until(stopTime) >= 0; count++ {
-		if file, err := os.Open(rootDevice); err == nil {
-			file.Close()
-			if count > 0 {
-				logger.Debugf(0, "%s valid after: %d iterations, %s\n",
-					rootDevice, count, format.Duration(time.Since(startTime)))
-			}
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	rootDevice := loopDevice + partition
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
 		logger)
 	if options.AllocateBlocks { // mkfs discards blocks, so do this after.

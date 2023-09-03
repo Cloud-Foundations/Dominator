@@ -7,33 +7,75 @@ import (
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
 type HtmlWriter interface {
 	WriteHtml(writer io.Writer)
 }
 
-var htmlWriters []HtmlWriter
-
-type state struct {
-	builder *builder.Builder
+type Options struct {
+	PortNumber uint
 }
 
+type Params struct {
+	Builder          *builder.Builder
+	BuildLogReporter logarchiver.BuildLogReporter
+	DaemonMode       bool
+	Logger           log.DebugLogger
+}
+
+type state struct {
+	builder          *builder.Builder
+	buildLogReporter logarchiver.BuildLogReporter
+	logger           log.DebugLogger
+}
+
+var htmlWriters []HtmlWriter
+
 func StartServer(portNum uint, builderObj *builder.Builder,
-	daemon bool) error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
+	logReporter logarchiver.BuildLogReporter, daemon bool) error {
+	return StartServerWithOptionsAndParams(
+		Options{PortNumber: portNum},
+		Params{Builder: builderObj},
+	)
+}
+
+func StartServerWithOptionsAndParams(options Options, params Params) error {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", options.PortNumber))
 	if err != nil {
 		return err
 	}
-	myState := state{builderObj}
+	myState := state{params.Builder, params.BuildLogReporter, params.Logger}
 	html.HandleFunc("/", myState.statusHandler)
 	html.HandleFunc("/showCurrentBuildLog", myState.showCurrentBuildLogHandler)
 	html.HandleFunc("/showDirectedGraph", myState.showDirectedGraphHandler)
 	html.HandleFunc("/showImageStream", myState.showImageStreamHandler)
 	html.HandleFunc("/showImageStreams", myState.showImageStreamsHandler)
 	html.HandleFunc("/showLastBuildLog", myState.showLastBuildLogHandler)
-	if daemon {
+	if myState.buildLogReporter != nil {
+		html.HandleFunc("/showAllBuilds", myState.showAllBuildsHandler)
+		html.HandleFunc("/showBuildLog", myState.showBuildLogHandler)
+		html.HandleFunc("/showBuildLogArchive",
+			myState.showBuildLogArchiveHandler)
+		html.HandleFunc("/showGoodBuilds", myState.showGoodBuildsHandler)
+		html.HandleFunc("/showErrorBuilds", myState.showErrorBuildsHandler)
+		html.HandleFunc("/showStreamAllBuilds",
+			myState.showStreamAllBuildsHandler)
+		html.HandleFunc("/showStreamGoodBuilds",
+			myState.showStreamGoodBuildsHandler)
+		html.HandleFunc("/showStreamErrorBuilds",
+			myState.showStreamErrorBuildsHandler)
+		html.HandleFunc("/showRequestorAllBuilds",
+			myState.showRequestorAllBuildsHandler)
+		html.HandleFunc("/showRequestorGoodBuilds",
+			myState.showRequestorGoodBuildsHandler)
+		html.HandleFunc("/showRequestorErrorBuilds",
+			myState.showRequestorErrorBuildsHandler)
+	}
+	if params.DaemonMode {
 		go http.Serve(listener, nil)
 	} else {
 		http.Serve(listener, nil)

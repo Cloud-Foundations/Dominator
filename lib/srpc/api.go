@@ -65,6 +65,7 @@ import (
 var (
 	ErrorConnectionRefused    = errors.New("connection refused")
 	ErrorNoRouteToHost        = errors.New("no route to host")
+	ErrorMissingCA            = errors.New("missing CA")
 	ErrorMissingCertificate   = errors.New("missing certificate")
 	ErrorBadCertificate       = errors.New("bad certificate")
 	ErrorNoSrpcEndpoint       = errors.New("no SRPC endpoint")
@@ -102,13 +103,23 @@ func GetEarliestClientCertExpiration() time.Time {
 	return getEarliestClientCertExpiration()
 }
 
-// LoadCertificates loads zero or more X509 certificates from directory. Each
+// LoadCertificates loads zero or more X.509 certificates from directory. Each
 // certificate must be stored in a pair of PEM-encoded files, with the private
 // key in a file with extension '.key' and the corresponding public key
 // certificate in a file with extension 'cert'. If there is an error loading a
 // certificate pair then processing stops and the error is returned.
 func LoadCertificates(directory string) ([]tls.Certificate, error) {
 	return loadCertificates(directory)
+}
+
+// LoadCertificatesFromMetadata will attempt to load an X.509 certificate and
+// key from the Metadata service. If errorIfMissing, an error will be returned
+// if data could not be loaded. If errorIfExpired, an error will be returned
+// if the certificate is not yet/no longer valid.
+func LoadCertificatesFromMetadata(timeout time.Duration, errorIfMissing bool,
+	errorIfExpired bool) (
+	*tls.Certificate, error) {
+	return loadCertificatesFromMetadata(timeout, errorIfMissing, errorIfExpired)
 }
 
 type AuthInformation struct {
@@ -129,6 +140,8 @@ type Decoder interface {
 type Encoder interface {
 	Encode(e interface{}) error
 }
+
+type FakeClientOptions struct{}
 
 // MethodBlocker defines an interface to block method calls (after possible
 // authorisation) for a receiver (passed to RegisterName). This may be used to
@@ -294,16 +307,17 @@ func (cr *ClientResource) ScheduleClose() {
 }
 
 type Client struct {
-	bufrw       *bufio.ReadWriter
-	callLock    sync.Mutex
-	conn        net.Conn
-	connType    string // Human-readable.
-	isEncrypted bool
-	localAddr   string
-	makeCoder   coderMaker
-	remoteAddr  string
-	resource    *ClientResource
-	tcpConn     libnet.TCPConn // The underlying raw TCP connection (if TCP).
+	bufrw             *bufio.ReadWriter
+	callLock          sync.Mutex
+	conn              net.Conn
+	connType          string // Human-readable.
+	fakeClientOptions *FakeClientOptions
+	isEncrypted       bool
+	localAddr         string
+	makeCoder         coderMaker
+	remoteAddr        string
+	resource          *ClientResource
+	tcpConn           libnet.TCPConn // The underlying raw TCP connection (if TCP).
 }
 
 // DialHTTP connects to an HTTP SRPC server at the specified network address
@@ -340,6 +354,12 @@ func DialTlsHTTPWithDialer(network, address string, tlsConfig *tls.Config,
 		tlsConfig = clientTlsConfig
 	}
 	return dialHTTP(network, address, tlsConfig, dialer)
+}
+
+// NewFakeClient will return a fake Client which may be used for limited
+// testing. The Client will support the Close method. Other methods may panic.
+func NewFakeClient(options FakeClientOptions) *Client {
+	return newFakeClient(options)
 }
 
 // Close will close a client, immediately releasing the internal connection.

@@ -96,7 +96,7 @@ func addImage(client *srpc.Client, request proto.BuildImageRequest,
 	if request.ExpiresIn > 0 {
 		img.ExpiresAt = time.Now().Add(request.ExpiresIn)
 	}
-	name := path.Join(request.StreamName, time.Now().Format(timeFormat))
+	name := makeImageName(request.StreamName)
 	if err := imageclient.AddImage(client, name, img); err != nil {
 		return "", errors.New("remote error: " + err.Error())
 	}
@@ -139,6 +139,10 @@ func listPackages(g *goroutine.Goroutine, rootDir string) (
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
 		return runInTarget(g, nil, w, rootDir, nil, packagerPathname, cmd)
 	})
+}
+
+func makeImageName(streamName string) string {
+	return path.Join(streamName, time.Now().Format(timeFormat))
 }
 
 func packImage(g *goroutine.Goroutine, client *srpc.Client,

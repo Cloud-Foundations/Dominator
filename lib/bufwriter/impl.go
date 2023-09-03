@@ -40,12 +40,16 @@ func (b *Writer) delayedFlush() {
 func (b *Writer) flush() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
+	flushPending := b.flushPending
 	b.flushPending = false
 	if b.err != nil {
 		return b.err
 	}
-	b.err = b.flushingWriter.Flush()
-	return b.err
+	if flushPending {
+		b.err = b.flushingWriter.Flush()
+		return b.err
+	}
+	return nil
 }
 
 func (b *Writer) lockAndScheduleFlush() {

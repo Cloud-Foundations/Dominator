@@ -58,3 +58,11 @@ type GetDirectedGraphResult struct {
 	LastAttemptAt    time.Time
 	LastAttemptError string
 }
+
+type ReplaceIdleSlavesRequest struct {
+	ImmediateGetNew bool
+}
+
+type ReplaceIdleSlavesResponse struct {
+	Error string
+}

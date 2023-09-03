@@ -1,28 +1,29 @@
 package slavedriver
 
 import (
+	"container/list"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
-type slaveRoll struct {
-	BusySlaves []SlaveInfo `json:",omitempty"`
-	IdleSlaves []SlaveInfo `json:",omitempty"`
-	Zombies    []SlaveInfo `json:",omitempty"`
+type jsonDatabase struct {
+	filename string
 }
 
 func dialWithRetry(network, address string,
 	timeout time.Duration) (*srpc.Client, error) {
 	stopTime := time.Now().Add(timeout)
-	for ; time.Until(stopTime) >= 0; time.Sleep(time.Second) {
-		client, err := srpc.DialHTTP(network, address, time.Second*5)
+	sleeper := backoffdelay.NewExponential(100*time.Millisecond, time.Second, 1)
+	for ; time.Until(stopTime) >= 0; sleeper.Sleep() {
+		client, err := srpc.DialHTTP(network, address, time.Second)
 		if err != nil {
 			continue
 		}
@@ -36,15 +37,16 @@ func dialWithRetry(network, address string,
 	return nil, fmt.Errorf("timed out connecting to: %s", address)
 }
 
-func listSlaves(slaves map[*Slave]struct{}) []*Slave {
-	list := make([]*Slave, 0, len(slaves))
+func listSlaves(slaves map[*Slave]struct{}) []SlaveInfo {
+	list := make([]SlaveInfo, 0, len(slaves))
 	for slave := range slaves {
-		list = append(list, slave)
+		list = append(list, slave.info)
 	}
 	return list
 }
 
 func newSlaveDriver(options SlaveDriverOptions, slaveTrader SlaveTrader,
+	clientDialer clientDialerFunc, databaseDriver databaseLoadSaver,
 	logger log.DebugLogger) (*SlaveDriver, error) {
 	if options.MinimumIdleSlaves < 1 {
 		options.MinimumIdleSlaves = 1
@@ -55,121 +57,222 @@ func newSlaveDriver(options SlaveDriverOptions, slaveTrader SlaveTrader,
 	if options.MaximumIdleSlaves < options.MinimumIdleSlaves {
 		options.MaximumIdleSlaves = options.MinimumIdleSlaves
 	}
-	rollCallTrigger := make(chan struct{}, 1)
-	driver := &SlaveDriver{
-		options:         options,
-		logger:          logger,
-		rollCallTrigger: rollCallTrigger,
-		slaveTrader:     slaveTrader,
-		busySlaves:      make(map[*Slave]struct{}),
-		idleSlaves:      make(map[*Slave]struct{}),
-		zombies:         make(map[*Slave]struct{}),
+	destroySlaveChannel := make(chan *Slave, 1)
+	getSlaveChannel := make(chan requestSlaveMessage)
+	getSlavesChannel := make(chan chan<- slaveRoll)
+	releaseSlaveChannel := make(chan *Slave, 1)
+	replaceIdleChannel := make(chan bool)
+	publicDriver := &SlaveDriver{
+		options:             options,
+		destroySlaveChannel: destroySlaveChannel,
+		getSlaveChannel:     getSlaveChannel,
+		getSlavesChannel:    getSlavesChannel,
+		logger:              logger,
+		releaseSlaveChannel: releaseSlaveChannel,
+		replaceIdleChannel:  replaceIdleChannel,
+	}
+	driver := &slaveDriver{
+		options:             options,
+		busySlaves:          make(map[*Slave]struct{}),
+		clientDialer:        clientDialer,
+		destroySlaveChannel: destroySlaveChannel,
+		databaseDriver:      databaseDriver,
+		getSlaveChannel:     getSlaveChannel,
+		getSlavesChannel:    getSlavesChannel,
+		getterList:          list.New(),
+		logger:              logger,
+		pingResponseChannel: make(chan pingResponseMessage, 1),
+		publicDriver:        publicDriver,
+		slaveTrader:         slaveTrader,
+		releaseSlaveChannel: releaseSlaveChannel,
+		replaceIdleChannel:  replaceIdleChannel,
 	}
 	if err := driver.loadSlaves(); err != nil {
 		driver.slaveTrader.Close()
 		return nil, err
 	}
-	go driver.watchRoll(rollCallTrigger)
-	return driver, nil
+	go driver.watchRoll()
+	return publicDriver, nil
 }
 
-func (driver *SlaveDriver) createSlave() (*Slave, error) {
-	if slaveInfo, err := driver.slaveTrader.CreateSlave(); err != nil {
+func (db *jsonDatabase) load() (*slaveRoll, error) {
+	var slaves slaveRoll
+	err := json.ReadFromFile(db.filename, &slaves)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	return &slaves, nil
+}
+
+func (db *jsonDatabase) save(slaves slaveRoll) error {
+	return json.WriteToFile(db.filename, fsutil.PublicFilePerms, "    ", slaves)
+}
+
+func (slave *Slave) getClient() *srpc.Client {
+	return slave.client
+}
+
+func (slave *Slave) ping(pingResponseChannel chan<- pingResponseMessage) {
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(5 * time.Second)
+	go func() {
+		errorChannel <- slave.client.Ping()
+		slave.driver.logger.Debugf(1, "ping(%s) goroutine returning\n", slave)
+	}()
+	select {
+	case err := <-errorChannel:
+		pingResponseChannel <- pingResponseMessage{
+			error: err,
+			slave: slave,
+		}
+	case <-timer.C:
+		pingResponseChannel <- pingResponseMessage{
+			error: fmt.Errorf("timed out"),
+			slave: slave,
+		}
+	}
+}
+
+func (driver *SlaveDriver) getSlave(timeout time.Duration) (*Slave, error) {
+	driver.logger.Debugln(0, "getSlave() starting")
+	if timeout < 0 {
+		timeout = time.Hour
+	}
+	slaveChannel := make(chan *Slave)
+	driver.getSlaveChannel <- requestSlaveMessage{
+		slaveChannel: slaveChannel,
+		timeout:      time.Now().Add(timeout),
+	}
+	if slave := <-slaveChannel; slave == nil {
+		return nil, fmt.Errorf("timed out getting slave")
 	} else {
+		return slave, nil
+	}
+}
+
+func (driver *slaveDriver) createSlave() {
+	driver.logger.Debugln(0, "creating slave")
+	sleeper := backoffdelay.NewExponential(time.Second, time.Minute, 1)
+	for ; ; sleeper.Sleep() {
+		slaveInfo, err := driver.slaveTrader.CreateSlave()
+		if err != nil {
+			driver.logger.Println(err)
+			continue
+		}
 		slave := &Slave{
 			clientAddress: fmt.Sprintf("%s:%d", slaveInfo.IpAddress,
 				driver.options.PortNumber),
-			info:   slaveInfo,
-			driver: driver,
+			info:       slaveInfo,
+			driver:     driver.publicDriver,
+			timeToPing: time.Now().Add(time.Minute),
 		}
-		slave.client, err = dialWithRetry("tcp", slave.clientAddress,
+		slave.client, err = driver.clientDialer("tcp", slave.clientAddress,
 			time.Minute)
 		if err != nil {
 			e := driver.slaveTrader.DestroySlave(slaveInfo.Identifier)
 			if e != nil {
 				driver.logger.Printf("error destroying: %s: %s\n",
-					slaveInfo.IpAddress, e)
+					slaveInfo.Identifier, e)
 			}
-			return nil, fmt.Errorf("error dialing: %s: %s",
+			driver.logger.Printf("error dialing: %s: %s\n",
 				slave.clientAddress, err)
+			continue
 		}
 		driver.logger.Printf("created slave: %s\n", slaveInfo.Identifier)
-		return slave, nil
+		driver.createdSlaveChannel <- slave
+		return
 	}
 }
 
-func (driver *SlaveDriver) getIdleSlave() *Slave {
-	driver.mutex.Lock()
-	defer driver.mutex.Unlock()
-	for slave := range driver.idleSlaves {
-		driver.busySlaves[slave] = struct{}{}
-		delete(driver.idleSlaves, slave)
-		driver.scheduleRollCall()
-		return slave
-	}
-	return nil
-}
-
-func (driver *SlaveDriver) getSlave() (*Slave, error) {
-	if slave := driver.getIdleSlave(); slave != nil {
-		return slave, nil
-	}
-	driver.logger.Debugln(0, "creating slave")
-	if slave, err := driver.createSlave(); err != nil {
-		return nil, err
-	} else {
-		driver.mutex.Lock()
-		driver.busySlaves[slave] = struct{}{}
-		driver.mutex.Unlock()
-		driver.scheduleRollCall()
-		return slave, nil
+func (driver *slaveDriver) getSlaves() slaveRoll {
+	return slaveRoll{
+		BusySlaves: listSlaves(driver.busySlaves),
+		IdleSlaves: listSlaves(driver.idleSlaves),
+		Zombies:    listSlaves(driver.zombies),
 	}
 }
 
-func (driver *SlaveDriver) loadSlaves() error {
-	var slaves slaveRoll
-	err := json.ReadFromFile(driver.options.DatabaseFilename, &slaves)
+func (driver *slaveDriver) loadSlaves() error {
+	slavesFromDB, err := driver.databaseDriver.load()
 	if err != nil {
-		if os.IsNotExist(err) {
-			go driver.rollCall(false)
-			return nil
-		}
 		return err
 	}
-	slaves.BusySlaves = append(slaves.BusySlaves, slaves.Zombies...)
-	for _, slaveInfo := range slaves.BusySlaves {
+	if slavesFromDB == nil {
+		driver.idleSlaves = make(map[*Slave]struct{})
+		driver.zombies = make(map[*Slave]struct{})
+		return nil
+	}
+	slavesFromDB.BusySlaves = append(slavesFromDB.BusySlaves,
+		slavesFromDB.Zombies...)
+	driver.idleSlaves = make(map[*Slave]struct{}, len(slavesFromDB.IdleSlaves))
+	driver.zombies = make(map[*Slave]struct{}, len(slavesFromDB.BusySlaves))
+	for _, slaveInfo := range slavesFromDB.BusySlaves {
 		driver.zombies[&Slave{
-			driver: driver,
+			driver: driver.publicDriver,
 			info:   slaveInfo,
 		}] = struct{}{}
 	}
-	for _, slaveInfo := range slaves.IdleSlaves {
+	for _, slaveInfo := range slavesFromDB.IdleSlaves {
 		slave := &Slave{
 			clientAddress: fmt.Sprintf("%s:%d", slaveInfo.IpAddress,
 				driver.options.PortNumber),
 			info:   slaveInfo,
-			driver: driver,
+			driver: driver.publicDriver,
 		}
-		slave.client, err = dialWithRetry("tcp", slave.clientAddress,
+		slave.client, err = driver.clientDialer("tcp", slave.clientAddress,
 			time.Minute)
 		if err != nil {
 			driver.logger.Printf("error dialing: %s: %s\n", slave.clientAddress,
 				err)
 			driver.zombies[slave] = struct{}{}
 		} else {
+			slave.timeToPing = time.Now().Add(time.Minute)
 			driver.idleSlaves[slave] = struct{}{}
 		}
 	}
-	go driver.rollCall(false)
 	return nil
 }
 
-// rollCall can take a while. It should be called from a goroutine.
-func (driver *SlaveDriver) rollCall(writeState bool) {
-	var numToCreate int
-	driver.mutex.Lock()
-	if uint(len(driver.idleSlaves)) > driver.options.MaximumIdleSlaves {
+// rollCall manages all the internal state. It should be called from a forever
+// goroutine.
+func (driver *slaveDriver) rollCall() {
+	driver.logger.Debugf(0, "rollCall(): %d idle, %d getters\n",
+		len(driver.idleSlaves), driver.getterList.Len())
+	// First: if there is an idle slave, dispatch to a getter.
+	if len(driver.idleSlaves) > 0 && driver.getterList.Len() > 0 {
+		entry := driver.getterList.Front()
+		request := entry.Value.(requestSlaveMessage)
+		driver.getterList.Remove(entry)
+		if time.Since(request.timeout) > 0 {
+			request.slaveChannel <- nil // Getter wanted to give up by now.
+			close(request.slaveChannel)
+			return
+		}
+		for slave := range driver.idleSlaves {
+			if time.Since(slave.timeToPing) >= 0 || slave.pinging {
+				continue
+			}
+			request.slaveChannel <- slave // Consumed by getter.
+			close(request.slaveChannel)
+			delete(driver.idleSlaves, slave)
+			driver.busySlaves[slave] = struct{}{}
+			driver.writeState = true
+			driver.logger.Debugf(0, "sent slave: %s to getter\n", slave)
+			return
+		}
+	}
+	if driver.getterList.Len() > 0 ||
+		uint(len(driver.idleSlaves)) < driver.options.MinimumIdleSlaves {
+		if driver.createdSlaveChannel == nil {
+			driver.createdSlaveChannel = make(chan *Slave, 1)
+			go driver.createSlave()
+		}
+	}
+	if uint(len(driver.idleSlaves)) > driver.options.MaximumIdleSlaves &&
+		driver.getterList.Len() < 1 {
 		for slave := range driver.idleSlaves {
 			if uint(len(driver.idleSlaves)) <=
 				driver.options.MaximumIdleSlaves {
@@ -177,153 +280,147 @@ func (driver *SlaveDriver) rollCall(writeState bool) {
 			}
 			delete(driver.idleSlaves, slave)
 			driver.zombies[slave] = struct{}{}
-			writeState = true
+			driver.writeState = true
 		}
-	} else {
-		numToCreate = int(driver.options.MinimumIdleSlaves) -
-			len(driver.idleSlaves)
 	}
-	zombies := listSlaves(driver.zombies)
-	driver.mutex.Unlock()
-	for _, slave := range zombies {
+	for slave := range driver.zombies {
+		if slave.client != nil {
+			if err := slave.client.Close(); err != nil {
+				driver.logger.Printf("error closing Client for slave: %s: %s\n",
+					slave, err)
+			}
+			slave.client = nil
+		}
+		driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
 		err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
 		if err != nil {
 			driver.logger.Printf("error destroying: %s: %s\n",
-				slave.clientAddress, err)
+				slave.info.Identifier, err)
 		} else {
-			driver.mutex.Lock()
 			delete(driver.zombies, slave)
-			driver.mutex.Unlock()
-			writeState = true
+			driver.writeState = true
 		}
 	}
-	if numToCreate > 0 {
-		driver.logger.Debugf(0, "creating %d slaves for idle pool\n",
-			numToCreate)
-		for i := 0; i < numToCreate; i++ {
-			if slave, err := driver.createSlave(); err != nil {
-				driver.logger.Println(err)
-			} else {
-				driver.mutex.Lock()
-				driver.idleSlaves[slave] = struct{}{}
-				driver.mutex.Unlock()
-				writeState = true
-			}
-		}
-	}
-	if writeState {
-		var slaves slaveRoll
-		driver.mutex.Lock()
-		for slave := range driver.busySlaves {
-			slaves.BusySlaves = append(slaves.BusySlaves, slave.info)
-		}
-		for slave := range driver.idleSlaves {
-			slaves.IdleSlaves = append(slaves.IdleSlaves, slave.info)
-		}
-		for slave := range driver.zombies {
-			slaves.Zombies = append(slaves.Zombies, slave.info)
-		}
-		driver.mutex.Unlock()
-		err := json.WriteToFile(driver.options.DatabaseFilename,
-			fsutil.PublicFilePerms, "    ", slaves)
-		if err != nil {
+	if driver.writeState {
+		if err := driver.databaseDriver.save(driver.getSlaves()); err != nil {
 			driver.logger.Println(err)
+		} else {
+			driver.writeState = false
 		}
 	}
-}
-
-func (driver *SlaveDriver) scheduleRollCall() {
+	pingTimeout := time.Hour
+	for slave := range driver.idleSlaves {
+		if slave.pinging {
+			continue
+		}
+		if timeToPing := slave.timeToPing; time.Since(timeToPing) >= 0 {
+			slave.pinging = true
+			go slave.ping(driver.pingResponseChannel)
+		} else if timeout := time.Until(timeToPing); timeout < pingTimeout {
+			pingTimeout = timeout
+		}
+	}
+	if pingTimeout < 0 {
+		pingTimeout = 0
+	}
+	pingTimer := time.NewTimer(pingTimeout)
 	select {
-	case driver.rollCallTrigger <- struct{}{}:
+	case slave := <-driver.createdSlaveChannel:
+		driver.createdSlaveChannel = nil
+		driver.idleSlaves[slave] = struct{}{}
+		driver.writeState = true
+		return // Return now so that new slave can be sent to a getter quickly.
+	case slave := <-driver.destroySlaveChannel:
+		if _, ok := driver.idleSlaves[slave]; ok {
+			panic("destroying idle slave")
+		}
+		if _, ok := driver.zombies[slave]; ok {
+			panic("destroying zombie")
+		}
+		if _, ok := driver.busySlaves[slave]; !ok {
+			panic("destroying unknown slave")
+		}
+		delete(driver.busySlaves, slave)
+		driver.zombies[slave] = struct{}{}
+		driver.writeState = true
+	case slaveChannel := <-driver.getSlaveChannel:
+		driver.getterList.PushBack(slaveChannel)
+	case slavesChannel := <-driver.getSlavesChannel:
+		slavesChannel <- driver.getSlaves()
+	case pingResponse := <-driver.pingResponseChannel:
+		slave := pingResponse.slave
+		slave.pinging = false
+		if err := pingResponse.error; err == nil {
+			slave.timeToPing = time.Now().Add(time.Minute)
+			driver.logger.Debugf(0, "ping: %s succeeded\n", slave)
+		} else {
+			driver.logger.Printf("error pinging: %s: %s\n", slave, err)
+			delete(driver.idleSlaves, slave)
+			driver.zombies[slave] = struct{}{}
+			driver.writeState = true
+		}
+	case slave := <-driver.releaseSlaveChannel:
+		if _, ok := driver.idleSlaves[slave]; ok {
+			panic("releasing idle slave")
+		}
+		if _, ok := driver.zombies[slave]; ok {
+			panic("releasing zombie")
+		}
+		if _, ok := driver.busySlaves[slave]; !ok {
+			panic("releasing unknown slave")
+		}
+		delete(driver.busySlaves, slave)
+		driver.idleSlaves[slave] = struct{}{}
+		driver.writeState = true
+		slave.timeToPing = time.Now().Add(100 * time.Millisecond)
+	case createIfNeeded := <-driver.replaceIdleChannel:
+		for slave := range driver.idleSlaves {
+			delete(driver.idleSlaves, slave)
+			driver.zombies[slave] = struct{}{}
+			driver.writeState = true
+		}
+		if createIfNeeded && driver.createdSlaveChannel == nil {
+			driver.createdSlaveChannel = make(chan *Slave, 1)
+			go driver.createSlave()
+		}
+	case <-pingTimer.C:
+	}
+	pingTimer.Stop()
+	select {
+	case <-pingTimer.C:
 	default:
 	}
 }
 
-func (driver *SlaveDriver) watchRoll(rollCallTrigger <-chan struct{}) {
-	timer := time.NewTimer(time.Minute)
+func (driver *slaveDriver) watchRoll() {
 	for {
-		select {
-		case <-rollCallTrigger:
-			timer.Reset(time.Minute)
-			driver.rollCall(true)
-		case <-timer.C:
-			timer.Reset(time.Minute)
-			driver.rollCall(false)
-		}
+		driver.rollCall()
 	}
 }
 
 func (driver *SlaveDriver) writeHtml(writer io.Writer) {
-	driver.mutex.Lock()
-	defer driver.mutex.Unlock()
-	if len(driver.busySlaves) < 1 && len(driver.idleSlaves) < 1 &&
-		len(driver.zombies) < 1 {
+	slavesChannel := make(chan slaveRoll)
+	driver.getSlavesChannel <- slavesChannel
+	slaves := <-slavesChannel
+	if len(slaves.BusySlaves) < 1 && len(slaves.IdleSlaves) < 1 &&
+		len(slaves.Zombies) < 1 {
 		fmt.Fprintf(writer, "No slaves for %s<br>\n", driver.options.Purpose)
 		return
 	}
 	fmt.Fprintf(writer, "Slaves for %s:<br>\n", driver.options.Purpose)
-	for slave := range driver.busySlaves {
+	for _, slave := range slaves.BusySlaves {
 		fmt.Fprintf(writer,
 			"&nbsp;&nbsp;<a href=\"http://%s:%d/\">%s</a> (busy)<br>\n",
-			slave, driver.options.PortNumber, slave)
+			slave.IpAddress, driver.options.PortNumber, slave)
 	}
-	for slave := range driver.idleSlaves {
+	for _, slave := range slaves.IdleSlaves {
 		fmt.Fprintf(writer,
 			"&nbsp;&nbsp;<a href=\"http://%s:%d/\">%s</a> (idle)<br>\n",
-			slave, driver.options.PortNumber, slave)
+			slave.IpAddress, driver.options.PortNumber, slave)
 	}
-	for slave := range driver.zombies {
+	for _, slave := range slaves.Zombies {
 		fmt.Fprintf(writer,
 			"&nbsp;&nbsp;<a href=\"http://%s:%d/\">%s</a> (zombie)<br>\n",
-			slave, driver.options.PortNumber, slave)
+			slave.IpAddress, driver.options.PortNumber, slave)
 	}
-}
-
-func (slave *Slave) destroy() {
-	driver := slave.driver
-	driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
-	driver.mutex.Lock()
-	if _, ok := driver.busySlaves[slave]; !ok {
-		driver.mutex.Unlock()
-		panic("destroying slave which is not busy")
-	}
-	go slave.destroyAndUnlock()
-}
-
-func (slave *Slave) destroyAndUnlock() {
-	driver := slave.driver
-	defer driver.mutex.Unlock()
-	if err := slave.client.Close(); err != nil {
-		driver.logger.Println(err)
-	}
-	err := slave.driver.slaveTrader.DestroySlave(slave.info.Identifier)
-	delete(driver.busySlaves, slave)
-	if err != nil {
-		driver.logger.Println(err)
-		driver.zombies[slave] = struct{}{}
-	} else {
-	}
-	driver.scheduleRollCall()
-}
-
-func (slave *Slave) getClient() *srpc.Client {
-	return slave.client
-}
-
-func (slave *Slave) release() {
-	driver := slave.driver
-	driver.mutex.Lock()
-	defer driver.mutex.Unlock()
-	if _, ok := driver.idleSlaves[slave]; ok {
-		panic("releasing idle slave")
-	}
-	if _, ok := driver.zombies[slave]; ok {
-		panic("releasing zombie")
-	}
-	if _, ok := driver.busySlaves[slave]; !ok {
-		panic("releasing unknown slave")
-	}
-	delete(driver.busySlaves, slave)
-	driver.idleSlaves[slave] = struct{}{}
-	driver.scheduleRollCall()
 }

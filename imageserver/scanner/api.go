@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 // TODO: the types should probably be moved into a separate package, leaving
@@ -107,9 +108,9 @@ func (imdb *ImageDataBase) DoWithPendingImage(image *image.Image,
 	return imdb.doWithPendingImage(image, doFunc)
 }
 
-func (imdb *ImageDataBase) FindLatestImage(dirame string,
-	ignoreExpiring bool) (string, error) {
-	return imdb.findLatestImage(dirame, ignoreExpiring)
+func (imdb *ImageDataBase) FindLatestImage(
+	request proto.FindLatestImageRequest) (string, error) {
+	return imdb.findLatestImage(request)
 }
 
 func (imdb *ImageDataBase) GetImage(name string) *image.Image {

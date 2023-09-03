@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
+	"github.com/Cloud-Foundations/Dominator/lib/decoders"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -25,8 +26,23 @@ func buildFromManifestSubcommand(args []string, logger log.DebugLogger) error {
 	if *alwaysShowBuildLog {
 		fmt.Fprintln(os.Stderr, "Start of build log ==========================")
 	}
-	name, err := builder.BuildImageFromManifest(srpcClient, args[0], args[1],
-		*expiresIn, bindMounts, logWriter, logger)
+	var variables map[string]string
+	if *variablesFilename != "" {
+		err := decoders.DecodeFile(*variablesFilename, &variables)
+		if err != nil {
+			return err
+		}
+	}
+	name, err := builder.BuildImageFromManifestWithOptions(
+		srpcClient,
+		builder.BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: args[0],
+			Variables:         variables,
+		},
+		args[1],
+		*expiresIn,
+		logWriter)
 	if err != nil {
 		if !*alwaysShowBuildLog {
 			fmt.Fprintln(os.Stderr,
@@ -56,8 +72,21 @@ func buildTreeFromManifestSubcommand(args []string,
 	if *alwaysShowBuildLog {
 		fmt.Fprintln(os.Stderr, "Start of build log ==========================")
 	}
-	rootDir, err := builder.BuildTreeFromManifest(srpcClient, args[0],
-		bindMounts, logWriter, logger)
+	var variables map[string]string
+	if *variablesFilename != "" {
+		err := decoders.DecodeFile(*variablesFilename, &variables)
+		if err != nil {
+			return err
+		}
+	}
+	rootDir, err := builder.BuildTreeFromManifestWithOptions(
+		srpcClient,
+		builder.BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: args[0],
+			Variables:         variables,
+		},
+		logWriter)
 	if err != nil {
 		if !*alwaysShowBuildLog {
 			fmt.Fprintln(os.Stderr,
@@ -85,7 +114,20 @@ func processManifestSubcommand(args []string, logger log.DebugLogger) error {
 	if *alwaysShowBuildLog {
 		fmt.Fprintln(os.Stderr, "Start of build log ==========================")
 	}
-	err := builder.ProcessManifest(args[0], args[1], bindMounts, logWriter)
+	var variables map[string]string
+	if *variablesFilename != "" {
+		err := decoders.DecodeFile(*variablesFilename, &variables)
+		if err != nil {
+			return err
+		}
+	}
+	err := builder.ProcessManifestWithOptions(
+		builder.BuildLocalOptions{
+			BindMounts:        bindMounts,
+			ManifestDirectory: args[0],
+			Variables:         variables,
+		},
+		args[1], logWriter)
 	if err != nil {
 		if !*alwaysShowBuildLog {
 			fmt.Fprintln(os.Stderr,

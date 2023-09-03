@@ -16,6 +16,9 @@ import (
 
 func (s *server) computePaths() {
 	s.paths = make(map[string]struct{})
+	for path := range s.fileHandlers {
+		s.paths[path] = struct{}{}
+	}
 	for path := range s.infoHandlers {
 		s.paths[path] = struct{}{}
 	}
@@ -36,6 +39,10 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if filename, ok := s.fileHandlers[req.URL.Path]; ok {
+		s.showFileData(w, ipAddr, filename)
 		return
 	}
 	if rawHandler, ok := s.rawHandlers[req.URL.Path]; ok {
@@ -96,8 +103,9 @@ func (s *server) showTrue(w http.ResponseWriter, ipAddr net.IP) {
 	w.Write([]byte("true\n"))
 }
 
-func (s *server) showUserData(w http.ResponseWriter, ipAddr net.IP) {
-	if file, err := s.manager.GetVmUserData(ipAddr); err != nil {
+func (s *server) showFileData(w http.ResponseWriter, ipAddr net.IP,
+	filename string) {
+	if file, err := s.manager.GetVmFileData(ipAddr, filename); err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
 	} else {

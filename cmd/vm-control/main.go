@@ -23,13 +23,17 @@ import (
 var (
 	adjacentVM = flag.String("adjacentVM", "",
 		"IP address of VM adjacent (same Hypervisor) to VM being created")
-	consoleType       hyper_proto.ConsoleType
+	consoleType        hyper_proto.ConsoleType
+	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
+		"If true, destroy VM if it powers down internally")
 	destroyProtection = flag.Bool("destroyProtection", false,
 		"If true, do not destroy running VM")
 	disableVirtIO = flag.Bool("disableVirtIO", false,
 		"If true, disable virtio drivers, reducing I/O performance")
 	dhcpTimeout = flag.Duration("dhcpTimeout", time.Minute,
 		"Time to wait before timing out on DHCP request from VM")
+	doNotStart = flag.Bool("doNotStart", false,
+		"If true, do not start VM when creating")
 	enableNetboot = flag.Bool("enableNetboot", false,
 		"If true, enable boot from network for first boot")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
@@ -43,6 +47,10 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
+	identityCertFile = flag.String("identityCertFile", "",
+		"Filename of PEM-encoded cetificate availabe from metadata service ")
+	identityKeyFile = flag.String("identityKeyFile", "",
+		"Filename of PEM-encoded key available from metadata service ")
 	includeUnhealthy = flag.Bool("includeUnhealthy", false,
 		"If true, list connected but unhealthy hypervisors")
 	imageFile = flag.String("imageFile", "",
@@ -107,6 +115,7 @@ var (
 		"Index of volume to get or delete")
 	volumeIndices flagutil.UintList
 	volumeSize    flagutil.Size
+	volumeTypes   volumeTypeList
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -127,6 +136,8 @@ func init() {
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
+	flag.Var(&volumeTypes, "volumeTypes",
+		"Types for volumes (default persistent)")
 }
 
 func printUsage() {
@@ -177,6 +188,7 @@ var subcommands = []commands.Command{
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
 	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
+	{"replace-vm-credentials", "IPaddr", 1, 1, replaceVmCredentialsSubcommand},
 	{"replace-vm-image", "IPaddr", 1, 1, replaceVmImageSubcommand},
 	{"replace-vm-user-data", "IPaddr", 1, 1, replaceVmUserDataSubcommand},
 	{"restore-vm", "source", 1, 1, restoreVmSubcommand},
