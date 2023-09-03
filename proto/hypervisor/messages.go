@@ -578,6 +578,7 @@ type ReplaceVmImageRequest struct {
 	MinimumFreeBytes uint64
 	OverlayFiles     map[string][]byte
 	RoundupPower     uint64
+	SkipBackup       bool
 	SkipBootloader   bool
 } // RAW image data (length=ImageDataSize) is streamed afterwards.
 
