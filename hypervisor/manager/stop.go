@@ -61,7 +61,7 @@ func (vm *vmInfoType) shutdown() {
 	case proto.StateStarting, proto.StateRunning:
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		vm.mutex.RUnlock()
 		timer := time.NewTimer(time.Minute)
 		select {
@@ -72,7 +72,7 @@ func (vm *vmInfoType) shutdown() {
 			vm.logger.Println("shut down cleanly for system shutdown")
 		case <-timer.C:
 			vm.logger.Println("shutdown timed out: killing VM")
-			vm.commandChannel <- "quit"
+			vm.commandInput <- "quit"
 		}
 	default:
 		vm.mutex.RUnlock()

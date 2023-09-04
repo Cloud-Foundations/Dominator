@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -221,6 +222,28 @@ func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return reply.VmInfo, nil
 }
 
+func holdLock(client *srpc.Client, timeout time.Duration,
+	writeLock bool) error {
+	request := proto.HoldLockRequest{timeout, writeLock}
+	var reply proto.HoldLockResponse
+	err := client.RequestReply("Hypervisor.HoldLock", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func holdVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+	writeLock bool) error {
+	request := proto.HoldVmLockRequest{ipAddr, timeout, writeLock}
+	var reply proto.HoldVmLockResponse
+	err := client.RequestReply("Hypervisor.HoldVmLock", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	request := proto.ListSubnetsRequest{Sort: doSort}
 	var reply proto.ListSubnetsResponse
@@ -298,6 +321,16 @@ func scanVmRoot(client *srpc.Client, ipAddr net.IP,
 		return nil, err
 	}
 	return reply.FileSystem, errors.New(reply.Error)
+}
+
+func setDisabledState(client *srpc.Client, disable bool) error {
+	request := proto.SetDisabledStateRequest{Disable: disable}
+	var reply proto.SetDisabledStateResponse
+	err := client.RequestReply("Hypervisor.SetDisabledState", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
 }
 
 func startVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {

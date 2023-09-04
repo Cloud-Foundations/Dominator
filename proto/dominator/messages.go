@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -46,10 +47,10 @@ type GetSubsConfigurationRequest struct{}
 type GetSubsConfigurationResponse sub.Configuration
 
 type GetInfoForSubsRequest struct {
-	Hostnames        []string            // Empty: match all hostnames.
-	LocationsToMatch []string            // Empty: match all locations.
-	StatusesToMatch  []string            // Empty: match all statuses.
-	TagsToMatch      map[string][]string // Empty: match all tags.
+	Hostnames        []string       // Empty: match all hostnames.
+	LocationsToMatch []string       // Empty: match all locations.
+	StatusesToMatch  []string       // Empty: match all statuses.
+	TagsToMatch      tags.MatchTags // Empty: match all tags.
 }
 
 type GetInfoForSubsResponse struct {

@@ -11,8 +11,7 @@ func (t *srpcType) ListVMsInLocation(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	addresses, err := t.hypervisorsManager.ListVMsInLocation(
-		request.Location)
+	addresses, err := t.hypervisorsManager.ListVMsInLocation(request)
 	if err != nil {
 		response := proto.ListVMsInLocationResponse{
 			Error: errors.ErrorToString(err),

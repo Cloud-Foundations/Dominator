@@ -22,7 +22,7 @@ func (conn *Conn) getAuthInformation() *AuthInformation {
 }
 
 func (conn *Conn) getCloseNotifier() <-chan error {
-	closeChannel := make(chan error)
+	closeChannel := make(chan error, 1)
 	go func() {
 		for {
 			buf := make([]byte, 1)

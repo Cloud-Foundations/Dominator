@@ -125,11 +125,13 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 }
 
 func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
+	machine := *h.machine
+	machine.MemoryInMiB = h.memoryInMiB
+	machine.NumCPUs = h.numCPUs
+	machine.TotalVolumeBytes = h.totalVolumeBytes
 	if len(h.localTags) < 1 {
-		return h.machine
+		return &machine
 	}
-	var machine fm_proto.Machine
-	machine = *h.machine
 	machine.Tags = h.machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
 	return &machine
@@ -166,6 +168,8 @@ func (m *Manager) changeMachineTags(hostname string,
 		}
 		location := h.location
 		h.mutex.Unlock()
+		m.mutex.Lock()
+		defer m.mutex.Unlock()
 		m.sendUpdate(location, update)
 		return nil
 	}
@@ -180,38 +184,41 @@ func (h *hypervisorType) getMachine() *fm_proto.Machine {
 func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	delete(m.notifiers[channel].notifiers, channel)
-	delete(m.notifiers, channel)
+	if location, ok := m.notifiers[channel]; ok {
+		delete(location.notifiers, channel)
+		delete(m.notifiers, channel)
+	}
 }
 
-func (m *Manager) makeUpdateChannel(locationStr string) <-chan fm_proto.Update {
+func (m *Manager) makeUpdateChannel(
+	request fm_proto.GetUpdatesRequest) <-chan fm_proto.Update {
 	channel := make(chan fm_proto.Update, 16)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !*manageHypervisors && !request.IgnoreMissingLocalTags {
+		channel <- fm_proto.Update{Error: "this is a read-only Fleet Manager"}
+		return channel
+	}
 	if m.locations == nil {
 		m.locations = make(map[string]*locationType)
 	}
 	if m.notifiers == nil {
 		m.notifiers = make(map[<-chan fm_proto.Update]*locationType)
 	}
-	location, ok := m.locations[locationStr]
+	location, ok := m.locations[request.Location]
 	if !ok {
 		location = &locationType{
 			notifiers: make(map[<-chan fm_proto.Update]chan<- fm_proto.Update),
 		}
-		m.locations[locationStr] = location
+		m.locations[request.Location] = location
 	}
 	location.notifiers[channel] = channel
 	m.notifiers[channel] = location
-	if !*manageHypervisors {
-		channel <- fm_proto.Update{Error: "this is a read-only Fleet Manager"}
-		return channel
-	}
 	machines := make([]*fm_proto.Machine, 0)
 	vms := make(map[string]*hyper_proto.VmInfo, len(m.vms))
 	vmToHypervisor := make(map[string]string, len(m.vms))
 	for _, h := range m.hypervisors {
-		if !testInLocation(h.location, locationStr) {
+		if !testInLocation(h.location, request.Location) {
 			continue
 		}
 		machines = append(machines, h.getMachine())
@@ -512,7 +519,11 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		return
 	}
 	addressPoolOptions := defaultAddressPoolOptions
-	if h.healthStatus == "marginal" || h.healthStatus == "at risk" {
+	if h.disabled {
+		addressPoolOptions.desiredSize = 0
+		addressPoolOptions.maximumSize = 0
+		addressPoolOptions.minimumSize = 0
+	} else if h.healthStatus == "marginal" || h.healthStatus == "at risk" {
 		addressPoolOptions.desiredSize = 1
 		addressPoolOptions.maximumSize = 1
 		addressPoolOptions.minimumSize = 1
@@ -595,6 +606,9 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	update hyper_proto.Update, firstUpdate bool) {
 	h.mutex.Lock()
+	if update.HaveDisabled {
+		h.disabled = update.Disabled
+	}
 	if update.MemoryInMiB != nil {
 		h.memoryInMiB = *update.MemoryInMiB
 	}
@@ -799,6 +813,16 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 		}
 		update.DeletedVMs = append(update.DeletedVMs, ipAddr)
 	}
+	h.allocatedMilliCPUs = 0
+	h.allocatedMemory = 0
+	h.allocatedVolumeBytes = 0
+	for _, vm := range h.vms {
+		h.allocatedMilliCPUs += uint64(vm.MilliCPUs)
+		h.allocatedMemory += vm.MemoryInMiB
+		for _, volume := range vm.Volumes {
+			h.allocatedVolumeBytes += volume.Size
+		}
+	}
 	m.sendUpdate(h.location, &update)
 }
 
@@ -837,8 +861,14 @@ func (m *Manager) sendUpdate(hyperLocation string, update *fm_proto.Update) {
 		if !testInLocation(hyperLocation, locationStr) {
 			continue
 		}
-		for _, channel := range location.notifiers {
-			channel <- *update
+		for rChannel, sChannel := range location.notifiers {
+			select {
+			case sChannel <- *update:
+			default:
+				delete(location.notifiers, rChannel)
+				delete(m.notifiers, rChannel)
+				close(sChannel)
+			}
 		}
 	}
 }

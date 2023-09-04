@@ -24,12 +24,13 @@ import (
 )
 
 const (
-	connectString   = "200 Connected to Go SRPC"
-	rpcPath         = "/_goSRPC_/"      // Legacy endpoint. GOB coder.
-	tlsRpcPath      = "/_go_TLS_SRPC_/" // Legacy endpoint. GOB coder.
-	jsonRpcPath     = "/_SRPC_/unsecured/JSON"
-	jsonTlsRpcPath  = "/_SRPC_/TLS/JSON"
-	listMethodsPath = rpcPath + "listMethods"
+	connectString         = "200 Connected to Go SRPC"
+	rpcPath               = "/_goSRPC_/"      // Legacy endpoint. GOB coder.
+	tlsRpcPath            = "/_go_TLS_SRPC_/" // Legacy endpoint. GOB coder.
+	jsonRpcPath           = "/_SRPC_/unsecured/JSON"
+	jsonTlsRpcPath        = "/_SRPC_/TLS/JSON"
+	listMethodsPath       = rpcPath + "listMethods"
+	listPublicMethodsPath = rpcPath + "listPublicMethods"
 
 	methodTypeRaw = iota
 	methodTypeCoder
@@ -88,6 +89,7 @@ func init() {
 	http.HandleFunc(jsonRpcPath, jsonUnsecuredHttpHandler)
 	http.HandleFunc(jsonTlsRpcPath, jsonTlsHttpHandler)
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
+	http.HandleFunc(listPublicMethodsPath, listPublicMethodsHttpHandler)
 	registerServerMetrics()
 }
 
@@ -590,6 +592,24 @@ func listMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {
 	for receiverName, receiver := range receivers {
 		for method := range receiver.methods {
 			methods = append(methods, receiverName+"."+method+"\n")
+		}
+	}
+	sort.Strings(methods)
+	for _, method := range methods {
+		writer.WriteString(method)
+	}
+}
+
+func listPublicMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	methods := make([]string, len(receivers))
+	for receiverName, receiver := range receivers {
+		for name, method := range receiver.methods {
+			if !method.public {
+				continue
+			}
+			methods = append(methods, receiverName+"."+name+"\n")
 		}
 	}
 	sort.Strings(methods)

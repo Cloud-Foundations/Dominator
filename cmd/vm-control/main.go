@@ -47,7 +47,8 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
-	identityCertFile = flag.String("identityCertFile", "",
+	hypervisorTagsToMatch tags.MatchTags
+	identityCertFile      = flag.String("identityCertFile", "",
 		"Filename of PEM-encoded cetificate availabe from metadata service ")
 	identityKeyFile = flag.String("identityKeyFile", "",
 		"Filename of PEM-encoded key available from metadata service ")
@@ -70,6 +71,9 @@ var (
 		"Location to search for hypervisors")
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	placement        placementType
+	placementCommand = flag.String("placementCommand", "",
+		"Command to make placement decisions when creating/copying/moving VM")
 	minFreeBytes     = flagutil.Size(256 << 20)
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
@@ -105,9 +109,10 @@ var (
 		"Name file containing user-data accessible from the metadata server")
 	virtualCPUs = flag.Uint("vCPUs", 0,
 		"virtual CPUs (default rounds up milliCPUs)")
-	vmHostname = flag.String("vmHostname", "", "Hostname for VM")
-	vmTags     tags.Tags
-	vncViewer  = flag.String("vncViewer", defaultVncViewer,
+	vmHostname    = flag.String("vmHostname", "", "Hostname for VM")
+	vmTags        tags.Tags
+	vmTagsToMatch tags.MatchTags
+	vncViewer     = flag.String("vncViewer", defaultVncViewer,
 		"Path to VNC viewer")
 	volumeFilename = flag.String("volumeFilename", "",
 		"Name of file to write volume data to")
@@ -124,9 +129,13 @@ var (
 func init() {
 	flag.Var(&consoleType, "consoleType",
 		"type of graphical console (default none)")
+	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
+		"Tags to match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&memory, "memory", "memory (default 1GiB)")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in root volume")
+	flag.Var(&placement, "placement",
+		"Placement choice when selecting Hypervisor to create/copy/move VM")
 	flag.Var(&ownerGroups, "ownerGroups", "Groups who own the VM")
 	flag.Var(&ownerUsers, "ownerUsers", "Extra users who own the VM")
 	flag.Var(&requestIPs, "requestIPs", "Request specific IPs, if available")
@@ -134,6 +143,7 @@ func init() {
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
+	flag.Var(&vmTagsToMatch, "vmTagsToMatch", "Tags to match when listing")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
@@ -175,6 +185,7 @@ var subcommands = []commands.Command{
 	{"discard-vm-snapshot", "IPaddr", 1, 1, discardVmSnapshotSubcommand},
 	{"export-local-vm", "IPaddr", 1, 1, exportLocalVmSubcommand},
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
+	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},
 	{"get-vm-info", "IPaddr", 1, 1, getVmInfoSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
 	{"get-vm-volume", "IPaddr", 1, 1, getVmVolumeSubcommand},

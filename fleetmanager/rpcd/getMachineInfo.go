@@ -10,7 +10,7 @@ import (
 func (t *srpcType) GetMachineInfo(conn *srpc.Conn,
 	request fm_proto.GetMachineInfoRequest,
 	reply *fm_proto.GetMachineInfoResponse) error {
-	if response, err := t.getMachineInfo(request.Hostname); err != nil {
+	if response, err := t.getMachineInfo(request); err != nil {
 		*reply = fm_proto.GetMachineInfoResponse{
 			Error: errors.ErrorToString(err)}
 	} else {
@@ -19,21 +19,21 @@ func (t *srpcType) GetMachineInfo(conn *srpc.Conn,
 	return nil
 }
 
-func (t *srpcType) getMachineInfo(hostname string) (
+func (t *srpcType) getMachineInfo(request fm_proto.GetMachineInfoRequest) (
 	fm_proto.GetMachineInfoResponse, error) {
 	topology, err := t.hypervisorsManager.GetTopology()
 	if err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	}
-	location, err := topology.GetLocationOfMachine(hostname)
+	location, err := topology.GetLocationOfMachine(request.Hostname)
 	if err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	}
-	machine, err := t.hypervisorsManager.GetMachineInfo(hostname)
+	machine, err := t.hypervisorsManager.GetMachineInfo(request)
 	if err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	}
-	tSubnets, err := topology.GetSubnetsForMachine(hostname)
+	tSubnets, err := topology.GetSubnetsForMachine(request.Hostname)
 	if err != nil {
 		return fm_proto.GetMachineInfoResponse{}, err
 	}

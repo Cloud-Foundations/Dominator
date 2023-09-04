@@ -12,9 +12,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const commonStyleSheet string = `<style>
@@ -91,6 +93,9 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			var background, foreground string
 			if vm.hypervisor.probeStatus == probeStatusOff {
 				foreground = "#ff8080"
+			} else if vm.hypervisor.probeStatus == probeStatusConnected &&
+				vm.hypervisor.disabled {
+				foreground = "grey"
 			} else if vm.hypervisor.probeStatus != probeStatusConnected {
 				foreground = "red"
 			} else if vm.hypervisor.healthStatus == "at risk" {
@@ -100,7 +105,8 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			}
 			if vm.Uncommitted {
 				background = "yellow"
-			} else if topology.CheckIfIpIsReserved(vm.ipAddr) {
+			} else if topology.CheckIfIpIsHost(vm.ipAddr) ||
+				topology.CheckIfIpIsReserved(vm.ipAddr) {
 				background = "orange"
 			}
 			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,
@@ -170,26 +176,63 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	}
 }
 
-func (m *Manager) listVMsInLocation(dirname string) ([]net.IP, error) {
-	hypervisors, err := m.listHypervisors(dirname, showAll, "")
+func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
+	[]net.IP, error) {
+	hypervisors, err := m.listHypervisors(request.Location, showAll, "",
+		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return nil, err
 	}
+	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
+	ownerUsers := stringutil.ConvertListToMap(request.OwnerUsers, false)
 	addresses := make([]net.IP, 0)
+	vmTagMatcher := tagmatcher.New(request.VmTagsToMatch, false)
 	for _, hypervisor := range hypervisors {
 		hypervisor.mutex.RLock()
 		for _, vm := range hypervisor.vms {
-			addresses = append(addresses, vm.Address.IpAddress)
+			if vm.checkOwnerGroups(ownerGroups) &&
+				vm.checkOwnerUsers(ownerUsers) &&
+				vmTagMatcher.MatchEach(vm.Tags) {
+				addresses = append(addresses, vm.Address.IpAddress)
+			}
 		}
 		hypervisor.mutex.RUnlock()
 	}
 	return addresses, nil
 }
 
+// checkOwnerGroups returns true if one of the specified ownerGroups owns the
+// VM. If ownerGroups is nil, checkOwnerGroups returns true.
+func (vm *vmInfoType) checkOwnerGroups(ownerGroups map[string]struct{}) bool {
+	if ownerGroups == nil {
+		return true
+	}
+	for _, ownerGroup := range vm.OwnerGroups {
+		if _, ok := ownerGroups[ownerGroup]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// checkOwnerUsers returns true if one of the specified ownerUsers owns the VM.
+// If ownerUsers is nil, checkOwnerUsers returns true.
+func (vm *vmInfoType) checkOwnerUsers(ownerUsers map[string]struct{}) bool {
+	if ownerUsers == nil {
+		return true
+	}
+	for _, ownerUser := range vm.OwnerUsers {
+		if _, ok := ownerUsers[ownerUser]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (vm *vmInfoType) numVolumesTableEntry() string {
 	var comment string
 	for _, volume := range vm.Volumes {
-		if comment == "" && volume.Format != proto.VolumeFormatRaw {
+		if comment == "" && volume.Format != hyper_proto.VolumeFormatRaw {
 			comment = `<font style="color:grey;font-size:12px"> (!RAW)</font>`
 		}
 	}

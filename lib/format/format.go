@@ -50,15 +50,22 @@ func Duration(duration time.Duration) string {
 // FormatBytes returns a string with the number of bytes specified converted
 // into a human-friendly format with a binary multiplier (i.e. GiB).
 func FormatBytes(bytes uint64) string {
-	if bytes>>40 > 100 || (bytes>>40 >= 1 && bytes&(1<<40-1) == 0) {
-		return fmt.Sprintf("%d TiB", bytes>>40)
-	} else if bytes>>30 > 100 || (bytes>>30 >= 1 && bytes&(1<<30-1) == 0) {
-		return fmt.Sprintf("%d GiB", bytes>>30)
-	} else if bytes>>20 > 100 || (bytes>>20 >= 1 && bytes&(1<<20-1) == 0) {
-		return fmt.Sprintf("%d MiB", bytes>>20)
-	} else if bytes>>10 > 100 || (bytes>>10 >= 1 && bytes&(1<<10-1) == 0) {
-		return fmt.Sprintf("%d KiB", bytes>>10)
+	shift, multiplier := GetMiltiplier(bytes)
+	return fmt.Sprintf("%d %sB", bytes>>shift, multiplier)
+}
+
+// GetMiltiplier will return the preferred base-2 multiplier (i.e. Ki, Mi, Gi)
+// and right shift number for the specified vlaue.
+func GetMiltiplier(value uint64) (uint, string) {
+	if value>>40 > 100 || (value>>40 >= 1 && value&(1<<40-1) == 0) {
+		return 40, "Ti"
+	} else if value>>30 > 100 || (value>>30 >= 1 && value&(1<<30-1) == 0) {
+		return 30, "Gi"
+	} else if value>>20 > 100 || (value>>20 >= 1 && value&(1<<20-1) == 0) {
+		return 20, "Mi"
+	} else if value>>10 > 100 || (value>>10 >= 1 && value&(1<<10-1) == 0) {
+		return 10, "Ki"
 	} else {
-		return fmt.Sprintf("%d B", bytes)
+		return 0, ""
 	}
 }

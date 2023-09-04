@@ -39,6 +39,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -250,10 +251,39 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 	reader io.Reader) error {
 	filename := filepath.Join(objectsDir, objectcache.HashToFilename(hashVal))
 	dirname := filepath.Dir(filename)
-	if err := os.MkdirAll(dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	return fsutil.CopyToFile(filename, fsutil.PrivateFilePerms, reader, length)
+}
+
+// Returns bytes read up to a carriage return (which is discarded), and true if
+// the last byte was read, else false.
+func readUntilCarriageReturn(firstByte byte, moreBytes <-chan byte,
+	echo chan<- byte) ([]byte, bool) {
+	buffer := make([]byte, 1, len(moreBytes)+1)
+	buffer[0] = firstByte
+	echo <- firstByte
+	for char := range moreBytes {
+		echo <- char
+		if char == '\r' {
+			echo <- '\n'
+			return buffer, false
+		}
+		buffer = append(buffer, char)
+	}
+	return buffer, true
+}
+
+// removeFile will remove the specified filename. If the removal was successful
+// or the file does not exist, nil is returned, else an error is returned.
+func removeFile(filename string) error {
+	if err := os.Remove(filename); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func setVolumeSize(filename string, size uint64) error {
@@ -307,11 +337,11 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			DirectoryToCleanup: dirname,
 			Filename:           filename,
 		}
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		cFlags := os.O_CREATE | os.O_EXCL | os.O_RDWR
-		file, err := os.OpenFile(filename, cFlags, privateFilePerms)
+		file, err := os.OpenFile(filename, cFlags, fsutil.PrivateFilePerms)
 		if err != nil {
 			return err
 		} else {
@@ -708,6 +738,47 @@ func (m *Manager) connectToVmConsole(ipAddr net.IP,
 	return console, nil
 }
 
+func (m *Manager) connectToVmManager(ipAddr net.IP) (
+	chan<- byte, <-chan byte, error) {
+	input := make(chan byte, 256)
+	vm, err := m.getVmAndLock(ipAddr, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer vm.mutex.Unlock()
+	if vm.State != proto.StateRunning {
+		return nil, nil, errors.New("VM is not running")
+	}
+	commandInput := vm.commandInput
+	if commandInput == nil {
+		return nil, nil, errors.New("no commandInput for VM")
+	}
+	// Drain any previous output.
+	for keepReading := true; keepReading; {
+		select {
+		case <-vm.commandOutput:
+		default:
+			keepReading = false
+			break
+		}
+	}
+	go func(input <-chan byte, output chan<- string) {
+		for char := range input {
+			if char == '\r' {
+				continue
+			}
+			buffer, gotLast := readUntilCarriageReturn(char, input,
+				vm.commandOutput)
+			output <- "\\" + string(buffer)
+			if gotLast {
+				break
+			}
+		}
+		vm.logger.Debugln(0, "input channel for manager closed")
+	}(input, vm.commandInput)
+	return input, vm.commandOutput, nil
+}
+
 func (m *Manager) connectToVmSerialPort(ipAddr net.IP,
 	authInfo *srpc.AuthInformation,
 	portNumber uint) (chan<- byte, <-chan byte, error) {
@@ -819,7 +890,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 		vm.cleanup()
 	}()
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	// Begin copying over the volumes.
@@ -895,9 +966,18 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+	if m.disabled {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
+		return sendError(conn, errors.New("Hypervisor is disabled"))
+	}
 	ownerUsers := make([]string, 1, len(request.OwnerUsers)+1)
 	ownerUsers[0] = conn.Username()
 	if ownerUsers[0] == "" {
+		if err := maybeDrainAll(conn, request); err != nil {
+			return err
+		}
 		return sendError(conn, errors.New("no authentication data"))
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
@@ -929,7 +1009,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
 		}
@@ -1236,7 +1316,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -1314,7 +1394,7 @@ func (m *Manager) destroyVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			return errors.New("cannot destroy running VM when protected")
 		}
 		vm.setState(proto.StateDestroying)
-		vm.commandChannel <- "quit"
+		vm.commandInput <- "quit"
 	case proto.StateStopping:
 		return errors.New("VM is stopping")
 	case proto.StateStopped, proto.StateFailedToStart, proto.StateMigrating,
@@ -1344,12 +1424,19 @@ func (m *Manager) discardVmAccessToken(ipAddr net.IP,
 
 func (m *Manager) discardVmOldImage(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) error {
+	extension := ".old"
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(vm.VolumeLocations[0].Filename + ".old")
+	if err := removeFile(vm.getInitrdPath() + extension); err != nil {
+		return err
+	}
+	if err := removeFile(vm.getKernelPath() + extension); err != nil {
+		return err
+	}
+	return removeFile(vm.VolumeLocations[0].Filename + extension)
 }
 
 func (m *Manager) discardVmOldUserData(ipAddr net.IP,
@@ -1359,7 +1446,7 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 		return err
 	}
 	defer vm.mutex.Unlock()
-	return os.Remove(filepath.Join(vm.dirname, UserDataFile+".old"))
+	return removeFile(filepath.Join(vm.dirname, UserDataFile+".old"))
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
@@ -1634,6 +1721,32 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 		vm.Volumes[request.VolumeIndex].Size)
 }
 
+func (m *Manager) holdVmLock(ipAddr net.IP, timeout time.Duration,
+	writeLock bool, authInfo *srpc.AuthInformation) error {
+	if timeout > time.Minute {
+		return fmt.Errorf("timeout: %s exceeds one minute", timeout)
+	}
+	if authInfo == nil {
+		return fmt.Errorf("no authentication information")
+	}
+	vm, err := m.getVmAndLock(ipAddr, writeLock)
+	if err != nil {
+		return err
+	}
+	if writeLock {
+		vm.logger.Printf("HoldVmLock(%s) by %s for writing\n",
+			format.Duration(timeout), authInfo.Username)
+		time.Sleep(timeout)
+		vm.mutex.Unlock()
+	} else {
+		vm.logger.Printf("HoldVmLock(%s) by %s for reading\n",
+			format.Duration(timeout), authInfo.Username)
+		time.Sleep(timeout)
+		vm.mutex.RUnlock()
+	}
+	return nil
+}
+
 func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
 	requestedIpAddrs := make(map[string]struct{},
@@ -1739,14 +1852,14 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 			os.RemoveAll(volume.DirectoryToCleanup)
 		}
 	}()
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for index, sourceFilename := range request.VolumeFilenames {
 		dirname := filepath.Join(filepath.Dir(filepath.Dir(
 			filepath.Dir(sourceFilename))),
 			ipAddress)
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		destFilename := filepath.Join(dirname, indexToName(index))
@@ -1765,13 +1878,27 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 }
 
 func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
+	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
+	vmTagMatcher := tagmatcher.New(request.VmTagsToMatch, false)
 	m.mutex.RLock()
 	ipAddrs := make([]string, 0, len(m.vms))
 	for ipAddr, vm := range m.vms {
 		if request.IgnoreStateMask&(1<<vm.State) != 0 {
 			continue
 		}
+		if !vmTagMatcher.MatchEach(vm.Tags) {
+			continue
+		}
 		include := true
+		if len(ownerGroups) > 0 {
+			include = false
+			for _, ownerGroup := range vm.OwnerGroups {
+				if _, ok := ownerGroups[ownerGroup]; ok {
+					include = true
+					break
+				}
+			}
+		}
 		if len(request.OwnerUsers) > 0 {
 			include = false
 			for _, ownerUser := range request.OwnerUsers {
@@ -1872,12 +1999,12 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		}
 	}()
 	vm.ownerUsers = stringutil.ConvertListToMap(vm.OwnerUsers, false)
-	if err := os.MkdirAll(vm.dirname, dirPerms); err != nil {
+	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for index, _dirname := range volumeDirectories {
 		dirname := filepath.Join(_dirname, ipAddress)
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		vm.VolumeLocations = append(vm.VolumeLocations, proto.LocalVolume{
@@ -2068,7 +2195,7 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 		return nil
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
-		privateFilePerms)
+		fsutil.PrivateFilePerms)
 	if err != nil {
 		io.CopyN(ioutil.Discard, conn, int64(reply.Length))
 		return err
@@ -2115,7 +2242,7 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		}
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE,
-		privateFilePerms)
+		fsutil.PrivateFilePerms)
 	if err != nil {
 		return nil, err
 	}
@@ -2256,7 +2383,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -2288,7 +2415,8 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDelete(loopDevice)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+		time.Minute, vm.logger)
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", loopDevice, rootDir)
 	err = wsyscall.Mount(loopDevice+partition, rootDir, "ext4", 0, "")
 	if err != nil {
@@ -2494,7 +2622,7 @@ func (m *Manager) rebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	case proto.StateStarting:
 		return false, errors.New("VM is starting")
 	case proto.StateRunning:
-		vm.commandChannel <- "reboot" // Not a QMP command: interpreted locally.
+		vm.commandInput <- "reboot" // Not a QMP command: interpreted locally.
 		vm.mutex.Unlock()
 		doUnlock = false
 		if dhcpTimeout > 0 {
@@ -2681,7 +2809,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -2739,7 +2867,7 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	filename := filepath.Join(vm.dirname, UserDataFile)
 	oldFilename := filename + ".old"
 	newFilename := filename + ".new"
-	err = fsutil.CopyToFile(newFilename, privateFilePerms, reader, size)
+	err = fsutil.CopyToFile(newFilename, fsutil.PrivateFilePerms, reader, size)
 	if err != nil {
 		return err
 	}
@@ -2921,7 +3049,8 @@ func (vm *vmInfoType) scanVmRoot(scanFilter *filter.Filter) (
 	if err != nil {
 		return nil, err
 	}
-	defer fsutil.LoopbackDelete(loopDevice)
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+		time.Minute, vm.logger)
 	blockDevice := loopDevice + partition
 	vm.logger.Debugf(0, "mounting: %s onto: %s\n", blockDevice, rootDir)
 	err = wsyscall.Mount(blockDevice, rootDir, "ext4", 0, "")
@@ -2974,7 +3103,7 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		snapshotFilename := volume.Filename + ".snapshot"
 		if index == 0 || !snapshotRootOnly {
 			err := fsutil.CopyFile(snapshotFilename, volume.Filename,
-				privateFilePerms)
+				fsutil.PrivateFilePerms)
 			if err != nil {
 				return err
 			}
@@ -2987,6 +3116,9 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 // startVm returns true if the DHCP check timed out.
 func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	accessToken []byte, dhcpTimeout time.Duration) (bool, error) {
+	if m.disabled {
+		return false, errors.New("Hypervisor is disabled")
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, accessToken)
 	if err != nil {
 		return false, err
@@ -3025,7 +3157,7 @@ func (m *Manager) startVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		<-stoppedNotifier
@@ -3073,7 +3205,7 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		stoppedNotifier := make(chan struct{}, 1)
 		vm.stoppedNotifier = stoppedNotifier
 		vm.setState(proto.StateStopping)
-		vm.commandChannel <- "system_powerdown"
+		vm.commandInput <- "system_powerdown"
 		time.AfterFunc(time.Second*15, vm.kill)
 		vm.mutex.Unlock()
 		doUnlock = false
@@ -3136,8 +3268,8 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	writeRawOptions.WriteFstab = true
 	err := util.WriteRawWithOptions(fs, objectsGetter,
-		volume.Filename+extension, privateFilePerms, mbr.TABLE_TYPE_MSDOS,
-		writeRawOptions, m.Logger)
+		volume.Filename+extension, fsutil.PrivateFilePerms,
+		mbr.TABLE_TYPE_MSDOS, writeRawOptions, m.Logger)
 	if err != nil {
 		return err
 	}
@@ -3212,7 +3344,7 @@ func (vm *vmInfoType) cleanup() {
 		return
 	}
 	select {
-	case vm.commandChannel <- "quit":
+	case vm.commandInput <- "quit":
 	default:
 	}
 	m := vm.manager
@@ -3301,7 +3433,7 @@ func (vm *vmInfoType) delete() {
 
 func (vm *vmInfoType) destroy() {
 	select {
-	case vm.commandChannel <- "quit":
+	case vm.commandInput <- "quit":
 	default:
 	}
 	vm.delete()
@@ -3309,10 +3441,8 @@ func (vm *vmInfoType) destroy() {
 
 func (vm *vmInfoType) discardSnapshot() error {
 	for _, volume := range vm.VolumeLocations {
-		if err := os.Remove(volume.Filename + ".snapshot"); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
+		if err := removeFile(volume.Filename + ".snapshot"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -3354,27 +3484,32 @@ func (vm *vmInfoType) kill() {
 	vm.mutex.RLock()
 	defer vm.mutex.RUnlock()
 	if vm.State == proto.StateStopping {
-		vm.commandChannel <- "quit"
+		vm.commandInput <- "quit"
 	}
 }
 
 func (vm *vmInfoType) monitor(monitorSock net.Conn,
-	commandChannel <-chan string) {
+	commandInput <-chan string, commandOutput chan<- byte) {
 	vm.hasHealthAgent = false
 	defer monitorSock.Close()
-	go vm.processMonitorResponses(monitorSock)
+	go vm.processMonitorResponses(monitorSock, commandOutput)
 	cancelChannel := make(chan struct{}, 1)
 	go vm.probeHealthAgent(cancelChannel)
 	go vm.serialManager()
-	for command := range commandChannel {
+	for command := range commandInput {
 		var err error
 		if command == "reboot" { // Not a QMP command: convert to ctrl-alt-del.
 			_, err = monitorSock.Write([]byte(rebootJson))
+		} else if command[0] == '\\' {
+			_, err = fmt.Fprintln(monitorSock, command[1:])
 		} else {
-			_, err = fmt.Fprintf(monitorSock, `{"execute":"%s"}`, command)
+			_, err = fmt.Fprintf(monitorSock, "{\"execute\":\"%s\"}\n",
+				command)
 		}
 		if err != nil {
 			vm.logger.Println(err)
+		} else if command[0] == '\\' {
+			vm.logger.Debugf(0, "sent JSON: %s", command[1:])
 		} else {
 			vm.logger.Debugf(0, "sent %s command", command)
 		}
@@ -3494,10 +3629,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	case proto.StateStopping:
 		monitorSock, err := net.Dial("unix", vm.monitorSockname)
 		if err == nil {
-			commandChannel := make(chan string, 1)
-			vm.commandChannel = commandChannel
-			go vm.monitor(monitorSock, commandChannel)
-			commandChannel <- "qmp_capabilities"
+			commandInput := make(chan string, 1)
+			commandOutput := make(chan byte, 16<<10)
+			vm.commandInput = commandInput
+			vm.commandOutput = commandOutput
+			go vm.monitor(monitorSock, commandInput, commandOutput)
+			commandInput <- "qmp_capabilities"
 			vm.kill()
 		} else {
 			vm.setState(proto.StateStopped)
@@ -3549,10 +3686,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		vm.setState(proto.StateFailedToStart)
 		return false, err
 	}
-	commandChannel := make(chan string, 1)
-	vm.commandChannel = commandChannel
-	go vm.monitor(monitorSock, commandChannel)
-	commandChannel <- "qmp_capabilities"
+	commandInput := make(chan string, 1)
+	vm.commandInput = commandInput
+	commandOutput := make(chan byte, 16<<10)
+	vm.commandOutput = commandOutput
+	go vm.monitor(monitorSock, commandInput, commandOutput)
+	commandInput <- "qmp_capabilities"
 	if vm.getDebugRoot() == "" {
 		vm.setState(proto.StateRunning)
 	} else {
@@ -3746,5 +3885,5 @@ func (vm *vmInfoType) writeAndSendInfo() {
 
 func (vm *vmInfoType) writeInfo() error {
 	filename := filepath.Join(vm.dirname, "info.json")
-	return json.WriteToFile(filename, publicFilePerms, "    ", vm)
+	return json.WriteToFile(filename, fsutil.PublicFilePerms, "    ", vm)
 }

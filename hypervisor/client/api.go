@@ -2,6 +2,7 @@ package client
 
 import (
 	"net"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -60,6 +61,16 @@ func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
 }
 
+func HoldLock(client *srpc.Client, timeout time.Duration,
+	writeLock bool) error {
+	return holdLock(client, timeout, writeLock)
+}
+
+func HoldVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+	writeLock bool) error {
+	return holdVmLock(client, ipAddr, timeout, writeLock)
+}
+
 func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	return listSubnets(client, doSort)
 }
@@ -86,6 +97,10 @@ func ReorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
 func ScanVmRoot(client *srpc.Client, ipAddr net.IP,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return scanVmRoot(client, ipAddr, scanFilter)
+}
+
+func SetDisabledState(client *srpc.Client, disable bool) error {
+	return setDisabledState(client, disable)
 }
 
 func StartVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {

@@ -1,6 +1,8 @@
 package smallstack
 
 import (
+	"time"
+
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -20,7 +22,9 @@ type SlaveTrader struct {
 
 type SlaveTraderOptions struct {
 	CreateRequest     hyper_proto.CreateVmRequest
-	HypervisorAddress string // Default: local Hypervisor.
+	CreateTimeout     time.Duration // Default: 5 minutes.
+	DestroyTimeout    time.Duration // Default: 1 minute.
+	HypervisorAddress string        // Default: local Hypervisor.
 }
 
 func NewSlaveTrader(createRequest hyper_proto.CreateVmRequest,

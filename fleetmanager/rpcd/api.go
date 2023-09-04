@@ -37,6 +37,7 @@ func Setup(hypervisorsManager *hypervisors.Manager, logger log.DebugLogger) (
 			PublicMethods: []string{
 				"ChangeMachineTags",
 				"GetHypervisorForVM",
+				"GetHypervisorsInLocation",
 				"GetMachineInfo",
 				"GetUpdates",
 				"ListHypervisorLocations",

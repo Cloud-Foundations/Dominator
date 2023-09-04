@@ -159,6 +159,17 @@ type ConnectToVmConsoleResponse struct {
 	Error string
 }
 
+// The ConnectToVmManger RPC is fully streamed. After the request/response,
+// the connection/client is hijacked and each side of the connection will send
+// a stream of bytes.
+type ConnectToVmManagerRequest struct {
+	IpAddress net.IP
+}
+
+type ConnectToVmManagerResponse struct {
+	Error string
+}
+
 // The ConnectToVmSerialPort RPC is fully streamed. After the request/response,
 // the connection/client is hijacked and each side of the connection will send
 // a stream of bytes.
@@ -325,6 +336,8 @@ type GetUpdatesRequest struct {
 type Update struct {
 	HaveAddressPool  bool               `json:",omitempty"`
 	AddressPool      []Address          `json:",omitempty"` // Used & free.
+	HaveDisabled     bool               `json:",omitempty"`
+	Disabled         bool               `json:",omitempty"`
 	MemoryInMiB      *uint64            `json:",omitempty"`
 	NumCPUs          *uint              `json:",omitempty"`
 	NumFreeAddresses map[string]uint    `json:",omitempty"` // Key: subnet ID.
@@ -382,6 +395,25 @@ type GetVmVolumeResponse struct {
 	ExtraFiles map[string][]byte // May contain "kernel", "initrd" and such.
 }
 
+type HoldLockRequest struct {
+	Timeout   time.Duration
+	WriteLock bool
+}
+
+type HoldLockResponse struct {
+	Error string
+}
+
+type HoldVmLockRequest struct {
+	IpAddress net.IP
+	Timeout   time.Duration
+	WriteLock bool
+}
+
+type HoldVmLockResponse struct {
+	Error string
+}
+
 type ListSubnetsRequest struct {
 	Sort bool
 }
@@ -404,8 +436,10 @@ type ImportLocalVmResponse struct {
 
 type ListVMsRequest struct {
 	IgnoreStateMask uint64
+	OwnerGroups     []string
 	OwnerUsers      []string
 	Sort            bool
+	VmTagsToMatch   tags.MatchTags // Empty: match all tags.
 }
 
 type ListVMsResponse struct {
@@ -605,6 +639,14 @@ type ScanVmRootRequest struct {
 type ScanVmRootResponse struct {
 	Error      string
 	FileSystem *filesystem.FileSystem
+}
+
+type SetDisabledStateRequest struct {
+	Disable bool
+}
+
+type SetDisabledStateResponse struct {
+	Error string
 }
 
 type SnapshotVmRequest struct {

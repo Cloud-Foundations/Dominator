@@ -16,12 +16,12 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 		return err
 	}
 	closeChannel := conn.GetCloseNotifier()
-	updateChannel := t.hypervisorsManager.MakeUpdateChannel(request.Location)
+	updateChannel := t.hypervisorsManager.MakeUpdateChannel(request)
 	defer t.hypervisorsManager.CloseUpdateChannel(updateChannel)
 	flushTimer := time.NewTimer(flushDelay)
 	var numToFlush uint
 	maxUpdates := request.MaxUpdates
-	for count := uint64(0); maxUpdates < 1 || count < maxUpdates; count++ {
+	for count := uint64(0); maxUpdates < 1 || count < maxUpdates; {
 		select {
 		case update, ok := <-updateChannel:
 			if !ok {
@@ -36,6 +36,7 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 			if update.Error != "" {
 				return nil
 			}
+			count++
 			numToFlush++
 			flushTimer.Reset(flushDelay)
 		case <-flushTimer.C:

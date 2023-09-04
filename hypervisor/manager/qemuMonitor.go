@@ -8,6 +8,11 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type copyingReader struct {
+	copyChannel chan<- byte
+	r           io.Reader
+}
+
 type monitorMessageType struct {
 	Data      json.RawMessage      `json:data",omitempty"`
 	Event     string               `json:event",omitempty"`
@@ -24,14 +29,27 @@ type shutdownDataType struct {
 	Reason string `json:reason",omitempty"`
 }
 
-func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
-	decoder := json.NewDecoder(monitorSock)
-	var guestShutdown bool
+func (r *copyingReader) Read(p []byte) (int, error) {
+	nRead, err := r.r.Read(p)
+	for index := 0; index < nRead; index++ {
+		select {
+		case r.copyChannel <- p[index]:
+		default:
+		}
+	}
+	return nRead, err
+}
+
+func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
+	commandOutput chan<- byte) {
+	reader := &copyingReader{commandOutput, monitorSock}
+	decoder := json.NewDecoder(reader)
+	var guestShutdown, hostQuit bool
 	for {
 		var message monitorMessageType
 		if err := decoder.Decode(&message); err != nil {
 			if err == io.EOF {
-				if !guestShutdown {
+				if !guestShutdown && !hostQuit {
 					vm.logger.Debugln(0, "EOF on monitor socket")
 				}
 				break
@@ -51,12 +69,16 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn) {
 			shutdownData.Guest, shutdownData.Reason)
 		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
 			guestShutdown = true
+		} else if shutdownData.Reason == "host-qmp-quit" {
+			hostQuit = true
 		}
 	}
+	close(commandOutput)
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
-	close(vm.commandChannel)
-	vm.commandChannel = nil
+	close(vm.commandInput)
+	vm.commandInput = nil
+	vm.commandOutput = nil
 	switch vm.State {
 	case proto.StateStarting:
 		select {

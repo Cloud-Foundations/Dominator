@@ -15,15 +15,17 @@ import (
 )
 
 type slaveDriverConfiguration struct {
-	HypervisorAddress  string
-	MaximumIdleSlaves  uint
-	MinimumIdleSlaves  uint
-	ImageIdentifier    string
-	MemoryInMiB        uint64
-	MilliCPUs          uint
-	PreferMemoryVolume bool
-	OverlayDirectory   string
-	VirtualCPUs        uint
+	CreateTimeoutInSeconds  uint64
+	DestroyTimeoutInSeconds uint64
+	HypervisorAddress       string
+	MaximumIdleSlaves       uint
+	MinimumIdleSlaves       uint
+	ImageIdentifier         string
+	MemoryInMiB             uint64
+	MilliCPUs               uint
+	PreferMemoryVolume      bool
+	OverlayDirectory        string
+	VirtualCPUs             uint
 }
 
 func createSlaveDriver(logger log.DebugLogger) (
@@ -62,7 +64,11 @@ func createSlaveDriver(logger log.DebugLogger) (
 	}
 	slaveTrader, err := smallstack.NewSlaveTraderWithOptions(
 		smallstack.SlaveTraderOptions{
-			CreateRequest:     createVmRequest,
+			CreateRequest: createVmRequest,
+			CreateTimeout: time.Second * time.Duration(
+				configuration.CreateTimeoutInSeconds),
+			DestroyTimeout: time.Second * time.Duration(
+				configuration.DestroyTimeoutInSeconds),
 			HypervisorAddress: configuration.HypervisorAddress,
 		},
 		logger)

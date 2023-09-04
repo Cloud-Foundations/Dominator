@@ -25,8 +25,30 @@ type GetHypervisorForVMResponse struct {
 	Error             string
 }
 
+type GetHypervisorsInLocationRequest struct {
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeUnhealthy      bool
+	IncludeVMs            bool
+	Location              string
+	SubnetId              string
+}
+
+type GetHypervisorsInLocationResponse struct {
+	Error       string
+	Hypervisors []Hypervisor `json:",omitempty"`
+}
+
+type Hypervisor struct {
+	AllocatedMilliCPUs   uint64 `json:",omitempty"`
+	AllocatedMemory      uint64 `json:",omitempty"`
+	AllocatedVolumeBytes uint64 `json:",omitempty"`
+	Machine
+	VMs []proto.VmInfo `json:",omitempty"`
+}
+
 type GetMachineInfoRequest struct {
-	Hostname string
+	Hostname               string
+	IgnoreMissingLocalTags bool
 }
 
 type GetMachineInfoResponse struct {
@@ -41,8 +63,9 @@ type GetMachineInfoResponse struct {
 // The server sends a stream of Update messages.
 
 type GetUpdatesRequest struct {
-	Location   string
-	MaxUpdates uint64 // Zero means infinite.
+	IgnoreMissingLocalTags bool
+	Location               string
+	MaxUpdates             uint64 // Zero means infinite.
 }
 
 type Update struct {
@@ -66,20 +89,25 @@ type ListHypervisorLocationsResponse struct {
 }
 
 type ListHypervisorsInLocationRequest struct {
-	IncludeUnhealthy bool
-	Location         string
-	SubnetId         string
-	TagsToInclude    []string
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeUnhealthy      bool
+	Location              string
+	SubnetId              string
+	TagsToInclude         []string
 }
 
 type ListHypervisorsInLocationResponse struct {
+	Error               string
 	HypervisorAddresses []string    // host:port
 	TagsForHypervisors  []tags.Tags `json:",omitempty"`
-	Error               string
 }
 
 type ListVMsInLocationRequest struct {
-	Location string
+	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	Location              string
+	OwnerGroups           []string
+	OwnerUsers            []string
+	VmTagsToMatch         tags.MatchTags // Empty: match all tags.
 }
 
 // A stream of ListVMsInLocationResponse messages is sent, until either the
@@ -92,12 +120,15 @@ type ListVMsInLocationResponse struct {
 type Machine struct {
 	GatewaySubnetId         string `json:",omitempty"`
 	Location                string `json:",omitempty"`
+	MemoryInMiB             uint64 `json:",omitempty"`
 	NetworkEntry            `json:",omitempty"`
+	NumCPUs                 uint           `json:",omitempty"`
 	IPMI                    NetworkEntry   `json:",omitempty"`
 	OwnerGroups             []string       `json:",omitempty"`
 	OwnerUsers              []string       `json:",omitempty"`
 	SecondaryNetworkEntries []NetworkEntry `json:",omitempty"`
 	Tags                    tags.Tags      `json:",omitempty"`
+	TotalVolumeBytes        uint64         `json:",omitempty"`
 }
 
 type MoveIpAddressesRequest struct {

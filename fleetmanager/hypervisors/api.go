@@ -26,26 +26,30 @@ const (
 )
 
 type hypervisorType struct {
-	logger             log.DebugLogger
-	receiveChannel     chan struct{}
-	mutex              sync.RWMutex
-	cachedSerialNumber string
-	conn               *srpc.Conn
-	deleteScheduled    bool
-	healthStatus       string
-	lastIpmiProbe      time.Time
-	localTags          tags.Tags
-	location           string
-	machine            *fm_proto.Machine
-	memoryInMiB        uint64
-	migratingVms       map[string]*vmInfoType // Key: VM IP address.
-	numCPUs            uint
-	ownerUsers         map[string]struct{}
-	probeStatus        probeStatus
-	serialNumber       string
-	subnets            []hyper_proto.Subnet
-	totalVolumeBytes   uint64
-	vms                map[string]*vmInfoType // Key: VM IP address.
+	logger               log.DebugLogger
+	receiveChannel       chan struct{}
+	mutex                sync.RWMutex // Lock everything below.
+	allocatedMilliCPUs   uint64
+	allocatedMemory      uint64
+	allocatedVolumeBytes uint64
+	cachedSerialNumber   string
+	conn                 *srpc.Conn
+	deleteScheduled      bool
+	disabled             bool
+	healthStatus         string
+	lastIpmiProbe        time.Time
+	localTags            tags.Tags
+	location             string
+	machine              *fm_proto.Machine
+	memoryInMiB          uint64
+	migratingVms         map[string]*vmInfoType // Key: VM IP address.
+	numCPUs              uint
+	ownerUsers           map[string]struct{}
+	probeStatus          probeStatus
+	serialNumber         string
+	subnets              []hyper_proto.Subnet
+	totalVolumeBytes     uint64
+	vms                  map[string]*vmInfoType // Key: VM IP address.
 }
 
 type ipStorer interface {
@@ -140,8 +144,15 @@ func (m *Manager) GetHypervisorForVm(ipAddr net.IP) (string, error) {
 	return m.getHypervisorForVm(ipAddr)
 }
 
-func (m *Manager) GetMachineInfo(hostname string) (fm_proto.Machine, error) {
-	return m.getMachineInfo(hostname)
+func (m *Manager) GetHypervisorsInLocation(
+	request fm_proto.GetHypervisorsInLocationRequest) (
+	fm_proto.GetHypervisorsInLocationResponse, error) {
+	return m.getHypervisorsInLocation(request)
+}
+
+func (m *Manager) GetMachineInfo(request fm_proto.GetMachineInfoRequest) (
+	fm_proto.Machine, error) {
+	return m.getMachineInfo(request)
 }
 
 func (m *Manager) GetTopology() (*topology.Topology, error) {
@@ -158,12 +169,14 @@ func (m *Manager) ListLocations(dirname string) ([]string, error) {
 	return m.listLocations(dirname)
 }
 
-func (m *Manager) ListVMsInLocation(dirname string) ([]net.IP, error) {
-	return m.listVMsInLocation(dirname)
+func (m *Manager) ListVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
+	[]net.IP, error) {
+	return m.listVMsInLocation(request)
 }
 
-func (m *Manager) MakeUpdateChannel(location string) <-chan fm_proto.Update {
-	return m.makeUpdateChannel(location)
+func (m *Manager) MakeUpdateChannel(
+	request fm_proto.GetUpdatesRequest) <-chan fm_proto.Update {
+	return m.makeUpdateChannel(request)
 }
 
 func (m *Manager) MoveIpAddresses(hostname string, ipAddresses []net.IP) error {

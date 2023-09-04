@@ -46,6 +46,7 @@ type Manager struct {
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
 	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
+	disabled          bool
 	healthStatus      string
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	objectCache       *cachingreader.ObjectServer
@@ -76,7 +77,8 @@ type vmInfoType struct {
 	mutex                      sync.RWMutex
 	accessToken                []byte
 	accessTokenCleanupNotifier chan<- struct{}
-	commandChannel             chan<- string
+	commandInput               chan<- string
+	commandOutput              chan byte
 	destroyTimer               *time.Timer
 	dirname                    string
 	doNotWriteOrSend           bool
@@ -179,6 +181,11 @@ func (m *Manager) CommitImportedVm(ipAddr net.IP,
 func (m *Manager) ConnectToVmConsole(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) (net.Conn, error) {
 	return m.connectToVmConsole(ipAddr, authInfo)
+}
+
+func (m *Manager) ConnectToVmManager(ipAddr net.IP) (
+	chan<- byte, <-chan byte, error) {
+	return m.connectToVmManager(ipAddr)
 }
 
 func (m *Manager) ConnectToVmSerialPort(ipAddr net.IP,
@@ -297,6 +304,15 @@ func (m *Manager) GetUUID() (string, error) {
 	return m.uuid, nil
 }
 
+func (m *Manager) HoldLock(timeout time.Duration, writeLock bool) error {
+	return m.holdLock(timeout, writeLock)
+}
+
+func (m *Manager) HoldVmLock(ipAddr net.IP, timeout time.Duration,
+	writeLock bool, authInfo *srpc.AuthInformation) error {
+	return m.holdVmLock(ipAddr, timeout, writeLock, authInfo)
+}
+
 func (m *Manager) ImportLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
 	return m.importLocalVm(authInfo, request)
@@ -410,6 +426,10 @@ func (m *Manager) ReorderVmVolumes(ipAddr net.IP,
 func (m *Manager) ScanVmRoot(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return m.scanVmRoot(ipAddr, authInfo, scanFilter)
+}
+
+func (m *Manager) SetDisabledState(disable bool) error {
+	return m.setDisabledState(disable)
 }
 
 func (m *Manager) ShutdownVMsAndExit() {

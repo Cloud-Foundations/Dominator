@@ -1,8 +1,6 @@
 package rpcd
 
 import (
-	"io"
-
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -13,7 +11,6 @@ func (t *srpcType) ConnectToVmSerialPort(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	closeNotifier := make(chan error, 1)
 	input, output, err := t.manager.ConnectToVmSerialPort(request.IpAddress,
 		conn.GetAuthInformation(), request.PortNumber)
 	if input != nil {
@@ -28,62 +25,7 @@ func (t *srpcType) ConnectToVmSerialPort(conn *srpc.Conn) error {
 		return e
 	}
 	if err != nil {
-		return err
+		return nil // Have successfully sent the error in the response message.
 	}
-	go func() { // Read from connection and write to input until EOF.
-		buffer := make([]byte, 256)
-		for {
-			if nRead, err := conn.Read(buffer); err != nil {
-				if err != io.EOF {
-					closeNotifier <- err
-				} else {
-					closeNotifier <- srpc.ErrorCloseClient
-				}
-				return
-			} else {
-				for _, char := range buffer[:nRead] {
-					input <- char
-				}
-			}
-		}
-	}()
-	// Read from output until closure or transmission error.
-	for {
-		select {
-		case data, ok := <-output:
-			var buffer []byte
-			if !ok {
-				buffer = []byte("VM serial port closed\n")
-			} else {
-				buffer = readData(data, output)
-			}
-			if _, err := conn.Write(buffer); err != nil {
-				return err
-			}
-			if err := conn.Flush(); err != nil {
-				return err
-			}
-			if !ok {
-				return srpc.ErrorCloseClient
-			}
-		case err := <-closeNotifier:
-			return err
-		}
-	}
-}
-
-func readData(firstByte byte, moreBytes <-chan byte) []byte {
-	buffer := make([]byte, 1, len(moreBytes)+1)
-	buffer[0] = firstByte
-	for {
-		select {
-		case char, ok := <-moreBytes:
-			if !ok {
-				return buffer
-			}
-			buffer = append(buffer, char)
-		default:
-			return buffer
-		}
-	}
+	return connectChannelsToConnection(conn, input, output)
 }

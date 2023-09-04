@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -337,7 +338,7 @@ func (m *Manager) writeAddressPoolWithLock(addressPool addressPoolType,
 		return err
 	}
 	err = json.WriteToFile(path.Join(m.StateDir, "address-pool.json"),
-		publicFilePerms, "    ", addressPool)
+		fsutil.PublicFilePerms, "    ", addressPool)
 	if err != nil {
 		return err
 	}

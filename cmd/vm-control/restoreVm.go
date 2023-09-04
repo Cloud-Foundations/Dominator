@@ -102,21 +102,6 @@ func restoreVmSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func restoreVm(source string, logger log.DebugLogger) error {
-	if hypervisor, err := getHypervisorAddress(); err != nil {
-		return err
-	} else {
-		logger.Debugf(0, "restoring VM on %s\n", hypervisor)
-		return restoreVmOnHypervisor(hypervisor, source, logger)
-	}
-}
-
-func restoreVmOnHypervisor(hypervisor, source string,
-	logger log.DebugLogger) error {
-	client, err := dialHypervisor(hypervisor)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
 	u, err := url.Parse(source)
 	if err != nil {
 		return err
@@ -166,6 +151,23 @@ func restoreVmOnHypervisor(hypervisor, source string,
 		UserDataSize:         uint64(len(userData)),
 		VmInfo:               vmInfo,
 	}
+	if hypervisor, err := getHypervisorAddress(request.VmInfo); err != nil {
+		return err
+	} else {
+		logger.Debugf(0, "restoring VM on %s\n", hypervisor)
+		return restoreVmOnHypervisor(hypervisor, request, restorer, userData,
+			source, logger)
+	}
+}
+
+func restoreVmOnHypervisor(hypervisor string, request proto.CreateVmRequest,
+	restorer vmRestorer, userData []byte, source string,
+	logger log.DebugLogger) error {
+	client, err := dialHypervisor(hypervisor)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
 	conn, err := client.Call("Hypervisor.CreateVm")
 	if err != nil {
 		return fmt.Errorf("error calling Hypervisor.CreateVm: %s", err)
@@ -182,15 +184,15 @@ func restoreVmOnHypervisor(hypervisor, source string,
 	if err != nil {
 		return err
 	}
-	err = copyVolumeFromVmRestorer(conn, restorer, 0, vmInfo.Volumes[0].Size,
-		logger)
+	err = copyVolumeFromVmRestorer(conn, restorer, 0,
+		request.VmInfo.Volumes[0].Size, logger)
 	if err != nil {
 		return err
 	}
 	if _, err := conn.Write(userData); err != nil {
 		return err
 	}
-	for index, volume := range vmInfo.Volumes[1:] {
+	for index, volume := range request.VmInfo.Volumes[1:] {
 		err := copyVolumeFromVmRestorer(conn, restorer, uint(index+1),
 			volume.Size, logger)
 		if err != nil {

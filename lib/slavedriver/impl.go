@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -187,6 +188,22 @@ func (driver *slaveDriver) createSlave() {
 	}
 }
 
+func (driver *slaveDriver) destroySlave(slave *Slave) {
+	driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
+	startTime := time.Now()
+	err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
+	if err != nil {
+		driver.logger.Printf("error destroying: %s: %s\n",
+			slave.info.Identifier, err)
+		driver.destroyedSlaveChannel <- nil
+	}
+	if duration := time.Since(startTime); duration > 5*time.Second {
+		driver.logger.Printf("destroyed slave: %s in %s\n",
+			slave.info.Identifier, format.Duration(duration))
+	}
+	driver.destroyedSlaveChannel <- slave
+}
+
 func (driver *slaveDriver) getSlaves() slaveRoll {
 	return slaveRoll{
 		BusySlaves: listSlaves(driver.busySlaves),
@@ -283,7 +300,7 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = true
 		}
 	}
-	for slave := range driver.zombies {
+	for slave := range driver.zombies { // Close any connections.
 		if slave.client != nil {
 			if err := slave.client.Close(); err != nil {
 				driver.logger.Printf("error closing Client for slave: %s: %s\n",
@@ -291,15 +308,13 @@ func (driver *slaveDriver) rollCall() {
 			}
 			slave.client = nil
 		}
-		driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
-		err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
-		if err != nil {
-			driver.logger.Printf("error destroying: %s: %s\n",
-				slave.info.Identifier, err)
-		} else {
-			delete(driver.zombies, slave)
-			driver.writeState = true
+	}
+	for slave := range driver.zombies { // Destroy one zombie at a time.
+		if driver.destroyedSlaveChannel == nil {
+			driver.destroyedSlaveChannel = make(chan *Slave, 1)
+			go driver.destroySlave(slave)
 		}
+		break
 	}
 	if driver.writeState {
 		if err := driver.databaseDriver.save(driver.getSlaves()); err != nil {
@@ -343,6 +358,12 @@ func (driver *slaveDriver) rollCall() {
 		delete(driver.busySlaves, slave)
 		driver.zombies[slave] = struct{}{}
 		driver.writeState = true
+	case slave := <-driver.destroyedSlaveChannel:
+		driver.destroyedSlaveChannel = nil
+		if slave != nil {
+			delete(driver.zombies, slave)
+			driver.writeState = true
+		}
 	case slaveChannel := <-driver.getSlaveChannel:
 		driver.getterList.PushBack(slaveChannel)
 	case slavesChannel := <-driver.getSlavesChannel:

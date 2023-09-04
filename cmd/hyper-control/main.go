@@ -32,7 +32,9 @@ var (
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
-	hypervisorTags      tags.Tags
+	hypervisorTags         tags.Tags
+	ignoreMissingLocalTags = flag.Bool("ignoreMissingLocalTags", false,
+		"If true, ignore missing local tags when connecting to Fleet Manager")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -44,8 +46,12 @@ var (
 		constants.InstallerPortNumber, "Port number of installer")
 	location = flag.String("location", "",
 		"Location to search for hypervisors")
+	lockTimeout = flag.Duration("lockTimeout", 15*time.Second,
+		"Time to hold the lock")
 	offerTimeout = flag.Duration("offerTimeout", time.Minute+time.Second,
 		"How long to offer DHCP OFFERs and ACKs")
+	maxUpdates = flag.Uint64("maxUpdates", 0,
+		"Maximum number of updates to receive (default infinite)")
 	memory              = flagutil.Size(4 << 30)
 	netbootFiles        tags.Tags
 	netbootFilesTimeout = flag.Duration("netbootFilesTimeout",
@@ -70,6 +76,7 @@ var (
 		"If true, use kexec to reboot into newly installed OS")
 	vncViewer   = flag.String("vncViewer", "", "Path to VNC viewer for VM")
 	volumeSizes = flagutil.SizeList{16 << 30}
+	writeLock   = flag.Bool("writeLock", false, "If true, hold a write lock")
 
 	rrDialer *rrdialer.Dialer
 )
@@ -100,8 +107,13 @@ var subcommands = []commands.Command{
 	{"add-subnet", "ID IPgateway IPmask DNSserver...", 4, -1,
 		addSubnetSubcommand},
 	{"change-tags", "", 0, 0, changeTagsSubcommand},
+	{"connect-to-vm-manager", "IPaddr", 1, 1, connectToVmManagerSubcommand},
+	{"disable-hypervisor", "", 0, 0, disableHypervisorSubcommand},
+	{"enable-hypervisor", "", 0, 0, enableHypervisorSubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
+	{"hold-lock", "", 0, 0, holdLockSubcommand},
+	{"hold-vm-lock", "", 1, 1, holdVmLockSubcommand},
 	{"installer-shell", "hostname", 1, 1, installerShellSubcommand},
 	{"make-installer-iso", "hostname dirname", 2, 2,
 		makeInstallerIsoSubcommand},

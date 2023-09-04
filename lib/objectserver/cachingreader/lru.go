@@ -23,7 +23,16 @@ func (objSrv *ObjectServer) addToLruWithLock(object *objectType) {
 	if object.usageCount != 0 {
 		panic("object.usageCount != 0")
 	}
+	if object.newer != nil {
+		panic("object has newer link")
+	}
+	if object.older != nil {
+		panic("object has older link")
+	}
 	if objSrv.oldest == nil { // Empty list: initialise it.
+		if objSrv.newest != nil {
+			panic("LRU has newest but not oldest entry")
+		}
 		objSrv.oldest = object
 	} else { // Update previous newest object.
 		if objSrv.newest == nil {
@@ -71,6 +80,22 @@ func (objSrv *ObjectServer) getObjectWithLock(hashVal hash.Hash) *objectType {
 	}
 }
 
+func (objSrv *ObjectServer) linkOrphanedEntries() {
+	for _, object := range objSrv.objects {
+		if objSrv.newest == nil { // Empty list: initialise it.
+			objSrv.newest = object
+			objSrv.oldest = object
+			objSrv.lruBytes += object.size
+		} else if object.newer == nil && objSrv.newest != object {
+			// Orphaned object: make it the newest.
+			object.older = objSrv.newest
+			objSrv.newest.newer = object
+			objSrv.newest = object
+			objSrv.lruBytes += object.size
+		}
+	}
+}
+
 func (objSrv *ObjectServer) loadLru() error {
 	startTime := time.Now()
 	filename := filepath.Join(objSrv.baseDir, ".lru")
@@ -83,6 +108,25 @@ func (objSrv *ObjectServer) loadLru() error {
 	}
 	defer file.Close()
 	reader := bufio.NewReader(file)
+	if err := objSrv.readLru(reader); err != nil {
+		return err
+	}
+	objSrv.logger.Printf("Loaded LRU in %s\n",
+		format.Duration(time.Since(startTime)))
+	return nil
+}
+
+func (objSrv *ObjectServer) putObjectWithLock(object *objectType) {
+	if object.usageCount < 1 {
+		panic("object.usageCount == 0")
+	}
+	object.usageCount--
+	if object.usageCount == 0 {
+		objSrv.addToLruWithLock(object)
+	}
+}
+
+func (objSrv *ObjectServer) readLru(reader io.Reader) error {
 	var hashVal hash.Hash
 	objSrv.lruBytes = 0
 	for { // First object is newest, last object is oldest.
@@ -103,19 +147,7 @@ func (objSrv *ObjectServer) loadLru() error {
 			objSrv.oldest = object
 		}
 	}
-	objSrv.logger.Printf("Loaded LRU in %s\n",
-		format.Duration(time.Since(startTime)))
 	return nil
-}
-
-func (objSrv *ObjectServer) putObjectWithLock(object *objectType) {
-	if object.usageCount < 1 {
-		panic("object.usageCount == 0")
-	}
-	object.usageCount--
-	if object.usageCount == 0 {
-		objSrv.addToLruWithLock(object)
-	}
 }
 
 // Returns true if space is available.
@@ -128,15 +160,16 @@ func (objSrv *ObjectServer) releaseSpaceWithLock(size uint64) bool {
 		objSrv.maxCachedBytes {
 		return false // No amount of deleting unused objects will help.
 	}
-	for objSrv.oldest != nil {
+	for object := objSrv.oldest; object != nil; object = objSrv.oldest {
 		filename := filepath.Join(objSrv.baseDir,
-			objectcache.HashToFilename(objSrv.oldest.hash))
+			objectcache.HashToFilename(object.hash))
 		if err := os.Remove(filename); err != nil {
 			objSrv.logger.Println(err)
 			return false
 		}
-		objSrv.removeFromLruWithLock(objSrv.oldest)
-		objSrv.cachedBytes -= objSrv.oldest.size
+		objSrv.removeFromLruWithLock(object)
+		delete(objSrv.objects, object.hash)
+		objSrv.cachedBytes -= object.size
 		if objSrv.cachedBytes+objSrv.downloadingBytes+size <=
 			objSrv.maxCachedBytes {
 			return true
@@ -147,6 +180,9 @@ func (objSrv *ObjectServer) releaseSpaceWithLock(size uint64) bool {
 
 func (objSrv *ObjectServer) removeFromLruWithLock(object *objectType) {
 	if object.older == nil { // Object is the oldest.
+		if object != objSrv.oldest { // Fuck, it's not actually in the list.
+			panic("object is not in the LRU")
+		}
 		objSrv.oldest = object.newer
 		if objSrv.oldest != nil {
 			objSrv.oldest.older = nil
@@ -155,6 +191,9 @@ func (objSrv *ObjectServer) removeFromLruWithLock(object *objectType) {
 		object.older.newer = object.newer
 	}
 	if object.newer == nil { // Object is the newest.
+		if object != objSrv.newest { // Fuck, it's not actually in the list.
+			panic("object is not in the LRU")
+		}
 		objSrv.newest = object.older
 		if objSrv.newest != nil {
 			objSrv.newest.newer = nil
