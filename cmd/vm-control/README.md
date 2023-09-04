@@ -178,4 +178,4 @@ struct {
 }
 ```
 
-See [fm_proto](../../protos/fleetmanager/messages.go) and [hyper_proto](../../protos/hypervisor/messages.go) for sub-schema definitions.
+See [fm_proto](../../proto/fleetmanager/messages.go) and [hyper_proto](../../proto/hypervisor/messages.go) for sub-schema definitions.
