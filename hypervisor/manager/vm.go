@@ -2849,17 +2849,23 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		}
 	}
 	rootFilename := vm.VolumeLocations[0].Filename
-	oldRootFilename := vm.VolumeLocations[0].Filename + ".old"
-	if err := os.Rename(rootFilename, oldRootFilename); err != nil {
-		return sendError(conn, err)
+	if request.SkipBackup {
+		if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
+			return sendError(conn, err)
+		}
+	} else {
+		oldRootFilename := vm.VolumeLocations[0].Filename + ".old"
+		if err := os.Rename(rootFilename, oldRootFilename); err != nil {
+			return sendError(conn, err)
+		}
+		if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
+			os.Rename(oldRootFilename, rootFilename)
+			return sendError(conn, err)
+		}
+		os.Rename(initrdFilename, initrdFilename+".old")
+		os.Rename(kernelFilename, kernelFilename+".old")
 	}
-	if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
-		os.Rename(oldRootFilename, rootFilename)
-		return sendError(conn, err)
-	}
-	os.Rename(initrdFilename, initrdFilename+".old")
 	os.Rename(tmpInitrdFilename, initrdFilename)
-	os.Rename(kernelFilename, kernelFilename+".old")
 	os.Rename(tmpKernelFilename, kernelFilename)
 	if request.ImageName != "" {
 		vm.ImageName = request.ImageName
