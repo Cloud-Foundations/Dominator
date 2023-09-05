@@ -91,7 +91,7 @@ var (
 	serialPort = flag.Uint("serialPort", 0,
 		"Serial port number on VM")
 	skipBackup = flag.Bool("skipBackup", false,
-		"If true, do not make a backup when patching the VM image")
+		"If true, do not make a backup when patching/replacing the VM image")
 	skipBootloader = flag.Bool("skipBootloader", false,
 		"If true, directly boot into the kernel")
 	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,
