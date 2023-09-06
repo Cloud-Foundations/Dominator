@@ -604,7 +604,7 @@ func writeToFile(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, "partition",
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
 		time.Minute, logger)
 	rootDevice := loopDevice + partition
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
