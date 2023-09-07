@@ -1223,35 +1223,35 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		}
 		return sendError(conn, err)
 	}
-	rootFilename := vm.VolumeLocations[0].Filename + ".debug"
-	defer func() {
-		vm.updating = false
-		vm.mutex.Unlock()
-	}()
+	vm.mutating = true
 	switch vm.State {
 	case proto.StateStopped:
 	case proto.StateRunning:
 		if len(vm.Address.IpAddress) < 1 {
-			if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
-				return err
-			}
-			return errors.New("cannot stop VM with externally managed lease")
+			err = errors.New("cannot stop VM with externally managed lease")
 		}
 	default:
+		err = errors.New("VM is not running or stopped")
+	}
+	if err != nil {
+		vm.stopMutatingAndUnlock()
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
-		return sendError(conn, errors.New("VM is not running or stopped"))
+		return sendError(conn, err)
 	}
-	if vm.updating {
-		return errors.New("cannot update already updating VM")
-	}
-	vm.updating = true
+	rootFilename := vm.VolumeLocations[0].Filename + ".debug"
+	vm.mutex.Unlock()
+	haveLock := false
 	doCleanup := true
 	defer func() {
+		if !haveLock {
+			vm.mutex.Lock()
+		}
 		if doCleanup {
 			os.Remove(rootFilename)
 		}
+		vm.stopMutatingAndUnlock()
 	}()
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
@@ -1311,7 +1311,11 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
-	if vm.State == proto.StateRunning {
+	vm.mutex.Lock()
+	haveLock = true
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
 		if err := sendUpdate(conn, "stopping VM"); err != nil {
 			return err
 		}
@@ -1327,13 +1331,15 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn,
 				errors.New("VM is not stopped after stop attempt"))
 		}
+	default:
+		return errors.New("VM is not running or stopped")
 	}
 	vm.writeAndSendInfo()
 	vm.setState(proto.StateStarting)
-	sendUpdate(conn, "starting VM")
 	vm.mutex.Unlock()
+	haveLock = false
+	sendUpdate(conn, "starting VM")
 	_, err = vm.startManaging(0, false, false)
-	vm.mutex.Lock()
 	if err != nil {
 		sendError(conn, err)
 	}
@@ -1621,6 +1627,12 @@ func (m *Manager) getVmLockAndAuth(ipAddr net.IP, write bool,
 			vm.mutex.RUnlock()
 		}
 		return nil, err
+	}
+	if write {
+		if vm.mutating {
+			vm.mutex.Unlock()
+			return nil, errors.New("cannot mutate already mutating VM")
+		}
 	}
 	return vm, nil
 }
@@ -2349,11 +2361,26 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err != nil {
 		return err
 	}
-	restart := vm.State == proto.StateRunning
+	vm.mutating = true
+	haveLock := true
 	defer func() {
-		vm.updating = false
-		vm.mutex.Unlock()
+		if !haveLock {
+			vm.mutex.Lock()
+		}
+		vm.stopMutatingAndUnlock()
 	}()
+	restart := vm.State == proto.StateRunning
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
+		if len(vm.Address.IpAddress) < 1 {
+			return errors.New("cannot stop VM with externally managed lease")
+		}
+	default:
+		return errors.New("VM is not running or stopped")
+	}
+	vm.mutex.Unlock()
+	haveLock = false
 	if m.objectCache == nil {
 		objectClient := objclient.AttachObjectClient(client)
 		defer objectClient.Close()
@@ -2373,25 +2400,16 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	} else {
 		objectsGetter = m.objectCache
 	}
-	switch vm.State {
-	case proto.StateStopped:
-	case proto.StateRunning:
-		if len(vm.Address.IpAddress) < 1 {
-			return errors.New("cannot stop VM with externally managed lease")
-		}
-	default:
-		return errors.New("VM is not running or stopped")
-	}
-	if vm.updating {
-		return errors.New("cannot update already updating VM")
-	}
-	vm.updating = true
 	bootInfo, err := util.GetBootInfo(img.FileSystem, vm.rootLabel(false),
 		"net.ifnames=0")
 	if err != nil {
 		return err
 	}
-	if vm.State == proto.StateRunning {
+	vm.mutex.Lock()
+	haveLock = true
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
 		if err := sendVmPatchImageMessage(conn, "stopping VM"); err != nil {
 			return err
 		}
@@ -2404,10 +2422,13 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		<-stoppedNotifier
 		vm.mutex.Lock()
 		if vm.State != proto.StateStopped {
-			restart = false
 			return errors.New("VM is not stopped after stop attempt")
 		}
+	default:
+		return errors.New("VM is not running or stopped")
 	}
+	vm.mutex.Unlock()
+	haveLock = false
 	rootFilename := vm.VolumeLocations[0].Filename
 	tmpRootFilename := rootFilename + ".new"
 	if request.SkipBackup {
@@ -2560,6 +2581,8 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	}
 	os.Rename(tmpInitrdFilename, initrdFilename)
 	os.Rename(tmpKernelFilename, kernelFilename)
+	vm.mutex.Lock()
+	haveLock = true
 	vm.ImageName = imageName
 	vm.writeAndSendInfo()
 	if restart && vm.State == proto.StateStopped {
@@ -2723,30 +2746,32 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		}
 		return sendError(conn, err)
 	}
-	restart := vm.State == proto.StateRunning
-	defer func() {
-		vm.updating = false
-		vm.mutex.Unlock()
-	}()
+	vm.mutating = true
 	switch vm.State {
 	case proto.StateStopped:
 	case proto.StateRunning:
 		if len(vm.Address.IpAddress) < 1 {
-			if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
-				return err
-			}
-			return errors.New("cannot stop VM with externally managed lease")
+			err = errors.New("cannot stop VM with externally managed lease")
 		}
 	default:
+		err = errors.New("VM is not running or stopped")
+	}
+	if err != nil {
+		vm.stopMutatingAndUnlock()
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
-		return sendError(conn, errors.New("VM is not running or stopped"))
+		return sendError(conn, err)
 	}
-	if vm.updating {
-		return errors.New("cannot update already updating VM")
-	}
-	vm.updating = true
+	restart := vm.State == proto.StateRunning
+	vm.mutex.Unlock()
+	haveLock := false
+	defer func() {
+		if !haveLock {
+			vm.mutex.Lock()
+		}
+		vm.stopMutatingAndUnlock()
+	}()
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
 	defer os.Remove(tmpInitrdFilename)
@@ -2830,7 +2855,11 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
-	if vm.State == proto.StateRunning {
+	vm.mutex.Lock()
+	haveLock = true
+	switch vm.State {
+	case proto.StateStopped:
+	case proto.StateRunning:
 		if err := sendUpdate(conn, "stopping VM"); err != nil {
 			return err
 		}
@@ -2843,10 +2872,11 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		<-stoppedNotifier
 		vm.mutex.Lock()
 		if vm.State != proto.StateStopped {
-			restart = false
 			return sendError(conn,
 				errors.New("VM is not stopped after stop attempt"))
 		}
+	default:
+		return sendError(conn, errors.New("VM is not running or stopped"))
 	}
 	rootFilename := vm.VolumeLocations[0].Filename
 	if request.SkipBackup {
@@ -3761,6 +3791,14 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		}
 	}
 	return false, nil
+}
+
+func (vm *vmInfoType) stopMutatingAndUnlock() {
+	if !vm.mutating {
+		panic(vm.Address.IpAddress.String() + ": mutating flag already unset")
+	}
+	vm.mutating = false
+	vm.mutex.Unlock()
 }
 
 func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
