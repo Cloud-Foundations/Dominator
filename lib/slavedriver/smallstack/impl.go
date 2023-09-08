@@ -203,6 +203,7 @@ func (trader *SlaveTrader) destroySlave(identifier string) error {
 		if !strings.Contains(err.Error(), "no VM with IP address") {
 			return err
 		}
+		trader.logger.Printf("error destroying VM: %s\n", err)
 	}
 	return nil
 }
