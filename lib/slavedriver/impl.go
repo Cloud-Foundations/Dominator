@@ -112,6 +112,27 @@ func (db *jsonDatabase) save(slaves slaveRoll) error {
 	return json.WriteToFile(db.filename, fsutil.PublicFilePerms, "    ", slaves)
 }
 
+func (slave *Slave) acknowledge(logger log.DebugLogger) error {
+	if slave.acknowledgeChannel == nil {
+		return nil
+	}
+	errorChannel := make(chan error, 1)
+	slave.acknowledgeChannel <- errorChannel
+	slave.acknowledgeChannel = nil
+	timer := time.NewTimer(15 * time.Second)
+	select {
+	case err := <-errorChannel:
+		if err != nil {
+			return err
+		} else {
+			logger.Debugf(0, "acknowledged slave: %s\n", slave)
+			return nil
+		}
+	case <-timer.C:
+		return fmt.Errorf("timed out acknowledging slave: %s", slave)
+	}
+}
+
 func (slave *Slave) getClient() *srpc.Client {
 	return slave.client
 }
@@ -189,10 +210,10 @@ func (driver *slaveDriver) createSlave(responseChannel chan<- *Slave) {
 	}
 }
 
-func (driver *slaveDriver) createSlaveMachine() (SlaveInfo, chan<- struct{},
+func (driver *slaveDriver) createSlaveMachine() (SlaveInfo, chan<- chan<- error,
 	error) {
 	if creator, ok := driver.slaveTrader.(SlaveTraderAcknowledger); ok {
-		acknowledgeChannel := make(chan struct{}, 1)
+		acknowledgeChannel := make(chan chan<- error, 1)
 		slaveInfo, err := creator.CreateSlaveWithAcknowledger(
 			acknowledgeChannel)
 		if err != nil {
@@ -363,6 +384,11 @@ func (driver *slaveDriver) rollCall() {
 	select {
 	case slave := <-driver.createdSlaveChannel:
 		driver.createdSlaveChannel = nil
+		if err := slave.acknowledge(driver.logger); err != nil {
+			driver.logger.Printf("error acknowledging slave: %s: %s\n",
+				slave, err)
+			break
+		}
 		driver.idleSlaves[slave] = struct{}{}
 		// Write state now to reduce chance of forgetting about this slave.
 		if err := driver.databaseDriver.save(driver.getSlaves()); err != nil {
@@ -370,10 +396,6 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = true
 		} else {
 			driver.writeState = false
-		}
-		if slave.acknowledgeChannel != nil {
-			slave.acknowledgeChannel <- struct{}{}
-			slave.acknowledgeChannel = nil
 		}
 		return // Return now so that new slave can be sent to a getter quickly.
 	case slave := <-driver.destroySlaveChannel:

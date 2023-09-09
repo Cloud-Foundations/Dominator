@@ -11,7 +11,7 @@ import (
 )
 
 type Slave struct {
-	acknowledgeChannel chan<- struct{}
+	acknowledgeChannel chan<- chan<- error
 	clientAddress      string
 	driver             *SlaveDriver
 	info               SlaveInfo
@@ -97,7 +97,7 @@ type SlaveTrader interface {
 }
 
 type SlaveTraderAcknowledger interface {
-	CreateSlaveWithAcknowledger(<-chan struct{}) (SlaveInfo, error)
+	CreateSlaveWithAcknowledger(<-chan chan<- error) (SlaveInfo, error)
 }
 
 type clientDialerFunc func(string, string, time.Duration) (*srpc.Client, error)
