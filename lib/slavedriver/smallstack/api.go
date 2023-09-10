@@ -47,7 +47,7 @@ func (trader *SlaveTrader) CreateSlave() (slavedriver.SlaveInfo, error) {
 }
 
 func (trader *SlaveTrader) CreateSlaveWithAcknowledger(
-	acknowledgeChannel <-chan struct{}) (slavedriver.SlaveInfo, error) {
+	acknowledgeChannel <-chan chan<- error) (slavedriver.SlaveInfo, error) {
 	return trader.createSlave(acknowledgeChannel)
 }
 

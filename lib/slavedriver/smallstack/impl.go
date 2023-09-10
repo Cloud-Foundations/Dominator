@@ -148,7 +148,7 @@ func (trader *SlaveTrader) close() error {
 }
 
 func (trader *SlaveTrader) createSlave(
-	acknowledgeChannel <-chan struct{}) (slavedriver.SlaveInfo, error) {
+	acknowledgeChannel <-chan chan<- error) (slavedriver.SlaveInfo, error) {
 	if hyperClient, err := trader.getHypervisor(); err != nil {
 		return slavedriver.SlaveInfo{}, err
 	} else {
@@ -173,12 +173,9 @@ func (trader *SlaveTrader) createSlave(
 			}
 		} else {
 			go func() {
-				<-acknowledgeChannel
-				err := client.AcknowledgeVm(hyperClient, reply.IpAddress)
-				if err != nil {
-					trader.logger.Printf("error acknowledging VM: %s: %s",
-						reply.IpAddress, err)
-				}
+				errorChannel := <-acknowledgeChannel
+				errorChannel <- client.AcknowledgeVm(hyperClient,
+					reply.IpAddress)
 			}()
 		}
 		return slavedriver.SlaveInfo{
