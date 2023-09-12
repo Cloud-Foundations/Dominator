@@ -177,8 +177,32 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.Logger.Printf(
 			"%s shown as used but no corresponding VM, removing\n", ipAddr)
 	}
+	var changedPool bool
 	if len(manager.addressPool.Registered) != len(addressesToKeep) {
 		manager.addressPool.Registered = addressesToKeep
+		changedPool = true
+	}
+	// Check address pool for free addresses which are not registered and remove
+	addressesToKeep = nil
+	registeredIPs := make(map[string]struct{},
+		len(manager.addressPool.Registered))
+	for _, addr := range manager.addressPool.Registered {
+		registeredIPs[addr.IpAddress.String()] = struct{}{}
+	}
+	for _, addr := range manager.addressPool.Free {
+		ipAddr := addr.IpAddress.String()
+		if _, ok := registeredIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
+		} else {
+			manager.Logger.Printf(
+				"%s shown as free but not registered, removing\n", ipAddr)
+		}
+	}
+	if len(manager.addressPool.Free) != len(addressesToKeep) {
+		manager.addressPool.Free = addressesToKeep
+		changedPool = true
+	}
+	if changedPool {
 		manager.writeAddressPoolWithLock(manager.addressPool, false)
 	}
 	if startOptions.ObjectCacheBytes >= 1<<20 {
