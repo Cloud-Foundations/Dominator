@@ -362,6 +362,10 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	authInfo *srpc.AuthInformation) (*vmInfoType, error) {
+	dirname := filepath.Join(m.StateDir, "VMs")
+	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
+		return nil, err
+	}
 	if err := req.ConsoleType.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -456,7 +460,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 			},
 		},
 		manager:          m,
-		dirname:          filepath.Join(m.StateDir, "VMs", ipAddress),
+		dirname:          filepath.Join(dirname, ipAddress),
 		ipAddress:        ipAddress,
 		logger:           prefixlogger.New(ipAddress+": ", m.Logger),
 		metadataChannels: make(map[chan<- string]struct{}),
@@ -888,7 +892,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
+	if err := os.Mkdir(vm.dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	// Begin copying over the volumes.
@@ -1009,7 +1013,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		memoryError = tryAllocateMemory(getVmInfoMemoryInMiB(request.VmInfo))
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
-	if err := os.MkdirAll(vm.dirname, fsutil.DirPerms); err != nil {
+	if err := os.Mkdir(vm.dirname, fsutil.DirPerms); err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
 		}
