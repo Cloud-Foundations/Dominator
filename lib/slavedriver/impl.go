@@ -129,7 +129,7 @@ func (slave *Slave) acknowledge(logger log.DebugLogger) error {
 			return nil
 		}
 	case <-timer.C:
-		return fmt.Errorf("timed out acknowledging slave: %s", slave)
+		return fmt.Errorf("timed out")
 	}
 }
 
