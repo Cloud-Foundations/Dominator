@@ -324,12 +324,12 @@ func (client *Client) close() error {
 		clientMetricsMutex.Lock()
 		numOpenClientConnections--
 		clientMetricsMutex.Unlock()
-		err := client.conn.Close()
+		conn := client.conn
 		client.conn = nil
-		return err
+		return conn.Close()
 	}
-	client.resource.resource.Release()
 	client.conn = nil
+	client.resource.resource.Release()
 	clientMetricsMutex.Lock()
 	if client.resource.inUse {
 		numInUseClientConnections--

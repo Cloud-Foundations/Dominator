@@ -381,6 +381,11 @@ func (client *Client) Call(serviceMethod string) (*Conn, error) {
 	return client.call(serviceMethod)
 }
 
+// IsClosed will return true of the client is closed.
+func (client *Client) IsClosed() bool {
+	return client.conn == nil
+}
+
 // IsEncrypted will return true if the underlying connection is TLS-encrypted.
 func (client *Client) IsEncrypted() bool {
 	return client.isEncrypted
