@@ -33,7 +33,7 @@ type hypervisorType struct {
 	allocatedMemory      uint64
 	allocatedVolumeBytes uint64
 	cachedSerialNumber   string
-	conn                 *srpc.Conn
+	closeClientChannel   chan<- struct{}
 	deleteScheduled      bool
 	disabled             bool
 	healthStatus         string

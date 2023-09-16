@@ -356,9 +356,9 @@ func (h *hypervisorType) delete() {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 	h.deleteScheduled = true
-	if h.conn != nil {
-		h.conn.Close()
-		h.conn = nil
+	select {
+	case h.closeClientChannel <- struct{}{}:
+	default:
 	}
 }
 
@@ -410,11 +410,8 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 	defer func() {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
+		h.closeClientChannel = nil
 		h.probeStatus = failureProbeStatus
-		if h.conn != nil {
-			h.conn.Close()
-			h.conn = nil
-		}
 	}()
 	client, err := srpc.DialHTTP("tcp", h.address(), time.Second*15)
 	if err != nil {
@@ -457,10 +454,11 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 		conn.Close()
 		return 0
 	}
-	h.conn = conn
+	closeClientChannel := make(chan struct{}, 1)
+	h.closeClientChannel = closeClientChannel
 	h.receiveChannel = make(chan struct{}, 1)
 	h.mutex.Unlock()
-	go h.monitorLoop(client, conn)
+	go h.monitorLoop(client, conn, closeClientChannel)
 	defer close(h.receiveChannel)
 	h.logger.Debugln(0, "waiting for Update messages")
 	firstUpdate := true
@@ -469,7 +467,7 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 		if err := conn.Decode(&update); err != nil {
 			if err == io.EOF {
 				h.logger.Debugln(0, "remote closed connection")
-			} else {
+			} else if !client.IsClosed() {
 				h.logger.Println(err)
 			}
 			return time.Second

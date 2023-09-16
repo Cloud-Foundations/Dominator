@@ -16,7 +16,8 @@ var (
 		"time after which a Hypervisor is marked as unresponsive")
 )
 
-func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn) {
+func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn,
+	closeClientChannel <-chan struct{}) {
 	pingDeferChannel := make(chan struct{})
 	defer close(pingDeferChannel)
 	go h.pingLoop(conn, pingDeferChannel)
@@ -28,6 +29,9 @@ func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn) {
 		}
 		timer := time.NewTimer(timeout)
 		select {
+		case <-closeClientChannel:
+			client.Close()
+			return
 		case _, ok := <-h.receiveChannel:
 			if !timer.Stop() {
 				<-timer.C
@@ -46,7 +50,6 @@ func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn) {
 		case <-timer.C:
 			h.mutex.Lock()
 			h.probeStatus = probeStatusUnreachable
-			h.conn = nil
 			h.mutex.Unlock()
 			h.logger.Debugln(0, "shutting down unresponsive client")
 			client.Close()
