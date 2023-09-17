@@ -235,8 +235,8 @@ func (m *Manager) makeUpdateChannel(
 	return channel
 }
 
-func (m *Manager) updateHypervisor(h *hypervisorType,
-	machine *fm_proto.Machine) {
+func (m *Manager) updateHypervisor(h *hypervisorType, machine *fm_proto.Machine,
+	machineChanged bool) {
 	location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 	var numTagsToDelete uint
 	h.mutex.Lock()
@@ -261,7 +261,9 @@ func (m *Manager) updateHypervisor(h *hypervisorType,
 	}
 	h.mutex.Unlock()
 	if *manageHypervisors && h.probeStatus == probeStatusConnected {
-		go h.changeOwners(nil)
+		if machineChanged {
+			go h.changeOwners(nil)
+		}
 		go m.processSubnetsUpdates(h, subnets)
 	}
 }
@@ -292,10 +294,11 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 	for _, machine := range machines {
 		delete(hypervisorsToDelete, machine.Hostname)
 		if hypervisor, ok := m.hypervisors[machine.Hostname]; ok {
-			if !hypervisor.machine.Equal(machine) {
+			equal := hypervisor.machine.Equal(machine)
+			if !equal {
 				hypersToChange = append(hypersToChange, hypervisor)
 			}
-			m.updateHypervisor(hypervisor, machine)
+			m.updateHypervisor(hypervisor, machine, !equal)
 		} else {
 			location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 			hypervisor := &hypervisorType{
@@ -353,6 +356,7 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 }
 
 func (h *hypervisorType) delete() {
+	h.logger.Debugln(0, "deleting")
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 	h.deleteScheduled = true
