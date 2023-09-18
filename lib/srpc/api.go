@@ -83,10 +83,12 @@ var (
 	logger log.DebugLogger = debuglogger.New(
 		stdlog.New(os.Stderr, "", stdlog.LstdFlags))
 
-	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
-		"If true, trust the SmallStack VM owners for all method access")
+	srpcClientDoNotUseMethodPowers = flag.Bool("srpcClientDoNotUseMethodPowers",
+		false, "If true, do not use method powers when connecting to servers")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
+	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
+		"If true, trust the SmallStack VM owners for all method access")
 )
 
 // CheckTlsRequired returns true if the server requires TLS connections with
