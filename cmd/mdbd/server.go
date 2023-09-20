@@ -8,6 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
@@ -28,6 +29,29 @@ func startRpcd(logger log.Logger) *rpcType {
 	return rpcObj
 }
 
+func (t *rpcType) ListImages(conn *srpc.Conn,
+	request mdbserver.ListImagesRequest,
+	reply *mdbserver.ListImagesResponse) error {
+	currentMdb := t.currentMdb
+	if currentMdb == nil {
+		return nil
+	}
+	plannedImages := make(map[string]struct{})
+	requiredImages := make(map[string]struct{})
+	for _, machine := range currentMdb.Machines {
+		plannedImages[machine.PlannedImage] = struct{}{}
+		requiredImages[machine.RequiredImage] = struct{}{}
+	}
+	delete(plannedImages, "")
+	delete(requiredImages, "")
+	response := mdbserver.ListImagesResponse{
+		PlannedImages:  stringutil.ConvertMapKeysToList(plannedImages, false),
+		RequiredImages: stringutil.ConvertMapKeysToList(requiredImages, false),
+	}
+	*reply = response
+	return nil
+}
+
 func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 	updateChannel := make(chan mdbserver.MdbUpdate, 10)
 	t.rwMutex.Lock()
@@ -39,8 +63,9 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 		delete(t.updateChannels, conn)
 		t.rwMutex.Unlock()
 	}()
-	if t.currentMdb != nil {
-		mdbUpdate := mdbserver.MdbUpdate{MachinesToAdd: t.currentMdb.Machines}
+	currentMdb := t.currentMdb
+	if currentMdb != nil {
+		mdbUpdate := mdbserver.MdbUpdate{MachinesToAdd: currentMdb.Machines}
 		if err := conn.Encode(mdbUpdate); err != nil {
 			return err
 		}
