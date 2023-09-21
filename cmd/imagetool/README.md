@@ -57,6 +57,7 @@ Some of the sub-commands available are:
 - **list**: list all images
 - **listdirs**: list all directories
 - **listunrefobj**: list the unreferenced objects on the server
+- **list-mdb**: list all image names in MDB (images may not exist)
 - **make-raw-image**: make a bootable RAW image from an image
 - **match-triggers**: match a path to a triggers file
 - **merge-filters**: merge filter files

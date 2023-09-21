@@ -54,6 +54,16 @@ type readCloser struct {
 	reader io.Reader
 }
 
+func dialMdbd() (*srpc.Client, error) {
+	clientName := fmt.Sprintf("%s:%d",
+		*mdbServerHostname, *mdbServerPortNum)
+	mdbdClient, err := srpc.DialHTTP("tcp", clientName, 0)
+	if err != nil {
+		return nil, fmt.Errorf("error dialing: %s: %s\n", clientName, err)
+	}
+	return mdbdClient, err
+}
+
 // getTypedFileReader returns a file reader. The reader must be closed before
 // the next call to getTypedFileReader.
 func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {
