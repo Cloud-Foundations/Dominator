@@ -6,6 +6,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
@@ -35,7 +36,9 @@ func listMdbImages(mdbdClient *srpc.Client) error {
 	for _, imageName := range reply.RequiredImages {
 		imageNames[imageName] = struct{}{}
 	}
-	for _, name := range stringutil.ConvertMapKeysToList(imageNames, true) {
+	names := stringutil.ConvertMapKeysToList(imageNames, false)
+	verstr.Sort(names)
+	for _, name := range names {
 		fmt.Println(name)
 	}
 	return nil

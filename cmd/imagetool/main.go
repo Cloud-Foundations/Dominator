@@ -172,6 +172,7 @@ var subcommands = []commands.Command{
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
 	{"list-mdb", "", 0, 0, listMdbImagesSubcommand},
+	{"list-not-in-mdb", "", 0, 0, listImagesNotInMdbSubcommand},
 	{"make-raw-image", "         name rawfile", 2, 2, makeRawImageSubcommand},
 	{"match-triggers", "         name triggers-file", 2, 2,
 		matchTriggersSubcommand},
