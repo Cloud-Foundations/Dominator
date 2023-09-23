@@ -8,6 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
@@ -15,17 +16,26 @@ import (
 type rpcType struct {
 	currentMdb *mdb.Mdb
 	logger     log.Logger
-	rwMutex    sync.RWMutex
+	*serverutil.PerUserMethodLimiter
+	rwMutex sync.RWMutex
 	// Protected by lock.
 	updateChannels map[*srpc.Conn]chan<- mdbserver.MdbUpdate
 }
 
 func startRpcd(logger log.Logger) *rpcType {
 	rpcObj := &rpcType{
-		logger:         logger,
+		logger: logger,
+		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
+			map[string]uint{
+				"ListImages": 1,
+			}),
+
 		updateChannels: make(map[*srpc.Conn]chan<- mdbserver.MdbUpdate),
 	}
-	srpc.RegisterName("MdbServer", rpcObj)
+	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
+		PublicMethods: []string{
+			"ListImages",
+		}})
 	return rpcObj
 }
 
