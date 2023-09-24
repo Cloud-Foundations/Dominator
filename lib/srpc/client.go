@@ -332,8 +332,8 @@ func (client *Client) close() error {
 		client.conn = nil
 		return conn.Close()
 	}
-	client.conn = nil
 	client.resource.resource.Release()
+	client.conn = nil
 	clientMetricsMutex.Lock()
 	if client.resource.inUse {
 		numInUseClientConnections--
