@@ -17,6 +17,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
@@ -62,14 +63,28 @@ func (lb *LogBuffer) setupFileLogging() error {
 	return nil
 }
 
+func (lb *LogBuffer) checkNeverLogged() bool {
+	lb.rwMutex.Lock()
+	defer lb.rwMutex.Unlock()
+	return lb.noLogsEver
+}
+
 func (lb *LogBuffer) createLogDirectory() error {
 	if fi, err := os.Stat(lb.options.Directory); err != nil {
 		if err := os.Mkdir(lb.options.Directory, dirPerms); err != nil {
 			return fmt.Errorf("error creating: %s: %s",
 				lb.options.Directory, err)
 		}
+		lb.noLogsEver = true
 	} else if !fi.IsDir() {
 		return errors.New(lb.options.Directory + ": is not a directory")
+	} else {
+		names, err := fsutil.ReadDirnames(lb.options.Directory, false)
+		if err != nil {
+			return err
+		} else if len(names) < 1 {
+			lb.noLogsEver = true
+		}
 	}
 	lb.scanPreviousForPanic()
 	return lb.enforceQuota()

@@ -1,9 +1,9 @@
 /*
-	Package logbuf provides a circular buffer for writing logs to.
+Package logbuf provides a circular buffer for writing logs to.
 
-	Package logbuf provides an io.Writer which can be passed to the log.New
-	function to serve as a destination for logs. Logs can be viewed via a HTTP
-	interface and may also be directed to the standard error output.
+Package logbuf provides an io.Writer which can be passed to the log.New
+function to serve as a destination for logs. Logs can be viewed via a HTTP
+interface and may also be directed to the standard error output.
 */
 package logbuf
 
@@ -43,6 +43,7 @@ type LogBuffer struct {
 	usage         flagutil.Size
 	writeNotifier chan<- struct{}
 	panicLogfile  *string // Name of last invocation logfile if it has a panic.
+	noLogsEver    bool    // true if no logs ever written (fresh directory).
 }
 
 type Options struct {
@@ -78,15 +79,16 @@ func UseFlagSet(set *flag.FlagSet) {
 // GetStandardOptions will return the standard options.
 // Only one *LogBuffer should be created per application with these options.
 // The following command-line flags are registered and used:
-//  -alsoLogToStderr: If true, also write logs to stderr
-//  -logbufLines:     Number of lines to store in the log buffer
-//  -logDir:          Directory to write log data to. If empty, no logs are
-//                    written
-//  -logFileMaxSize:  Maximum size for each log file. If exceeded, the logfile
-//                    is closed and a new one opened.
-//                    If zero, the limit will be 16 KiB
-//  -logQuota:        Log quota. If exceeded, old logs are deleted.
-//                    If zero, the quota will be 64 KiB
+//
+//	-alsoLogToStderr: If true, also write logs to stderr
+//	-logbufLines:     Number of lines to store in the log buffer
+//	-logDir:          Directory to write log data to. If empty, no logs are
+//	                  written
+//	-logFileMaxSize:  Maximum size for each log file. If exceeded, the logfile
+//	                  is closed and a new one opened.
+//	                  If zero, the limit will be 16 KiB
+//	-logQuota:        Log quota. If exceeded, old logs are deleted.
+//	                  If zero, the quota will be 64 KiB
 func GetStandardOptions() Options { return stdOptions }
 
 // New returns a new *LogBuffer with the standard options. Note that
@@ -114,6 +116,12 @@ func Get() *LogBuffer {
 	})
 	return kSoleLogBuffer
 
+}
+
+// CheckNeverLogged returns true if this LogBuffer never had any logs written
+// to the log directory.
+func (lb *LogBuffer) CheckNeverLogged() bool {
+	return lb.checkNeverLogged()
 }
 
 // Dump will write the contents of the log buffer to w, with a prefix and
