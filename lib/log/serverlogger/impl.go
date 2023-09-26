@@ -86,6 +86,9 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 	debugLogger = logger
 	_ = debugLogger
 	loggerMap.loggerMap[name] = logger
+	if circularBuffer.CheckNeverLogged() {
+		logger.Println("Created log directory")
+	}
 	if *logAtStartup {
 		logger.Println("Startup")
 	}
