@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sync"
 
+	liblog "github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
@@ -19,6 +20,9 @@ var (
 		"If true, write a log entry at startup")
 	logSubseconds = flag.Bool("logSubseconds", false,
 		"if true, datestamps will have subsecond resolution")
+
+	// Interface check.
+	_ liblog.FullDebugLogger = (*Logger)(nil)
 )
 
 type Logger struct {

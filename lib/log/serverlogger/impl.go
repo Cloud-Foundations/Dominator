@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	liblog "github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
@@ -81,13 +80,9 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 		logger.level = -1
 	}
 	logger.maxLevel = logger.level
-	// Ensure this satisfies the published interface.
-	var debugLogger liblog.FullDebugLogger
-	debugLogger = logger
-	_ = debugLogger
 	loggerMap.loggerMap[name] = logger
 	if circularBuffer.CheckNeverLogged() {
-		logger.Println("Created log directory")
+		logger.Println("New log directory")
 	}
 	if *logAtStartup {
 		logger.Println("Startup")
