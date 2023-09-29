@@ -43,7 +43,7 @@ Since *mdbd* does not need root privileges, the init script runs
 
 ### Configuration files
 *Mdbd* requires "upstream" data sources. A configuration file
-(`/var/lib/Dominator/mdb.sources.list` by default) specifies the data sources
+(`/var/lib/mdbd/mdb.sources.list` by default) specifies the data sources
 to be collected from.
 
 To directly query AWS for all running instances in a region, you would use the
