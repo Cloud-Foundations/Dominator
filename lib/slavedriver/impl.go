@@ -321,6 +321,20 @@ func (driver *slaveDriver) rollCall() {
 			return
 		}
 	}
+	// Clean up expired getters and set timeout on when to next check.
+	wakeTimeout := time.Hour
+	var nextEntry *list.Element
+	for entry := driver.getterList.Front(); entry != nil; entry = nextEntry {
+		nextEntry = entry.Next()
+		request := entry.Value.(requestSlaveMessage)
+		if timeout := time.Until(request.timeout); timeout <= 0 {
+			request.slaveChannel <- nil // Getter wanted to give up by now.
+			close(request.slaveChannel)
+			driver.getterList.Remove(entry)
+		} else if timeout < wakeTimeout {
+			wakeTimeout = timeout
+		}
+	}
 	if driver.getterList.Len() > 0 ||
 		uint(len(driver.idleSlaves)) < driver.options.MinimumIdleSlaves {
 		if driver.createdSlaveChannel == nil {
@@ -365,7 +379,6 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = false
 		}
 	}
-	pingTimeout := time.Hour
 	for slave := range driver.idleSlaves {
 		if slave.pinging {
 			continue
@@ -373,14 +386,14 @@ func (driver *slaveDriver) rollCall() {
 		if timeToPing := slave.timeToPing; time.Since(timeToPing) >= 0 {
 			slave.pinging = true
 			go slave.ping(driver.pingResponseChannel)
-		} else if timeout := time.Until(timeToPing); timeout < pingTimeout {
-			pingTimeout = timeout
+		} else if timeout := time.Until(timeToPing); timeout < wakeTimeout {
+			wakeTimeout = timeout
 		}
 	}
-	if pingTimeout < 0 {
-		pingTimeout = 0
+	if wakeTimeout < 0 {
+		wakeTimeout = 0
 	}
-	pingTimer := time.NewTimer(pingTimeout)
+	wakeTimer := time.NewTimer(wakeTimeout)
 	select {
 	case slave := <-driver.createdSlaveChannel:
 		driver.createdSlaveChannel = nil
@@ -458,11 +471,11 @@ func (driver *slaveDriver) rollCall() {
 			driver.createdSlaveChannel = ch
 			go driver.createSlave(ch)
 		}
-	case <-pingTimer.C:
+	case <-wakeTimer.C:
 	}
-	pingTimer.Stop()
+	wakeTimer.Stop()
 	select {
-	case <-pingTimer.C:
+	case <-wakeTimer.C:
 	default:
 	}
 }
