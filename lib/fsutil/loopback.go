@@ -96,26 +96,27 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		100*time.Millisecond, 2)
 	startTime := time.Now()
 	stopTime := startTime.Add(timeout)
-	var numNonBlock uint
-	for count := 0; time.Until(stopTime) >= 0; count++ {
+	var numNonBlock, numOpened uint
+	for numIterations := 0; time.Until(stopTime) >= 0; numIterations++ {
 		if file, err := os.Open(partitionDevice); err == nil {
+			numOpened++
 			fi, err := file.Stat()
 			file.Close()
 			if err != nil {
 				return "", err
 			}
 			if fi.Mode()&os.ModeDevice != 0 {
-				if count > 0 {
+				if numIterations > 0 {
 					if time.Since(startTime) > time.Second {
 						logger.Printf(
-							"%s valid after: %d iterations (%d were not a block device), %s\n",
-							partitionDevice, count, numNonBlock,
-							format.Duration(time.Since(startTime)))
+							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
+							partitionDevice, numIterations, numNonBlock,
+							numOpened, format.Duration(time.Since(startTime)))
 					} else {
 						logger.Debugf(0,
-							"%s valid after: %d iterations (%d were not a block device), %s\n",
-							partitionDevice, count, numNonBlock,
-							format.Duration(time.Since(startTime)))
+							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
+							partitionDevice, numIterations, numNonBlock,
+							numOpened, format.Duration(time.Since(startTime)))
 					}
 				}
 				doDelete = false
