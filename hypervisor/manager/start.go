@@ -129,6 +129,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		var vmInfo vmInfoType
 		if err := json.ReadFromFile(filename, &vmInfo); err != nil {
 			manager.Logger.Println(err)
+			if err := os.Remove(vmDirname); err != nil {
+				manager.Logger.Println(err)
+			}
 			continue
 		}
 		vmInfo.Address.Shrink()
