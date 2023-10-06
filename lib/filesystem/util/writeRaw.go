@@ -250,7 +250,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	if options.InstallBootloader {
 		var err error
-		bootInfo, err = getBootInfo(fs, options.RootLabel, "net.ifnames=0")
+		kernelOptions := []string{"net.ifnames=0"}
+		if options.ExtraKernelOptions != "" {
+			kernelOptions = append(kernelOptions, options.ExtraKernelOptions)
+		}
+		kernelOptionsString := strings.Join(kernelOptions, " ")
+		bootInfo, err = getBootInfo(fs, options.RootLabel, kernelOptionsString)
 		if err != nil {
 			return err
 		}
