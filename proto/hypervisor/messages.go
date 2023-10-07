@@ -724,6 +724,7 @@ type VmInfo struct {
 	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
+	ExtraKernelOptions string      `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
 	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`
