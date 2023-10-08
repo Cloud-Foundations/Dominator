@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -444,6 +445,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				DestroyOnPowerdown: req.DestroyOnPowerdown,
 				DestroyProtection:  req.DestroyProtection,
 				DisableVirtIO:      req.DisableVirtIO,
+				ExtraKernelOptions: req.ExtraKernelOptions,
 				Hostname:           req.Hostname,
 				ImageName:          req.ImageName,
 				ImageURL:           req.ImageURL,
@@ -1058,6 +1060,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
+			ExtraKernelOptions: request.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
 			OverlayDirectories: request.OverlayDirectories,
@@ -2804,11 +2807,12 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
-			InitialImageName: imageName,
-			MinimumFreeBytes: request.MinimumFreeBytes,
-			OverlayFiles:     request.OverlayFiles,
-			RootLabel:        vm.rootLabel(false),
-			RoundupPower:     request.RoundupPower,
+			ExtraKernelOptions: vm.ExtraKernelOptions,
+			InitialImageName:   imageName,
+			MinimumFreeBytes:   request.MinimumFreeBytes,
+			OverlayFiles:       request.OverlayFiles,
+			RootLabel:          vm.rootLabel(false),
+			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
 			writeRawOptions, request.SkipBootloader)
@@ -3898,16 +3902,22 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+debugRoot+",format=raw"+options)
 	} else if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
+		kernelOptions := []string{"net.ifnames=0"}
+		if vm.ExtraKernelOptions != "" {
+			kernelOptions = append(kernelOptions, vm.ExtraKernelOptions)
+		}
+		kernelOptionsString := strings.Join(kernelOptions, " ")
 		cmd.Args = append(cmd.Args, "-kernel", kernelPath)
 		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
 			cmd.Args = append(cmd.Args,
 				"-initrd", initrdPath,
 				"-append", util.MakeKernelOptions("LABEL="+vm.rootLabel(false),
-					"net.ifnames=0"),
+					kernelOptionsString),
 			)
 		} else {
 			cmd.Args = append(cmd.Args,
-				"-append", util.MakeKernelOptions("/dev/vda1", "net.ifnames=0"),
+				"-append", util.MakeKernelOptions("/dev/vda1",
+					kernelOptionsString),
 			)
 		}
 	} else if enableNetboot {
