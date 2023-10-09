@@ -36,6 +36,8 @@ var (
 		"If true, do not start VM when creating")
 	enableNetboot = flag.Bool("enableNetboot", false,
 		"If true, enable boot from network for first boot")
+	extraKernelOptions = flag.String("extraKernelOptions", "",
+		"Extra options to pass to kernel")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
