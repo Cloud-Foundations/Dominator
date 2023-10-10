@@ -126,6 +126,17 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		}
 		sleeper.Sleep()
 	}
+	if numOpened > 0 {
+		if time.Since(startTime) > 15*time.Second {
+			if err := os.Remove(partitionDevice); err != nil {
+				logger.Printf("failed to forcibly delete partition: %s: %s\n",
+					partitionDevice, err)
+			} else {
+				logger.Printf("forcibly deleted partition: %s\n",
+					partitionDevice)
+			}
+		}
+	}
 	return "", fmt.Errorf("timed out waiting for partition (%d non-block): %s",
 		numNonBlock, partitionDevice)
 }
