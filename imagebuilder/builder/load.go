@@ -98,6 +98,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		variables = make(map[string]string)
 	}
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
+	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
 		buildLogArchiver:          params.BuildLogArchiver,
 		bindMounts:                masterConfiguration.BindMounts,
@@ -107,6 +108,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		logger:                    params.Logger,
 		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
 		initialNamespace:          initialNamespace,
+		streamsLoadedChannel:      streamsLoadedChannel,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
 		slaveDriver:               params.SlaveDriver,
@@ -130,7 +132,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		return nil, err
 	}
 	go b.dependencyGeneratorLoop(generateDependencyTrigger)
-	go b.watchConfigLoop(imageStreamsConfigChannel)
+	go b.watchConfigLoop(imageStreamsConfigChannel, streamsLoadedChannel)
 	go b.rebuildImages(options.ImageRebuildInterval)
 	return b, nil
 }
@@ -271,7 +273,26 @@ func (b *Builder) updateImageStreams(
 	return b.makeRequiredDirectories()
 }
 
-func (b *Builder) watchConfigLoop(configChannel <-chan interface{}) {
+func (b *Builder) waitForStreamsLoaded(timeout time.Duration) error {
+	if timeout < 0 {
+		timeout = time.Hour
+	} else if timeout < time.Second {
+		timeout = time.Second
+	}
+	timer := time.NewTimer(timeout)
+	select {
+	case <-b.streamsLoadedChannel:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("timed out waiting for streams list to load")
+	}
+}
+
+func (b *Builder) watchConfigLoop(configChannel <-chan interface{},
+	streamsLoadedChannel chan<- struct{}) {
 	firstLoadNotifier := make(chan struct{})
 	go b.delayMakeRequiredDirectories(firstLoadNotifier)
 	for rawConfig := range configChannel {
@@ -284,6 +305,10 @@ func (b *Builder) watchConfigLoop(configChannel <-chan interface{}) {
 			firstLoadNotifier <- struct{}{}
 			close(firstLoadNotifier)
 			firstLoadNotifier = nil
+		}
+		if streamsLoadedChannel != nil {
+			close(streamsLoadedChannel)
+			streamsLoadedChannel = nil
 		}
 		b.logger.Println("received new image streams configuration")
 		b.updateImageStreams(imageStreamsConfig)

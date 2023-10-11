@@ -176,7 +176,8 @@ type Builder struct {
 	imageServerAddress        string
 	logger                    log.DebugLogger
 	imageStreamsUrl           string
-	initialNamespace          string // For catching golang bugs.
+	initialNamespace          string          // For catching golang bugs.
+	streamsLoadedChannel      <-chan struct{} // Closed when streams loaded.
 	streamsLock               sync.RWMutex
 	bootstrapStreams          map[string]*bootstrapStream
 	imageStreams              map[string]*imageStreamType
@@ -268,6 +269,10 @@ func (b *Builder) ShowImageStream(writer io.Writer, streamName string) {
 
 func (b *Builder) ShowImageStreams(writer io.Writer) {
 	b.showImageStreams(writer)
+}
+
+func (b *Builder) WaitForStreamsLoaded(timeout time.Duration) error {
+	return b.waitForStreamsLoaded(timeout)
 }
 
 func (b *Builder) WriteHtml(writer io.Writer) {
