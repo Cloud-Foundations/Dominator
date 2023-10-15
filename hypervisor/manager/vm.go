@@ -31,7 +31,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/filelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
@@ -50,8 +52,9 @@ import (
 )
 
 const (
-	bootlogFilename    = "bootlog"
-	serialSockFilename = "serial0.sock"
+	bootlogFilename      = "bootlog"
+	lastPatchLogFilename = "lastPatchLog"
+	serialSockFilename   = "serial0.sock"
 
 	rebootJson = `{ "execute": "send-key",
      "arguments": { "keys": [ { "type": "qcode", "data": "ctrl" },
@@ -1681,6 +1684,26 @@ func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return vm.VmInfo, nil
 }
 
+func (m *Manager) getVmLastPatchLog(ipAddr net.IP) (
+	io.ReadCloser, uint64, time.Time, error) {
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	defer vm.mutex.RUnlock()
+	file, err := openBufferedFile(filepath.Join(
+		vm.VolumeLocations[0].DirectoryToCleanup, lastPatchLogFilename))
+	if err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, 0, time.Time{}, err
+	}
+	return file, uint64(fi.Size()), fi.ModTime(), nil
+}
+
 func (m *Manager) getVmLockWatcher(ipAddr net.IP) (
 	*lockwatcher.LockWatcher, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
@@ -2241,6 +2264,20 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 	return nil
 }
 
+func (vm *vmInfoType) makeExtraLogger(filename string) (
+	*filelogger.Logger, error) {
+	debugLevel := int16(-1)
+	if levelGetter, ok := vm.logger.(log.DebugLogLevelGetter); ok {
+		debugLevel = levelGetter.GetLevel()
+	}
+	return filelogger.New(filepath.Join(
+		vm.VolumeLocations[0].DirectoryToCleanup, filename),
+		filelogger.Options{
+			Flags:      serverlogger.GetStandardFlags(),
+			DebugLevel: debugLevel,
+		})
+}
+
 func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 	sourceIpAddr net.IP, accessToken []byte, getExtraFiles bool) error {
 	for index, volume := range vm.VolumeLocations {
@@ -2499,9 +2536,14 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	} else { // Requires a bootloader.
 		writeBootloaderConfig = true
 	}
+	patchLogger, err := vm.makeExtraLogger(lastPatchLogFilename)
+	if err != nil {
+		return err
+	}
+	defer patchLogger.Close()
 	subObj := domlib.Sub{FileSystem: &fs.FileSystem}
 	fetchMap, _ := domlib.BuildMissingLists(subObj, img, false, true,
-		vm.logger)
+		patchLogger)
 	objectsToFetch := objectcache.ObjectMapToCache(fetchMap)
 	objectsDir := filepath.Join(rootDir, ".subd", "objects")
 	defer os.RemoveAll(objectsDir)
@@ -2516,7 +2558,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	err = deleteFilesNotInImage(img.FileSystem, &fs.FileSystem, rootDir,
-		vm.logger)
+		patchLogger)
 	if err != nil {
 		return err
 	}
@@ -2548,7 +2590,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	subObj.ObjectCache = append(subObj.ObjectCache, objectsToFetch...)
 	var subRequest subproto.UpdateRequest
 	if domlib.BuildUpdateRequest(subObj, img, &subRequest, false, true,
-		vm.logger) {
+		patchLogger) {
 		return errors.New("failed building update: missing computed files")
 	}
 	subRequest.ImageName = imageName
@@ -2557,9 +2599,10 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	vm.logger.Debugf(0, "update(%s) starting\n", imageName)
+	patchLogger.Printf("update(%s) starting\n", imageName)
 	startTime = time.Now()
 	_, _, err = sublib.Update(subRequest, rootDir, objectsDir, nil, nil, nil,
-		vm.logger)
+		patchLogger)
 	if err != nil {
 		return err
 	}
