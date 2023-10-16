@@ -97,6 +97,16 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		writeBool(writer, "Spread volumes", vm.SpreadVolumes)
 		writeString(writer, "Latest boot",
 			fmt.Sprintf("<a href=\"showVmBootLog?%s\">log</a>", ipAddr))
+		rc, size, lastPatchTime, err := s.manager.GetVmLastPatchLog(netIpAddr)
+		if err == nil {
+			rc.Close()
+			writeString(writer, "Last patch",
+				fmt.Sprintf(
+					"<a href=\"showVmLastPatchLog?%s\">log</a> (%s, at: %s, age: %s)",
+					ipAddr, format.FormatBytes(size),
+					lastPatchTime.Format(timeFormat),
+					format.Duration(time.Since(lastPatchTime))))
+		}
 		if ok, _ := s.manager.CheckVmHasHealthAgent(netIpAddr); ok {
 			writeString(writer, "Health Agent",
 				fmt.Sprintf("<a href=\"http://%s:6910/\">detected</a>",
