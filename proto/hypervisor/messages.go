@@ -370,6 +370,16 @@ type GetVmInfoResponse struct {
 	Error  string
 }
 
+type GetVmLastPatchLogRequest struct {
+	IpAddress net.IP
+}
+
+type GetVmLastPatchLogResponse struct {
+	Error     string
+	Length    uint64
+	PatchTime time.Time
+} // Data (length=Length) are streamed afterwards.
+
 type GetVmUserDataRequest struct {
 	AccessToken []byte
 	IpAddress   net.IP
