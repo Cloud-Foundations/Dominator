@@ -61,6 +61,11 @@ func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
 }
 
+func GetVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
+	[]byte, time.Time, error) {
+	return getVmLastPatchLog(client, ipAddr)
+}
+
 func HoldLock(client *srpc.Client, timeout time.Duration,
 	writeLock bool) error {
 	return holdLock(client, timeout, writeLock)
