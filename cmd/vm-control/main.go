@@ -81,8 +81,10 @@ var (
 		"Directory tree of files to overlay on top of the image")
 	overlayPrefix = flag.String("overlayPrefix", "/",
 		"Prefix to add to overlay filenames")
-	ownerGroups  flagutil.StringList
-	ownerUsers   flagutil.StringList
+	ownerGroups      flagutil.StringList
+	ownerUsers       flagutil.StringList
+	patchLogFilename = flag.String("patchLogFilename", "",
+		"Name file to write VM patch log to")
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
