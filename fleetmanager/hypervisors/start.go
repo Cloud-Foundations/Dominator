@@ -32,6 +32,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	html.HandleFunc("/listLocations", manager.listLocationsHandler)
 	html.HandleFunc("/listVMs", manager.listVMsHandler)
 	html.HandleFunc("/showHypervisor", manager.showHypervisorHandler)
+	html.HandleFunc("/showVM", manager.showVmHandler)
 	go manager.notifierLoop()
 	return manager, nil
 }
