@@ -88,7 +88,7 @@ func shallowClone(topdir string, params ShallowCloneParams,
 		logger.Debugf(0, "Cloning repository: %s\n", params.PublicURL)
 	}
 	startTime := time.Now()
-	err := runCommand(logger, "", "git", "init", topdir)
+	err := runCommand(logger, "", "git", "init", "-b", "master", topdir)
 	if err != nil {
 		return err
 	}
