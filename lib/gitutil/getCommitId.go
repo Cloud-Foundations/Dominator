@@ -3,11 +3,17 @@ package gitutil
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
 
-// GetCommitIdOfRef will return the Commit ID of the specified reference.
 func getCommitIdOfRef(topdir, ref string) (string, error) {
+	// First try directly reading.
+	if commitId, err := getCommitIdOfRefDirect(topdir, ref); err == nil {
+		return commitId, nil
+	}
 	cmd := exec.Command("git", "log", "--format=format:%H", "-1", ref)
 	cmd.Dir = topdir
 	_output, err := cmd.CombinedOutput()
@@ -19,5 +25,16 @@ func getCommitIdOfRef(topdir, ref string) (string, error) {
 		return "", fmt.Errorf("error running: git log: %s: %s", err, output)
 	}
 	return output, nil
+}
+
+func getCommitIdOfRefDirect(topdir, ref string) (string, error) {
+	filename := filepath.Join(topdir, ".git", "refs", "heads", ref)
+	if lines, err := fsutil.LoadLines(filename); err != nil {
+		return "", err
+	} else if len(lines) != 1 {
+		return "", fmt.Errorf("%s does not have only one line", filename)
+	} else {
+		return strings.TrimSpace(lines[0]), nil
+	}
 
 }
