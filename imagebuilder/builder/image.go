@@ -131,7 +131,9 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 	}
 	gitDirectory := filepath.Join(manifestRoot, ".git")
 	var gitInfo *gitInfoType
-	commitId, err := gitutil.GetCommitIdOfRef(manifestRoot, gitBranch)
+	// The specified branch/tag/commit will be in the "master" branch in the
+	// cloned repository.
+	commitId, err := gitutil.GetCommitIdOfRef(manifestRoot, "master")
 	if err != nil {
 		return "", nil, err
 	} else {
