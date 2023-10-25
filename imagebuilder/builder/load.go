@@ -52,6 +52,11 @@ func imageStreamsRealDecoder(reader io.Reader) (
 }
 
 func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
+	if options.MinimumExpirationDuration <= 0 {
+		options.MinimumExpirationDuration = 15 * time.Minute
+	} else if options.MinimumExpirationDuration < 15*time.Second {
+		options.MinimumExpirationDuration = 5 * time.Minute
+	}
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
@@ -108,6 +113,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		logger:                    params.Logger,
 		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
 		initialNamespace:          initialNamespace,
+		minimumExpirationDuration: options.MinimumExpirationDuration,
 		streamsLoadedChannel:      streamsLoadedChannel,
 		bootstrapStreams:          masterConfiguration.BootstrapStreams,
 		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,

@@ -176,7 +176,8 @@ type Builder struct {
 	imageServerAddress        string
 	logger                    log.DebugLogger
 	imageStreamsUrl           string
-	initialNamespace          string          // For catching golang bugs.
+	initialNamespace          string // For catching golang bugs.
+	minimumExpirationDuration time.Duration
 	streamsLoadedChannel      <-chan struct{} // Closed when streams loaded.
 	streamsLock               sync.RWMutex
 	bootstrapStreams          map[string]*bootstrapStream
@@ -196,11 +197,12 @@ type Builder struct {
 }
 
 type BuilderOptions struct {
-	ConfigurationURL     string
-	ImageRebuildInterval time.Duration
-	ImageServerAddress   string
-	StateDirectory       string
-	VariablesFile        string
+	ConfigurationURL          string
+	ImageRebuildInterval      time.Duration
+	ImageServerAddress        string
+	MinimumExpirationDuration time.Duration // Default: 15 minutes. Min: 5 min.
+	StateDirectory            string
+	VariablesFile             string
 }
 
 type BuilderParams struct {
