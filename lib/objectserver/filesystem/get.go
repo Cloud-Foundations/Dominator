@@ -38,7 +38,7 @@ func (or *ObjectsReader) nextObject() (uint64, io.ReadCloser, error) {
 	if or.nextIndex >= int64(len(or.hashes)) {
 		return 0, nil, errors.New("all objects have been consumed")
 	}
-	filename := path.Join(or.objectServer.baseDir,
+	filename := path.Join(or.objectServer.BaseDirectory,
 		objectcache.HashToFilename(or.hashes[or.nextIndex]))
 	file, err := os.Open(filename)
 	if err != nil {

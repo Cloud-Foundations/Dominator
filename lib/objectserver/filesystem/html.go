@@ -8,6 +8,7 @@ import (
 )
 
 func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
+	objSrv.lockWatcher.WriteHtml(writer, "ObjectServer: ")
 	free, capacity, err := objSrv.getSpaceMetrics()
 	if err != nil {
 		fmt.Fprintln(writer, err)

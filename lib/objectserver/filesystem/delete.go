@@ -10,7 +10,8 @@ import (
 )
 
 func (objSrv *ObjectServer) deleteObject(hashVal hash.Hash) error {
-	filename := path.Join(objSrv.baseDir, objectcache.HashToFilename(hashVal))
+	filename := path.Join(objSrv.BaseDirectory,
+		objectcache.HashToFilename(hashVal))
 	if err := os.Remove(filename); err != nil {
 		return err
 	}

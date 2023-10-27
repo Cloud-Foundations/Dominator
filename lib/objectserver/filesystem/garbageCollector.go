@@ -34,7 +34,7 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 	bytesToDelete := (utilisation - cleanupStopPercent) * capacity / 100
 	bytesDeleted, err := objSrv.gc(bytesToDelete)
 	if err != nil {
-		objSrv.logger.Printf("Error collecting garbage, only deleted: %s: %s\n",
+		objSrv.Logger.Printf("Error collecting garbage, only deleted: %s: %s\n",
 			format.FormatBytes(bytesDeleted), err)
 		return 0, err
 	}
@@ -42,14 +42,15 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 }
 
 func (t *ObjectServer) getSpaceMetrics() (uint64, uint64, error) {
-	if fd, err := syscall.Open(t.baseDir, syscall.O_RDONLY, 0); err != nil {
-		t.logger.Printf("error opening: %s: %s", t.baseDir, err)
+	fd, err := syscall.Open(t.BaseDirectory, syscall.O_RDONLY, 0)
+	if err != nil {
+		t.Logger.Printf("error opening: %s: %s", t.BaseDirectory, err)
 		return 0, 0, err
 	} else {
 		defer syscall.Close(fd)
 		var statbuf syscall.Statfs_t
 		if err := syscall.Fstatfs(fd, &statbuf); err != nil {
-			t.logger.Printf("error getting file-system stats: %s\n", err)
+			t.Logger.Printf("error getting file-system stats: %s\n", err)
 			return 0, 0, err
 		}
 		rootReservation := statbuf.Bfree - statbuf.Bavail

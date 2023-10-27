@@ -28,7 +28,8 @@ func (objSrv *ObjectServer) checkObject(hash hash.Hash) (uint64, error) {
 	if ok {
 		return size, nil
 	}
-	filename := path.Join(objSrv.baseDir, objectcache.HashToFilename(hash))
+	filename := path.Join(objSrv.BaseDirectory,
+		objectcache.HashToFilename(hash))
 	fi, err := os.Lstat(filename)
 	if err != nil {
 		return 0, nil

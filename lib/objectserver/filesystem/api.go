@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 )
 
@@ -18,28 +20,48 @@ var (
 		90, "")
 )
 
+type Config struct {
+	BaseDirectory     string
+	LockCheckInterval time.Duration
+	LockLogTimeout    time.Duration
+}
+
 type ObjectServer struct {
-	baseDir               string
-	addCallback           objectserver.AddCallback
-	gc                    objectserver.GarbageCollector
-	logger                log.Logger
+	addCallback objectserver.AddCallback
+	Config
+	gc          objectserver.GarbageCollector
+	lockWatcher *lockwatcher.LockWatcher
+	Params
 	rwLock                sync.RWMutex         // Protect the following fields.
 	sizesMap              map[hash.Hash]uint64 // Only set if object is known.
 	lastGarbageCollection time.Time
 	lastMutationTime      time.Time
 }
 
+type Params struct {
+	Logger log.DebugLogger
+}
+
 func NewObjectServer(baseDir string, logger log.Logger) (
 	*ObjectServer, error) {
-	return newObjectServer(baseDir, logger)
+	return newObjectServer(
+		Config{BaseDirectory: baseDir},
+		Params{Logger: debuglogger.Upgrade(logger)},
+	)
+}
+
+func NewObjectServerWithConfigAndParams(config Config, params Params) (
+	*ObjectServer, error) {
+	return newObjectServer(config, params)
 }
 
 // AddObject will add an object. Object data are read from reader (length bytes
 // are read). The object hash is computed and compared with expectedHash if not
 // nil. The following are returned:
-//   computed hash value
-//   a boolean which is true if the object is new
-//   an error or nil if no error.
+//
+//	computed hash value
+//	a boolean which is true if the object is new
+//	an error or nil if no error.
 func (objSrv *ObjectServer) AddObject(reader io.Reader, length uint64,
 	expectedHash *hash.Hash) (hash.Hash, bool, error) {
 	return objSrv.addObject(reader, length, expectedHash)
@@ -105,9 +127,10 @@ func (objSrv *ObjectServer) NumObjects() uint64 {
 // already exists. Object data are read from reader (length bytes are read). The
 // object hash is computed and compared with expectedHash if not nil.
 // The following are returned:
-//   computed hash value
-//   the object data if the object is new, otherwise nil
-//   an error or nil if no error.
+//
+//	computed hash value
+//	the object data if the object is new, otherwise nil
+//	an error or nil if no error.
 func (objSrv *ObjectServer) StashOrVerifyObject(reader io.Reader,
 	length uint64, expectedHash *hash.Hash) (hash.Hash, []byte, error) {
 	return objSrv.stashOrVerifyObject(reader, length, expectedHash)

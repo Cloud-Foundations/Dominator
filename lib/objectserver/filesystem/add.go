@@ -25,7 +25,8 @@ func (objSrv *ObjectServer) addObject(reader io.Reader, length uint64,
 	if err != nil {
 		return hashVal, false, err
 	}
-	filename := path.Join(objSrv.baseDir, objectcache.HashToFilename(hashVal))
+	filename := path.Join(objSrv.BaseDirectory,
+		objectcache.HashToFilename(hashVal))
 	// Check for existing object and collision.
 	if isNew, err := objSrv.addOrCompare(hashVal, data, filename); err != nil {
 		return hashVal, false, err
