@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/httpd"
 	imageserverRpcd "github.com/Cloud-Foundations/Dominator/imageserver/rpcd"
@@ -34,6 +35,10 @@ var (
 	imageServerPortNum = flag.Uint("imageServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
+	lockCheckInterval = flag.Duration("lockCheckInterval", 2*time.Second,
+		"Interval between checks for lock timeouts")
+	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
+		"Timeout before logging that a lock has been held too long")
 	objectDir = flag.String("objectDir", "/var/lib/objectserver",
 		"Name of image server data directory.")
 	permitInsecureMode = flag.Bool("permitInsecureMode", false,
@@ -69,7 +74,15 @@ func main() {
 			logger.Fatalln(err)
 		}
 	}
-	objSrv, err := filesystem.NewObjectServer(*objectDir, logger)
+	objSrv, err := filesystem.NewObjectServerWithConfigAndParams(
+		filesystem.Config{
+			BaseDirectory:     *objectDir,
+			LockCheckInterval: *lockCheckInterval,
+			LockLogTimeout:    *lockLogTimeout,
+		},
+		filesystem.Params{
+			Logger: logger,
+		})
 	if err != nil {
 		logger.Fatalf("Cannot create ObjectServer: %s\n", err)
 	}
