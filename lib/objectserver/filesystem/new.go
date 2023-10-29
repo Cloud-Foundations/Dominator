@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/filesystem/scan"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
@@ -51,7 +52,7 @@ func newObjectServer(config Config, params Params) (*ObjectServer, error) {
 	objSrv.lockWatcher = lockwatcher.New(&objSrv.rwLock,
 		lockwatcher.LockWatcherOptions{
 			CheckInterval: config.LockCheckInterval,
-			Logger:        params.Logger,
+			Logger:        prefixlogger.New("ObjectServer: ", params.Logger),
 			LogTimeout:    config.LockLogTimeout,
 		})
 	return objSrv, nil
