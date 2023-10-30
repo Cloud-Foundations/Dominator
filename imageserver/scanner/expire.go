@@ -27,9 +27,9 @@ func (imdb *ImageDataBase) expireImage(image *image.Image, name string) {
 	}
 	imdb.Lock()
 	defer imdb.Unlock()
-	imdb.logger.Printf("Auto expiring (deleting) image: %s\n", name)
-	if err := os.Remove(path.Join(imdb.baseDir, name)); err != nil {
-		imdb.logger.Println(err)
+	imdb.Logger.Printf("Auto expiring (deleting) image: %s\n", name)
+	if err := os.Remove(path.Join(imdb.BaseDirectory, name)); err != nil {
+		imdb.Logger.Println(err)
 	}
 	imdb.deleteImageAndUpdateUnreferencedObjectsList(name)
 }

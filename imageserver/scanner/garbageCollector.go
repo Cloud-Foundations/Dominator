@@ -212,13 +212,13 @@ func (imdb *ImageDataBase) saveUnreferencedObjectsList(grabLock bool) {
 		defer imdb.RUnlock()
 	}
 	if err := imdb.writeUnreferencedObjectsList(); err != nil {
-		imdb.logger.Printf("Error writing unreferenced objects list: %s\n",
+		imdb.Logger.Printf("Error writing unreferenced objects list: %s\n",
 			err)
 	}
 }
 
 func (imdb *ImageDataBase) writeUnreferencedObjectsList() error {
-	filename := path.Join(imdb.baseDir, unreferencedObjectsFile)
+	filename := path.Join(imdb.BaseDirectory, unreferencedObjectsFile)
 	file, err := fsutil.CreateRenamingWriter(filename, filePerms)
 	if err != nil {
 		return err
@@ -226,7 +226,7 @@ func (imdb *ImageDataBase) writeUnreferencedObjectsList() error {
 	defer file.Close()
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
-	return imdb.unreferencedObjects.write(writer, imdb.logger)
+	return imdb.unreferencedObjects.write(writer, imdb.Logger)
 }
 
 func (imdb *ImageDataBase) garbageCollector(bytesToDelete uint64) (
@@ -241,10 +241,10 @@ func (imdb *ImageDataBase) collectGarbage(bytesToDelete uint64,
 		return 0, nil
 	}
 	if deleteBefore.IsZero() {
-		imdb.logger.Printf("Garbage collector deleting: %s\n",
+		imdb.Logger.Printf("Garbage collector deleting: %s\n",
 			format.FormatBytes(bytesToDelete))
 	} else {
-		imdb.logger.Printf("Garbage collector deleting: %s or before: %s\n",
+		imdb.Logger.Printf("Garbage collector deleting: %s or before: %s\n",
 			format.FormatBytes(bytesToDelete), deleteBefore.Format(timeFormat))
 	}
 	imdb.Lock()
@@ -269,13 +269,14 @@ func (imdb *ImageDataBase) collectGarbage(bytesToDelete uint64,
 	}
 	imdb.Unlock()
 	if firstEntryToDelete == nil {
-		imdb.logger.Println("Garbage collector: nothing to delete")
+		imdb.Logger.Println("Garbage collector: nothing to delete")
 		return 0, nil
 	}
 	nBytesDeleted = 0
 	var err error
 	for entry := firstEntryToDelete; entry != nil; entry = entry.next {
-		if e := imdb.objectServer.DeleteObject(entry.object.Hash); e != nil {
+		e := imdb.Params.ObjectServer.DeleteObject(entry.object.Hash)
+		if e != nil {
 			if err == nil {
 				err = e
 			}
@@ -284,7 +285,7 @@ func (imdb *ImageDataBase) collectGarbage(bytesToDelete uint64,
 		}
 	}
 	imdb.saveUnreferencedObjectsList(true)
-	imdb.logger.Printf("Garbage collector deleted: %s in: %d objects\n",
+	imdb.Logger.Printf("Garbage collector deleted: %s in: %d objects\n",
 		format.FormatBytes(nBytesDeleted), nObjectsDeleted)
 	return nBytesDeleted, err
 }
@@ -294,7 +295,7 @@ func (imdb *ImageDataBase) maybeRegenerateUnreferencedObjectsList() {
 	imdb.RLock()
 	lastRegeneratedTime := imdb.unreferencedObjects.lastRegeneratedTime
 	imdb.RUnlock()
-	lastMutationTime := imdb.objectServer.LastMutationTime()
+	lastMutationTime := imdb.Params.ObjectServer.LastMutationTime()
 	if lastMutationTime.After(lastRegeneratedTime) {
 		imdb.regenerateUnreferencedObjectsList()
 	}
@@ -304,7 +305,7 @@ func (imdb *ImageDataBase) maybeRegenerateUnreferencedObjectsList() {
 func (imdb *ImageDataBase) regenerateUnreferencedObjectsList() {
 	scanTime := time.Now()
 	// First generate list of currently unused objects.
-	objectsMap := imdb.objectServer.ListObjectSizes()
+	objectsMap := imdb.Params.ObjectServer.ListObjectSizes()
 	imdb.Lock()
 	defer imdb.Unlock()
 	for _, image := range imdb.imageMap {

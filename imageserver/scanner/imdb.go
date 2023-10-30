@@ -37,7 +37,7 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		return err
 	}
 	if imageIsExpired(image) {
-		imdb.logger.Printf("Ignoring already expired image: %s\n", name)
+		imdb.Logger.Printf("Ignoring already expired image: %s\n", name)
 		return nil
 	}
 	imdb.deduperLock.Lock()
@@ -51,9 +51,9 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		if err := imdb.checkPermissions(name, authInfo); err != nil {
 			return err
 		}
-		filename := filepath.Join(imdb.baseDir, name)
+		filename := filepath.Join(imdb.BaseDirectory, name)
 		flags := os.O_CREATE | os.O_RDWR
-		if imdb.replicationMaster == "" {
+		if imdb.ReplicationMaster == "" {
 			flags |= os.O_EXCL // I am the master.
 		} else {
 			flags |= os.O_TRUNC
@@ -82,7 +82,7 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		}
 		imdb.scheduleExpiration(image, name)
 		imdb.imageMap[name] = image
-		imdb.addNotifiers.sendPlain(name, "add", imdb.logger)
+		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 		imdb.removeFromUnreferencedObjectsListAndSave(image)
 		return nil
 	}
@@ -103,7 +103,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 			return false, err
 		}
 		img.ExpiresAt = expiresAt
-		imdb.addNotifiers.sendPlain(name, "add", imdb.logger)
+		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 		return true, nil
 	} else if expiresAt.Before(img.ExpiresAt) {
 		return false, errors.New("cannot shorten expiration time")
@@ -112,7 +112,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 			return false, err
 		}
 		img.ExpiresAt = expiresAt
-		imdb.addNotifiers.sendPlain(name, "add", imdb.logger)
+		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 		return true, nil
 	} else {
 		return false, nil
@@ -212,13 +212,13 @@ func (imdb *ImageDataBase) updateDirectoryMetadata(
 		return err
 	}
 	imdb.directoryMap[directory.Name] = directory.Metadata
-	imdb.mkdirNotifiers.sendMakeDirectory(directory, imdb.logger)
+	imdb.mkdirNotifiers.sendMakeDirectory(directory, imdb.Logger)
 	return nil
 }
 
 func (imdb *ImageDataBase) updateDirectoryMetadataFile(
 	directory image.Directory) error {
-	filename := filepath.Join(imdb.baseDir, directory.Name, metadataFile)
+	filename := filepath.Join(imdb.BaseDirectory, directory.Name, metadataFile)
 	_, ok := imdb.directoryMap[directory.Name]
 	if directory.Metadata == (image.DirectoryMetadata{}) {
 		if !ok {
@@ -270,12 +270,12 @@ func (imdb *ImageDataBase) deleteImage(name string,
 		if err := imdb.checkPermissions(name, authInfo); err != nil {
 			return err
 		}
-		filename := filepath.Join(imdb.baseDir, name)
+		filename := filepath.Join(imdb.BaseDirectory, name)
 		if err := os.Truncate(filename, 0); err != nil {
 			return err
 		}
 		imdb.deleteImageAndUpdateUnreferencedObjectsList(name)
-		imdb.deleteNotifiers.sendPlain(name, "delete", imdb.logger)
+		imdb.deleteNotifiers.sendPlain(name, "delete", imdb.Logger)
 		return nil
 	} else {
 		return errors.New("image: " + name + " does not exist")
@@ -302,8 +302,8 @@ func (imdb *ImageDataBase) deleteUnreferencedObjects(percentage uint8,
 		if !(objectsCount < objectsThreshold || bytesCount < bytesThreshold) {
 			break
 		}
-		if err := imdb.objectServer.DeleteObject(hashVal); err != nil {
-			imdb.logger.Printf("Error cleaning up: %x: %s\n", hashVal, err)
+		if err := imdb.Params.ObjectServer.DeleteObject(hashVal); err != nil {
+			imdb.Logger.Printf("Error cleaning up: %x: %s\n", hashVal, err)
 			return fmt.Errorf("error cleaning up: %x: %s\n", hashVal, err)
 		}
 		objectsCount++
@@ -412,7 +412,7 @@ func (imdb *ImageDataBase) listUnreferencedObjects() map[hash.Hash]uint64 {
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 	authInfo *srpc.AuthInformation, userRpc bool) error {
 	directory.Name = filepath.Clean(directory.Name)
-	pathname := filepath.Join(imdb.baseDir, directory.Name)
+	pathname := filepath.Join(imdb.BaseDirectory, directory.Name)
 	imdb.Lock()
 	defer imdb.Unlock()
 	oldDirectoryMetadata, ok := imdb.directoryMap[directory.Name]
@@ -455,7 +455,7 @@ func (imdb *ImageDataBase) rebuildDeDuper() {
 	for _, image := range imdb.imageMap {
 		image.ReplaceStrings(imdb.deduper.DeDuplicate)
 	}
-	imdb.logger.Debugf(0, "Rebuilding de-duper state took %s\n",
+	imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
 		time.Since(startTime))
 }
 
@@ -507,7 +507,7 @@ func (imdb *ImageDataBase) writeNewExpiration(name string,
 	oldImage *image.Image, expiresAt time.Time) error {
 	img := *oldImage
 	img.ExpiresAt = expiresAt
-	filename := filepath.Join(imdb.baseDir, name)
+	filename := filepath.Join(imdb.BaseDirectory, name)
 	tmpFilename := filename + "~"
 	file, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_RDWR|os.O_EXCL,
 		filePerms)

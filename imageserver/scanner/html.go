@@ -6,6 +6,7 @@ import (
 )
 
 func (imdb *ImageDataBase) writeHtml(writer io.Writer) {
+	imdb.lockWatcher.WriteHtml(writer, "ImageServer: ")
 	fmt.Fprintf(writer,
 		"Number of  <a href=\"listImages?output=text\">images</a>: "+
 			"<a href=\"listImages\">%d</a><br>\n",
