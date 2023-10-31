@@ -91,8 +91,17 @@ func main() {
 		imageServerAddress = fmt.Sprintf("%s:%d", *imageServerHostname,
 			*imageServerPortNum)
 	}
-	imdb, err := scanner.LoadImageDataBase(*imageDir, objSrv,
-		imageServerAddress, logger)
+	imdb, err := scanner.Load(
+		scanner.Config{
+			BaseDirectory:     *imageDir,
+			LockCheckInterval: *lockCheckInterval,
+			LockLogTimeout:    *lockLogTimeout,
+			ReplicationMaster: imageServerAddress,
+		},
+		scanner.Params{
+			Logger:       logger,
+			ObjectServer: objSrv,
+		})
 	if err != nil {
 		logger.Fatalf("Cannot load image database: %s\n", err)
 	}
