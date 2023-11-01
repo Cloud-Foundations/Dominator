@@ -3,6 +3,7 @@ package filesystem
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 )
@@ -16,6 +17,7 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 	}
 	utilisation := float64(capacity-free) * 100 / float64(capacity)
 	var totalBytes uint64
+	startTime := time.Now()
 	objSrv.rwLock.RLock()
 	numObjects := len(objSrv.sizesMap)
 	for _, size := range objSrv.sizesMap {
@@ -23,6 +25,7 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 	}
 	objSrv.rwLock.RUnlock()
 	fmt.Fprintf(writer,
-		"Number of objects: %d, consuming %s (FS is %.1f%% full)<br>\n",
-		numObjects, format.FormatBytes(totalBytes), utilisation)
+		"Number of objects: %d, consuming %s (FS is %.1f%% full), computed in %s<br>\n",
+		numObjects, format.FormatBytes(totalBytes), utilisation,
+		format.Duration(time.Since(startTime)))
 }
