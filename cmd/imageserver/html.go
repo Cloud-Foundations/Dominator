@@ -11,23 +11,31 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
-var statisticsComputeBucketer *tricorder.Bucketer
-var statisticsComputeCpuTimeDistribution *tricorder.CumulativeDistribution
+var (
+	statisticsComputeBucketer            *tricorder.Bucketer
+	statisticsComputeCpuTimeDistribution *tricorder.CumulativeDistribution
+	statisticsComputeTimeDistribution    *tricorder.CumulativeDistribution
+)
 
 func init() {
 	statisticsComputeBucketer = tricorder.NewGeometricBucketer(0.1, 100e3)
 	statisticsComputeCpuTimeDistribution =
 		statisticsComputeBucketer.NewCumulativeDistribution()
+	statisticsComputeTimeDistribution =
+		statisticsComputeBucketer.NewCumulativeDistribution()
 	tricorder.RegisterMetric("/statistics-compute-cputime",
 		statisticsComputeCpuTimeDistribution,
 		units.Millisecond, "statistics compute CPU time")
-
+	tricorder.RegisterMetric("/statistics-compute-time",
+		statisticsComputeTimeDistribution,
+		units.Millisecond, "statistics compute time")
 }
 
 func (imageObjectServers *imageObjectServersType) WriteHtml(writer io.Writer) {
 	// TODO(rgooch): These statistics should be cached and the cache invalidated
 	//               when images and objects are added/deleted.
 	var rusageStart, rusageStop syscall.Rusage
+	startTime := time.Now()
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
 	objectsMap := imageObjectServers.objSrv.ListObjectSizes()
 	var totalBytes uint64
@@ -49,16 +57,19 @@ func (imageObjectServers *imageObjectServersType) WriteHtml(writer io.Writer) {
 			100.0 * float64(unreferencedBytes) / float64(totalBytes)
 	}
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStop)
-	statisticsComputeCpuTimeDistribution.Add(time.Duration(
-		rusageStop.Utime.Sec)*time.Second +
+	timeTaken := time.Since(startTime)
+	cpuTimeTaken := time.Duration(rusageStop.Utime.Sec)*time.Second +
 		time.Duration(rusageStop.Utime.Usec)*time.Microsecond -
 		time.Duration(rusageStart.Utime.Sec)*time.Second -
-		time.Duration(rusageStart.Utime.Usec)*time.Microsecond)
+		time.Duration(rusageStart.Utime.Usec)*time.Microsecond
+	statisticsComputeCpuTimeDistribution.Add(cpuTimeTaken)
+	statisticsComputeTimeDistribution.Add(timeTaken)
 	fmt.Fprintf(writer,
 		"Number of unreferenced objects: %d (%.1f%%), "+
-			"consuming %s (%.1f%%)<br>\n",
+			"consuming %s (%.1f%%), computed in %s (%s CPU)<br>\n",
 		numUnreferencedObjects, unreferencedObjectsPercent,
-		format.FormatBytes(unreferencedBytes), unreferencedBytesPercent)
+		format.FormatBytes(unreferencedBytes), unreferencedBytesPercent,
+		format.Duration(timeTaken), format.Duration(cpuTimeTaken))
 	if imageObjectServers.imageServerAddress != "" {
 		fmt.Fprintf(writer,
 			"Replication master: <a href=\"http://%s/\">%s</a><br>\n",
