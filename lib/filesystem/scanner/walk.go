@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"runtime"
 	"sort"
 	"syscall"
 
@@ -17,16 +16,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
-
-var myCountGC int
-
-func myGC() {
-	if myCountGC > 1000 {
-		runtime.GC()
-		myCountGC = 0
-	}
-	myCountGC++
-}
 
 func makeRegularInode(stat *wsyscall.Stat_t) *filesystem.RegularInode {
 	var inode filesystem.RegularInode
@@ -145,7 +134,6 @@ func scanDirectory(directory, oldDirectory *filesystem.DirectoryInode,
 			fileSystem.checkScanDisableRequest() {
 			return errors.New("DisableScan"), false
 		}
-		myGC()
 		dirent := new(filesystem.DirectoryEntry)
 		dirent.Name = name
 		dirent.InodeNumber = stat.Ino
