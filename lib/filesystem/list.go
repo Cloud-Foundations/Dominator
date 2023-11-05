@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -19,7 +18,6 @@ const (
 
 func (fs *FileSystem) list(w io.Writer, listSelector ListSelector,
 	filter *filter.Filter) error {
-	defer runtime.GC()
 	numLinksTable := buildNumLinksTable(fs)
 	return fs.DirectoryInode.list(w, "/", numLinksTable, 1, listSelector,
 		filter)
