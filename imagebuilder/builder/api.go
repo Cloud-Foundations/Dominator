@@ -66,10 +66,12 @@ type currentBuildInfo struct {
 }
 
 type dependencyDataType struct {
-	fetchLog           []byte
-	generatedAt        time.Time
-	streamToSource     map[string]string // K: stream name, V: source stream.
-	unbuildableSources map[string]struct{}
+	generatedAt         time.Time
+	lastAttemptError    error
+	lastAttemptFetchLog []byte
+	lastAttemptTime     time.Time
+	streamToSource      map[string]string // K: stream name, V: source stream.
+	unbuildableSources  map[string]struct{}
 }
 
 type imageStreamsConfigurationType struct {
@@ -192,8 +194,6 @@ type Builder struct {
 	variables                 map[string]string
 	dependencyDataLock        sync.RWMutex
 	dependencyData            *dependencyDataType
-	dependencyDataAttempt     time.Time
-	dependencyDataError       error
 }
 
 type BuilderOptions struct {

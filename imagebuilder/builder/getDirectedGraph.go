@@ -16,6 +16,14 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
+type dependencyResultType struct {
+	fetchLog           []byte
+	fetchTime          time.Duration
+	resultTime         time.Time
+	streamToSource     map[string]string // K: stream name, V: source stream.
+	unbuildableSources map[string]struct{}
+}
+
 func isMatch(streamName string, patterns []string) bool {
 	for _, pattern := range patterns {
 		if len(streamName) < len(pattern) {
@@ -118,27 +126,38 @@ func (b *Builder) dependencyGeneratorLoop(
 			}
 		case <-timer.C:
 		}
-		startTime := time.Now()
-		dependencyData, fetchTime, err := b.generateDependencyData()
-		finishTime := time.Now()
-		timeTaken := finishTime.Sub(startTime)
+		dependencyResult, err := b.generateDependencyData()
 		if err != nil {
 			b.logger.Printf("failed to generate dependencies: %s\n", err)
+			dependencyData := dependencyDataType{
+				lastAttemptError:    err,
+				lastAttemptFetchLog: dependencyResult.fetchLog,
+				lastAttemptTime:     dependencyResult.resultTime,
+			}
+			b.dependencyDataLock.Lock()
+			if oldData := b.dependencyData; oldData != nil {
+				dependencyData.generatedAt = oldData.generatedAt
+				dependencyData.streamToSource = oldData.streamToSource
+				dependencyData.unbuildableSources = oldData.unbuildableSources
+			}
+			b.dependencyData = &dependencyData
+			b.dependencyDataLock.Unlock()
 		} else {
-			b.logger.Debugf(0, "generated dependencies in: %s (fetch: %s)\n",
-				format.Duration(timeTaken), fetchTime)
+			dependencyData := dependencyDataType{
+				generatedAt:         dependencyResult.resultTime,
+				lastAttemptFetchLog: dependencyResult.fetchLog,
+				lastAttemptTime:     dependencyResult.resultTime,
+				streamToSource:      dependencyResult.streamToSource,
+				unbuildableSources:  dependencyResult.unbuildableSources,
+			}
+			b.dependencyDataLock.Lock()
+			b.dependencyData = &dependencyData
+			b.dependencyDataLock.Unlock()
 		}
-		b.dependencyDataLock.Lock()
-		if dependencyData != nil {
-			b.dependencyData = dependencyData
-		}
-		b.dependencyDataAttempt = finishTime
-		b.dependencyDataError = err
-		b.dependencyDataLock.Unlock()
 		if wakeChannel != nil {
 			wakeChannel <- struct{}{}
 		}
-		interval = fetchTime * 10
+		interval = dependencyResult.fetchTime * 10
 		if interval < 10*time.Second {
 			interval = 10 * time.Second
 		}
@@ -156,8 +175,7 @@ func (b *Builder) dependencyGeneratorLoop(
 	}
 }
 
-func (b *Builder) generateDependencyData() (
-	*dependencyDataType, time.Duration, error) {
+func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 	var directoriesToRemove []string
 	defer func() {
 		for _, directory := range directoriesToRemove {
@@ -179,19 +197,19 @@ func (b *Builder) generateDependencyData() (
 		stream := b.imageStreams[streamName]
 		b.streamsLock.RUnlock()
 		if stream == nil {
-			return nil, 0, fmt.Errorf("stream: %s does not exist", streamName)
+			return nil, fmt.Errorf("stream: %s does not exist", streamName)
 		}
 		streams[streamName] = stream
 		manifestLocation := stream.getManifestLocation(b, nil)
 		if _, ok := urlToDirectory[manifestLocation.url]; ok {
 			continue // Git fetch has started.
 		} else if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
-			return nil, 0, err
+			return nil, err
 		} else if rootDir != "" {
 			manifestConfig, err := readManifestFile(
 				filepath.Join(rootDir, manifestLocation.directory), stream)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 			streamToSource[streamName] = manifestConfig.SourceImage
 			delete(streams, streamName) // Mark as completed.
@@ -199,10 +217,10 @@ func (b *Builder) generateDependencyData() (
 			gitRoot, err := makeTempDirectory("",
 				strings.Replace(streamName, "/", "_", -1)+".manifest")
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
-			err = state.GoRun(func() error {
+			state.GoRun(func() error {
 				myFetchLog := bytes.NewBuffer(nil)
 				startTime := time.Now()
 				err := gitShallowClone(gitRoot, manifestLocation.url,
@@ -218,7 +236,11 @@ func (b *Builder) generateDependencyData() (
 		}
 	}
 	if err := state.Reap(); err != nil {
-		return nil, 0, err
+		return &dependencyResultType{
+			fetchLog:   fetchLog.Bytes(),
+			fetchTime:  serialisedFetchTime,
+			resultTime: time.Now(),
+		}, err
 	}
 	// Second pass to process fetched manifests.
 	for streamName, stream := range streams {
@@ -227,7 +249,7 @@ func (b *Builder) generateDependencyData() (
 			filepath.Join(urlToDirectory[manifestLocation.url],
 				manifestLocation.directory), stream)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		streamToSource[streamName] = manifestConfig.SourceImage
 	}
@@ -247,47 +269,47 @@ func (b *Builder) generateDependencyData() (
 				streamName, sourceName)
 		}
 	}
-	finishTime := time.Now()
-	fmt.Fprintf(fetchLog, "Generated dependencies in: %s\n",
-		format.Duration(finishTime.Sub(startTime)))
-	return &dependencyDataType{
+	finishedTime := time.Now()
+	timeTaken := format.Duration(finishedTime.Sub(startTime))
+	b.logger.Debugf(0, "generated dependencies in: %s (fetch: %s)\n",
+		timeTaken, format.Duration(serialisedFetchTime))
+	fmt.Fprintf(fetchLog, "Generated dependencies in: %s\n", timeTaken)
+	return &dependencyResultType{
 		fetchLog:           fetchLog.Bytes(),
-		generatedAt:        finishTime,
+		fetchTime:          serialisedFetchTime,
+		resultTime:         finishedTime,
 		streamToSource:     streamToSource,
 		unbuildableSources: unbuildableSources,
-	}, serialisedFetchTime, nil
+	}, nil
 }
 
 func (b *Builder) getDependencies(request proto.GetDependenciesRequest) (
 	proto.GetDependenciesResult, error) {
-	dependencyData, lastAttempt, lastErr := b.getDependencyData(request.MaxAge)
+	dependencyData := b.getDependencyData(request.MaxAge)
 	if dependencyData == nil {
-		return proto.GetDependenciesResult{
-			LastAttemptAt:    lastAttempt,
-			LastAttemptError: errors.ErrorToString(lastErr),
-		}, nil
+		return proto.GetDependenciesResult{}, nil
 	}
+	lastErrorString := errors.ErrorToString(dependencyData.lastAttemptError)
 	return proto.GetDependenciesResult{
-		FetchLog:           dependencyData.fetchLog,
+		FetchLog:           dependencyData.lastAttemptFetchLog,
 		GeneratedAt:        dependencyData.generatedAt,
-		LastAttemptAt:      lastAttempt,
-		LastAttemptError:   errors.ErrorToString(lastErr),
+		LastAttemptAt:      dependencyData.lastAttemptTime,
+		LastAttemptError:   lastErrorString,
 		StreamToSource:     dependencyData.streamToSource,
 		UnbuildableSources: dependencyData.unbuildableSources,
 	}, nil
 
 }
 
-// getDependencyData returns the dependency data (possibly stale or nil), the
-// time of the last attempt to generate and the error result for the last
-// attempt. If maxAge is larger than zero, getDependencyData will wait until
-// there is an attempt less than maxAge ago.
-func (b *Builder) getDependencyData(maxAge time.Duration) (
-	*dependencyDataType, time.Time, error) {
+// getDependencyData returns the dependency data (possibly nil). If maxAge is
+// larger than zero, getDependencyData will wait until there is an attempt less
+// than maxAge ago.
+func (b *Builder) getDependencyData(maxAge time.Duration) *dependencyDataType {
 	if maxAge <= 0 {
 		b.dependencyDataLock.RLock()
-		defer b.dependencyDataLock.RUnlock()
-		return b.dependencyData, b.dependencyDataAttempt, b.dependencyDataError
+		dependencyData := b.dependencyData
+		b.dependencyDataLock.RUnlock()
+		return dependencyData
 	}
 	if maxAge < 2*time.Second {
 		maxAge = 2 * time.Second
@@ -295,11 +317,9 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 	for {
 		b.dependencyDataLock.RLock()
 		dependencyData := b.dependencyData
-		lastAttempt := b.dependencyDataAttempt
-		err := b.dependencyDataError
 		b.dependencyDataLock.RUnlock()
-		if time.Since(lastAttempt) < maxAge {
-			return dependencyData, lastAttempt, err
+		if time.Since(dependencyData.lastAttemptTime) < maxAge {
+			return dependencyData
 		}
 		waitChannel := make(chan struct{}, 1)
 		b.generateDependencyTrigger <- waitChannel // Trigger and wait.
@@ -309,11 +329,16 @@ func (b *Builder) getDependencyData(maxAge time.Duration) (
 
 func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	proto.GetDirectedGraphResult, error) {
-	dependencyData, lastAttempt, lastErr := b.getDependencyData(request.MaxAge)
+	dependencyData := b.getDependencyData(request.MaxAge)
 	if dependencyData == nil {
+		return proto.GetDirectedGraphResult{}, nil
+	}
+	lastErrorString := errors.ErrorToString(dependencyData.lastAttemptError)
+	if dependencyData.generatedAt.IsZero() {
 		return proto.GetDirectedGraphResult{
-			LastAttemptAt:    lastAttempt,
-			LastAttemptError: errors.ErrorToString(lastErr),
+			FetchLog:         dependencyData.lastAttemptFetchLog,
+			LastAttemptAt:    dependencyData.lastAttemptTime,
+			LastAttemptError: lastErrorString,
 		}, nil
 	}
 	bootstrapStreams := b.listBootstrapStreamNames()
@@ -351,11 +376,11 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	}
 	fmt.Fprintln(buffer, "}")
 	return proto.GetDirectedGraphResult{
-		FetchLog:         dependencyData.fetchLog,
+		FetchLog:         dependencyData.lastAttemptFetchLog,
 		GeneratedAt:      dependencyData.generatedAt,
 		GraphvizDot:      buffer.Bytes(),
-		LastAttemptAt:    lastAttempt,
-		LastAttemptError: errors.ErrorToString(lastErr),
+		LastAttemptAt:    dependencyData.lastAttemptTime,
+		LastAttemptError: lastErrorString,
 	}, nil
 }
 
