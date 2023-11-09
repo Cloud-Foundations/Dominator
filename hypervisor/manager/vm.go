@@ -3938,10 +3938,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		interfaceDriver = ",if=virtio"
 	}
 	if debugRoot := vm.getDebugRoot(); debugRoot != "" {
-		options := interfaceDriver
-		if vm.manager.checkTrim(vm.VolumeLocations[0].Filename) {
-			options += ",discard=on"
-		}
+		options := interfaceDriver + ",discard=off"
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+debugRoot+",format=raw"+options)
 	} else if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
@@ -3988,10 +3985,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
 		}
-		options := interfaceDriver
-		if vm.manager.checkTrim(volume.Filename) {
-			options += ",discard=on"
-		}
+		options := interfaceDriver + ",discard=off"
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
 				options)
