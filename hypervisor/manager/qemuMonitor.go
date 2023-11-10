@@ -87,7 +87,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 		}
 		return
 	case proto.StateRunning, proto.StateDebugging:
-		if guestShutdown {
+		if !vm.manager.shuttingDown && guestShutdown {
 			if vm.DestroyOnPowerdown && !vm.DestroyProtection {
 				vm.delete()
 				vm.logger.Debugln(0, "VM destroyed due to guest powerdown")

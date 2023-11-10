@@ -33,6 +33,7 @@ func (m *Manager) powerOff(stopVMs bool) error {
 }
 
 func (m *Manager) shutdownVMs() {
+	m.shuttingDown = true
 	var waitGroup sync.WaitGroup
 	for _, vm := range m.vms {
 		waitGroup.Add(1)

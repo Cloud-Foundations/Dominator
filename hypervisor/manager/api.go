@@ -48,6 +48,7 @@ type Manager struct {
 	numCPUs           uint
 	rootCookie        []byte
 	serialNumber      string
+	shuttingDown      bool
 	summaryMutex      sync.RWMutex
 	summary           *summaryData
 	volumeDirectories []string
