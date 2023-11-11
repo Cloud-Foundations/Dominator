@@ -78,6 +78,7 @@ func processControlConnection(conn net.Conn, m *manager.Manager,
 			}
 			os.Remove(m.GetRootCookiePath())
 			if shutdownVMsOnNextStop {
+				logger.Println("shutting down VMs and stopping")
 				m.ShutdownVMsAndExit()
 			} else {
 				logger.Println("stopping without shutting down VMs")
@@ -91,6 +92,7 @@ func processControlConnection(conn net.Conn, m *manager.Manager,
 				return err
 			}
 			shutdownVMsOnNextStop = true
+			logger.Println("will shut down VMs on next stop")
 		default:
 			if _, err := fmt.Fprintln(conn, "bad request"); err != nil {
 				return err
