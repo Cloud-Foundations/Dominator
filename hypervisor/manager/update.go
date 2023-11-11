@@ -5,22 +5,20 @@ import (
 )
 
 func (m *Manager) closeUpdateChannel(channel <-chan proto.Update) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.notifiersMutex.Lock()
+	defer m.notifiersMutex.Unlock()
 	delete(m.notifiers, channel)
 }
 
 func (m *Manager) getHealthStatus() string {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.healthStatusMutex.RLock()
+	defer m.healthStatusMutex.RUnlock()
 	return m.healthStatus
 }
 
 func (m *Manager) makeUpdateChannel() <-chan proto.Update {
-	channel := make(chan proto.Update, 16)
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	m.notifiers[channel] = channel
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
 	subnets := make([]proto.Subnet, 0, len(m.subnets))
 	for id, subnet := range m.subnets {
 		if id != "hypervisor" {
@@ -35,6 +33,10 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 	if err != nil {
 		m.Logger.Println(err)
 	}
+	channel := make(chan proto.Update, 16)
+	m.notifiersMutex.Lock()
+	defer m.notifiersMutex.Unlock()
+	m.notifiers[channel] = channel
 	// Initial update: give everything.
 	channel <- proto.Update{
 		HaveAddressPool:  true,
@@ -57,13 +59,9 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 }
 
 func (m *Manager) sendUpdate(update proto.Update) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	m.sendUpdateWithLock(update)
-}
-
-func (m *Manager) sendUpdateWithLock(update proto.Update) {
-	update.HealthStatus = m.healthStatus
+	update.HealthStatus = m.getHealthStatus()
+	m.notifiersMutex.Lock()
+	defer m.notifiersMutex.Unlock()
 	for readChannel, writeChannel := range m.notifiers {
 		select {
 		case writeChannel <- update:

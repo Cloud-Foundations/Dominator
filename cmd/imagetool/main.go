@@ -61,6 +61,11 @@ var (
 		"Port number of image server")
 	makeBootable = flag.Bool("makeBootable", true,
 		"If true, make raw image bootable by installing GRUB")
+	mdbServerHostname = flag.String("mdbServerHostname", "localhost",
+		"Hostname of MDB server")
+	mdbServerPortNum = flag.Uint("mdbServerPortNum",
+		constants.SimpleMdbServerPortNumber,
+		"Port number of MDB server")
 	minFreeBytes = flag.Uint64("minFreeBytes", 4<<20,
 		"minimum number of free bytes in raw image")
 	overlayDirectory = flag.String("overlayDirectory", "",
@@ -166,6 +171,8 @@ var subcommands = []commands.Command{
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
+	{"list-mdb", "", 0, 0, listMdbImagesSubcommand},
+	{"list-not-in-mdb", "", 0, 0, listImagesNotInMdbSubcommand},
 	{"make-raw-image", "         name rawfile", 2, 2, makeRawImageSubcommand},
 	{"match-triggers", "         name triggers-file", 2, 2,
 		matchTriggersSubcommand},

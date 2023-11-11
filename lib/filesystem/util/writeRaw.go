@@ -250,7 +250,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	if options.InstallBootloader {
 		var err error
-		bootInfo, err = getBootInfo(fs, options.RootLabel, "net.ifnames=0")
+		kernelOptions := []string{"net.ifnames=0"}
+		if options.ExtraKernelOptions != "" {
+			kernelOptions = append(kernelOptions, options.ExtraKernelOptions)
+		}
+		kernelOptionsString := strings.Join(kernelOptions, " ")
+		bootInfo, err = getBootInfo(fs, options.RootLabel, kernelOptionsString)
 		if err != nil {
 			return err
 		}
@@ -604,7 +609,7 @@ func writeToFile(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, "partition",
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
 		time.Minute, logger)
 	rootDevice := loopDevice + partition
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,

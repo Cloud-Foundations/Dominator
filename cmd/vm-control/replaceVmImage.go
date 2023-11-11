@@ -73,6 +73,7 @@ func replaceVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		IpAddress:        ipAddr,
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
+		SkipBackup:       *skipBackup,
 	}
 	var imageReader io.Reader
 	if *imageName != "" {

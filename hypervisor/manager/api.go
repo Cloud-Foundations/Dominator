@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -38,17 +39,22 @@ type DhcpServer interface {
 
 type Manager struct {
 	StartOptions
-	rootCookie        []byte
+	healthStatusMutex sync.RWMutex
+	healthStatus      string
+	lockWatcher       *lockwatcher.LockWatcher
 	memTotalInMiB     uint64
+	notifiersMutex    sync.Mutex
+	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	numCPUs           uint
+	rootCookie        []byte
 	serialNumber      string
+	summaryMutex      sync.RWMutex
+	summary           *summaryData
 	volumeDirectories []string
 	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
 	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
 	disabled          bool
-	healthStatus      string
-	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	objectCache       *cachingreader.ObjectServer
 	ownerGroups       map[string]struct{}
 	ownerUsers        map[string]struct{}
@@ -64,6 +70,8 @@ type StartOptions struct {
 	BridgeMap          map[string]net.Interface // Key: interface name.
 	DhcpServer         DhcpServer
 	ImageServerAddress string
+	LockCheckInterval  time.Duration
+	LockLogTimeout     time.Duration
 	Logger             log.DebugLogger
 	ObjectCacheBytes   uint64
 	ShowVgaConsole     bool
@@ -73,7 +81,21 @@ type StartOptions struct {
 	VolumeDirectories  []string
 }
 
+type summaryData struct {
+	availableMilliCPU      uint
+	memUnallocated         uint64
+	numFreeAddresses       uint
+	numRegisteredAddresses uint
+	numRunning             uint
+	numStopped             uint
+	numSubnets             uint
+	ownerGroups            []string
+	ownerUsers             []string
+	updatedAt              time.Time
+}
+
 type vmInfoType struct {
+	lockWatcher                *lockwatcher.LockWatcher
 	mutex                      sync.RWMutex
 	accessToken                []byte
 	accessTokenCleanupNotifier chan<- struct{}
@@ -88,11 +110,11 @@ type vmInfoType struct {
 	manager                    *Manager
 	metadataChannels           map[chan<- string]struct{}
 	monitorSockname            string
+	mutating                   bool
 	ownerUsers                 map[string]struct{}
 	serialInput                io.Writer
 	serialOutput               chan<- byte
 	stoppedNotifier            chan<- struct{}
-	updating                   bool
 	proto.LocalVmInfo
 }
 
@@ -281,6 +303,16 @@ func (m *Manager) GetVmFileData(ipAddr net.IP, filename string) (
 
 func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return m.getVmInfo(ipAddr)
+}
+
+func (m *Manager) GetVmLastPatchLog(ipAddr net.IP) (
+	io.ReadCloser, uint64, time.Time, error) {
+	return m.getVmLastPatchLog(ipAddr)
+}
+
+func (m *Manager) GetVmLockWatcher(ipAddr net.IP) (
+	*lockwatcher.LockWatcher, error) {
+	return m.getVmLockWatcher(ipAddr)
 }
 
 func (m *Manager) GetVmUserData(ipAddr net.IP) (io.ReadCloser, error) {

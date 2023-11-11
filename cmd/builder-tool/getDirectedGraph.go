@@ -18,13 +18,18 @@ func getDirectedGraphSubcommand(args []string, logger log.DebugLogger) error {
 
 func getDirectedGraph(logger log.Logger) error {
 	srpcClient := getImaginatorClient()
-	req := proto.GetDirectedGraphRequest{}
+	req := proto.GetDirectedGraphRequest{
+		Excludes: digraphExcludes,
+		Includes: digraphIncludes,
+	}
 	if result, err := client.GetDirectedGraph(srpcClient, req); err != nil {
 		return err
 	} else {
-		os.Stdout.Write(result.GraphvizDot)
-		if result.GraphvizDot[len(result.GraphvizDot)-1] != '\n' {
-			fmt.Println()
+		if len(result.GraphvizDot) > 0 {
+			os.Stdout.Write(result.GraphvizDot)
+			if result.GraphvizDot[len(result.GraphvizDot)-1] != '\n' {
+				fmt.Println()
+			}
 		}
 		if *showFetchLog {
 			os.Stderr.Write(result.FetchLog)

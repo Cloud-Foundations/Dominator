@@ -13,6 +13,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
@@ -127,7 +128,11 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		filename := filepath.Join(vmDirname, "info.json")
 		var vmInfo vmInfoType
 		if err := json.ReadFromFile(filename, &vmInfo); err != nil {
-			return nil, err
+			manager.Logger.Println(err)
+			if err := os.Remove(vmDirname); err != nil {
+				manager.Logger.Println(err)
+			}
+			continue
 		}
 		vmInfo.Address.Shrink()
 		vmInfo.manager = manager
@@ -138,6 +143,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.logger = prefixlogger.New(ipAddr+": ", manager.Logger)
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
+		vmInfo.setupLockWatcher()
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {
 			manager.Logger.Println(err)
 			if ipAddr == "0.0.0.0" {
@@ -146,7 +152,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			}
 		}
 	}
-	// Check address pool for used addresses with no VM.
+	// Check address pool for used addresses with no VM, and remove.
 	freeIPs := make(map[string]struct{}, len(manager.addressPool.Free))
 	for _, addr := range manager.addressPool.Free {
 		freeIPs[addr.IpAddress.String()] = struct{}{}
@@ -157,19 +163,51 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			secondaryIPs[addr.IpAddress.String()] = struct{}{}
 		}
 	}
+	var addressesToKeep []proto.Address
 	for _, addr := range manager.addressPool.Registered {
 		ipAddr := addr.IpAddress.String()
 		if _, ok := freeIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
 		if _, ok := manager.vms[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
 		if _, ok := secondaryIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
 			continue
 		}
-		manager.Logger.Printf("%s shown as used but no corresponding VM\n",
-			ipAddr)
+		manager.Logger.Printf(
+			"%s shown as used but no corresponding VM, removing\n", ipAddr)
+	}
+	var changedPool bool
+	if len(manager.addressPool.Registered) != len(addressesToKeep) {
+		manager.addressPool.Registered = addressesToKeep
+		changedPool = true
+	}
+	// Check address pool for free addresses which are not registered and remove
+	addressesToKeep = nil
+	registeredIPs := make(map[string]struct{},
+		len(manager.addressPool.Registered))
+	for _, addr := range manager.addressPool.Registered {
+		registeredIPs[addr.IpAddress.String()] = struct{}{}
+	}
+	for _, addr := range manager.addressPool.Free {
+		ipAddr := addr.IpAddress.String()
+		if _, ok := registeredIPs[ipAddr]; ok {
+			addressesToKeep = append(addressesToKeep, addr)
+		} else {
+			manager.Logger.Printf(
+				"%s shown as free but not registered, removing\n", ipAddr)
+		}
+	}
+	if len(manager.addressPool.Free) != len(addressesToKeep) {
+		manager.addressPool.Free = addressesToKeep
+		changedPool = true
+	}
+	if changedPool {
+		manager.writeAddressPoolWithLock(manager.addressPool, false)
 	}
 	if startOptions.ObjectCacheBytes >= 1<<20 {
 		dirname := filepath.Join(filepath.Dir(manager.volumeDirectories[0]),
@@ -186,6 +224,18 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.objectCache = objSrv
 	}
 	go manager.loopCheckHealthStatus()
+	lockCheckInterval := startOptions.LockCheckInterval
+	if lockCheckInterval > time.Second {
+		// Leveraged for dashboard, so keep it fresh.
+		lockCheckInterval = time.Second
+	}
+	manager.lockWatcher = lockwatcher.New(&manager.mutex,
+		lockwatcher.LockWatcherOptions{
+			CheckInterval: lockCheckInterval,
+			Logger:        startOptions.Logger,
+			LogTimeout:    startOptions.LockLogTimeout,
+			RFunction:     manager.updateSummaryWithMainRLock,
+		})
 	return manager, nil
 }
 
@@ -224,18 +274,22 @@ func (m *Manager) loopCheckHealthStatus() {
 	cr := rpcclientpool.New("tcp", ":6910", true, "")
 	for ; ; time.Sleep(time.Second * 10) {
 		healthStatus := m.checkHealthStatus(cr)
-		m.mutex.Lock()
-		if m.healthStatus != healthStatus {
-			numFreeAddresses, err := m.computeNumFreeAddressesMap(m.addressPool)
-			if err != nil {
-				m.Logger.Println(err)
-			}
-			m.healthStatus = healthStatus
-			m.sendUpdateWithLock(proto.Update{
-				NumFreeAddresses: numFreeAddresses,
-			})
+		m.healthStatusMutex.Lock()
+		if m.healthStatus == healthStatus {
+			m.healthStatusMutex.Unlock()
+			continue
 		}
-		m.mutex.Unlock()
+		m.healthStatus = healthStatus
+		m.healthStatusMutex.Unlock()
+		m.mutex.RLock()
+		numFreeAddresses, err := m.computeNumFreeAddressesMap(m.addressPool)
+		m.mutex.RUnlock()
+		if err != nil {
+			m.Logger.Println(err)
+		}
+		m.sendUpdate(proto.Update{
+			NumFreeAddresses: numFreeAddresses,
+		})
 	}
 }
 

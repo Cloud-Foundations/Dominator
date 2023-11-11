@@ -5,19 +5,20 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
-	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/filesystem/scan"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
-func newObjectServer(baseDir string, logger log.Logger) (
-	*ObjectServer, error) {
+func newObjectServer(config Config, params Params) (*ObjectServer, error) {
 	startTime := time.Now()
 	var rusageStart, rusageStop wsyscall.Rusage
 	wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusageStart)
 	sizesMap := make(map[hash.Hash]uint64)
 	var mutex sync.Mutex
-	err := scan.ScanTree(baseDir, func(hashVal hash.Hash, size uint64) {
+	err := scan.ScanTree(config.BaseDirectory, func(hashVal hash.Hash,
+		size uint64) {
 		mutex.Lock()
 		sizesMap[hashVal] = size
 		mutex.Unlock()
@@ -31,21 +32,28 @@ func newObjectServer(baseDir string, logger log.Logger) (
 	}
 	err = wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusageStop)
 	if err != nil {
-		logger.Printf("Scanned %d object%s in %s\n",
+		params.Logger.Printf("Scanned %d object%s in %s\n",
 			len(sizesMap), plural, time.Since(startTime))
 	} else {
 		userTime := time.Duration(rusageStop.Utime.Sec)*time.Second +
 			time.Duration(rusageStop.Utime.Usec)*time.Microsecond -
 			time.Duration(rusageStart.Utime.Sec)*time.Second -
 			time.Duration(rusageStart.Utime.Usec)*time.Microsecond
-		logger.Printf("Scanned %d object%s in %s (%s user CPUtime)\n",
+		params.Logger.Printf("Scanned %d object%s in %s (%s user CPUtime)\n",
 			len(sizesMap), plural, time.Since(startTime), userTime)
 	}
-	return &ObjectServer{
-		baseDir:               baseDir,
-		logger:                logger,
+	objSrv := &ObjectServer{
+		Config:                config,
+		Params:                params,
 		sizesMap:              sizesMap,
 		lastGarbageCollection: time.Now(),
 		lastMutationTime:      time.Now(),
-	}, nil
+	}
+	objSrv.lockWatcher = lockwatcher.New(&objSrv.rwLock,
+		lockwatcher.LockWatcherOptions{
+			CheckInterval: config.LockCheckInterval,
+			Logger:        prefixlogger.New("ObjectServer: ", params.Logger),
+			LogTimeout:    config.LockLogTimeout,
+		})
+	return objSrv, nil
 }

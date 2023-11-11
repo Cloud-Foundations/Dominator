@@ -32,6 +32,8 @@ const (
 	listMethodsPath       = rpcPath + "listMethods"
 	listPublicMethodsPath = rpcPath + "listPublicMethods"
 
+	doNotUseMethodPowers = "doNotUseMethodPowers"
+
 	methodTypeRaw = iota
 	methodTypeCoder
 	methodTypeRequestReply
@@ -69,6 +71,7 @@ var (
 	serverMetricsDir             *tricorder.DirectorySpec
 	bucketer                     *tricorder.Bucketer
 	serverMetricsMutex           sync.Mutex
+	numPanicedCalls              uint64
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
@@ -91,6 +94,12 @@ func init() {
 	http.HandleFunc(listMethodsPath, listMethodsHttpHandler)
 	http.HandleFunc(listPublicMethodsPath, listPublicMethodsHttpHandler)
 	registerServerMetrics()
+}
+
+func getNumPanicedCalls() uint64 {
+	serverMetricsMutex.Lock()
+	defer serverMetricsMutex.Unlock()
+	return numPanicedCalls
 }
 
 func registerServerMetrics() {
@@ -325,6 +334,10 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 			return
 		}
 	}
+	if req.ParseForm() != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -369,6 +382,10 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		logger.Println("error writing connect message: ", err.Error())
 		return
 	}
+	allowMethodPowers := true
+	if req.Form.Get(doNotUseMethodPowers) == "true" {
+		allowMethodPowers = false
+	}
 	if doTls {
 		var tlsConn *tls.Conn
 		if req.TLS == nil {
@@ -391,7 +408,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		}
 		myConn.isEncrypted = true
 		myConn.username, myConn.permittedMethods, myConn.groupList, err =
-			getAuth(tlsConn.ConnectionState())
+			getAuth(tlsConn.ConnectionState(), allowMethodPowers)
 		if err != nil {
 			logger.Println(err)
 			return
@@ -399,6 +416,9 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		myConn.ReadWriter = bufio.NewReadWriter(bufio.NewReader(tlsConn),
 			bufio.NewWriter(tlsConn))
 	} else {
+		if !allowMethodPowers {
+			myConn.permittedMethods = make(map[string]struct{})
+		}
 		myConn.ReadWriter = bufrw
 	}
 	logger.Debugf(0, "accepted %s connection from: %s\n",
@@ -425,7 +445,8 @@ func checkVerifiedChains(verifiedChains [][]*x509.Certificate,
 	return false
 }
 
-func getAuth(state tls.ConnectionState) (string, map[string]struct{},
+func getAuth(state tls.ConnectionState, allowMethodPowers bool) (
+	string, map[string]struct{},
 	map[string]struct{}, error) {
 	var username string
 	permittedMethods := make(map[string]struct{})
@@ -450,7 +471,7 @@ func getAuth(state tls.ConnectionState) (string, map[string]struct{},
 					return "", nil, nil, err
 				}
 			}
-			if trustCertMethods {
+			if allowMethodPowers && trustCertMethods {
 				pms, err := x509util.GetPermittedMethods(cert)
 				if err != nil {
 					return "", nil, nil, err
@@ -632,6 +653,14 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 }
 
 func (m *methodWrapper) _call(conn *Conn, makeCoder coderMaker) error {
+	defer func() {
+		if err := recover(); err != nil {
+			serverMetricsMutex.Lock()
+			numPanicedCalls++
+			serverMetricsMutex.Unlock()
+			panic(err)
+		}
+	}()
 	connValue := reflect.ValueOf(conn)
 	conn.Decoder = makeCoder.MakeDecoder(conn)
 	conn.Encoder = makeCoder.MakeEncoder(conn)

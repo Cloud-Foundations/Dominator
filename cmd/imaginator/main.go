@@ -40,6 +40,9 @@ var (
 		"Port number of image server")
 	imageRebuildInterval = flag.Duration("imageRebuildInterval", time.Hour,
 		"time between automatic rebuilds of images")
+	minimumExpirationDuration = flag.Duration("minimumExpirationDuration",
+		15*time.Minute,
+		"Minimum permitted expiration duration")
 	portNum = flag.Uint("portNum", constants.ImaginatorPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
 	slaveDriverConfigurationFile = flag.String("slaveDriverConfigurationFile",
@@ -104,8 +107,9 @@ func main() {
 			ImageRebuildInterval: *imageRebuildInterval,
 			ImageServerAddress: fmt.Sprintf("%s:%d",
 				*imageServerHostname, *imageServerPortNum),
-			StateDirectory: *stateDir,
-			VariablesFile:  *variablesFile,
+			MinimumExpirationDuration: *minimumExpirationDuration,
+			StateDirectory:            *stateDir,
+			VariablesFile:             *variablesFile,
 		},
 		builder.BuilderParams{
 			BuildLogArchiver: buildLogArchiver,

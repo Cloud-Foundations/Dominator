@@ -23,7 +23,7 @@ func getImageArchiveDataSubcommand(args []string,
 }
 
 func getImageArchiveDataAndWrite(name, outputFilename string) error {
-	img, err := getImageMetadata(name)
+	img, err := getTypedImageMetadata(name)
 	if err != nil {
 		return err
 	}

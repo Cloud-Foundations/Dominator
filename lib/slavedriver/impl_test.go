@@ -1,6 +1,7 @@
 package slavedriver
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -20,6 +21,20 @@ func (db *fakeDatabase) load() (*slaveRoll, error) {
 
 func (db *fakeDatabase) save(slaves slaveRoll) error {
 	return nil
+}
+
+type failingTrader struct{}
+
+func (trader *failingTrader) Close() error {
+	return nil
+}
+
+func (trader *failingTrader) CreateSlave() (SlaveInfo, error) {
+	return SlaveInfo{}, errors.New("cannot create slave")
+}
+
+func (trader *failingTrader) DestroySlave(identifier string) error {
+	return errors.New("cannot destroy slave that cannot have been created")
 }
 
 type fakeTrader struct {
@@ -144,4 +159,35 @@ func TestTwoGets(t *testing.T) {
 	logger.Printf("got slave: %s after: %s", slave, format.Duration(timeTaken))
 	slave.Destroy()
 	logger.Print("destroyed slave")
+}
+
+func TestStarvedGet(t *testing.T) {
+	logger := testlogger.NewWithTimestamps(t)
+	trader := &failingTrader{}
+	slaveDriver, err := newSlaveDriver(
+		SlaveDriverOptions{
+			MaximumIdleSlaves: 2,
+			MinimumIdleSlaves: 1,
+		},
+		trader,
+		fakeDialer,
+		&fakeDatabase{},
+		logger)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(100 * time.Millisecond)
+	go func() {
+		_, err := slaveDriver.GetSlaveWithTimeout(time.Millisecond)
+		errorChannel <- err
+	}()
+	select {
+	case err := <-errorChannel:
+		if err == nil {
+			logger.Fatal("GetSlaveWithTimeout() succeeded")
+		}
+	case <-timer.C:
+		logger.Fatal("GetSlaveWithTimeout() did not time out")
+	}
 }

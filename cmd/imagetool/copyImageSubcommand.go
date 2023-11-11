@@ -26,7 +26,7 @@ func copyImage(imageSClient *srpc.Client, name, oldImageName string,
 	if imageExists {
 		return errors.New("image exists")
 	}
-	image, err := getImage(imageSClient, oldImageName)
+	image, err := getTypedImage(oldImageName)
 	if err != nil {
 		return err
 	}

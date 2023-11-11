@@ -36,6 +36,8 @@ var (
 		"If true, do not start VM when creating")
 	enableNetboot = flag.Bool("enableNetboot", false,
 		"If true, enable boot from network for first boot")
+	extraKernelOptions = flag.String("extraKernelOptions", "",
+		"Extra options to pass to kernel")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
@@ -79,8 +81,10 @@ var (
 		"Directory tree of files to overlay on top of the image")
 	overlayPrefix = flag.String("overlayPrefix", "/",
 		"Prefix to add to overlay filenames")
-	ownerGroups  flagutil.StringList
-	ownerUsers   flagutil.StringList
+	ownerGroups      flagutil.StringList
+	ownerUsers       flagutil.StringList
+	patchLogFilename = flag.String("patchLogFilename", "",
+		"Name file to write VM patch log to")
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
@@ -90,6 +94,8 @@ var (
 		"File containing initialisation parameters for secondary volumes")
 	serialPort = flag.Uint("serialPort", 0,
 		"Serial port number on VM")
+	skipBackup = flag.Bool("skipBackup", false,
+		"If true, do not make a backup when patching/replacing the VM image")
 	skipBootloader = flag.Bool("skipBootloader", false,
 		"If true, directly boot into the kernel")
 	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,

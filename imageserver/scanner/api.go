@@ -8,6 +8,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -28,13 +29,22 @@ var (
 		"maximum age of unreferenced objects before cleaning")
 )
 
+type Config struct {
+	BaseDirectory     string
+	LockCheckInterval time.Duration
+	LockLogTimeout    time.Duration
+	ReplicationMaster string
+}
+
 type notifiers map[<-chan string]chan<- string
 type makeDirectoryNotifiers map[<-chan image.Directory]chan<- image.Directory
 
 type ImageDataBase struct {
+	Config
+	Params
+	lockWatcher *lockwatcher.LockWatcher
 	sync.RWMutex
 	// Protected by main lock.
-	baseDir             string
 	directoryMap        map[string]image.DirectoryMetadata
 	imageMap            map[string]*image.Image
 	addNotifiers        notifiers
@@ -46,15 +56,28 @@ type ImageDataBase struct {
 	deduper          *stringutil.StringDeduplicator
 	pendingImageLock sync.Mutex
 	objectFetchLock  sync.Mutex
-	// Unprotected by any lock.
-	objectServer      objectserver.FullObjectServer
-	replicationMaster string
-	logger            log.DebugLogger
+}
+
+type Params struct {
+	Logger       log.DebugLogger
+	ObjectServer objectserver.FullObjectServer
+}
+
+func Load(config Config, params Params) (*ImageDataBase, error) {
+	return loadImageDataBase(config, params)
 }
 
 func LoadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
 	replicationMaster string, logger log.DebugLogger) (*ImageDataBase, error) {
-	return loadImageDataBase(baseDir, objSrv, replicationMaster, logger)
+	return loadImageDataBase(
+		Config{
+			BaseDirectory:     baseDir,
+			ReplicationMaster: replicationMaster,
+		},
+		Params{
+			Logger:       logger,
+			ObjectServer: objSrv,
+		})
 }
 
 func (imdb *ImageDataBase) AddImage(image *image.Image, name string,
@@ -126,7 +149,12 @@ func (imdb *ImageDataBase) ListDirectories() []image.Directory {
 }
 
 func (imdb *ImageDataBase) ListImages() []string {
-	return imdb.listImages()
+	return imdb.listImages(proto.ListSelectedImagesRequest{})
+}
+
+func (imdb *ImageDataBase) ListSelectedImages(
+	request proto.ListSelectedImagesRequest) []string {
+	return imdb.listImages(request)
 }
 
 // ListUnreferencedObjects will return a map listing all the objects and their
@@ -144,7 +172,7 @@ func (imdb *ImageDataBase) MakeDirectory(dirname string,
 }
 
 func (imdb *ImageDataBase) ObjectServer() objectserver.ObjectServer {
-	return imdb.objectServer
+	return imdb.Params.ObjectServer
 }
 
 func (imdb *ImageDataBase) RegisterAddNotifier() <-chan string {

@@ -235,8 +235,8 @@ func (m *Manager) makeUpdateChannel(
 	return channel
 }
 
-func (m *Manager) updateHypervisor(h *hypervisorType,
-	machine *fm_proto.Machine) {
+func (m *Manager) updateHypervisor(h *hypervisorType, machine *fm_proto.Machine,
+	machineChanged bool) {
 	location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 	var numTagsToDelete uint
 	h.mutex.Lock()
@@ -261,7 +261,9 @@ func (m *Manager) updateHypervisor(h *hypervisorType,
 	}
 	h.mutex.Unlock()
 	if *manageHypervisors && h.probeStatus == probeStatusConnected {
-		go h.changeOwners(nil)
+		if machineChanged {
+			go h.changeOwners(nil)
+		}
 		go m.processSubnetsUpdates(h, subnets)
 	}
 }
@@ -292,10 +294,11 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 	for _, machine := range machines {
 		delete(hypervisorsToDelete, machine.Hostname)
 		if hypervisor, ok := m.hypervisors[machine.Hostname]; ok {
-			if !hypervisor.machine.Equal(machine) {
+			equal := hypervisor.machine.Equal(machine)
+			if !equal {
 				hypersToChange = append(hypersToChange, hypervisor)
 			}
-			m.updateHypervisor(hypervisor, machine)
+			m.updateHypervisor(hypervisor, machine, !equal)
 		} else {
 			location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 			hypervisor := &hypervisorType{
@@ -353,12 +356,13 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 }
 
 func (h *hypervisorType) delete() {
+	h.logger.Debugln(0, "deleting")
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 	h.deleteScheduled = true
-	if h.conn != nil {
-		h.conn.Close()
-		h.conn = nil
+	select {
+	case h.closeClientChannel <- struct{}{}:
+	default:
 	}
 }
 
@@ -410,11 +414,8 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 	defer func() {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
+		h.closeClientChannel = nil
 		h.probeStatus = failureProbeStatus
-		if h.conn != nil {
-			h.conn.Close()
-			h.conn = nil
-		}
 	}()
 	client, err := srpc.DialHTTP("tcp", h.address(), time.Second*15)
 	if err != nil {
@@ -457,10 +458,11 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 		conn.Close()
 		return 0
 	}
-	h.conn = conn
+	closeClientChannel := make(chan struct{}, 1)
+	h.closeClientChannel = closeClientChannel
 	h.receiveChannel = make(chan struct{}, 1)
 	h.mutex.Unlock()
-	go h.monitorLoop(client, conn)
+	go h.monitorLoop(client, conn, closeClientChannel)
 	defer close(h.receiveChannel)
 	h.logger.Debugln(0, "waiting for Update messages")
 	firstUpdate := true
@@ -469,7 +471,7 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 		if err := conn.Decode(&update); err != nil {
 			if err == io.EOF {
 				h.logger.Debugln(0, "remote closed connection")
-			} else {
+			} else if !client.IsClosed() {
 				h.logger.Println(err)
 			}
 			return time.Second

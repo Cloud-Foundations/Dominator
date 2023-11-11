@@ -115,9 +115,8 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 				vCPUs = `<font color="grey">` + vCPUs + `</font>`
 			}
 			tw.WriteRow(foreground, background,
-				fmt.Sprintf("<a href=\"http://%s:%d/showVM?%s\">%s</a>",
-					vm.hypervisor.machine.Hostname,
-					constants.HypervisorPortNumber, vm.ipAddr, vm.ipAddr),
+				fmt.Sprintf("<a href=\"showVM?%s\">%s</a>",
+					vm.ipAddr, vm.ipAddr),
 				vm.Tags["Name"],
 				vm.State.String(),
 				format.FormatBytes(vm.MemoryInMiB<<20),

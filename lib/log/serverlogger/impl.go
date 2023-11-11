@@ -3,6 +3,7 @@ package serverlogger
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	liblog "github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
@@ -61,6 +61,9 @@ func (w *grabWriter) Write(p []byte) (int, error) {
 }
 
 func newLogger(name string, options logbuf.Options, flags int) *Logger {
+	if name == "" && !options.AlsoLogToStderr {
+		options.RedirectStderr = true
+	}
 	loggerMap.Lock()
 	defer loggerMap.Unlock()
 	if _, ok := loggerMap.loggerMap[name]; ok {
@@ -77,11 +80,10 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 		logger.level = -1
 	}
 	logger.maxLevel = logger.level
-	// Ensure this satisfies the published interface.
-	var debugLogger liblog.FullDebugLogger
-	debugLogger = logger
-	_ = debugLogger
 	loggerMap.loggerMap[name] = logger
+	if circularBuffer.CheckNeverLogged() {
+		logger.Println("New log directory")
+	}
 	if *logAtStartup {
 		logger.Println("Startup")
 	}
@@ -336,4 +338,17 @@ func (t *loggerMapT) Watch(conn *srpc.Conn) error {
 		logger.watch(conn, streamer)
 		return srpc.ErrorCloseClient
 	}
+}
+
+func (l *Logger) writeHtml(writer io.Writer) {
+	if numPanics := srpc.GetNumPanicedCalls(); numPanics > 0 {
+		var suffix string
+		if numPanics > 1 {
+			suffix = "s"
+		}
+		fmt.Fprintf(writer,
+			"<p><font color=\"red\">SRPC Server recorded %d call%s which paniced</font><br>",
+			numPanics, suffix)
+	}
+	l.circularBuffer.WriteHtml(writer)
 }

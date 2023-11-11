@@ -33,9 +33,9 @@ func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
-	imageSClient, objectClient := getClients()
+	_, objectClient := getClients()
 	logger.Debugf(0, "getting image: %s\n", imageName)
-	img, err := getImage(imageSClient, imageName)
+	img, imageName, err := getTypedImageAndName(imageName)
 	if err != nil {
 		return err
 	}

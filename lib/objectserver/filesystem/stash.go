@@ -16,8 +16,8 @@ var stashDirectory string = ".stash"
 
 func (objSrv *ObjectServer) commitObject(hashVal hash.Hash) error {
 	hashName := objectcache.HashToFilename(hashVal)
-	filename := path.Join(objSrv.baseDir, hashName)
-	stashFilename := path.Join(objSrv.baseDir, stashDirectory, hashName)
+	filename := path.Join(objSrv.BaseDirectory, hashName)
+	stashFilename := path.Join(objSrv.BaseDirectory, stashDirectory, hashName)
 	fi, err := os.Lstat(stashFilename)
 	if err != nil {
 		if length, _ := objSrv.checkObject(hashVal); length > 0 {
@@ -52,7 +52,7 @@ func (objSrv *ObjectServer) commitObject(hashVal hash.Hash) error {
 }
 
 func (objSrv *ObjectServer) deleteStashedObject(hashVal hash.Hash) error {
-	filename := path.Join(objSrv.baseDir, stashDirectory,
+	filename := path.Join(objSrv.BaseDirectory, stashDirectory,
 		objectcache.HashToFilename(hashVal))
 	return os.Remove(filename)
 }
@@ -64,7 +64,7 @@ func (objSrv *ObjectServer) stashOrVerifyObject(reader io.Reader,
 		return hashVal, nil, err
 	}
 	hashName := objectcache.HashToFilename(hashVal)
-	filename := path.Join(objSrv.baseDir, hashName)
+	filename := path.Join(objSrv.BaseDirectory, hashName)
 	// Check for existing object and collision.
 	if length, err := objSrv.checkObject(hashVal); err != nil {
 		return hashVal, nil, err
@@ -75,7 +75,7 @@ func (objSrv *ObjectServer) stashOrVerifyObject(reader io.Reader,
 		return hashVal, nil, nil
 	}
 	// Check for existing stashed object and collision.
-	stashFilename := path.Join(objSrv.baseDir, stashDirectory, hashName)
+	stashFilename := path.Join(objSrv.BaseDirectory, stashDirectory, hashName)
 	if _, err := objSrv.addOrCompare(hashVal, data, stashFilename); err != nil {
 		return hashVal, nil, err
 	} else {

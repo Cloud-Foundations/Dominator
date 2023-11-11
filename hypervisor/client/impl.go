@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -220,6 +221,34 @@ func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 		return proto.VmInfo{}, err
 	}
 	return reply.VmInfo, nil
+}
+
+func getVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
+	[]byte, time.Time, error) {
+	conn, err := client.Call("Hypervisor.GetVmLastPatchLog")
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	defer conn.Close()
+	request := proto.GetVmLastPatchLogRequest{IpAddress: ipAddr}
+	if err := conn.Encode(request); err != nil {
+		return nil, time.Time{}, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, time.Time{}, err
+	}
+	var response proto.GetVmLastPatchLogResponse
+	if err := conn.Decode(&response); err != nil {
+		return nil, time.Time{}, err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return nil, time.Time{}, err
+	}
+	buffer := &bytes.Buffer{}
+	if _, err := io.CopyN(buffer, conn, int64(response.Length)); err != nil {
+		return nil, time.Time{}, err
+	}
+	return buffer.Bytes(), response.PatchTime, nil
 }
 
 func holdLock(client *srpc.Client, timeout time.Duration,

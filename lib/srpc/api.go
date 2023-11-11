@@ -83,10 +83,12 @@ var (
 	logger log.DebugLogger = debuglogger.New(
 		stdlog.New(os.Stderr, "", stdlog.LstdFlags))
 
-	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
-		"If true, trust the SmallStack VM owners for all method access")
+	srpcClientDoNotUseMethodPowers = flag.Bool("srpcClientDoNotUseMethodPowers",
+		false, "If true, do not use method powers when connecting to servers")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
+	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
+		"If true, trust the SmallStack VM owners for all method access")
 )
 
 // CheckTlsRequired returns true if the server requires TLS connections with
@@ -101,6 +103,11 @@ func CheckTlsRequired() bool {
 // returned if there are no certificates with an expiration time.
 func GetEarliestClientCertExpiration() time.Time {
 	return getEarliestClientCertExpiration()
+}
+
+// GetNumPanicedCalls returns the number of server method calls which paniced.
+func GetNumPanicedCalls() uint64 {
+	return getNumPanicedCalls()
 }
 
 // LoadCertificates loads zero or more X.509 certificates from directory. Each
@@ -374,6 +381,11 @@ func (client *Client) Close() error {
 // called prior to attempting another Call.
 func (client *Client) Call(serviceMethod string) (*Conn, error) {
 	return client.call(serviceMethod)
+}
+
+// IsClosed will return true of the client is closed.
+func (client *Client) IsClosed() bool {
+	return client.conn == nil
 }
 
 // IsEncrypted will return true if the underlying connection is TLS-encrypted.

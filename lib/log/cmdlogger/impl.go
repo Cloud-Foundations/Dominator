@@ -19,8 +19,8 @@ func newLogger(options Options) *debuglogger.Logger {
 	if options.DebugLevel < -1 {
 		options.DebugLevel = -1
 	}
-	if options.DebugLevel > 65535 {
-		options.DebugLevel = 65535
+	if options.DebugLevel > 32767 {
+		options.DebugLevel = 32767
 	}
 	logFlags := 0
 	if options.Datestamps {

@@ -370,6 +370,16 @@ type GetVmInfoResponse struct {
 	Error  string
 }
 
+type GetVmLastPatchLogRequest struct {
+	IpAddress net.IP
+}
+
+type GetVmLastPatchLogResponse struct {
+	Error     string
+	Length    uint64
+	PatchTime time.Time
+} // Data (length=Length) are streamed afterwards.
+
 type GetVmUserDataRequest struct {
 	AccessToken []byte
 	IpAddress   net.IP
@@ -501,6 +511,7 @@ type PatchVmImageRequest struct {
 	ImageName    string
 	ImageTimeout time.Duration
 	IpAddress    net.IP
+	SkipBackup   bool
 }
 
 type PatchVmImageResponse struct { // Multiple responses are sent.
@@ -577,6 +588,7 @@ type ReplaceVmImageRequest struct {
 	MinimumFreeBytes uint64
 	OverlayFiles     map[string][]byte
 	RoundupPower     uint64
+	SkipBackup       bool
 	SkipBootloader   bool
 } // RAW image data (length=ImageDataSize) is streamed afterwards.
 
@@ -722,6 +734,7 @@ type VmInfo struct {
 	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
+	ExtraKernelOptions string      `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
 	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`

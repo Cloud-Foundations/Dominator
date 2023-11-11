@@ -66,10 +66,12 @@ type currentBuildInfo struct {
 }
 
 type dependencyDataType struct {
-	fetchLog           []byte
-	generatedAt        time.Time
-	streamToSource     map[string]string // K: stream name, V: source stream.
-	unbuildableSources map[string]struct{}
+	generatedAt         time.Time
+	lastAttemptError    error
+	lastAttemptFetchLog []byte
+	lastAttemptTime     time.Time
+	streamToSource      map[string]string // K: stream name, V: source stream.
+	unbuildableSources  map[string]struct{}
 }
 
 type imageStreamsConfigurationType struct {
@@ -102,6 +104,7 @@ type manifestConfigType struct {
 	SourceImage string
 	*filter.Filter
 }
+
 type masterConfigurationType struct {
 	BindMounts                []string                    `json:",omitempty"`
 	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
@@ -109,6 +112,7 @@ type masterConfigurationType struct {
 	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
 	ImageStreamsUrl           string                      `json:",omitempty"`
 	PackagerTypes             map[string]packagerType     `json:",omitempty"`
+	RelationshipsQuickLinks   []WebLink                   `json:",omitempty"`
 }
 
 // manifestLocationType contains the expanded location of a manifest. These
@@ -155,6 +159,11 @@ type treeCache struct {
 	pathToInode map[string]uint64
 }
 
+type WebLink struct {
+	Name string
+	URL  string
+}
+
 type BuildLocalOptions struct {
 	BindMounts        []string
 	ManifestDirectory string
@@ -164,16 +173,19 @@ type BuildLocalOptions struct {
 type Builder struct {
 	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
-	generateDependencyTrigger chan<- struct{}
+	generateDependencyTrigger chan<- chan<- struct{}
 	stateDir                  string
 	imageServerAddress        string
 	logger                    log.DebugLogger
 	imageStreamsUrl           string
 	initialNamespace          string // For catching golang bugs.
+	minimumExpirationDuration time.Duration
+	streamsLoadedChannel      <-chan struct{} // Closed when streams loaded.
 	streamsLock               sync.RWMutex
 	bootstrapStreams          map[string]*bootstrapStream
 	imageStreams              map[string]*imageStreamType
 	imageStreamsToAutoRebuild []string
+	relationshipsQuickLinks   []WebLink
 	slaveDriver               *slavedriver.SlaveDriver
 	buildResultsLock          sync.RWMutex
 	currentBuildInfos         map[string]*currentBuildInfo // Key: stream name.
@@ -182,16 +194,15 @@ type Builder struct {
 	variables                 map[string]string
 	dependencyDataLock        sync.RWMutex
 	dependencyData            *dependencyDataType
-	dependencyDataAttempt     time.Time
-	dependencyDataError       error
 }
 
 type BuilderOptions struct {
-	ConfigurationURL     string
-	ImageRebuildInterval time.Duration
-	ImageServerAddress   string
-	StateDirectory       string
-	VariablesFile        string
+	ConfigurationURL          string
+	ImageRebuildInterval      time.Duration
+	ImageServerAddress        string
+	MinimumExpirationDuration time.Duration // Default: 15 minutes. Min: 5 min.
+	StateDirectory            string
+	VariablesFile             string
 }
 
 type BuilderParams struct {
@@ -246,6 +257,10 @@ func (b *Builder) GetLatestBuildLog(streamName string) ([]byte, error) {
 	return b.getLatestBuildLog(streamName)
 }
 
+func (b *Builder) GetRelationshipsQuickLinks() ([]WebLink, error) {
+	return b.relationshipsQuickLinks, nil
+}
+
 func (b *Builder) ReplaceIdleSlaves(immediateGetNew bool) error {
 	return b.replaceIdleSlaves(immediateGetNew)
 }
@@ -256,6 +271,10 @@ func (b *Builder) ShowImageStream(writer io.Writer, streamName string) {
 
 func (b *Builder) ShowImageStreams(writer io.Writer) {
 	b.showImageStreams(writer)
+}
+
+func (b *Builder) WaitForStreamsLoaded(timeout time.Duration) error {
+	return b.waitForStreamsLoaded(timeout)
 }
 
 func (b *Builder) WriteHtml(writer io.Writer) {

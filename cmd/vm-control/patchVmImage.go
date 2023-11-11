@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -62,6 +64,7 @@ func patchVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		ImageName:    *imageName,
 		ImageTimeout: *imageTimeout,
 		IpAddress:    ipAddr,
+		SkipBackup:   *skipBackup,
 	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
@@ -73,5 +76,18 @@ func patchVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	return nil
+	if *patchLogFilename == "" {
+		return nil
+	}
+	patchLog, _, err := hyperclient.GetVmLastPatchLog(client, ipAddr)
+	if err != nil {
+		return err
+	}
+	file, err := os.Create(*patchLogFilename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.Write(patchLog)
+	return err
 }

@@ -17,9 +17,19 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 const codeStyle = `background-color: #eee; border: 1px solid #999; display: block; float: left;`
+
+func streamNameText(streamName string,
+	autoRebuildStreams map[string]struct{}) string {
+	if _, ok := autoRebuildStreams[streamName]; ok {
+		return "<b>" + streamName + "</b>"
+	} else {
+		return streamName
+	}
+}
 
 func writeFilter(writer io.Writer, prefix string, filt *filter.Filter) {
 	if filt != nil && len(filt.FilterLines) > 0 {
@@ -72,6 +82,8 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 	fmt.Fprintln(writer, `<table border="1">`)
 	tw, _ := html.NewTableWriter(writer, true,
 		"Image Stream", "ManifestUrl", "ManifestDirectory")
+	autoRebuildStreams := stringutil.ConvertListToMap(
+		b.listStreamsToAutoRebuild(), false)
 	for _, streamName := range streamNames {
 		var manifestUrl, manifestDirectory string
 		if imageStream := b.getNormalStream(streamName); imageStream != nil {
@@ -80,7 +92,8 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 		}
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showImageStream?%s\">%s</a>",
-				streamName, streamName), manifestUrl, manifestDirectory)
+				streamName, streamNameText(streamName, autoRebuildStreams)),
+			manifestUrl, manifestDirectory)
 	}
 	fmt.Fprintln(writer, "</table>")
 }
@@ -113,6 +126,8 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		}
 	}
 	b.buildResultsLock.RUnlock()
+	autoRebuildStreams := stringutil.ConvertListToMap(
+		b.listStreamsToAutoRebuild(), false)
 	currentTime := time.Now()
 	if len(currentBuildNames) > 0 {
 		fmt.Fprintln(writer, "Current image builds:<br>")
@@ -124,7 +139,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		tw, _ := html.NewTableWriter(writer, true, columnNames...)
 		for index, streamName := range currentBuildNames {
 			columns := []string{
-				streamName,
+				streamNameText(streamName, autoRebuildStreams),
 				fmt.Sprintf("<a href=\"showCurrentBuildLog?%s#bottom\">log</a>",
 					streamName),
 				format.Duration(time.Since(currentBuildTimes[index])),
@@ -158,7 +173,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		for _, streamName := range streamNames {
 			result := failedBuilds[streamName]
 			tw.WriteRow("", "",
-				streamName,
+				streamNameText(streamName, autoRebuildStreams),
 				result.error.Error(),
 				fmt.Sprintf("<a href=\"showLastBuildLog?%s\">log</a>",
 					streamName),
@@ -182,7 +197,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 		for _, streamName := range streamNames {
 			result := goodBuilds[streamName]
 			tw.WriteRow("", "",
-				streamName,
+				streamNameText(streamName, autoRebuildStreams),
 				fmt.Sprintf("<a href=\"http://%s/showImage?%s\">%s</a>",
 					b.imageServerAddress, result.imageName, result.imageName),
 				fmt.Sprintf("<a href=\"showLastBuildLog?%s\">log</a>",

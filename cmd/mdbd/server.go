@@ -8,24 +8,58 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 type rpcType struct {
 	currentMdb *mdb.Mdb
 	logger     log.Logger
-	rwMutex    sync.RWMutex
+	*serverutil.PerUserMethodLimiter
+	rwMutex sync.RWMutex
 	// Protected by lock.
 	updateChannels map[*srpc.Conn]chan<- mdbserver.MdbUpdate
 }
 
 func startRpcd(logger log.Logger) *rpcType {
 	rpcObj := &rpcType{
-		logger:         logger,
+		logger: logger,
+		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
+			map[string]uint{
+				"ListImages": 1,
+			}),
+
 		updateChannels: make(map[*srpc.Conn]chan<- mdbserver.MdbUpdate),
 	}
-	srpc.RegisterName("MdbServer", rpcObj)
+	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
+		PublicMethods: []string{
+			"ListImages",
+		}})
 	return rpcObj
+}
+
+func (t *rpcType) ListImages(conn *srpc.Conn,
+	request mdbserver.ListImagesRequest,
+	reply *mdbserver.ListImagesResponse) error {
+	currentMdb := t.currentMdb
+	if currentMdb == nil {
+		return nil
+	}
+	plannedImages := make(map[string]struct{})
+	requiredImages := make(map[string]struct{})
+	for _, machine := range currentMdb.Machines {
+		plannedImages[machine.PlannedImage] = struct{}{}
+		requiredImages[machine.RequiredImage] = struct{}{}
+	}
+	delete(plannedImages, "")
+	delete(requiredImages, "")
+	response := mdbserver.ListImagesResponse{
+		PlannedImages:  stringutil.ConvertMapKeysToList(plannedImages, false),
+		RequiredImages: stringutil.ConvertMapKeysToList(requiredImages, false),
+	}
+	*reply = response
+	return nil
 }
 
 func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
@@ -39,8 +73,9 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 		delete(t.updateChannels, conn)
 		t.rwMutex.Unlock()
 	}()
-	if t.currentMdb != nil {
-		mdbUpdate := mdbserver.MdbUpdate{MachinesToAdd: t.currentMdb.Machines}
+	currentMdb := t.currentMdb
+	if currentMdb != nil {
+		mdbUpdate := mdbserver.MdbUpdate{MachinesToAdd: currentMdb.Machines}
 		if err := conn.Encode(mdbUpdate); err != nil {
 			return err
 		}

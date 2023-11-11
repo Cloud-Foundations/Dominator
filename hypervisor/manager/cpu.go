@@ -15,12 +15,6 @@ func (m *Manager) checkSufficientCPUWithLock(milliCPU uint) error {
 	return nil
 }
 
-func (m *Manager) getAvailableMilliCPU() uint {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	return m.getAvailableMilliCPUWithLock()
-}
-
 func (m *Manager) getAvailableMilliCPUWithLock() uint {
 	available := int(m.numCPUs) * 1000
 	for _, vm := range m.vms {

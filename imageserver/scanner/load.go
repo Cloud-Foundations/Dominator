@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/logutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
@@ -23,29 +24,33 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
-func loadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
-	replicationMaster string, logger log.DebugLogger) (*ImageDataBase, error) {
-	fi, err := os.Stat(baseDir)
+func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
+	fi, err := os.Stat(config.BaseDirectory)
 	if err != nil {
-		return nil, fmt.Errorf("cannot stat: %s: %s\n", baseDir, err)
+		return nil, fmt.Errorf("cannot stat: %s: %s\n",
+			config.BaseDirectory, err)
 	}
 	if !fi.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory\n", baseDir)
+		return nil, fmt.Errorf("%s is not a directory\n", config.BaseDirectory)
 	}
 	imdb := &ImageDataBase{
-		baseDir:           baseDir,
-		directoryMap:      make(map[string]image.DirectoryMetadata),
-		imageMap:          make(map[string]*image.Image),
-		addNotifiers:      make(notifiers),
-		deleteNotifiers:   make(notifiers),
-		mkdirNotifiers:    make(makeDirectoryNotifiers),
-		deduper:           stringutil.NewStringDeduplicator(false),
-		objectServer:      objSrv,
-		replicationMaster: replicationMaster,
-		logger:            logger,
+		Config:          config,
+		Params:          params,
+		directoryMap:    make(map[string]image.DirectoryMetadata),
+		imageMap:        make(map[string]*image.Image),
+		addNotifiers:    make(notifiers),
+		deleteNotifiers: make(notifiers),
+		mkdirNotifiers:  make(makeDirectoryNotifiers),
+		deduper:         stringutil.NewStringDeduplicator(false),
 	}
+	imdb.lockWatcher = lockwatcher.New(&imdb.RWMutex,
+		lockwatcher.LockWatcherOptions{
+			CheckInterval: config.LockCheckInterval,
+			Logger:        prefixlogger.New("ImageServer: ", params.Logger),
+			LogTimeout:    config.LockLogTimeout,
+		})
 	imdb.unreferencedObjects, err = loadUnreferencedObjects(
-		path.Join(baseDir, unreferencedObjectsFile))
+		path.Join(config.BaseDirectory, unreferencedObjectsFile))
 	if err != nil {
 		return nil, errors.New("error loading unreferenced objects list: " +
 			err.Error())
@@ -54,13 +59,13 @@ func loadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
-	if err := imdb.scanDirectory(".", state, logger); err != nil {
+	if err := imdb.scanDirectory(".", state, params.Logger); err != nil {
 		return nil, err
 	}
 	if err := state.Reap(); err != nil {
 		return nil, err
 	}
-	if logger != nil {
+	if params.Logger != nil {
 		plural := ""
 		if imdb.CountImages() != 1 {
 			plural = "s"
@@ -70,15 +75,15 @@ func loadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
 			time.Duration(rusageStop.Utime.Usec)*time.Microsecond -
 			time.Duration(rusageStart.Utime.Sec)*time.Second -
 			time.Duration(rusageStart.Utime.Usec)*time.Microsecond
-		logger.Printf("Loaded %d image%s in %s (%s user CPUtime)\n",
+		params.Logger.Printf("Loaded %d image%s in %s (%s user CPUtime)\n",
 			imdb.CountImages(), plural, time.Since(startTime), userTime)
-		logutil.LogMemory(logger, 0, "after loading")
+		logutil.LogMemory(params.Logger, 0, "after loading")
 	}
 	imdb.regenerateUnreferencedObjectsList()
-	if ads, ok := objSrv.(objectserver.AddCallbackSetter); ok {
+	if ads, ok := params.ObjectServer.(objectserver.AddCallbackSetter); ok {
 		ads.SetAddCallback(imdb.garbageCollectorAddCallback)
 	}
-	if gcs, ok := objSrv.(objectserver.GarbageCollectorSetter); ok {
+	if gcs, ok := params.ObjectServer.(objectserver.GarbageCollectorSetter); ok {
 		gcs.SetGarbageCollector(imdb.garbageCollector)
 	}
 	go imdb.periodicGarbageCollector()
@@ -92,7 +97,7 @@ func (imdb *ImageDataBase) scanDirectory(dirname string,
 		return err
 	}
 	imdb.directoryMap[dirname] = directoryMetadata
-	file, err := os.Open(path.Join(imdb.baseDir, dirname))
+	file, err := os.Open(path.Join(imdb.BaseDirectory, dirname))
 	if err != nil {
 		return err
 	}
@@ -107,7 +112,7 @@ func (imdb *ImageDataBase) scanDirectory(dirname string,
 		}
 		filename := path.Join(dirname, name)
 		var stat syscall.Stat_t
-		err := syscall.Lstat(path.Join(imdb.baseDir, filename), &stat)
+		err := syscall.Lstat(path.Join(imdb.BaseDirectory, filename), &stat)
 		if err != nil {
 			if err == syscall.ENOENT {
 				continue
@@ -133,7 +138,7 @@ func (imdb *ImageDataBase) scanDirectory(dirname string,
 
 func (imdb *ImageDataBase) readDirectoryMetadata(dirname string) (
 	image.DirectoryMetadata, error) {
-	file, err := os.Open(path.Join(imdb.baseDir, dirname, metadataFile))
+	file, err := os.Open(path.Join(imdb.BaseDirectory, dirname, metadataFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return image.DirectoryMetadata{}, nil
@@ -153,7 +158,7 @@ func (imdb *ImageDataBase) readDirectoryMetadata(dirname string) (
 
 func (imdb *ImageDataBase) loadFile(filename string,
 	logger log.DebugLogger) error {
-	pathname := path.Join(imdb.baseDir, filename)
+	pathname := path.Join(imdb.BaseDirectory, filename)
 	file, err := os.Open(pathname)
 	if err != nil {
 		return err
@@ -175,11 +180,11 @@ func (imdb *ImageDataBase) loadFile(filename string,
 		}
 	}
 	if imageIsExpired(&img) {
-		imdb.logger.Printf("Deleting already expired image: %s\n", filename)
+		imdb.Logger.Printf("Deleting already expired image: %s\n", filename)
 		return os.Remove(pathname)
 	}
-	if err := img.VerifyObjects(imdb.objectServer); err != nil {
-		if imdb.replicationMaster == "" ||
+	if err := img.VerifyObjects(imdb.Params.ObjectServer); err != nil {
+		if imdb.ReplicationMaster == "" ||
 			!strings.Contains(err.Error(), "not available") {
 			return fmt.Errorf("error verifying: %s: %s", filename, err)
 		}
@@ -207,12 +212,12 @@ func (imdb *ImageDataBase) fetchMissingObjects(img *image.Image,
 	logger log.DebugLogger) error {
 	imdb.objectFetchLock.Lock()
 	defer imdb.objectFetchLock.Unlock()
-	client, err := srpc.DialHTTP("tcp", imdb.replicationMaster, time.Minute)
+	client, err := srpc.DialHTTP("tcp", imdb.ReplicationMaster, time.Minute)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()
-	return img.GetMissingObjects(imdb.objectServer, objClient, logger)
+	return img.GetMissingObjects(imdb.Params.ObjectServer, objClient, logger)
 }

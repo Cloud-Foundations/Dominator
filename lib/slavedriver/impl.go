@@ -112,6 +112,27 @@ func (db *jsonDatabase) save(slaves slaveRoll) error {
 	return json.WriteToFile(db.filename, fsutil.PublicFilePerms, "    ", slaves)
 }
 
+func (slave *Slave) acknowledge(logger log.DebugLogger) error {
+	if slave.acknowledgeChannel == nil {
+		return nil
+	}
+	errorChannel := make(chan error, 1)
+	slave.acknowledgeChannel <- errorChannel
+	slave.acknowledgeChannel = nil
+	timer := time.NewTimer(15 * time.Second)
+	select {
+	case err := <-errorChannel:
+		if err != nil {
+			return err
+		} else {
+			logger.Debugf(0, "acknowledged slave: %s\n", slave)
+			return nil
+		}
+	case <-timer.C:
+		return fmt.Errorf("timed out")
+	}
+}
+
 func (slave *Slave) getClient() *srpc.Client {
 	return slave.client
 }
@@ -154,16 +175,17 @@ func (driver *SlaveDriver) getSlave(timeout time.Duration) (*Slave, error) {
 	}
 }
 
-func (driver *slaveDriver) createSlave() {
+func (driver *slaveDriver) createSlave(responseChannel chan<- *Slave) {
 	driver.logger.Debugln(0, "creating slave")
 	sleeper := backoffdelay.NewExponential(time.Second, time.Minute, 1)
 	for ; ; sleeper.Sleep() {
-		slaveInfo, err := driver.slaveTrader.CreateSlave()
+		slaveInfo, acknowledgeChannel, err := driver.createSlaveMachine()
 		if err != nil {
 			driver.logger.Println(err)
 			continue
 		}
 		slave := &Slave{
+			acknowledgeChannel: acknowledgeChannel,
 			clientAddress: fmt.Sprintf("%s:%d", slaveInfo.IpAddress,
 				driver.options.PortNumber),
 			info:       slaveInfo,
@@ -183,25 +205,43 @@ func (driver *slaveDriver) createSlave() {
 			continue
 		}
 		driver.logger.Printf("created slave: %s\n", slaveInfo.Identifier)
-		driver.createdSlaveChannel <- slave
+		responseChannel <- slave
 		return
 	}
 }
 
-func (driver *slaveDriver) destroySlave(slave *Slave) {
+func (driver *slaveDriver) createSlaveMachine() (SlaveInfo, chan<- chan<- error,
+	error) {
+	if creator, ok := driver.slaveTrader.(SlaveTraderAcknowledger); ok {
+		acknowledgeChannel := make(chan chan<- error, 1)
+		slaveInfo, err := creator.CreateSlaveWithAcknowledger(
+			acknowledgeChannel)
+		if err != nil {
+			close(acknowledgeChannel)
+			return SlaveInfo{}, nil, err
+		}
+		return slaveInfo, acknowledgeChannel, err
+	}
+	slaveInfo, err := driver.slaveTrader.CreateSlave()
+	return slaveInfo, nil, err
+}
+
+func (driver *slaveDriver) destroySlave(slave *Slave,
+	responseChannel chan<- *Slave) {
 	driver.logger.Printf("destroying slave: %s\n", slave.info.Identifier)
 	startTime := time.Now()
 	err := driver.slaveTrader.DestroySlave(slave.info.Identifier)
 	if err != nil {
 		driver.logger.Printf("error destroying: %s: %s\n",
 			slave.info.Identifier, err)
-		driver.destroyedSlaveChannel <- nil
+		responseChannel <- nil
+		return
 	}
 	if duration := time.Since(startTime); duration > 5*time.Second {
 		driver.logger.Printf("destroyed slave: %s in %s\n",
 			slave.info.Identifier, format.Duration(duration))
 	}
-	driver.destroyedSlaveChannel <- slave
+	responseChannel <- slave
 }
 
 func (driver *slaveDriver) getSlaves() slaveRoll {
@@ -281,11 +321,26 @@ func (driver *slaveDriver) rollCall() {
 			return
 		}
 	}
+	// Clean up expired getters and set timeout on when to next check.
+	wakeTimeout := time.Hour
+	var nextEntry *list.Element
+	for entry := driver.getterList.Front(); entry != nil; entry = nextEntry {
+		nextEntry = entry.Next()
+		request := entry.Value.(requestSlaveMessage)
+		if timeout := time.Until(request.timeout); timeout <= 0 {
+			request.slaveChannel <- nil // Getter wanted to give up by now.
+			close(request.slaveChannel)
+			driver.getterList.Remove(entry)
+		} else if timeout < wakeTimeout {
+			wakeTimeout = timeout
+		}
+	}
 	if driver.getterList.Len() > 0 ||
 		uint(len(driver.idleSlaves)) < driver.options.MinimumIdleSlaves {
 		if driver.createdSlaveChannel == nil {
-			driver.createdSlaveChannel = make(chan *Slave, 1)
-			go driver.createSlave()
+			ch := make(chan *Slave, 1)
+			driver.createdSlaveChannel = ch
+			go driver.createSlave(ch)
 		}
 	}
 	if uint(len(driver.idleSlaves)) > driver.options.MaximumIdleSlaves &&
@@ -311,8 +366,9 @@ func (driver *slaveDriver) rollCall() {
 	}
 	for slave := range driver.zombies { // Destroy one zombie at a time.
 		if driver.destroyedSlaveChannel == nil {
-			driver.destroyedSlaveChannel = make(chan *Slave, 1)
-			go driver.destroySlave(slave)
+			ch := make(chan *Slave, 1)
+			driver.destroyedSlaveChannel = ch
+			go driver.destroySlave(slave, ch)
 		}
 		break
 	}
@@ -323,7 +379,6 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = false
 		}
 	}
-	pingTimeout := time.Hour
 	for slave := range driver.idleSlaves {
 		if slave.pinging {
 			continue
@@ -331,19 +386,30 @@ func (driver *slaveDriver) rollCall() {
 		if timeToPing := slave.timeToPing; time.Since(timeToPing) >= 0 {
 			slave.pinging = true
 			go slave.ping(driver.pingResponseChannel)
-		} else if timeout := time.Until(timeToPing); timeout < pingTimeout {
-			pingTimeout = timeout
+		} else if timeout := time.Until(timeToPing); timeout < wakeTimeout {
+			wakeTimeout = timeout
 		}
 	}
-	if pingTimeout < 0 {
-		pingTimeout = 0
+	if wakeTimeout < 0 {
+		wakeTimeout = 0
 	}
-	pingTimer := time.NewTimer(pingTimeout)
+	wakeTimer := time.NewTimer(wakeTimeout)
 	select {
 	case slave := <-driver.createdSlaveChannel:
 		driver.createdSlaveChannel = nil
+		if err := slave.acknowledge(driver.logger); err != nil {
+			driver.logger.Printf("error acknowledging slave: %s: %s\n",
+				slave, err)
+			break
+		}
 		driver.idleSlaves[slave] = struct{}{}
-		driver.writeState = true
+		// Write state now to reduce chance of forgetting about this slave.
+		if err := driver.databaseDriver.save(driver.getSlaves()); err != nil {
+			driver.logger.Println(err)
+			driver.writeState = true
+		} else {
+			driver.writeState = false
+		}
 		return // Return now so that new slave can be sent to a getter quickly.
 	case slave := <-driver.destroySlaveChannel:
 		if _, ok := driver.idleSlaves[slave]; ok {
@@ -401,14 +467,15 @@ func (driver *slaveDriver) rollCall() {
 			driver.writeState = true
 		}
 		if createIfNeeded && driver.createdSlaveChannel == nil {
-			driver.createdSlaveChannel = make(chan *Slave, 1)
-			go driver.createSlave()
+			ch := make(chan *Slave, 1)
+			driver.createdSlaveChannel = ch
+			go driver.createSlave(ch)
 		}
-	case <-pingTimer.C:
+	case <-wakeTimer.C:
 	}
-	pingTimer.Stop()
+	wakeTimer.Stop()
 	select {
-	case <-pingTimer.C:
+	case <-wakeTimer.C:
 	default:
 	}
 }

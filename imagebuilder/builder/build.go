@@ -167,8 +167,12 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 func (b *Builder) buildImage(request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
 	logWriter io.Writer) (*image.Image, string, error) {
-	if request.ExpiresIn < time.Minute*15 {
-		return nil, "", errors.New("minimum expiration time is 15 minutes")
+	if request.ExpiresIn < b.minimumExpirationDuration {
+		return nil, "", fmt.Errorf("minimum expiration duration is %s",
+			format.Duration(b.minimumExpirationDuration))
+	}
+	if err := b.WaitForStreamsLoaded(time.Minute); err != nil {
+		return nil, "", err
 	}
 	client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
 	if err != nil {

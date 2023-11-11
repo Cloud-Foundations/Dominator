@@ -184,7 +184,11 @@ func dialHTTPEndpoints(network, address string, tlsConfig *tls.Config,
 }
 
 func doHTTPConnect(conn net.Conn, path string) error {
-	io.WriteString(conn, "CONNECT "+path+" HTTP/1.0\n\n")
+	var query string
+	if *srpcClientDoNotUseMethodPowers {
+		query = "?" + doNotUseMethodPowers + "=true"
+	}
+	io.WriteString(conn, "CONNECT "+path+query+" HTTP/1.0\n\n")
 	// Require successful HTTP response before switching to SRPC protocol.
 	resp, err := http.ReadResponse(bufio.NewReader(conn),
 		&http.Request{Method: "CONNECT"})
@@ -324,9 +328,9 @@ func (client *Client) close() error {
 		clientMetricsMutex.Lock()
 		numOpenClientConnections--
 		clientMetricsMutex.Unlock()
-		err := client.conn.Close()
+		conn := client.conn
 		client.conn = nil
-		return err
+		return conn.Close()
 	}
 	client.resource.resource.Release()
 	client.conn = nil

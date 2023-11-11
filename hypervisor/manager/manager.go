@@ -7,8 +7,15 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+func (m *Manager) getSummary() *summaryData {
+	m.summaryMutex.RLock()
+	defer m.summaryMutex.RUnlock()
+	return m.summary
+}
 
 func (m *Manager) holdLock(timeout time.Duration, writeLock bool) error {
 	if timeout > time.Minute {
@@ -26,9 +33,40 @@ func (m *Manager) holdLock(timeout time.Duration, writeLock bool) error {
 	return nil
 }
 
+func (m *Manager) updateSummaryWithMainRLock() {
+	availableMilliCPU := m.getAvailableMilliCPUWithLock()
+	memUnallocated := m.getUnallocatedMemoryInMiBWithLock(nil)
+	numFreeAddresses := uint(len(m.addressPool.Free))
+	numRegisteredAddresses := uint(len(m.addressPool.Registered))
+	numRunning, numStopped := m.getNumVMsWithLock()
+	numSubnets := uint(len(m.subnets))
+	ownerGroups := stringutil.ConvertMapKeysToList(m.ownerGroups, false)
+	ownerUsers := stringutil.ConvertMapKeysToList(m.ownerUsers, false)
+	summary := &summaryData{
+		availableMilliCPU:      availableMilliCPU,
+		memUnallocated:         memUnallocated,
+		numFreeAddresses:       numFreeAddresses,
+		numRegisteredAddresses: numRegisteredAddresses,
+		numRunning:             numRunning,
+		numStopped:             numStopped,
+		numSubnets:             numSubnets,
+		ownerGroups:            ownerGroups,
+		ownerUsers:             ownerUsers,
+		updatedAt:              time.Now(),
+	}
+	m.summaryMutex.Lock()
+	defer m.summaryMutex.Unlock()
+	m.summary = summary
+}
+
 func (m *Manager) setDisabledState(disable bool) error {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	doUnlock := true
+	defer func() {
+		if doUnlock {
+			m.mutex.Unlock()
+		}
+	}()
 	if m.disabled == disable {
 		return nil
 	}
@@ -50,9 +88,11 @@ func (m *Manager) setDisabledState(disable bool) error {
 	if err != nil {
 		m.Logger.Println(err)
 	}
-	m.sendUpdateWithLock(proto.Update{
+	m.mutex.Unlock()
+	doUnlock = false
+	m.sendUpdate(proto.Update{
 		HaveDisabled:     true,
-		Disabled:         m.disabled,
+		Disabled:         disable,
 		NumFreeAddresses: numFreeAddresses,
 	})
 	return nil

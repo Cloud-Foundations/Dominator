@@ -45,7 +45,7 @@ func addReplaceImage(imageSClient *srpc.Client,
 	if imageExists {
 		return errors.New("image exists")
 	}
-	newImage, err := getImage(imageSClient, baseImageName)
+	newImage, err := getTypedImage(baseImageName)
 	if err != nil {
 		return err
 	}

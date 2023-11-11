@@ -59,6 +59,11 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
                           }
                           </style>`)
 		fmt.Fprintln(writer, "<body>")
+		if lw, _ := s.manager.GetVmLockWatcher(netIpAddr); lw != nil {
+			if wroteSomething, _ := lw.WriteHtml(writer, ""); wroteSomething {
+				fmt.Fprintln(writer, "<br>")
+			}
+		}
 		fmt.Fprintln(writer, `<table border="0">`)
 		if len(vm.Address.IpAddress) < 1 {
 			writeString(writer, "IP Address", ipAddr+" (externally allocated)")
@@ -92,13 +97,23 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		writeBool(writer, "Spread volumes", vm.SpreadVolumes)
 		writeString(writer, "Latest boot",
 			fmt.Sprintf("<a href=\"showVmBootLog?%s\">log</a>", ipAddr))
+		rc, size, lastPatchTime, err := s.manager.GetVmLastPatchLog(netIpAddr)
+		if err == nil {
+			rc.Close()
+			writeString(writer, "Last patch",
+				fmt.Sprintf(
+					"<a href=\"showVmLastPatchLog?%s\">log</a> (%s, at: %s, age: %s)",
+					ipAddr, format.FormatBytes(size),
+					lastPatchTime.Format(timeFormat),
+					format.Duration(time.Since(lastPatchTime))))
+		}
 		if ok, _ := s.manager.CheckVmHasHealthAgent(netIpAddr); ok {
 			writeString(writer, "Health Agent",
 				fmt.Sprintf("<a href=\"http://%s:6910/\">detected</a>",
 					ipAddr))
 		}
 		fmt.Fprintln(writer, "</table>")
-		fmt.Fprintln(writer, "Tags:<br>")
+		fmt.Fprintln(writer, "<br>Tags:<br>")
 		fmt.Fprintln(writer, `<table border="1">`)
 		tw, _ := html.NewTableWriter(writer, true, "Name", "Value")
 		for _, name := range tagNames {

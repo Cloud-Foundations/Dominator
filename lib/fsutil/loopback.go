@@ -46,7 +46,15 @@ func loopbackDeleteAndWaitForPartition(loopDevice, partition string,
 		}
 		sleeper.Sleep()
 	}
-	return fmt.Errorf("timed out waiting for partition: %s",
+	if time.Since(startTime) > 15*time.Second {
+		if err := os.Remove(partitionDevice); err != nil {
+			logger.Printf("failed to forcibly delete partition: %s: %s\n",
+				partitionDevice, err)
+		} else {
+			logger.Printf("forcibly deleted partition: %s\n", partitionDevice)
+		}
+	}
+	return fmt.Errorf("timed out waiting for partition to delete: %s",
 		partitionDevice)
 }
 
@@ -88,33 +96,47 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		100*time.Millisecond, 2)
 	startTime := time.Now()
 	stopTime := startTime.Add(timeout)
-	for count := 0; time.Until(stopTime) >= 0; count++ {
+	var numNonBlock, numOpened uint
+	for numIterations := 0; time.Until(stopTime) >= 0; numIterations++ {
 		if file, err := os.Open(partitionDevice); err == nil {
+			numOpened++
 			fi, err := file.Stat()
 			file.Close()
 			if err != nil {
 				return "", err
 			}
-			if fi.Mode()&os.ModeDevice == 0 {
-				return "", fmt.Errorf("%s is not a block device, mode: %s",
-					partitionDevice, fi.Mode())
-			}
-			if count > 0 {
-				if time.Since(startTime) > time.Second {
-					logger.Printf("%s valid after: %d iterations, %s\n",
-						partitionDevice, count,
-						format.Duration(time.Since(startTime)))
-				} else {
-					logger.Debugf(0, "%s valid after: %d iterations, %s\n",
-						partitionDevice, count,
-						format.Duration(time.Since(startTime)))
+			if fi.Mode()&os.ModeDevice != 0 {
+				if numIterations > 0 {
+					if time.Since(startTime) > time.Second {
+						logger.Printf(
+							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
+							partitionDevice, numIterations, numNonBlock,
+							numOpened, format.Duration(time.Since(startTime)))
+					} else {
+						logger.Debugf(0,
+							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
+							partitionDevice, numIterations, numNonBlock,
+							numOpened, format.Duration(time.Since(startTime)))
+					}
 				}
+				doDelete = false
+				return loopDevice, nil
 			}
-			doDelete = false
-			return loopDevice, nil
+			numNonBlock++
 		}
 		sleeper.Sleep()
 	}
-	return "", fmt.Errorf("timed out waiting for partition: %s",
-		partitionDevice)
+	if numOpened > 0 {
+		if time.Since(startTime) > 15*time.Second {
+			if err := os.Remove(partitionDevice); err != nil {
+				logger.Printf("failed to forcibly delete partition: %s: %s\n",
+					partitionDevice, err)
+			} else {
+				logger.Printf("forcibly deleted partition: %s\n",
+					partitionDevice)
+			}
+		}
+	}
+	return "", fmt.Errorf("timed out waiting for partition (%d non-block): %s",
+		numNonBlock, partitionDevice)
 }

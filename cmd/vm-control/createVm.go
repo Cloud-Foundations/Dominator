@@ -41,14 +41,16 @@ func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
 }
 
-func approximateVolumesForCreateRequest(request *hyper_proto.CreateVmRequest) {
-	request.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
-	request.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
+func approximateVolumesForCreateRequest() hyper_proto.VmInfo {
+	vmInfo := hyper_proto.VmInfo{}
+	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
+	vmInfo.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
 	for _, size := range secondaryVolumeSizes {
-		request.Volumes = append(request.Volumes, hyper_proto.Volume{
+		vmInfo.Volumes = append(vmInfo.Volumes, hyper_proto.Volume{
 			Size: uint64(size),
 		})
 	}
+	return vmInfo
 }
 
 func createVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -154,12 +156,11 @@ func createVm(logger log.DebugLogger) error {
 				IpAddress: ipAddr}
 		}
 	}
-	approximateVolumesForCreateRequest(&request)
-	if hypervisor, err := getHypervisorAddress(request.VmInfo); err != nil {
+	tmpVmInfo := approximateVolumesForCreateRequest()
+	if hypervisor, err := getHypervisorAddress(tmpVmInfo); err != nil {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		request.VmInfo.Volumes = nil // Not strictly needed, but be paranoid.
 		return createVmOnHypervisor(hypervisor, request, logger)
 	}
 }
@@ -175,6 +176,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		DestroyOnPowerdown: *destroyOnPowerdown,
 		DestroyProtection:  *destroyProtection,
 		DisableVirtIO:      *disableVirtIO,
+		ExtraKernelOptions: *extraKernelOptions,
 		Hostname:           *vmHostname,
 		MemoryInMiB:        uint64(memory >> 20),
 		MilliCPUs:          *milliCPUs,

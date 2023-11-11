@@ -11,12 +11,13 @@ import (
 )
 
 type Slave struct {
-	clientAddress string
-	driver        *SlaveDriver
-	info          SlaveInfo
-	client        *srpc.Client
-	timeToPing    time.Time
-	pinging       bool
+	acknowledgeChannel chan<- chan<- error
+	clientAddress      string
+	driver             *SlaveDriver
+	info               SlaveInfo
+	client             *srpc.Client
+	timeToPing         time.Time
+	pinging            bool
 }
 
 func (slave *Slave) Destroy() {
@@ -95,6 +96,10 @@ type SlaveTrader interface {
 	DestroySlave(identifier string) error
 }
 
+type SlaveTraderAcknowledger interface {
+	CreateSlaveWithAcknowledger(<-chan chan<- error) (SlaveInfo, error)
+}
+
 type clientDialerFunc func(string, string, time.Duration) (*srpc.Client, error)
 
 type databaseLoadSaver interface {
@@ -116,9 +121,9 @@ type slaveDriver struct {
 	options               SlaveDriverOptions
 	busySlaves            map[*Slave]struct{}
 	clientDialer          clientDialerFunc
-	createdSlaveChannel   chan *Slave
+	createdSlaveChannel   <-chan *Slave
 	destroySlaveChannel   <-chan *Slave
-	destroyedSlaveChannel chan *Slave
+	destroyedSlaveChannel <-chan *Slave
 	databaseDriver        databaseLoadSaver
 	getSlaveChannel       <-chan requestSlaveMessage
 	getSlavesChannel      <-chan chan<- slaveRoll

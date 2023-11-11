@@ -289,10 +289,15 @@ func (m *Manager) updateSubnetsLocked(
 	if err != nil {
 		return err
 	}
-	m.sendUpdateWithLock(
+	// Make a copy, since these will be sent over a channel.
+	registered := make([]proto.Address, 0, len(m.addressPool.Registered))
+	for _, addr := range m.addressPool.Registered {
+		registered = append(registered, addr)
+	}
+	m.sendUpdate(
 		proto.Update{
 			HaveAddressPool:  true,
-			AddressPool:      m.addressPool.Registered,
+			AddressPool:      registered,
 			NumFreeAddresses: numFreeAddresses,
 			HaveSubnets:      true,
 			Subnets:          subnetsToWrite,
