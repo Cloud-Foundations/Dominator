@@ -35,15 +35,28 @@ func (m *Manager) powerOff(stopVMs bool) error {
 func (m *Manager) shutdownVMs() {
 	m.shuttingDown = true
 	var waitGroup sync.WaitGroup
+	var failCount uint
+	var failMutex sync.Mutex
 	for _, vm := range m.vms {
 		waitGroup.Add(1)
 		go func(vm *vmInfoType) {
 			defer waitGroup.Done()
-			vm.shutdown()
+			if !vm.shutdown() {
+				failMutex.Lock()
+				failCount++
+				failMutex.Unlock()
+			}
 		}(vm)
 	}
 	waitGroup.Wait()
-	m.Logger.Println("stopping cleanly after shutting down VMs")
+	if failCount > 1 {
+		m.Logger.Printf("stopping but failed to cleanly shut down %d VMs\n",
+			failCount)
+	} else if failCount > 0 {
+		m.Logger.Println("stopping but failed to cleanly shut down 1 VM")
+	} else {
+		m.Logger.Println("stopping cleanly after shutting down VMs")
+	}
 	if flusher, ok := m.Logger.(flusher); ok {
 		flusher.Flush()
 	}
@@ -56,7 +69,8 @@ func (m *Manager) shutdownVMsAndExit() {
 	os.Exit(0)
 }
 
-func (vm *vmInfoType) shutdown() {
+// Returns false if the VM failed to shut down cleanly, else true.
+func (vm *vmInfoType) shutdown() bool {
 	vm.mutex.RLock()
 	switch vm.State {
 	case proto.StateStarting, proto.StateRunning:
@@ -74,8 +88,10 @@ func (vm *vmInfoType) shutdown() {
 		case <-timer.C:
 			vm.logger.Println("shutdown timed out: killing VM")
 			vm.commandInput <- "quit"
+			return false
 		}
 	default:
 		vm.mutex.RUnlock()
 	}
+	return true
 }
