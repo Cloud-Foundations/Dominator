@@ -3,26 +3,17 @@ package lockwatcher
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 )
 
-func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
-	for {
-		timer := time.NewTimer(lw.CheckInterval)
-		select {
-		case <-stopChannel:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return
-		case <-timer.C:
-			check()
-		}
-	}
-}
+var (
+	dumpedMutex sync.Mutex
+	dumpedStack bool
+)
 
 func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	if options.CheckInterval < time.Second {
@@ -48,6 +39,23 @@ func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	return lockWatcher
 }
 
+func (lw *LockWatcher) logTimeout(lockType string) {
+	dumpedMutex.Lock()
+	defer dumpedMutex.Unlock()
+	if dumpedStack {
+		lw.Logger.Printf("timed out getting %slock\n", lockType)
+		return
+	}
+	dumpedStack = true
+	logLine := fmt.Sprintf(
+		"timed out getting %slock, first stack trace follows:\n",
+		lockType)
+	buffer := make([]byte, 1<<20)
+	copy(buffer, logLine)
+	nBytes := runtime.Stack(buffer[len(logLine):], true)
+	lw.Logger.Print(string(buffer[:len(logLine)+nBytes]))
+}
+
 func (lw *LockWatcher) check() {
 	lockedChannel := make(chan struct{}, 1)
 	timer := time.NewTimer(lw.LogTimeout)
@@ -68,7 +76,7 @@ func (lw *LockWatcher) check() {
 	case <-timer.C:
 	}
 	lw.incrementNumLockTimeouts()
-	lw.Logger.Println("timed out getting lock")
+	lw.logTimeout("")
 	<-lockedChannel
 	lw.clearLockWaiting()
 	lw.Logger.Println("eventually got lock")
@@ -119,6 +127,21 @@ func (lw *LockWatcher) incrementNumWLockTimeouts() {
 	lw.stats.WaitingForWLock = true
 }
 
+func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
+	for {
+		timer := time.NewTimer(lw.CheckInterval)
+		select {
+		case <-stopChannel:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+			check()
+		}
+	}
+}
+
 func (lw *LockWatcher) rcheck() {
 	lockedChannel := make(chan struct{}, 1)
 	timer := time.NewTimer(lw.LogTimeout)
@@ -140,7 +163,7 @@ func (lw *LockWatcher) rcheck() {
 	case <-timer.C:
 	}
 	lw.incrementNumRLockTimeouts()
-	lw.Logger.Println("timed out getting rlock")
+	lw.logTimeout("r")
 	<-lockedChannel
 	lw.clearRLockWaiting()
 	lw.Logger.Println("eventually got rlock")
@@ -161,7 +184,7 @@ func (lw *LockWatcher) wcheck() {
 		}
 	}
 	lw.incrementNumWLockTimeouts()
-	lw.Logger.Println("timed out getting wlock")
+	lw.logTimeout("w")
 	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
 	for ; true; sleeper.Sleep() {
 		if rwlock.TryLock() {
