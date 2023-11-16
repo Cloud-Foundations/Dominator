@@ -169,12 +169,14 @@ func (lw *LockWatcher) rcheck() {
 	lw.Logger.Println("eventually got rlock")
 }
 
-// rwcheck uses a TryLock() to grab a write lock, so as to not block future read
+// wcheck uses a TryLock() to grab a write lock, so as to not block future read
 // lockers.
 func (lw *LockWatcher) wcheck() {
 	rwlock := lw.lock.(RWLock)
+	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>8, lw.LogTimeout>>4,
+		1)
 	timeoutTime := time.Now().Add(lw.LogTimeout)
-	for ; time.Until(timeoutTime) > 0; time.Sleep(lw.LogTimeout >> 4) {
+	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
 				lw.Function()
@@ -185,7 +187,7 @@ func (lw *LockWatcher) wcheck() {
 	}
 	lw.incrementNumWLockTimeouts()
 	lw.logTimeout("w")
-	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
+	sleeper = backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
 	for ; true; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
