@@ -70,7 +70,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
 			guestShutdown = true
 		} else if shutdownData.Reason == "host-qmp-quit" {
-			hostQuit = true
+			hostQuit = true // Not currently used but may be useful later.
 		}
 	}
 	close(commandOutput)
