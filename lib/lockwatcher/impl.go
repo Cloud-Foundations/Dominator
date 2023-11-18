@@ -216,18 +216,26 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 	prefix string) (bool, error) {
 	stats := lw.GetStats()
 	if stats.NumLockTimeouts > 0 {
-		fmt.Fprintf(writer,
-			"%sLock timeouts: %d", prefix, stats.NumLockTimeouts)
-		var err error
 		if stats.WaitingForLock {
-			_, err = fmt.Fprintf(writer, " still waiting for lock<br>\n")
+			fmt.Fprintf(writer, "<font color=\"red\">")
 		} else {
-			_, err = fmt.Fprintln(writer, "<br>")
+			fmt.Fprintf(writer, "<font color=\"salmon\">")
 		}
+		fmt.Fprintf(writer, "%sLock timeouts: %d",
+			prefix, stats.NumLockTimeouts)
+		if stats.WaitingForLock {
+			fmt.Fprintf(writer, " still waiting for lock")
+		}
+		_, err := fmt.Fprintln(writer, "</font><br>\n")
 		return true, err
 	}
 	if stats.NumRLockTimeouts < 1 && stats.NumWLockTimeouts < 1 {
 		return false, nil
+	}
+	if stats.WaitingForRLock || stats.WaitingForWLock {
+		fmt.Fprintf(writer, "<font color=\"red\">")
+	} else {
+		fmt.Fprintf(writer, "<font color=\"salmon\">")
 	}
 	if stats.NumRLockTimeouts > 0 {
 		fmt.Fprintf(writer,
@@ -244,6 +252,6 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 			fmt.Fprintf(writer, ", still waiting for WLock")
 		}
 	}
-	_, err := fmt.Fprintln(writer, "<br>")
+	_, err := fmt.Fprintln(writer, "</font><br>")
 	return true, err
 }
