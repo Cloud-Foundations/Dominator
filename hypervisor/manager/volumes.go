@@ -78,7 +78,9 @@ func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	if err := syscall.Statfs(dirname, &statbuf); err != nil {
 		return 0, fmt.Errorf("error statfsing: %s: %s", dirname, err)
 	}
-	freeSpace := uint64(statbuf.Bfree * uint64(statbuf.Bsize))
+	// Even though volumes are written as root, treat them as ordinary users so
+	// that they don't consume the space reserved for root.
+	freeSpace := uint64(statbuf.Bavail * uint64(statbuf.Bsize))
 	freeSpaceTable[dirname] = freeSpace
 	return freeSpace, nil
 }

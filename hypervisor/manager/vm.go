@@ -684,7 +684,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	if err := syscall.Statfs(localVolume.Filename, &statbuf); err != nil {
 		return err
 	}
-	if size-volume.Size > uint64(statbuf.Bfree*uint64(statbuf.Bsize)) {
+	if size-volume.Size > uint64(statbuf.Bavail*uint64(statbuf.Bsize)) {
 		return errors.New("not enough free space")
 	}
 	if err := setVolumeSize(localVolume.Filename, size); err != nil {
