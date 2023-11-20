@@ -120,7 +120,8 @@ type vmInfoType struct {
 }
 
 type volumeInfo struct {
-	canTrim bool
+	canTrim    bool
+	mountPoint string
 }
 
 func New(startOptions StartOptions) (*Manager, error) {

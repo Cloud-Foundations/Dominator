@@ -353,7 +353,10 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 	for _, entry := range mountEntriesToUse {
 		volumeDirectory := filepath.Join(entry.MountPoint, "hyper-volumes")
 		m.volumeDirectories = append(m.volumeDirectories, volumeDirectory)
-		m.volumeInfos[volumeDirectory] = volumeInfo{canTrim: checkTrim(entry)}
+		m.volumeInfos[volumeDirectory] = volumeInfo{
+			canTrim:    checkTrim(entry),
+			mountPoint: entry.MountPoint,
+		}
 	}
 	sort.Strings(m.volumeDirectories)
 	return nil
@@ -370,6 +373,14 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 			freeSpaceTable)
 		if err != nil {
 			return "", err
+		}
+		// Keep an extra 1 GiB free space for the root file-system. Be nice.
+		if m.volumeInfos[m.volumeDirectories[*position]].mountPoint == "/" {
+			if freeSpace > 1<<30 {
+				freeSpace -= 1 << 30
+			} else {
+				freeSpace = 0
+			}
 		}
 		if size < freeSpace {
 			dirname := m.volumeDirectories[*position]
@@ -443,7 +454,10 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 		m.volumeDirectories = startOptions.VolumeDirectories
 		for _, dirname := range m.volumeDirectories {
 			if entry := mountTable.FindEntry(dirname); entry != nil {
-				m.volumeInfos[dirname] = volumeInfo{canTrim: checkTrim(entry)}
+				m.volumeInfos[dirname] = volumeInfo{
+					canTrim:    checkTrim(entry),
+					mountPoint: entry.MountPoint,
+				}
 			}
 		}
 	}
