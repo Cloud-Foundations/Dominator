@@ -46,7 +46,7 @@ func newObjectServer(baseDir string, maxCachedBytes uint64,
 		lruUpdateNotifier:   lruUpdateNotifier,
 		maxCachedBytes:      maxCachedBytes,
 		objectServerAddress: objectServerAddress,
-		cachedBytes:         cachedBytes,
+		data:                Stats{CachedBytes: cachedBytes},
 		objects:             objects,
 	}
 	objSrv.flushTimer.Stop()

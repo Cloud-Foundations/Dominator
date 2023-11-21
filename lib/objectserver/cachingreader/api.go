@@ -31,12 +31,17 @@ type ObjectServer struct {
 	maxCachedBytes      uint64
 	objectServerAddress string
 	rwLock              sync.RWMutex // Protect the following fields.
-	cachedBytes         uint64       // Includes lruBytes.
-	downloadingBytes    uint64       // Objects being downloaded and cached.
-	lruBytes            uint64       // Cached but not in-use objects.
-	newest              *objectType  // For unused objects only.
+	data                Stats
+	newest              *objectType // For unused objects only.
 	objects             map[hash.Hash]*objectType
 	oldest              *objectType // For unused objects only.
+}
+
+type Stats struct {
+	CachedBytes      uint64 // Includes LruBytes.
+	DownloadingBytes uint64 // Objects being downloaded and cached.
+	LruBytes         uint64 // Cached but not in-use objects.
+
 }
 
 func NewObjectServer(baseDir string, maxCachedBytes uint64,
@@ -51,6 +56,10 @@ func (objSrv *ObjectServer) FetchObjects(hashes []hash.Hash) error {
 func (objSrv *ObjectServer) GetObjects(hashes []hash.Hash) (
 	objectserver.ObjectsReader, error) {
 	return objSrv.getObjects(hashes)
+}
+
+func (objSrv *ObjectServer) GetStats() Stats {
+	return objSrv.getStats(true)
 }
 
 func (objSrv *ObjectServer) LinkObject(filename string,

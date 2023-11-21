@@ -9,13 +9,15 @@ import (
 
 func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 	objSrv.rwLock.RLock()
-	defer objSrv.rwLock.RUnlock()
+	numObjects := len(objSrv.objects)
+	stats := objSrv.getStats(false)
+	objSrv.rwLock.RUnlock()
 	fmt.Fprintf(writer,
 		"Objectcache max: %s, total: %s (%d), cached: %s, in use: %s, downloading: %s<br>\n",
 		format.FormatBytes(objSrv.maxCachedBytes),
-		format.FormatBytes(objSrv.cachedBytes+objSrv.downloadingBytes),
-		len(objSrv.objects),
-		format.FormatBytes(objSrv.cachedBytes),
-		format.FormatBytes(objSrv.cachedBytes-objSrv.lruBytes),
-		format.FormatBytes(objSrv.downloadingBytes))
+		format.FormatBytes(stats.CachedBytes+stats.DownloadingBytes),
+		numObjects,
+		format.FormatBytes(stats.CachedBytes),
+		format.FormatBytes(stats.CachedBytes-stats.LruBytes),
+		format.FormatBytes(stats.DownloadingBytes))
 }
