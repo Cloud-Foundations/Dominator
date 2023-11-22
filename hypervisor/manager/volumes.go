@@ -374,6 +374,19 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 		if err != nil {
 			return "", err
 		}
+		// Remove space reserved for the object cache but not yet used.
+		if *position == 0 && m.objectCache != nil {
+			stats := m.objectCache.GetStats()
+			if m.ObjectCacheBytes > stats.CachedBytes {
+				unused := m.ObjectCacheBytes - stats.CachedBytes
+				unused += unused >> 2 // In practice block usage is +30%.
+				if unused < freeSpace {
+					freeSpace -= unused
+				} else {
+					freeSpace = 0
+				}
+			}
+		}
 		// Keep an extra 1 GiB free space for the root file-system. Be nice.
 		if m.volumeInfos[m.volumeDirectories[*position]].mountPoint == "/" {
 			if freeSpace > 1<<30 {
