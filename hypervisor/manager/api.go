@@ -52,7 +52,7 @@ type Manager struct {
 	summaryMutex      sync.RWMutex
 	summary           *summaryData
 	volumeDirectories []string
-	volumeInfos       map[string]volumeInfo // Key: volumeDirectory.
+	volumeInfos       map[string]VolumeInfo // Key: volumeDirectory.
 	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
 	disabled          bool
@@ -119,9 +119,9 @@ type vmInfoType struct {
 	proto.LocalVmInfo
 }
 
-type volumeInfo struct {
-	canTrim    bool
-	mountPoint string
+type VolumeInfo struct {
+	CanTrim    bool
+	MountPoint string
 }
 
 func New(startOptions StartOptions) (*Manager, error) {
@@ -280,6 +280,10 @@ func (m *Manager) GetNumVMs() (uint, uint) {
 
 func (m *Manager) GetRootCookiePath() string {
 	return filepath.Join(m.StartOptions.StateDir, "root-cookie")
+}
+
+func (m *Manager) GetVolumeDirectories() map[string]VolumeInfo {
+	return m.volumeInfos
 }
 
 func (m *Manager) GetVmAccessToken(ipAddr net.IP,

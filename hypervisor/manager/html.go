@@ -66,7 +66,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	fmt.Fprint(writer, "Volume directories:")
 	for _, dirname := range m.volumeDirectories {
 		fmt.Fprint(writer, " ", dirname)
-		if m.volumeInfos[dirname].canTrim {
+		if m.volumeInfos[dirname].CanTrim {
 			fmt.Fprint(writer, "(TRIM)")
 		}
 	}

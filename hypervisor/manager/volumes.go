@@ -307,7 +307,7 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 }
 
 func (m *Manager) checkTrim(filename string) bool {
-	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].canTrim
+	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].CanTrim
 }
 
 func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
@@ -353,9 +353,9 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 	for _, entry := range mountEntriesToUse {
 		volumeDirectory := filepath.Join(entry.MountPoint, "hyper-volumes")
 		m.volumeDirectories = append(m.volumeDirectories, volumeDirectory)
-		m.volumeInfos[volumeDirectory] = volumeInfo{
-			canTrim:    checkTrim(entry),
-			mountPoint: entry.MountPoint,
+		m.volumeInfos[volumeDirectory] = VolumeInfo{
+			CanTrim:    checkTrim(entry),
+			MountPoint: entry.MountPoint,
 		}
 	}
 	sort.Strings(m.volumeDirectories)
@@ -388,7 +388,7 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 			}
 		}
 		// Keep an extra 1 GiB free space for the root file-system. Be nice.
-		if m.volumeInfos[m.volumeDirectories[*position]].mountPoint == "/" {
+		if m.volumeInfos[m.volumeDirectories[*position]].MountPoint == "/" {
 			if freeSpace > 1<<30 {
 				freeSpace -= 1 << 30
 			} else {
@@ -458,7 +458,7 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 	if err != nil {
 		return err
 	}
-	m.volumeInfos = make(map[string]volumeInfo)
+	m.volumeInfos = make(map[string]VolumeInfo)
 	if len(startOptions.VolumeDirectories) < 1 {
 		if err := m.detectVolumeDirectories(mountTable); err != nil {
 			return err
@@ -467,9 +467,9 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 		m.volumeDirectories = startOptions.VolumeDirectories
 		for _, dirname := range m.volumeDirectories {
 			if entry := mountTable.FindEntry(dirname); entry != nil {
-				m.volumeInfos[dirname] = volumeInfo{
-					canTrim:    checkTrim(entry),
-					mountPoint: entry.MountPoint,
+				m.volumeInfos[dirname] = VolumeInfo{
+					CanTrim:    checkTrim(entry),
+					MountPoint: entry.MountPoint,
 				}
 			}
 		}
