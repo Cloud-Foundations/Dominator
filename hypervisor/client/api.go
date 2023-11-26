@@ -80,6 +80,10 @@ func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	return listSubnets(client, doSort)
 }
 
+func ListVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
+	return listVolumeDirectories(client, doSort)
+}
+
 func PowerOff(client *srpc.Client, stopVMs bool) error {
 	return powerOff(client, stopVMs)
 }
