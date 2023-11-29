@@ -236,7 +236,7 @@ func (b *Builder) buildOnSlave(client *srpc.Client,
 		}
 		request.Variables = variables
 	}
-	slave, err := b.slaveDriver.GetSlave()
+	slave, err := b.slaveDriver.GetSlaveWithTimeout(b.createSlaveTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("error getting slave: %s", err)
 	}

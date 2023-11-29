@@ -173,6 +173,7 @@ type BuildLocalOptions struct {
 type Builder struct {
 	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
+	createSlaveTimeout        time.Duration
 	generateDependencyTrigger chan<- chan<- struct{}
 	stateDir                  string
 	imageServerAddress        string
@@ -198,6 +199,7 @@ type Builder struct {
 
 type BuilderOptions struct {
 	ConfigurationURL          string
+	CreateSlaveTimeout        time.Duration
 	ImageRebuildInterval      time.Duration
 	ImageServerAddress        string
 	MinimumExpirationDuration time.Duration // Default: 15 minutes. Min: 5 min.

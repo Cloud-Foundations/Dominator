@@ -52,6 +52,13 @@ func imageStreamsRealDecoder(reader io.Reader) (
 }
 
 func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
+	if options.CreateSlaveTimeout <= 0 {
+		options.CreateSlaveTimeout = time.Hour
+		if options.ImageRebuildInterval > 0 &&
+			options.CreateSlaveTimeout > options.ImageRebuildInterval {
+			options.CreateSlaveTimeout = options.ImageRebuildInterval
+		}
+	}
 	if options.MinimumExpirationDuration <= 0 {
 		options.MinimumExpirationDuration = 15 * time.Minute
 	} else if options.MinimumExpirationDuration < 15*time.Second {
@@ -107,6 +114,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	b := &Builder{
 		buildLogArchiver:          params.BuildLogArchiver,
 		bindMounts:                masterConfiguration.BindMounts,
+		createSlaveTimeout:        options.CreateSlaveTimeout,
 		generateDependencyTrigger: generateDependencyTrigger,
 		stateDir:                  options.StateDirectory,
 		imageServerAddress:        options.ImageServerAddress,
