@@ -1,4 +1,4 @@
-// +build linux
+//go:build linux
 
 package main
 
@@ -29,14 +29,14 @@ type slaveDriverConfiguration struct {
 }
 
 func createSlaveDriver(logger log.DebugLogger) (
-	*slavedriver.SlaveDriver, error) {
+	*slavedriver.SlaveDriver, time.Duration, error) {
 	if *slaveDriverConfigurationFile == "" {
-		return nil, nil
+		return nil, 0, nil
 	}
 	var configuration slaveDriverConfiguration
 	err := json.ReadFromFile(*slaveDriverConfigurationFile, &configuration)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	createVmRequest := hypervisor.CreateVmRequest{
 		DhcpTimeout:      time.Minute,
@@ -58,7 +58,7 @@ func createSlaveDriver(logger log.DebugLogger) (
 		overlayFiles, err := fsutil.ReadFileTree(configuration.OverlayDirectory,
 			"/")
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		createVmRequest.OverlayFiles = overlayFiles
 	}
@@ -73,7 +73,7 @@ func createSlaveDriver(logger log.DebugLogger) (
 		},
 		logger)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	slaveDriver, err := slavedriver.NewSlaveDriver(
 		slavedriver.SlaveDriverOptions{
@@ -85,7 +85,9 @@ func createSlaveDriver(logger log.DebugLogger) (
 		},
 		slaveTrader, logger)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return slaveDriver, nil
+	return slaveDriver,
+		time.Second * time.Duration(configuration.CreateTimeoutInSeconds),
+		nil
 }

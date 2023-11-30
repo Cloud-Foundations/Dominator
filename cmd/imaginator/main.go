@@ -1,4 +1,4 @@
-// +build linux
+//go:build linux
 
 package main
 
@@ -82,7 +82,7 @@ func main() {
 	if err := os.MkdirAll(*stateDir, dirPerms); err != nil {
 		logger.Fatalf("Cannot create state directory: %s\n", err)
 	}
-	slaveDriver, err := createSlaveDriver(logger)
+	slaveDriver, createSlaveTimeout, err := createSlaveDriver(logger)
 	if err != nil {
 		logger.Fatalf("Error starting slave driver: %s\n", err)
 	}
@@ -104,6 +104,7 @@ func main() {
 	builderObj, err := builder.LoadWithOptionsAndParams(
 		builder.BuilderOptions{
 			ConfigurationURL:     *configurationUrl,
+			CreateSlaveTimeout:   createSlaveTimeout,
 			ImageRebuildInterval: *imageRebuildInterval,
 			ImageServerAddress: fmt.Sprintf("%s:%d",
 				*imageServerHostname, *imageServerPortNum),
