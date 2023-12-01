@@ -335,6 +335,43 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 	}
 }
 
+// extendAutoRebuildImages will return true if a slave driver is configured but
+// failes to provide a slave. It will attempt to extend the image lifetimes
+// in this case.
+func (b *Builder) extendAutoRebuildImages(cr *srpc.ClientResource,
+	expiresIn time.Duration) bool {
+	if b.slaveDriver == nil {
+		return false
+	}
+	slave, err := b.slaveDriver.GetSlaveWithTimeout(b.createSlaveTimeout)
+	if err == nil {
+		slave.Release()
+		return false
+	}
+	b.logger.Printf("Error getting slave: %s, will extend image lifetimes\n",
+		err)
+	client := getClient(cr, b.logger)
+	defer client.Put()
+	for _, streamName := range b.listStreamsToAutoRebuild() {
+		imageName, err := imgclient.FindLatestImage(client, streamName, false)
+		if err != nil {
+			b.logger.Printf("Error finding latest image for stream: %s: %s\n",
+				streamName, err)
+			continue
+		}
+		if imageName == "" {
+			continue
+		}
+		err = imgclient.ChangeImageExpiration(client, imageName,
+			time.Now().Add(expiresIn))
+		if err != nil {
+			b.logger.Printf("Error extending expiration for image: %s: %s\n",
+				imageName, err)
+		}
+	}
+	return true
+}
+
 func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
 	b.buildResultsLock.RLock()
 	defer b.buildResultsLock.RUnlock()
@@ -423,6 +460,9 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 		b.logger.Println("Starting automatic image build cycle")
 		startTime := time.Now()
 		sleepUntil = startTime.Add(minInterval)
+		if b.extendAutoRebuildImages(cr, minInterval*2) {
+			continue
+		}
 		for _, streamName := range b.listStreamsToAutoRebuild() {
 			b.rebuildImage(cr, streamName, minInterval*2)
 		}
