@@ -24,6 +24,24 @@ type BuildImageResponse struct {
 	ErrorString string
 }
 
+type DisableAutoBuildsRequest struct {
+	DisableFor time.Duration
+}
+
+type DisableAutoBuildsResponse struct {
+	DisabledUntil time.Time
+	Error         string
+}
+
+type DisableBuildRequestsRequest struct {
+	DisableFor time.Duration
+}
+
+type DisableBuildRequestsResponse struct {
+	DisabledUntil time.Time
+	Error         string
+}
+
 type GetDependenciesRequest struct {
 	MaxAge time.Duration
 }
