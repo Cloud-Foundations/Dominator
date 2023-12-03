@@ -117,6 +117,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		createSlaveTimeout:        options.CreateSlaveTimeout,
 		generateDependencyTrigger: generateDependencyTrigger,
 		stateDir:                  options.StateDirectory,
+		imageRebuildInterval:      options.ImageRebuildInterval,
 		imageServerAddress:        options.ImageServerAddress,
 		logger:                    params.Logger,
 		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
