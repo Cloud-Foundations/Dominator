@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -44,6 +45,40 @@ func buildImage(client *srpc.Client, request proto.BuildImageRequest,
 			return nil
 		}
 	}
+}
+
+func disableAutoBuilds(client *srpc.Client, disableFor time.Duration) (
+	time.Time, error) {
+	var reply proto.DisableAutoBuildsResponse
+	err := client.RequestReply("Imaginator.DisableAutoBuilds",
+		proto.DisableAutoBuildsRequest{
+			DisableFor: disableFor,
+		}, &reply)
+	if err != nil {
+		return time.Time{}, err
+	}
+	err = errors.New(reply.Error)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return reply.DisabledUntil, nil
+}
+
+func disableBuildRequests(client *srpc.Client, disableFor time.Duration) (
+	time.Time, error) {
+	var reply proto.DisableBuildRequestsResponse
+	err := client.RequestReply("Imaginator.DisableBuildRequests",
+		proto.DisableBuildRequestsRequest{
+			DisableFor: disableFor,
+		}, &reply)
+	if err != nil {
+		return time.Time{}, err
+	}
+	err = errors.New(reply.Error)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return reply.DisabledUntil, nil
 }
 
 func getDependencies(client *srpc.Client,
