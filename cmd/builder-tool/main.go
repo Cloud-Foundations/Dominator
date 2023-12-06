@@ -21,7 +21,9 @@ var (
 	bindMounts      flagutil.StringList
 	digraphExcludes flagutil.StringList
 	digraphIncludes flagutil.StringList
-	expiresIn       = flag.Duration("expiresIn", time.Hour,
+	disableFor      = flag.Duration("disableFor", 5*time.Minute,
+		"How long to disable")
+	expiresIn = flag.Duration("expiresIn", time.Hour,
 		"How long before the image expires (auto deletes)")
 	imaginatorHostname = flag.String("imaginatorHostname", "localhost",
 		"Hostname of image build server")
@@ -73,6 +75,8 @@ var subcommands = []commands.Command{
 		buildRawFromManifestSubcommand},
 	{"build-tree-from-manifest", "manifestDir", 1, 1,
 		buildTreeFromManifestSubcommand},
+	{"disable-auto-builds", "", 0, 0, disableAutoBuildsSubcommand},
+	{"disable-build-requests", "", 0, 0, disableBuildRequestsSubcommand},
 	{"get-dependencies", "", 0, 0, getDependenciesSubcommand},
 	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
 	{"process-manifest", "manifestDir rootDir", 2, 2,
