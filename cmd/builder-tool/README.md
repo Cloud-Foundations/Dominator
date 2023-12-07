@@ -40,6 +40,10 @@ Some of the sub-commands available are:
                                 for the tree is created and written to stdout.
                                 The source image will be fetched from the
                                 *[imageserver](../imageserver/README.md)*
+- **disable-auto-builds**: disable automatic image building for the period
+                           specified by `-disableFor`
+- **disable-build-requests**: disable automatic image building for the period
+                              specified by `-disableFor`
 - **get-dependencies**: get the dependencies for all the *[imaginator](../imaginator/README.md)*
                         image streams and write a JSON representation to stdout
 - **get-digraph**: get the image stream dependencies represented as a directed
@@ -47,6 +51,7 @@ Some of the sub-commands available are:
                    *Graphviz* tools
 - **process-manifest**: process a manifest locally in the specified root
                         directory containing an already unpacked source image
+- **replace-idle-slaves**: replace build slaves which are idle
 
 ## Security
 *[Imaginator](../imaginator/README.md)* restricts RPC access using TLS client
