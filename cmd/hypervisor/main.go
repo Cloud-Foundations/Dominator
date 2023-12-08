@@ -16,8 +16,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/hypervisor/rpcd"
 	"github.com/Cloud-Foundations/Dominator/hypervisor/tftpbootd"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -67,30 +69,26 @@ func init() {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr,
+	w := flag.CommandLine.Output()
+	fmt.Fprintln(w,
 		"Usage: hypervisor [flags...] [run|stop|stop-vms-on-next-stop]")
-	fmt.Fprintln(os.Stderr, "Common flags:")
+	fmt.Fprintln(w, "Common flags:")
 	flag.PrintDefaults()
+	fmt.Fprintln(w, "Commands:")
+	commands.PrintCommands(w, subcommands)
+}
+
+var subcommands = []commands.Command{
+	{"run", "", 0, 0, runSubcommand},
+	{"stop", "", 0, 0, stopSubcommand},
+	{"stop-vms-on-next-stop", "", 0, 0, stopVmsOnNextStopSubcommand},
 }
 
 func processCommand(args []string) {
 	if len(args) < 1 {
-		return
-	} else if len(args) > 1 {
-		printUsage()
-		os.Exit(2)
+		runSubcommand(nil, nil)
 	}
-	switch args[0] {
-	case "run":
-		return
-	case "stop":
-		requestStop()
-	case "stop-vms-on-next-stop":
-		configureVMsToStopOnNextStop()
-	default:
-		printUsage()
-		os.Exit(2)
-	}
+	os.Exit(commands.RunCommands(subcommands, printUsage, nil))
 }
 
 func main() {
@@ -101,6 +99,9 @@ func main() {
 	flag.Usage = printUsage
 	flag.Parse()
 	processCommand(flag.Args())
+}
+
+func run() {
 	if *testMemoryAvailable > 0 {
 		nBytes := *testMemoryAvailable << 20
 		mem := make([]byte, nBytes)
@@ -211,4 +212,9 @@ func main() {
 	if err := httpd.StartServer(*portNum, managerObj, false); err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
+}
+
+func runSubcommand(args []string, logger log.DebugLogger) error {
+	run()
+	return fmt.Errorf("unexpected return from run()")
 }
