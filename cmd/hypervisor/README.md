@@ -30,6 +30,7 @@ comand:
 service hypervisor start
 ```
 
+## Usage
 There are many command-line flags which may change the behaviour of
 *hypervisor* but many have defaults which should be adequate for most
 deployments. Built-in help is available with the command:
@@ -37,6 +38,16 @@ deployments. Built-in help is available with the command:
 ```
 hypervisor -h
 ```
+
+There are some sub-commands available for special maintenance:
+
+- **check-vms**: check VM configuration and data files for consistency
+- **run**: start the *hypervisor*. This is the same as not providing a
+           subcommand
+- **stop**: stop the *hypervisor* without shutting down VMs. The metadata,
+            DHCP and TFTP services will stop
+- **stop-vms-on-next-stop**: signal the *hypervisor* to cleanly shut down
+                             VMs on the next **stop**
 
 ## Security
 RPC access is restricted using TLS client authentication. *Hypervisor* expects
@@ -54,4 +65,4 @@ The *[vm-control](../vm-control/README.md)* utility may be used to create,
 modify and destroy VMs.
 
 The *[hyper-control](../hyper-control/README.md)* utility is used to perform
-administrator tasks on the *Hypervisor*.
+administrative tasks on the *Hypervisor*.
