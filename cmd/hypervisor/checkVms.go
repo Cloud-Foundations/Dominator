@@ -14,10 +14,10 @@ import (
 )
 
 func checkVmsSubcommand(args []string, logger log.DebugLogger) error {
-	return checkVms()
+	return checkVms(false)
 }
 
-func checkVms() error {
+func checkVms(repair bool) error {
 	dirname := filepath.Join(*stateDir, "VMs")
 	vms, err := fsutil.ReadDirnames(dirname, false)
 	if err != nil {
@@ -34,15 +34,16 @@ func checkVms() error {
 			if err := wsyscall.Stat(volume.Filename, &statbuf); err != nil {
 				return err
 			}
-			if vmInfo.Volumes[index].Size != uint64(statbuf.Size) {
+			volumeSize := vmInfo.Volumes[index].Size
+			if volumeSize != uint64(statbuf.Size) {
 				fmt.Fprintf(os.Stderr, "%s size: %s should be: %s\n",
 					volume.Filename,
 					format.FormatBytes(uint64(statbuf.Size)),
-					format.FormatBytes(vmInfo.Volumes[index].Size))
+					format.FormatBytes(volumeSize))
 				continue
 			}
-			requiredBlocks := vmInfo.Volumes[index].Size >> 9
-			if requiredBlocks<<9 < vmInfo.Volumes[index].Size {
+			requiredBlocks := volumeSize >> 9
+			if requiredBlocks<<9 < volumeSize {
 				requiredBlocks++
 			}
 			if uint64(statbuf.Blocks) < requiredBlocks {
@@ -57,6 +58,13 @@ func checkVms() error {
 					volume.Filename,
 					(statbuf.Blocks<<9)>>shift, unit,
 					(requiredBlocks<<9)>>shift, unit)
+				if repair {
+					err := fsutil.Fallocate(volume.Filename, volumeSize)
+					if err != nil {
+						return fmt.Errorf("fallocate: %s: %s",
+							volume.Filename, err)
+					}
+				}
 			}
 		}
 	}

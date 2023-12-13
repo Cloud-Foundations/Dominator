@@ -80,6 +80,8 @@ func printUsage() {
 
 var subcommands = []commands.Command{
 	{"check-vms", "", 0, 0, checkVmsSubcommand},
+	{"repair-vm-volume-allocations", "", 0, 0,
+		repairVmVolumeAllocationsSubcommand},
 	{"run", "", 0, 0, runSubcommand},
 	{"stop", "", 0, 0, stopSubcommand},
 	{"stop-vms-on-next-stop", "", 0, 0, stopVmsOnNextStopSubcommand},
