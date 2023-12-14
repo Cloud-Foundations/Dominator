@@ -23,6 +23,7 @@ func checkVms(repair bool) error {
 	if err != nil {
 		return err
 	}
+	var blocksAdded uint64
 	for _, vm := range vms {
 		filename := filepath.Join(dirname, vm, "info.json")
 		var vmInfo proto.LocalVmInfo
@@ -48,6 +49,7 @@ func checkVms(repair bool) error {
 			}
 			if uint64(statbuf.Blocks) < requiredBlocks {
 				shift, unit := format.GetMiltiplier(uint64(statbuf.Blocks) << 9)
+				blocksAdded += requiredBlocks - uint64(statbuf.Blocks)
 				shiftRequired, unitRequired := format.GetMiltiplier(
 					requiredBlocks << 9)
 				if shiftRequired < shift {
@@ -67,6 +69,16 @@ func checkVms(repair bool) error {
 				}
 			}
 		}
+	}
+	if blocksAdded < 1 {
+		return nil
+	}
+	if repair {
+		fmt.Fprintf(os.Stderr, "Total allocation increase: %s\n",
+			format.FormatBytes(blocksAdded<<9))
+	} else {
+		fmt.Fprintf(os.Stderr, "Total allocation increase required: %s\n",
+			format.FormatBytes(blocksAdded<<9))
 	}
 	return nil
 }
