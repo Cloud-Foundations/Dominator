@@ -42,6 +42,8 @@ hypervisor -h
 There are some sub-commands available for special maintenance:
 
 - **check-vms**: check VM configuration and data files for consistency
+- **repair-vm-volume-allocations**: repair the number of allocated blocks for
+                                    VM volumes
 - **run**: start the *hypervisor*. This is the same as not providing a
            subcommand
 - **stop**: stop the *hypervisor* without shutting down VMs. The metadata,
