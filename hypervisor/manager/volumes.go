@@ -78,7 +78,9 @@ func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	if err := syscall.Statfs(dirname, &statbuf); err != nil {
 		return 0, fmt.Errorf("error statfsing: %s: %s", dirname, err)
 	}
-	freeSpace := uint64(statbuf.Bfree * uint64(statbuf.Bsize))
+	// Even though volumes are written as root, treat them as ordinary users so
+	// that they don't consume the space reserved for root.
+	freeSpace := uint64(statbuf.Bavail * uint64(statbuf.Bsize))
 	freeSpaceTable[dirname] = freeSpace
 	return freeSpace, nil
 }
@@ -305,7 +307,7 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 }
 
 func (m *Manager) checkTrim(filename string) bool {
-	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].canTrim
+	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].CanTrim
 }
 
 func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
@@ -351,7 +353,10 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 	for _, entry := range mountEntriesToUse {
 		volumeDirectory := filepath.Join(entry.MountPoint, "hyper-volumes")
 		m.volumeDirectories = append(m.volumeDirectories, volumeDirectory)
-		m.volumeInfos[volumeDirectory] = volumeInfo{canTrim: checkTrim(entry)}
+		m.volumeInfos[volumeDirectory] = VolumeInfo{
+			CanTrim:    checkTrim(entry),
+			MountPoint: entry.MountPoint,
+		}
 	}
 	sort.Strings(m.volumeDirectories)
 	return nil
@@ -368,6 +373,27 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 			freeSpaceTable)
 		if err != nil {
 			return "", err
+		}
+		// Remove space reserved for the object cache but not yet used.
+		if *position == 0 && m.objectCache != nil {
+			stats := m.objectCache.GetStats()
+			if m.ObjectCacheBytes > stats.CachedBytes {
+				unused := m.ObjectCacheBytes - stats.CachedBytes
+				unused += unused >> 2 // In practice block usage is +30%.
+				if unused < freeSpace {
+					freeSpace -= unused
+				} else {
+					freeSpace = 0
+				}
+			}
+		}
+		// Keep an extra 1 GiB free space for the root file-system. Be nice.
+		if m.volumeInfos[m.volumeDirectories[*position]].MountPoint == "/" {
+			if freeSpace > 1<<30 {
+				freeSpace -= 1 << 30
+			} else {
+				freeSpace = 0
+			}
 		}
 		if size < freeSpace {
 			dirname := m.volumeDirectories[*position]
@@ -432,7 +458,7 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 	if err != nil {
 		return err
 	}
-	m.volumeInfos = make(map[string]volumeInfo)
+	m.volumeInfos = make(map[string]VolumeInfo)
 	if len(startOptions.VolumeDirectories) < 1 {
 		if err := m.detectVolumeDirectories(mountTable); err != nil {
 			return err
@@ -441,7 +467,10 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 		m.volumeDirectories = startOptions.VolumeDirectories
 		for _, dirname := range m.volumeDirectories {
 			if entry := mountTable.FindEntry(dirname); entry != nil {
-				m.volumeInfos[dirname] = volumeInfo{canTrim: checkTrim(entry)}
+				m.volumeInfos[dirname] = VolumeInfo{
+					CanTrim:    checkTrim(entry),
+					MountPoint: entry.MountPoint,
+				}
 			}
 		}
 	}

@@ -3,26 +3,17 @@ package lockwatcher
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 )
 
-func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
-	for {
-		timer := time.NewTimer(lw.CheckInterval)
-		select {
-		case <-stopChannel:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return
-		case <-timer.C:
-			check()
-		}
-	}
-}
+var (
+	dumpedMutex sync.Mutex
+	dumpedStack bool
+)
 
 func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	if options.CheckInterval < time.Second {
@@ -48,6 +39,23 @@ func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	return lockWatcher
 }
 
+func (lw *LockWatcher) logTimeout(lockType string) {
+	dumpedMutex.Lock()
+	defer dumpedMutex.Unlock()
+	if dumpedStack {
+		lw.Logger.Printf("timed out getting %slock\n", lockType)
+		return
+	}
+	dumpedStack = true
+	logLine := fmt.Sprintf(
+		"timed out getting %slock, first stack trace follows:\n",
+		lockType)
+	buffer := make([]byte, 1<<20)
+	copy(buffer, logLine)
+	nBytes := runtime.Stack(buffer[len(logLine):], true)
+	lw.Logger.Print(string(buffer[:len(logLine)+nBytes]))
+}
+
 func (lw *LockWatcher) check() {
 	lockedChannel := make(chan struct{}, 1)
 	timer := time.NewTimer(lw.LogTimeout)
@@ -68,7 +76,7 @@ func (lw *LockWatcher) check() {
 	case <-timer.C:
 	}
 	lw.incrementNumLockTimeouts()
-	lw.Logger.Println("timed out getting lock")
+	lw.logTimeout("")
 	<-lockedChannel
 	lw.clearLockWaiting()
 	lw.Logger.Println("eventually got lock")
@@ -119,6 +127,21 @@ func (lw *LockWatcher) incrementNumWLockTimeouts() {
 	lw.stats.WaitingForWLock = true
 }
 
+func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
+	for {
+		timer := time.NewTimer(lw.CheckInterval)
+		select {
+		case <-stopChannel:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+			check()
+		}
+	}
+}
+
 func (lw *LockWatcher) rcheck() {
 	lockedChannel := make(chan struct{}, 1)
 	timer := time.NewTimer(lw.LogTimeout)
@@ -140,18 +163,20 @@ func (lw *LockWatcher) rcheck() {
 	case <-timer.C:
 	}
 	lw.incrementNumRLockTimeouts()
-	lw.Logger.Println("timed out getting rlock")
+	lw.logTimeout("r")
 	<-lockedChannel
 	lw.clearRLockWaiting()
 	lw.Logger.Println("eventually got rlock")
 }
 
-// rwcheck uses a TryLock() to grab a write lock, so as to not block future read
+// wcheck uses a TryLock() to grab a write lock, so as to not block future read
 // lockers.
 func (lw *LockWatcher) wcheck() {
 	rwlock := lw.lock.(RWLock)
+	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>8, lw.LogTimeout>>4,
+		1)
 	timeoutTime := time.Now().Add(lw.LogTimeout)
-	for ; time.Until(timeoutTime) > 0; time.Sleep(lw.LogTimeout >> 4) {
+	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
 				lw.Function()
@@ -161,8 +186,8 @@ func (lw *LockWatcher) wcheck() {
 		}
 	}
 	lw.incrementNumWLockTimeouts()
-	lw.Logger.Println("timed out getting wlock")
-	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
+	lw.logTimeout("w")
+	sleeper = backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
 	for ; true; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
@@ -191,18 +216,26 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 	prefix string) (bool, error) {
 	stats := lw.GetStats()
 	if stats.NumLockTimeouts > 0 {
-		fmt.Fprintf(writer,
-			"%sLock timeouts: %d", prefix, stats.NumLockTimeouts)
-		var err error
 		if stats.WaitingForLock {
-			_, err = fmt.Fprintf(writer, " still waiting for lock<br>\n")
+			fmt.Fprintf(writer, "<font color=\"red\">")
 		} else {
-			_, err = fmt.Fprintln(writer, "<br>")
+			fmt.Fprintf(writer, "<font color=\"salmon\">")
 		}
+		fmt.Fprintf(writer, "%sLock timeouts: %d",
+			prefix, stats.NumLockTimeouts)
+		if stats.WaitingForLock {
+			fmt.Fprintf(writer, " still waiting for lock")
+		}
+		_, err := fmt.Fprintln(writer, "</font><br>\n")
 		return true, err
 	}
 	if stats.NumRLockTimeouts < 1 && stats.NumWLockTimeouts < 1 {
 		return false, nil
+	}
+	if stats.WaitingForRLock || stats.WaitingForWLock {
+		fmt.Fprintf(writer, "<font color=\"red\">")
+	} else {
+		fmt.Fprintf(writer, "<font color=\"salmon\">")
 	}
 	if stats.NumRLockTimeouts > 0 {
 		fmt.Fprintf(writer,
@@ -219,6 +252,6 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 			fmt.Fprintf(writer, ", still waiting for WLock")
 		}
 	}
-	_, err := fmt.Fprintln(writer, "<br>")
+	_, err := fmt.Fprintln(writer, "</font><br>")
 	return true, err
 }

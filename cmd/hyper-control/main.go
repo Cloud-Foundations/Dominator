@@ -115,6 +115,7 @@ var subcommands = []commands.Command{
 	{"hold-lock", "", 0, 0, holdLockSubcommand},
 	{"hold-vm-lock", "", 1, 1, holdVmLockSubcommand},
 	{"installer-shell", "hostname", 1, 1, installerShellSubcommand},
+	{"list-volume-directories", "", 0, 0, listVolumeDirectoriesSubcommand},
 	{"make-installer-iso", "hostname dirname", 2, 2,
 		makeInstallerIsoSubcommand},
 	{"move-ip-address", "IPaddr", 1, 1, moveIpAddressSubcommand},

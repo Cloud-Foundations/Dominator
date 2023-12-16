@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"sort"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/bufwriter"
@@ -284,6 +285,23 @@ func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 		return nil, err
 	}
 	return reply.Subnets, nil
+}
+
+func listVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
+	var request proto.ListVolumeDirectoriesRequest
+	var reply proto.ListVolumeDirectoriesResponse
+	err := client.RequestReply("Hypervisor.ListVolumeDirectories", request,
+		&reply)
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	if doSort {
+		sort.Strings(reply.Directories)
+	}
+	return reply.Directories, nil
 }
 
 func powerOff(client *srpc.Client, stopVMs bool) error {

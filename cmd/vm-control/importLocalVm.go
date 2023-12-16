@@ -107,7 +107,7 @@ func importLocalVmInfo(vmInfo proto.VmInfo, rootVolume string,
 	if err != nil {
 		return err
 	}
-	directories, err := listVolumeDirectories(client)
+	directories, err := hyperclient.ListVolumeDirectories(client, false)
 	if err != nil {
 		return err
 	}
@@ -151,20 +151,6 @@ func importLocalVmInfo(vmInfo proto.VmInfo, rootVolume string,
 		return err
 	}
 	return askForCommitDecision(client, vmInfo.Address.IpAddress)
-}
-
-func listVolumeDirectories(client *srpc.Client) ([]string, error) {
-	var request proto.ListVolumeDirectoriesRequest
-	var reply proto.ListVolumeDirectoriesResponse
-	err := client.RequestReply("Hypervisor.ListVolumeDirectories", request,
-		&reply)
-	if err != nil {
-		return nil, err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return nil, err
-	}
-	return reply.Directories, nil
 }
 
 func readRootCookie(client *srpc.Client,

@@ -29,6 +29,8 @@ func StartServer(portNum uint, managerObj *manager.Manager, daemon bool) error {
 	html.HandleFunc("/", myState.statusHandler)
 	html.HandleFunc("/listAvailableAddresses",
 		myState.listAvailableAddressesHandler)
+	html.HandleFunc("/listVolumeDirectories",
+		myState.listVolumeDirectoriesHandler)
 	html.HandleFunc("/listRegisteredAddresses",
 		myState.listRegisteredAddressesHandler)
 	html.HandleFunc("/listSubnets", myState.listSubnetsHandler)
@@ -36,6 +38,8 @@ func StartServer(portNum uint, managerObj *manager.Manager, daemon bool) error {
 	html.HandleFunc("/showVmBootLog", myState.showBootLogHandler)
 	html.HandleFunc("/showVmLastPatchLog", myState.showLastPatchLogHandler)
 	html.HandleFunc("/showVM", myState.showVMHandler)
+	html.HandleFunc("/showVolumeDirectories",
+		myState.showVolumeDirectoriesHandler)
 	if daemon {
 		go http.Serve(listener, nil)
 	} else {

@@ -173,8 +173,13 @@ type BuildLocalOptions struct {
 type Builder struct {
 	buildLogArchiver          logarchiver.BuildLogArchiver
 	bindMounts                []string
+	createSlaveTimeout        time.Duration
+	disableLock               sync.RWMutex
+	disableAutoBuildsUntil    time.Time
+	disableBuildRequestsUntil time.Time
 	generateDependencyTrigger chan<- chan<- struct{}
 	stateDir                  string
+	imageRebuildInterval      time.Duration
 	imageServerAddress        string
 	logger                    log.DebugLogger
 	imageStreamsUrl           string
@@ -198,6 +203,7 @@ type Builder struct {
 
 type BuilderOptions struct {
 	ConfigurationURL          string
+	CreateSlaveTimeout        time.Duration
 	ImageRebuildInterval      time.Duration
 	ImageServerAddress        string
 	MinimumExpirationDuration time.Duration // Default: 15 minutes. Min: 5 min.
@@ -237,6 +243,16 @@ func (b *Builder) BuildImage(request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
 	logWriter io.Writer) (*image.Image, string, error) {
 	return b.buildImage(request, authInfo, logWriter)
+}
+
+func (b *Builder) DisableAutoBuilds(disableFor time.Duration) (
+	time.Time, error) {
+	return b.disableAutoBuilds(disableFor)
+}
+
+func (b *Builder) DisableBuildRequests(disableFor time.Duration) (
+	time.Time, error) {
+	return b.disableBuildRequests(disableFor)
 }
 
 func (b *Builder) GetCurrentBuildLog(streamName string) ([]byte, error) {

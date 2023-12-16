@@ -28,10 +28,6 @@ func acceptControlConnections(m *manager.Manager, listener net.Listener,
 	}
 }
 
-func configureVMsToStopOnNextStop() {
-	sendRequest(connectToControl(), "stop-vms-on-next-stop")
-}
-
 func connectToControl() net.Conn {
 	sockAddr := filepath.Join(*stateDir, "control")
 	if conn, err := net.Dial("unix", sockAddr); err != nil {
@@ -78,6 +74,7 @@ func processControlConnection(conn net.Conn, m *manager.Manager,
 			}
 			os.Remove(m.GetRootCookiePath())
 			if shutdownVMsOnNextStop {
+				logger.Println("shutting down VMs and stopping")
 				m.ShutdownVMsAndExit()
 			} else {
 				logger.Println("stopping without shutting down VMs")
@@ -91,6 +88,7 @@ func processControlConnection(conn net.Conn, m *manager.Manager,
 				return err
 			}
 			shutdownVMsOnNextStop = true
+			logger.Println("will shut down VMs on next stop")
 		default:
 			if _, err := fmt.Fprintln(conn, "bad request"); err != nil {
 				return err
@@ -100,37 +98,35 @@ func processControlConnection(conn net.Conn, m *manager.Manager,
 	return nil
 }
 
-func requestStop() {
-	sendRequest(connectToControl(), "stop")
-}
-
-func sendRequest(conn net.Conn, request string) {
+func sendRequest(conn net.Conn, request string) error {
 	if _, err := fmt.Fprintln(conn, request); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing request: %s\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error writing request: %s\n", err)
 	}
 	buffer := make([]byte, 256)
 	if nRead, err := conn.Read(buffer); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading response: %s\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error reading response: %s\n", err)
 	} else if nRead < 1 {
-		fmt.Fprintf(os.Stderr, "Read short response: %s\n", err)
-		os.Exit(1)
+		return fmt.Errorf("read short response: %s\n", err)
 	} else {
 		response := string(buffer[:nRead])
 		if response[nRead-1] != '\n' {
-			fmt.Fprintf(os.Stderr, "Response not null-terminated: %s\n",
-				response)
-			os.Exit(1)
+			return fmt.Errorf("response not null-terminated: %s\n", response)
 		}
 		response = response[:nRead-1]
 		if response != "ok" {
-			fmt.Fprintf(os.Stderr, "Bad response: %s\n", response)
-			os.Exit(1)
+			return fmt.Errorf("bad response: %s\n", response)
 		} else {
 			conn.Read(buffer) // Wait for EOF.
 			conn.Close()
-			os.Exit(0)
+			return nil
 		}
 	}
+}
+
+func stopSubcommand(args []string, logger log.DebugLogger) error {
+	return sendRequest(connectToControl(), "stop")
+}
+
+func stopVmsOnNextStopSubcommand(args []string, logger log.DebugLogger) error {
+	return sendRequest(connectToControl(), "stop-vms-on-next-stop")
 }

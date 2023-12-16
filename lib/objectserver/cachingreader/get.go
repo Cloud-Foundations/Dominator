@@ -137,10 +137,18 @@ func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
 			usageCount:         1,
 		}
 		or.objectsToRead[fetchToReadIndex[index]] = object
-		objSrv.downloadingBytes += size
+		objSrv.data.DownloadingBytes += size
 		objSrv.objects[hashVal] = object
 	}
 	return &or, nil
+}
+
+func (objSrv *ObjectServer) getStats(grabLock bool) Stats {
+	if grabLock {
+		objSrv.rwLock.RLock()
+		defer objSrv.rwLock.RUnlock()
+	}
+	return objSrv.data
 }
 
 func (or *objectsReader) Close() error {
@@ -198,12 +206,12 @@ func (or *objectsReader) nextObject(skipOpen bool) (
 			or.objSrv.rwLock.Lock()
 			object.downloadingChannel = nil
 			if err == nil {
-				or.objSrv.cachedBytes += object.size
+				or.objSrv.data.CachedBytes += object.size
 			} else {
 				delete(or.objSrv.objects, object.hash)
 				object.usageCount--
 			}
-			or.objSrv.downloadingBytes -= object.size
+			or.objSrv.data.DownloadingBytes -= object.size
 			or.objSrv.rwLock.Unlock()
 			close(completionChannel)
 			if err != nil {

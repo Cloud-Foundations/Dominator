@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -221,7 +222,7 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 	if err != nil {
 		return err
 	}
-	directories, err := listVolumeDirectories(client)
+	directories, err := hyperclient.ListVolumeDirectories(client, false)
 	if err != nil {
 		return err
 	}

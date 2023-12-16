@@ -684,7 +684,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	if err := syscall.Statfs(localVolume.Filename, &statbuf); err != nil {
 		return err
 	}
-	if size-volume.Size > uint64(statbuf.Bfree*uint64(statbuf.Bsize)) {
+	if size-volume.Size > uint64(statbuf.Bavail*uint64(statbuf.Bsize)) {
 		return errors.New("not enough free space")
 	}
 	if err := setVolumeSize(localVolume.Filename, size); err != nil {
@@ -3500,7 +3500,12 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	return nil
 }
 
+// delete deletes external VM state (files, leases, IPs). The VM lock will be
+// released and later grabbed. The Manager lock will be grabbed and released
+// while the VM lock is not held.
 func (vm *vmInfoType) delete() {
+	vm.logger.Debugln(2, "delete(): starting")
+	vm.State = proto.StateDestroying
 	select {
 	case vm.accessTokenCleanupNotifier <- struct{}{}:
 	default:
@@ -3508,13 +3513,20 @@ func (vm *vmInfoType) delete() {
 	for ch := range vm.metadataChannels {
 		close(ch)
 	}
+	vm.mutex.Unlock()
+	for _, volume := range vm.VolumeLocations {
+		os.Remove(volume.Filename)
+		if volume.DirectoryToCleanup != "" {
+			os.RemoveAll(volume.DirectoryToCleanup)
+		}
+	}
+	os.RemoveAll(vm.dirname)
 	vm.manager.DhcpServer.RemoveLease(vm.Address.IpAddress)
 	for _, address := range vm.SecondaryAddresses {
 		vm.manager.DhcpServer.RemoveLease(address.IpAddress)
 	}
 	vm.manager.mutex.Lock()
 	delete(vm.manager.vms, vm.ipAddress)
-	vm.manager.sendVmInfo(vm.ipAddress, nil)
 	var err error
 	if vm.State == proto.StateExporting {
 		err = vm.manager.unregisterAddress(vm.Address, false)
@@ -3537,19 +3549,17 @@ func (vm *vmInfoType) delete() {
 	if err != nil {
 		vm.manager.Logger.Println(err)
 	}
-	for _, volume := range vm.VolumeLocations {
-		os.Remove(volume.Filename)
-		if volume.DirectoryToCleanup != "" {
-			os.RemoveAll(volume.DirectoryToCleanup)
-		}
-	}
-	os.RemoveAll(vm.dirname)
+	vm.manager.sendVmInfo(vm.ipAddress, nil) // Send now that VM is really gone.
 	if vm.lockWatcher != nil {
 		vm.lockWatcher.Stop()
 	}
+	vm.mutex.Lock()
+	vm.logger.Debugln(2, "delete(): returning")
 }
 
 func (vm *vmInfoType) destroy() {
+	vm.mutex.Lock()
+	defer vm.mutex.Unlock()
 	select {
 	case vm.commandInput <- "quit":
 	default:
@@ -3747,13 +3757,13 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	case proto.StateStopping:
 		monitorSock, err := net.Dial("unix", vm.monitorSockname)
 		if err == nil {
-			commandInput := make(chan string, 1)
+			commandInput := make(chan string, 2)
 			commandOutput := make(chan byte, 16<<10)
 			vm.commandInput = commandInput
 			vm.commandOutput = commandOutput
 			go vm.monitor(monitorSock, commandInput, commandOutput)
 			commandInput <- "qmp_capabilities"
-			vm.kill()
+			commandInput <- "quit"
 		} else {
 			vm.setState(proto.StateStopped)
 			vm.logger.Println(err)
@@ -3762,7 +3772,9 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	case proto.StateStopped:
 		return false, nil
 	case proto.StateDestroying:
+		vm.mutex.Lock()
 		vm.delete()
+		vm.mutex.Unlock()
 		return false, nil
 	case proto.StateMigrating:
 		return false, nil
@@ -3938,10 +3950,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		interfaceDriver = ",if=virtio"
 	}
 	if debugRoot := vm.getDebugRoot(); debugRoot != "" {
-		options := interfaceDriver
-		if vm.manager.checkTrim(vm.VolumeLocations[0].Filename) {
-			options += ",discard=on"
-		}
+		options := interfaceDriver + ",discard=off"
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+debugRoot+",format=raw"+options)
 	} else if kernelPath := vm.getActiveKernelPath(); kernelPath != "" {
@@ -3988,10 +3997,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
 		}
-		options := interfaceDriver
-		if vm.manager.checkTrim(volume.Filename) {
-			options += ",discard=on"
-		}
+		options := interfaceDriver + ",discard=off"
 		cmd.Args = append(cmd.Args,
 			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
 				options)

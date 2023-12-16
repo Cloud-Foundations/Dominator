@@ -70,7 +70,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
 			guestShutdown = true
 		} else if shutdownData.Reason == "host-qmp-quit" {
-			hostQuit = true
+			hostQuit = true // Not currently used but may be useful later.
 		}
 	}
 	close(commandOutput)
@@ -87,7 +87,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 		}
 		return
 	case proto.StateRunning, proto.StateDebugging:
-		if guestShutdown {
+		if !vm.manager.shuttingDown && guestShutdown {
 			if vm.DestroyOnPowerdown && !vm.DestroyProtection {
 				vm.delete()
 				vm.logger.Debugln(0, "VM destroyed due to guest powerdown")

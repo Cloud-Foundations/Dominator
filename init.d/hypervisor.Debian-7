@@ -93,6 +93,7 @@ case "$1" in
   stop)
 	log_daemon_msg "Stopping hypervisor daemon" "hypervisor" || true
 	[ -s "$LOOP_PIDFILE" ] && kill -KILL $(cat "$LOOP_PIDFILE")
+	$DAEMON stop || true
 	[ -s "$PIDFILE" ]      && kill -TERM $(cat "$PIDFILE")
 	rm -f "$LOOP_PIDFILE" "$PIDFILE"
 	;;

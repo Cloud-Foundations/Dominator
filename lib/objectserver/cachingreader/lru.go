@@ -42,7 +42,7 @@ func (objSrv *ObjectServer) addToLruWithLock(object *objectType) {
 	}
 	object.older = objSrv.newest
 	objSrv.newest = object
-	objSrv.lruBytes += object.size
+	objSrv.data.LruBytes += object.size
 	select {
 	case objSrv.lruUpdateNotifier <- struct{}{}:
 	default:
@@ -85,13 +85,13 @@ func (objSrv *ObjectServer) linkOrphanedEntries() {
 		if objSrv.newest == nil { // Empty list: initialise it.
 			objSrv.newest = object
 			objSrv.oldest = object
-			objSrv.lruBytes += object.size
+			objSrv.data.LruBytes += object.size
 		} else if object.newer == nil && objSrv.newest != object {
 			// Orphaned object: make it the newest.
 			object.older = objSrv.newest
 			objSrv.newest.newer = object
 			objSrv.newest = object
-			objSrv.lruBytes += object.size
+			objSrv.data.LruBytes += object.size
 		}
 	}
 }
@@ -128,7 +128,7 @@ func (objSrv *ObjectServer) putObjectWithLock(object *objectType) {
 
 func (objSrv *ObjectServer) readLru(reader io.Reader) error {
 	var hashVal hash.Hash
-	objSrv.lruBytes = 0
+	objSrv.data.LruBytes = 0
 	for { // First object is newest, last object is oldest.
 		if _, err := reader.Read((&hashVal)[:]); err != nil {
 			if err == io.EOF {
@@ -137,7 +137,7 @@ func (objSrv *ObjectServer) readLru(reader io.Reader) error {
 			return err
 		}
 		if object, ok := objSrv.objects[hashVal]; ok {
-			objSrv.lruBytes += object.size
+			objSrv.data.LruBytes += object.size
 			if objSrv.newest == nil { // Empty list: initialise it.
 				objSrv.newest = object
 			} else { // Make object the oldest.
@@ -152,11 +152,12 @@ func (objSrv *ObjectServer) readLru(reader io.Reader) error {
 
 // Returns true if space is available.
 func (objSrv *ObjectServer) releaseSpaceWithLock(size uint64) bool {
-	if objSrv.cachedBytes+objSrv.downloadingBytes+size <=
+	if objSrv.data.CachedBytes+objSrv.data.DownloadingBytes+size <=
 		objSrv.maxCachedBytes {
 		return true
 	}
-	if objSrv.cachedBytes-objSrv.lruBytes+objSrv.downloadingBytes+size >
+	if objSrv.data.CachedBytes-
+		objSrv.data.LruBytes+objSrv.data.DownloadingBytes+size >
 		objSrv.maxCachedBytes {
 		return false // No amount of deleting unused objects will help.
 	}
@@ -169,8 +170,8 @@ func (objSrv *ObjectServer) releaseSpaceWithLock(size uint64) bool {
 		}
 		objSrv.removeFromLruWithLock(object)
 		delete(objSrv.objects, object.hash)
-		objSrv.cachedBytes -= object.size
-		if objSrv.cachedBytes+objSrv.downloadingBytes+size <=
+		objSrv.data.CachedBytes -= object.size
+		if objSrv.data.CachedBytes+objSrv.data.DownloadingBytes+size <=
 			objSrv.maxCachedBytes {
 			return true
 		}
@@ -209,7 +210,7 @@ func (objSrv *ObjectServer) removeFromLruWithLock(object *objectType) {
 	if objSrv.oldest == nil && objSrv.newest != nil {
 		panic("LRU has newest but not oldest entry")
 	}
-	objSrv.lruBytes -= object.size
+	objSrv.data.LruBytes -= object.size
 	select {
 	case objSrv.lruUpdateNotifier <- struct{}{}:
 	default:

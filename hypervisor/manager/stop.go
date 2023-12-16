@@ -16,10 +16,10 @@ type flusher interface {
 
 func (m *Manager) powerOff(stopVMs bool) error {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
 	if stopVMs {
 		m.shutdownVMs()
 	}
+	defer m.mutex.RUnlock()
 	for _, vm := range m.vms {
 		if vm.State != proto.StateStopped {
 			return fmt.Errorf("%s is not shut down", vm.Address.IpAddress)
@@ -32,17 +32,36 @@ func (m *Manager) powerOff(stopVMs bool) error {
 	return nil
 }
 
+// shutdownVMs will shut down all running VMs and wait. This must be called with
+// the read lock held, and it will unlock the lock after signalling VMs to shut
+// down but before waiting for them to finish shutting down.
 func (m *Manager) shutdownVMs() {
+	m.shuttingDown = true
 	var waitGroup sync.WaitGroup
+	var failCount uint
+	var failMutex sync.Mutex
 	for _, vm := range m.vms {
 		waitGroup.Add(1)
 		go func(vm *vmInfoType) {
 			defer waitGroup.Done()
-			vm.shutdown()
+			if !vm.shutdown() {
+				failMutex.Lock()
+				failCount++
+				failMutex.Unlock()
+			}
 		}(vm)
 	}
+	m.mutex.RUnlock()
 	waitGroup.Wait()
-	m.Logger.Println("stopping cleanly after shutting down VMs")
+	if failCount > 1 {
+		m.Logger.Printf("stopping but failed to cleanly shut down %d VMs\n",
+			failCount)
+	} else if failCount > 0 {
+		m.Logger.Println("stopping but failed to cleanly shut down 1 VM")
+	} else {
+		m.Logger.Println("stopping cleanly after shutting down VMs")
+	}
+	time.Sleep(time.Second) // Wait just a little for background work.
 	if flusher, ok := m.Logger.(flusher); ok {
 		flusher.Flush()
 	}
@@ -50,12 +69,12 @@ func (m *Manager) shutdownVMs() {
 
 func (m *Manager) shutdownVMsAndExit() {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
 	m.shutdownVMs()
 	os.Exit(0)
 }
 
-func (vm *vmInfoType) shutdown() {
+// Returns false if the VM failed to shut down cleanly, else true.
+func (vm *vmInfoType) shutdown() bool {
 	vm.mutex.RLock()
 	switch vm.State {
 	case proto.StateStarting, proto.StateRunning:
@@ -73,8 +92,10 @@ func (vm *vmInfoType) shutdown() {
 		case <-timer.C:
 			vm.logger.Println("shutdown timed out: killing VM")
 			vm.commandInput <- "quit"
+			return false
 		}
 	default:
 		vm.mutex.RUnlock()
 	}
+	return true
 }
