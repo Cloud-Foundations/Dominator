@@ -77,14 +77,17 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			"Primary Owner", "Hypervisor", "Location")
 	}
 	primaryOwnersMap := make(map[string]struct{})
+	var vmsToShow []*vmInfoType
 	for _, vm := range vms {
 		if primaryOwnerFilter != "" {
 			if vm.OwnerUsers[0] != primaryOwnerFilter {
 				primaryOwnersMap[vm.OwnerUsers[0]] = struct{}{}
 				continue
 			}
+			vmsToShow = append(vmsToShow, vm)
 		} else {
 			primaryOwnersMap[vm.OwnerUsers[0]] = struct{}{}
+			vmsToShow = append(vmsToShow, vm)
 		}
 		switch outputType {
 		case url.OutputTypeText:
@@ -136,6 +139,8 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	switch outputType {
 	case url.OutputTypeHtml:
 		fmt.Fprintln(writer, "</table>")
+	case url.OutputTypeJson:
+		json.WriteWithIndent(writer, "   ", vmsToShow)
 	}
 	return primaryOwnersMap, nil
 }
@@ -152,9 +157,6 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
 	vms := m.getVMs(true)
-	if parsedQuery.OutputType() == url.OutputTypeJson {
-		json.WriteWithIndent(writer, "   ", vms)
-	}
 	primaryOwnerFilter := parsedQuery.Table["primaryOwner"]
 	primaryOwnersMap, err := m.listVMs(writer, vms, primaryOwnerFilter,
 		parsedQuery.OutputType())
