@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -25,6 +26,15 @@ border-collapse: collapse;
 }
 </style>
 `
+
+type ownerTotalsType struct {
+	MemoryInMiB uint64
+	MilliCPUs   uint
+	NumVMs      uint
+	NumVolumes  uint
+	VirtualCPUs uint
+	VolumeSize  uint64
+}
 
 func getVmListFromMap(vmMap map[string]*vmInfoType, doSort bool) []*vmInfoType {
 	vms := make([]*vmInfoType, 0, len(vmMap))
@@ -62,10 +72,10 @@ func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
 }
 
 func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
-	primaryOwnerFilter string, outputType uint) (map[string]struct{}, error) {
+	primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var tw *html.TableWriter
 	if outputType == url.OutputTypeHtml {
@@ -76,19 +86,13 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 			"State", "RAM", "CPU", "vCPU", "Num Volumes", "Storage",
 			"Primary Owner", "Hypervisor", "Location")
 	}
-	primaryOwnersMap := make(map[string]struct{})
 	var vmsToShow []*vmInfoType
 	for _, vm := range vms {
-		if primaryOwnerFilter != "" {
-			if vm.OwnerUsers[0] != primaryOwnerFilter {
-				primaryOwnersMap[vm.OwnerUsers[0]] = struct{}{}
-				continue
-			}
-			vmsToShow = append(vmsToShow, vm)
-		} else {
-			primaryOwnersMap[vm.OwnerUsers[0]] = struct{}{}
-			vmsToShow = append(vmsToShow, vm)
+		if primaryOwnerFilter != "" &&
+			vm.OwnerUsers[0] != primaryOwnerFilter {
+			continue
 		}
+		vmsToShow = append(vmsToShow, vm)
 		switch outputType {
 		case url.OutputTypeText:
 			fmt.Fprintln(writer, vm.ipAddr)
@@ -142,13 +146,74 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	case url.OutputTypeJson:
 		json.WriteWithIndent(writer, "   ", vmsToShow)
 	}
-	return primaryOwnersMap, nil
+	return nil
 }
 
 func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return getVmListFromMap(m.vms, doSort)
+}
+
+func (m *Manager) listVMsByPrimaryOwnerHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	parsedQuery := url.ParseQuery(req.URL)
+	vms := m.getVMs(true)
+	totalsByOwner := make(map[string]*ownerTotalsType)
+	for _, vm := range vms {
+		ownerTotals := totalsByOwner[vm.OwnerUsers[0]]
+		if ownerTotals == nil {
+			ownerTotals = &ownerTotalsType{}
+			totalsByOwner[vm.OwnerUsers[0]] = ownerTotals
+		}
+		ownerTotals.MemoryInMiB += vm.MemoryInMiB
+		ownerTotals.MilliCPUs += vm.MilliCPUs
+		ownerTotals.NumVMs++
+		ownerTotals.NumVolumes += uint(len(vm.Volumes))
+		if vm.VirtualCPUs < 1 {
+			ownerTotals.VirtualCPUs++
+		} else {
+			ownerTotals.VirtualCPUs += vm.VirtualCPUs
+		}
+		for _, volume := range vm.Volumes {
+			ownerTotals.VolumeSize += volume.Size
+		}
+	}
+	ownersList := make([]string, 0, len(totalsByOwner))
+	for owner := range totalsByOwner {
+		ownersList = append(ownersList, owner)
+	}
+	sort.Strings(ownersList)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fmt.Fprintf(writer, "<title>List of VMs By Primary Owner</title>\n")
+		writer.WriteString(commonStyleSheet)
+		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+		tw, _ := html.NewTableWriter(writer, true, "Owner", "Num VMs", "RAM",
+			"CPU", "vCPU", "Num Volumes", "Storage")
+		for _, owner := range ownersList {
+			ownerTotals := totalsByOwner[owner]
+			tw.WriteRow("", "",
+				fmt.Sprintf("<a href=\"listVMs?primaryOwner=%s\">%s</a>",
+					owner, owner),
+				strconv.FormatUint(uint64(ownerTotals.NumVMs), 10),
+				format.FormatBytes(ownerTotals.MemoryInMiB<<20),
+				fmt.Sprintf("%g", float64(ownerTotals.MilliCPUs)*1e-3),
+				strconv.FormatUint(uint64(ownerTotals.VirtualCPUs), 10),
+				strconv.FormatUint(uint64(ownerTotals.NumVolumes), 10),
+				format.FormatBytes(ownerTotals.VolumeSize))
+		}
+		fmt.Fprintln(writer, "</body>")
+	case url.OutputTypeJson:
+		json.WriteWithIndent(writer, "   ", totalsByOwner)
+	case url.OutputTypeText:
+		for _, owner := range ownersList {
+			ownerTotals := totalsByOwner[owner]
+			fmt.Fprintf(writer, "%s %d\n", owner, ownerTotals.NumVMs)
+		}
+	}
 }
 
 func (m *Manager) listVMsHandler(w http.ResponseWriter,
@@ -158,8 +223,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	parsedQuery := url.ParseQuery(req.URL)
 	vms := m.getVMs(true)
 	primaryOwnerFilter := parsedQuery.Table["primaryOwner"]
-	primaryOwnersMap, err := m.listVMs(writer, vms, primaryOwnerFilter,
-		parsedQuery.OutputType())
+	err := m.listVMs(writer, vms, primaryOwnerFilter, parsedQuery.OutputType())
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
@@ -167,13 +231,6 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
 		fmt.Fprintln(writer, "</body>")
-		primaryOwners := stringutil.ConvertMapKeysToList(primaryOwnersMap, true)
-		fmt.Fprintln(writer, "Filter by primary owner:<br>")
-		for _, primaryOwner := range primaryOwners {
-			fmt.Fprintf(writer,
-				"<a href=\"listVMs?primaryOwner=%s\">%s</a><br>\n",
-				primaryOwner, primaryOwner)
-		}
 	}
 }
 

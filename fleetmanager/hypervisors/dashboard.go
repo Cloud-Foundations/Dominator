@@ -50,6 +50,8 @@ func (m *Manager) writeHtml(writer io.Writer) {
 		"listHypervisors?state=OK", numOK)
 	writeCountLinksHTJ(writer, "Number of VMs known",
 		"listVMs?", numVMs)
+	writeLinksHTJ(writer, "VMs by primary owner",
+		"listVMsByPrimaryOwner", numVMs)
 	fmt.Fprintln(writer, `Hypervisor <a href="listLocations">locations</a><br>`)
 }
 
@@ -67,6 +69,15 @@ func writeCountLinksHTJ(writer io.Writer, text, path string, count uint) {
 		return
 	}
 	fmt.Fprintf(writer,
-		"%s: <a href=\"%s\">%d</a> (<a href=\"%s&output=text\">text</a>, <a href=\"%s&output=json\">JSON</a>)<br>\n",
+		"%s: <a href=\"%s\">%d</a> (<a href=\"%soutput=text\">text</a>, <a href=\"%soutput=json\">JSON</a>)<br>\n",
 		text, path, count, path, path)
+}
+
+func writeLinksHTJ(writer io.Writer, text, path string, count uint) {
+	if count < 1 {
+		return
+	}
+	fmt.Fprintf(writer,
+		"%s: <a href=\"%s\">HTML</a>, <a href=\"%s?output=text\">text</a>, <a href=\"%s?output=json\">JSON</a><br>\n",
+		text, path, path, path)
 }
