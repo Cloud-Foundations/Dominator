@@ -60,6 +60,10 @@ func NewTableWriter(writer io.Writer, doHighlighting bool,
 	return newTableWriter(writer, doHighlighting, columns)
 }
 
+func (tw *TableWriter) Close() error {
+	return tw.close()
+}
+
 func (tw *TableWriter) CloseRow() error {
 	return tw.closeRow()
 }
