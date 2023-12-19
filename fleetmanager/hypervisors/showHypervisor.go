@@ -76,7 +76,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		for _, key := range keys {
 			tw.WriteRow("", "", key, h.localTags[key])
 		}
-		fmt.Fprintln(writer, "</table>")
+		tw.Close()
 	}
 	fmt.Fprintf(writer, "Status: %s<br>\n", h.getHealthStatus())
 	fmt.Fprintf(writer,

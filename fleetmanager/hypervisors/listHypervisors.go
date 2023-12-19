@@ -187,7 +187,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 				hypervisor.getNumVMs()),
 		)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 
