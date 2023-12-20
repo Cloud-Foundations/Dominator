@@ -123,8 +123,6 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	}
 	var tw *html.TableWriter
 	if outputType == url.OutputTypeHtml {
-		fmt.Fprintf(writer, "<title>List of VMs</title>\n")
-		writer.WriteString(commonStyleSheet)
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ = html.NewTableWriter(writer, true, "IP Addr", "Name(tag)",
 			"State", "RAM", "CPU", "vCPU", "Num Volumes", "Storage",
@@ -207,22 +205,16 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	return nil
 }
 
-func (m *Manager) listVMsByPrimaryOwnerHandler(w http.ResponseWriter,
-	req *http.Request) {
-	writer := bufio.NewWriter(w)
-	defer writer.Flush()
-	parsedQuery := url.ParseQuery(req.URL)
-	vms := m.getVMs(true)
+func (m *Manager) listVMsByPrimaryOwner(writer *bufio.Writer, vms []*vmInfoType,
+	outputType uint) error {
 	totalsByOwner := getTotalsByOwner(vms)
 	ownersList := make([]string, 0, len(totalsByOwner))
 	for owner := range totalsByOwner {
 		ownersList = append(ownersList, owner)
 	}
 	sort.Strings(ownersList)
-	switch parsedQuery.OutputType() {
+	switch outputType {
 	case url.OutputTypeHtml:
-		fmt.Fprintf(writer, "<title>List of VMs By Primary Owner</title>\n")
-		writer.WriteString(commonStyleSheet)
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ := html.NewTableWriter(writer, true, "Owner", "Num VMs", "RAM",
 			"CPU", "vCPU", "Num Volumes", "Storage")
@@ -248,7 +240,6 @@ func (m *Manager) listVMsByPrimaryOwnerHandler(w http.ResponseWriter,
 			strconv.FormatUint(uint64(totals.NumVolumes), 10),
 			format.FormatBytes(totals.VolumeSize))
 		tw.Close()
-		fmt.Fprintln(writer, "</body>")
 	case url.OutputTypeJson:
 		json.WriteWithIndent(writer, "   ", totalsByOwner)
 	case url.OutputTypeText:
@@ -257,6 +248,26 @@ func (m *Manager) listVMsByPrimaryOwnerHandler(w http.ResponseWriter,
 			fmt.Fprintf(writer, "%s %d\n", owner, ownerTotals.NumVMs)
 		}
 	}
+	return nil
+}
+
+func (m *Manager) listVMsByPrimaryOwnerHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	parsedQuery := url.ParseQuery(req.URL)
+	vms := m.getVMs(true)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fmt.Fprintf(writer, "<title>List of VMs By Primary Owner</title>\n")
+		writer.WriteString(commonStyleSheet)
+		fmt.Fprintln(writer, "<body>")
+	}
+	m.listVMsByPrimaryOwner(writer, vms, parsedQuery.OutputType())
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fmt.Fprintln(writer, "</body>")
+	}
 }
 
 func (m *Manager) listVMsHandler(w http.ResponseWriter,
@@ -264,6 +275,12 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fmt.Fprintf(writer, "<title>List of VMs</title>\n")
+		writer.WriteString(commonStyleSheet)
+		fmt.Fprintln(writer, "<body>")
+	}
 	vms := m.getVMs(true)
 	primaryOwnerFilter := parsedQuery.Table["primaryOwner"]
 	err := m.listVMs(writer, vms, primaryOwnerFilter, parsedQuery.OutputType())

@@ -43,11 +43,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintf(writer, "<title>Information for Hypervisor %s</title>\n",
 		hostname)
-	fmt.Fprintln(writer, `<style>
-                          table, th, td {
-                          border-collapse: collapse;
-                          }
-                          </style>`)
+	writer.WriteString(commonStyleSheet)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "Machine info:<br>")
 	fmt.Fprintln(writer, `<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
@@ -113,7 +109,13 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
 	vms := getVmListFromMap(h.vms, true)
-	err := m.listVMs(writer, vms, "", url.OutputTypeHtml)
+	if err := m.listVMs(writer, vms, "", url.OutputTypeHtml); err != nil {
+		fmt.Fprintln(writer, err)
+		return
+	}
+	fmt.Fprintln(writer, "<br>")
+	fmt.Fprintln(writer, "VMs by primary owner as of last update:<br>")
+	err := m.listVMsByPrimaryOwner(writer, vms, url.OutputTypeHtml)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
