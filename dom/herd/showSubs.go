@@ -184,7 +184,7 @@ func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
 	for _, sub := range subs {
 		showSub(tw, sub)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	bd.Write(writer)
 }
 
@@ -348,7 +348,8 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 		showDuration(tw, *sub.systemUptime, false)
 	}
 	fmt.Fprint(w, "  </tr>\n")
-	fmt.Fprint(w, "</table>\n")
+	tw.Close()
+	fmt.Fprintln(w, "<br>")
 	fmt.Fprintln(w, "MDB Data:")
 	fmt.Fprintln(w, "<pre>")
 	json.WriteWithIndent(w, "    ", sub.mdb)

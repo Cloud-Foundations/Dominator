@@ -100,7 +100,7 @@ func (herd *Herd) showImagesForSubsHTML(writer io.Writer,
 	for _, sub := range subs {
 		showImagesForSub(tw, sub)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 }
 
 func showImagesForSub(tw *html.TableWriter, sub *Sub) {
