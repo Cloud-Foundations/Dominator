@@ -46,7 +46,8 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 	for interfaceName, IPs := range s.interfaceIPs {
 		tw.WriteRow("", "", interfaceName, fmt.Sprintf("%v", IPs))
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 
 	fmt.Fprintln(writer, "<b>Route Table</b><br>")
 	fmt.Fprintln(writer, `<table border="1">`)
@@ -58,7 +59,8 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 			entry.BroadcastAddr.String(),
 			entry.GatewayAddr.String(), entry.Mask.String())
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 
 	fmt.Fprintln(writer, "<b>Static leases</b><br>")
 	fmt.Fprintln(writer, `<table border="1">`)
@@ -76,7 +78,8 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 		tw.WriteRow("", "", lease.MacAddress, lease.IpAddress.String(),
 			lease.hostname, lease.subnet.Id)
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 
 	fmt.Fprintln(writer, "<b>Dynamic leases</b><br>")
 	fmt.Fprintln(writer, `<table border="1">`)
@@ -99,5 +102,6 @@ func (s *DhcpServer) writeDashboard(writer io.Writer) {
 			lease.clientHostname, subnetId,
 			lease.expires.Round(time.Second).String())
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 }
