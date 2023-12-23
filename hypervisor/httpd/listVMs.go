@@ -76,7 +76,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
-		fmt.Fprintln(writer, "</table>")
+		tw.Close()
 		fmt.Fprintln(writer, "</body>")
 	}
 }

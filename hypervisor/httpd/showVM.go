@@ -119,7 +119,8 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		for _, name := range tagNames {
 			tw.WriteRow("", "", name, vm.Tags[name])
 		}
-		fmt.Fprintln(writer, "</table><br>")
+		tw.Close()
+		fmt.Fprintln(writer, "<br>")
 		fmt.Fprintf(writer,
 			"<a href=\"showVM?%s&output=json\">VM info:</a><br>\n",
 			vm.Address.IpAddress)
