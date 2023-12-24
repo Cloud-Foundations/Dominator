@@ -95,7 +95,8 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 				streamName, streamNameText(streamName, autoRebuildStreams)),
 			manifestUrl, manifestDirectory)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 }
 
 func (b *Builder) writeHtml(writer io.Writer) {
@@ -158,7 +159,8 @@ func (b *Builder) writeHtml(writer io.Writer) {
 			}
 			tw.WriteRow("", "", columns...)
 		}
-		fmt.Fprintln(writer, "</table><br>")
+		tw.Close()
+		fmt.Fprintln(writer, "<br>")
 	}
 	if len(failedBuilds) > 0 {
 		streamNames := make([]string, 0, len(failedBuilds))
@@ -182,7 +184,8 @@ func (b *Builder) writeHtml(writer io.Writer) {
 					format.Duration(currentTime.Sub(result.finishTime))),
 			)
 		}
-		fmt.Fprintln(writer, "</table><br>")
+		tw.Close()
+		fmt.Fprintln(writer, "<br>")
 	}
 	if len(goodBuilds) > 0 {
 		streamNames := make([]string, 0, len(goodBuilds))
@@ -207,7 +210,8 @@ func (b *Builder) writeHtml(writer io.Writer) {
 					format.Duration(currentTime.Sub(result.finishTime))),
 			)
 		}
-		fmt.Fprintln(writer, "</table><br>")
+		tw.Close()
+		fmt.Fprintln(writer, "<br>")
 	}
 	if _, ok := b.buildLogArchiver.(logarchiver.BuildLogReporter); ok {
 		fmt.Fprintln(writer,
