@@ -53,7 +53,7 @@ func showBuildInfos(writer io.Writer, buildInfos *logarchiver.BuildInfos,
 		}
 		tw.WriteRow("", "", columns...)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 
@@ -117,7 +117,7 @@ func (s state) showBuildLogArchiveHandler(w http.ResponseWriter,
 		fmt.Sprintf("<a href=\"showAllBuilds\">%d</a>", numBuilds),
 		fmt.Sprintf("<a href=\"showGoodBuilds\">%d</a>", numGoodBuilds),
 		fmt.Sprintf("<a href=\"showErrorBuilds\">%d</a>", numErrorBuilds))
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "<p>")
 	fmt.Fprintln(writer, "Build summary per requestor:<br>")
 	userBuildCounts := make([]userBuildCountType, 0, len(summary.Requestors))
@@ -145,7 +145,7 @@ func (s state) showBuildLogArchiveHandler(w http.ResponseWriter,
 			fmt.Sprintf("<a href=\"showRequestorErrorBuilds?%s\">%d</a>",
 				userBuildCount.username, userBuildCount.summary.NumErrorBuilds))
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 
