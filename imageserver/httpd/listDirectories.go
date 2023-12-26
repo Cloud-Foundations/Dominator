@@ -34,6 +34,6 @@ func (s state) listDirectoriesHandler(w http.ResponseWriter,
 	for _, directory := range directories {
 		tw.WriteRow("", "", directory.Name, directory.Metadata.OwnerGroup)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }

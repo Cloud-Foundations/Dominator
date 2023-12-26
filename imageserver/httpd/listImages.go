@@ -37,7 +37,7 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	for _, name := range imageNames {
 		writeImage(tw, name, s.imageDataBase.GetImage(name))
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 

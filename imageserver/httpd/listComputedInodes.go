@@ -32,7 +32,7 @@ func (s state) listComputedInodesHandler(w http.ResponseWriter,
 		tw, _ := html.NewTableWriter(writer, true, "Filename", "Data Source")
 		// Walk the file-system to leverage stable and friendly sort order.
 		listComputedInodes(tw, &image.FileSystem.DirectoryInode, "/")
-		fmt.Fprintln(writer, "</table>")
+		tw.Close()
 	}
 	fmt.Fprintln(writer, "</body>")
 }
