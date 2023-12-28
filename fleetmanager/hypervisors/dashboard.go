@@ -39,7 +39,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	numVMs := uint(len(m.vms))
 	m.mutex.RUnlock()
 	writeCountLinksHT(writer, "Number of hypervisors known",
-		"listHypervisors?state=", numMachines)
+		"listHypervisors", numMachines)
 	writeCountLinksHT(writer, "Number of hypervisors powered off",
 		"listHypervisors?state=off", numOff)
 	writeCountLinksHT(writer, "Number of hypervisors connected",
@@ -52,7 +52,8 @@ func (m *Manager) writeHtml(writer io.Writer) {
 		"listVMs?", numVMs)
 	writeLinksHTJ(writer, "VMs by primary owner",
 		"listVMsByPrimaryOwner", numVMs)
-	fmt.Fprintln(writer, `Hypervisor <a href="listLocations">locations</a><br>`)
+	fmt.Fprintln(writer, `Hypervisor <a href="listLocations">locations</a>`)
+	fmt.Fprintln(writer, ` (<a href="listLocations?output=text">text</a>)<br>`)
 }
 
 func writeCountLinksHT(writer io.Writer, text, path string, count uint) {

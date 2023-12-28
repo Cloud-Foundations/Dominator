@@ -204,7 +204,8 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	case "off":
 		showFilter = showOff
 	}
-	hypervisors, err := m.listHypervisors("", showFilter, "", nil)
+	hypervisors, err := m.listHypervisors(parsedQuery.Table["location"],
+		showFilter, "", nil)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
