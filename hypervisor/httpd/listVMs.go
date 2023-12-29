@@ -39,6 +39,9 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			"Name(tag)", "State", "RAM", "CPU", "vCPU", "Num Volumes",
 			"Storage", "Primary Owner")
 	}
+	var allocatedMemoryInMiB uint64
+	var allocatedMilliCPUs, allocatedVirtualCPUs, numVolumes uint
+	var allocatedVolumeSize uint64
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
 		if err != nil {
@@ -51,6 +54,8 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		case url.OutputTypeText:
 			fmt.Fprintln(writer, ipAddr)
 		case url.OutputTypeHtml:
+			allocatedMemoryInMiB += vm.MemoryInMiB
+			allocatedMilliCPUs += vm.MilliCPUs
 			var background string
 			if vm.Uncommitted {
 				background = "yellow"
@@ -59,7 +64,13 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 				vm.VirtualCPUs)))
 			if vm.VirtualCPUs < 1 {
 				vCPUs = `<font color="grey">` + vCPUs + `</font>`
+				allocatedVirtualCPUs++
+			} else {
+				allocatedVirtualCPUs += vm.VirtualCPUs
 			}
+			numVolumes += uint(len(vm.Volumes))
+			volumeSize, volumeString := storageTotalTableEntry(vm)
+			allocatedVolumeSize += volumeSize
 			tw.WriteRow("", background,
 				fmt.Sprintf("<a href=\"showVM?%s\">%s</a>", ipAddr, ipAddr),
 				vm.Address.MacAddress,
@@ -69,13 +80,25 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 				fmt.Sprintf("%g", float64(vm.MilliCPUs)*1e-3),
 				vCPUs,
 				numVolumesTableEntry(vm),
-				storageTotalTableEntry(vm),
+				volumeString,
 				vm.OwnerUsers[0],
 			)
 		}
 	}
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
+		tw.WriteRow("", "",
+			"<b>TOTAL</b>",
+			"",
+			"",
+			"",
+			format.FormatBytes(allocatedMemoryInMiB<<20),
+			fmt.Sprintf("%g", float64(allocatedMilliCPUs)*1e-3),
+			strconv.Itoa(int(allocatedVirtualCPUs)),
+			strconv.Itoa(int(numVolumes)),
+			format.FormatBytes(allocatedVolumeSize),
+			"",
+		)
 		tw.Close()
 		fmt.Fprintln(writer, "</body>")
 	}
@@ -107,10 +130,10 @@ func numVolumesTableEntry(vm proto.VmInfo) string {
 	return fmt.Sprintf("%d%s", len(vm.Volumes), comment)
 }
 
-func storageTotalTableEntry(vm proto.VmInfo) string {
+func storageTotalTableEntry(vm proto.VmInfo) (uint64, string) {
 	var storage uint64
 	for _, volume := range vm.Volumes {
 		storage += volume.Size
 	}
-	return format.FormatBytes(storage)
+	return storage, format.FormatBytes(storage)
 }
