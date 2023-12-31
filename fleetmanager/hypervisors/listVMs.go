@@ -3,6 +3,7 @@ package hypervisors
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sort"
@@ -104,7 +105,6 @@ func sumOwnerTotals(totalsByOwner map[string]*ownerTotalsType) ownerTotalsType {
 		totals.NumVolumes += ownerTotals.NumVolumes
 		totals.VirtualCPUs += ownerTotals.VirtualCPUs
 		totals.VolumeSize += ownerTotals.VolumeSize
-
 	}
 	return totals
 }
@@ -115,7 +115,7 @@ func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 	return getVmListFromMap(m.vms, doSort)
 }
 
-func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
+func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 	primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
@@ -205,7 +205,7 @@ func (m *Manager) listVMs(writer *bufio.Writer, vms []*vmInfoType,
 	return nil
 }
 
-func (m *Manager) listVMsByPrimaryOwner(writer *bufio.Writer, vms []*vmInfoType,
+func (m *Manager) listVMsByPrimaryOwner(writer io.Writer, vms []*vmInfoType,
 	outputType uint) error {
 	totalsByOwner := getTotalsByOwner(vms)
 	ownersList := make([]string, 0, len(totalsByOwner))
