@@ -3,8 +3,10 @@ package httpd
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -12,6 +14,84 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+type ownerTotalsType struct {
+	MemoryInMiB uint64
+	MilliCPUs   uint
+	NumVMs      uint
+	NumVolumes  uint
+	VirtualCPUs uint
+	VolumeSize  uint64
+}
+
+func addVmToOwnersTotals(totalsByOwner map[string]*ownerTotalsType,
+	vm *proto.VmInfo) {
+	ownerTotals := totalsByOwner[vm.OwnerUsers[0]]
+	if ownerTotals == nil {
+		ownerTotals = &ownerTotalsType{}
+		totalsByOwner[vm.OwnerUsers[0]] = ownerTotals
+	}
+	ownerTotals.MemoryInMiB += vm.MemoryInMiB
+	ownerTotals.MilliCPUs += vm.MilliCPUs
+	ownerTotals.NumVMs++
+	ownerTotals.NumVolumes += uint(len(vm.Volumes))
+	if vm.VirtualCPUs < 1 {
+		ownerTotals.VirtualCPUs++
+	} else {
+		ownerTotals.VirtualCPUs += vm.VirtualCPUs
+	}
+	for _, volume := range vm.Volumes {
+		ownerTotals.VolumeSize += volume.Size
+	}
+}
+
+func listVMsByPrimaryOwner(writer io.Writer,
+	totalsByOwner map[string]*ownerTotalsType) error {
+	ownersList := make([]string, 0, len(totalsByOwner))
+	for owner := range totalsByOwner {
+		ownersList = append(ownersList, owner)
+	}
+	sort.Strings(ownersList)
+	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+	tw, _ := html.NewTableWriter(writer, true, "Owner", "Num VMs", "RAM",
+		"CPU", "vCPU", "Num Volumes", "Storage")
+	for _, owner := range ownersList {
+		ownerTotals := totalsByOwner[owner]
+		tw.WriteRow("", "",
+			fmt.Sprintf("<a href=\"listVMs?primaryOwner=%s\">%s</a>",
+				owner, owner),
+			strconv.FormatUint(uint64(ownerTotals.NumVMs), 10),
+			format.FormatBytes(ownerTotals.MemoryInMiB<<20),
+			fmt.Sprintf("%g", float64(ownerTotals.MilliCPUs)*1e-3),
+			strconv.FormatUint(uint64(ownerTotals.VirtualCPUs), 10),
+			strconv.FormatUint(uint64(ownerTotals.NumVolumes), 10),
+			format.FormatBytes(ownerTotals.VolumeSize))
+	}
+	totals := sumOwnerTotals(totalsByOwner)
+	tw.WriteRow("", "",
+		"<b>TOTAL</b>",
+		strconv.FormatUint(uint64(totals.NumVMs), 10),
+		format.FormatBytes(totals.MemoryInMiB<<20),
+		fmt.Sprintf("%g", float64(totals.MilliCPUs)*1e-3),
+		strconv.FormatUint(uint64(totals.VirtualCPUs), 10),
+		strconv.FormatUint(uint64(totals.NumVolumes), 10),
+		format.FormatBytes(totals.VolumeSize))
+	tw.Close()
+	return nil
+}
+
+func sumOwnerTotals(totalsByOwner map[string]*ownerTotalsType) ownerTotalsType {
+	var totals ownerTotalsType
+	for _, ownerTotals := range totalsByOwner {
+		totals.MemoryInMiB += ownerTotals.MemoryInMiB
+		totals.MilliCPUs += ownerTotals.MilliCPUs
+		totals.NumVMs += ownerTotals.NumVMs
+		totals.NumVolumes += ownerTotals.NumVolumes
+		totals.VirtualCPUs += ownerTotals.VirtualCPUs
+		totals.VolumeSize += ownerTotals.VolumeSize
+	}
+	return totals
+}
 
 func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	parsedQuery := url.ParseQuery(req.URL)
@@ -42,6 +122,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	var allocatedMemoryInMiB uint64
 	var allocatedMilliCPUs, allocatedVirtualCPUs, numVolumes uint
 	var allocatedVolumeSize uint64
+	totalsByOwner := make(map[string]*ownerTotalsType)
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
 		if err != nil {
@@ -83,6 +164,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 				volumeString,
 				vm.OwnerUsers[0],
 			)
+			addVmToOwnersTotals(totalsByOwner, &vm)
 		}
 	}
 	switch parsedQuery.OutputType() {
@@ -100,6 +182,9 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			"",
 		)
 		tw.Close()
+		fmt.Fprintln(writer, "<p>")
+		fmt.Fprintln(writer, "VMs by primary owner:<br>")
+		listVMsByPrimaryOwner(writer, totalsByOwner)
 		fmt.Fprintln(writer, "</body>")
 	}
 }
