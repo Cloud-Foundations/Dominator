@@ -397,7 +397,7 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
 			h.logger.Printf("error reading VM: %s: %s", vmIpAddr, err)
 			continue
 		}
-		vmInfo := &vmInfoType{vmIpAddr, *pVmInfo, h}
+		vmInfo := &vmInfoType{vmIpAddr, *pVmInfo, h.location, h}
 		h.vms[vmIpAddr] = vmInfo
 		m.mutex.Lock()
 		m.vms[vmIpAddr] = vmInfo
@@ -769,7 +769,8 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				if _, ok := h.vms[ipAddr]; ok {
 					vmsToDelete[ipAddr] = struct{}{}
 				}
-				h.migratingVms[ipAddr] = &vmInfoType{ipAddr, *protoVm, h}
+				h.migratingVms[ipAddr] = &vmInfoType{ipAddr, *protoVm,
+					h.location, h}
 				m.migratingIPs[ipAddr] = struct{}{}
 			} else if vm, ok := h.vms[ipAddr]; ok {
 				if !vm.VmInfo.Equal(protoVm) {
@@ -790,7 +791,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 					delete(h.migratingVms, ipAddr)
 					delete(m.migratingIPs, ipAddr)
 				}
-				vm := &vmInfoType{ipAddr, *protoVm, h}
+				vm := &vmInfoType{ipAddr, *protoVm, h.location, h}
 				h.vms[ipAddr] = vm
 				m.vms[ipAddr] = vm
 				err := m.storer.WriteVm(h.machine.HostIpAddress, ipAddr,

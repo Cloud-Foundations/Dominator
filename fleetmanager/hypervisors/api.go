@@ -117,6 +117,7 @@ type tagsStorer interface {
 type vmInfoType struct {
 	ipAddr string
 	hyper_proto.VmInfo
+	Location   string // Used by dashboards.
 	hypervisor *hypervisorType
 }
 
