@@ -26,8 +26,8 @@ const (
 
 type hypervisorList []*hypervisorType
 
-func writeHypervisorTotalsStats(hypervisors []*hypervisorType, numVMs uint,
-	tw *html.TableWriter) {
+func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
+	numVMs uint, tw *html.TableWriter) {
 	var memoryInMiBAllocated, memoryInMiBTotal uint64
 	var milliCPUsAllocated uint64
 	var cpusTotal uint
@@ -44,6 +44,13 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, numVMs uint,
 		memoryInMiBAllocated << 20)
 	volumeShift, volumeMultiplier := format.GetMiltiplier(
 		volumeBytesAllocated)
+	var vmsString string
+	if location == "" {
+		vmsString = fmt.Sprintf("<a href=\"listVMs\">%d</a>", numVMs)
+	} else {
+		vmsString = fmt.Sprintf("<a href=\"listVMs?location=%s\">%d</a>",
+			location, numVMs)
+	}
 	tw.WriteRow("", "",
 		"<b>TOTAL</b>",
 		"",
@@ -60,7 +67,7 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, numVMs uint,
 			volumeBytesAllocated>>volumeShift,
 			volumeBytesTotal>>volumeShift,
 			volumeMultiplier),
-		fmt.Sprintf("%d", numVMs))
+		vmsString)
 }
 
 func (h *hypervisorType) getHealthStatus() string {
@@ -204,8 +211,8 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	case "off":
 		showFilter = showOff
 	}
-	hypervisors, err := m.listHypervisors(parsedQuery.Table["location"],
-		showFilter, "", nil)
+	locationFilter := parsedQuery.Table["location"]
+	hypervisors, err := m.listHypervisors(locationFilter, showFilter, "", nil)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
@@ -232,7 +239,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	for _, hypervisor := range hypervisors {
 		numVMs += hypervisor.writeStats(tw)
 	}
-	writeHypervisorTotalsStats(hypervisors, numVMs, tw)
+	writeHypervisorTotalsStats(hypervisors, locationFilter, numVMs, tw)
 	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }

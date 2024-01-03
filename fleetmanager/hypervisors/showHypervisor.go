@@ -109,7 +109,7 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
 	vms := getVmListFromMap(h.vms, true)
-	if err := m.listVMs(writer, vms, "", url.OutputTypeHtml); err != nil {
+	if err := m.listVMs(writer, vms, "", "", url.OutputTypeHtml); err != nil {
 		fmt.Fprintln(writer, err)
 		return
 	}

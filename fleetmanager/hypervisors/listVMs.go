@@ -116,7 +116,7 @@ func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 }
 
 func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
-	primaryOwnerFilter string, outputType uint) error {
+	locationFilter, primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
 		return err
@@ -130,6 +130,9 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 	}
 	var vmsToShow []*vmInfoType
 	for _, vm := range vms {
+		if !testInLocation(vm.Location, locationFilter) {
+			continue
+		}
 		if primaryOwnerFilter != "" &&
 			vm.OwnerUsers[0] != primaryOwnerFilter {
 			continue
@@ -282,8 +285,8 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "<body>")
 	}
 	vms := m.getVMs(true)
-	primaryOwnerFilter := parsedQuery.Table["primaryOwner"]
-	err := m.listVMs(writer, vms, primaryOwnerFilter, parsedQuery.OutputType())
+	err := m.listVMs(writer, vms, parsedQuery.Table["location"],
+		parsedQuery.Table["primaryOwner"], parsedQuery.OutputType())
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
