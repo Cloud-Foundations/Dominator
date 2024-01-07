@@ -38,8 +38,8 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		"Registered addresses: <a href=\"listRegisteredAddresses\">%d</a><br>\n",
 		summary.numRegisteredAddresses)
-	fmt.Fprintf(writer, "Available CPU: %g<br>\n",
-		float64(summary.availableMilliCPU)*1e-3)
+	fmt.Fprintf(writer, "Available CPU: %s<br>\n",
+		format.FormatMilli(uint64(summary.availableMilliCPU)))
 	if memInfo, err := meminfo.GetMemInfo(); err != nil {
 		fmt.Fprintf(writer, "Error getting available RAM: %s<br>\n", err)
 	} else {
