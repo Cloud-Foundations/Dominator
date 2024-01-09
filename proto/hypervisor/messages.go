@@ -318,6 +318,14 @@ type ExportLocalVmResponse struct {
 	VmInfo ExportLocalVmInfo
 }
 
+type GetCapacityRequest struct{}
+
+type GetCapacityResponse struct {
+	MemoryInMiB      uint64 `json:",omitempty"`
+	NumCPUs          uint   `json:",omitempty"`
+	TotalVolumeBytes uint64 `json:",omitempty"`
+}
+
 type GetRootCookiePathRequest struct{}
 
 type GetRootCookiePathResponse struct {
