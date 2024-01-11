@@ -181,6 +181,32 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			format.FormatBytes(allocatedVolumeSize),
 			"",
 		)
+		capacity := s.manager.GetCapacity()
+		tw.WriteRow("", "",
+			"<b>CAPACITY</b>",
+			"",
+			"",
+			"",
+			format.FormatBytes(capacity.MemoryInMiB<<20),
+			strconv.Itoa(int(capacity.NumCPUs)),
+			"",
+			"",
+			format.FormatBytes(capacity.TotalVolumeBytes),
+			"",
+		)
+		tw.WriteRow("", "",
+			"<b>USAGE</b>",
+			"",
+			"",
+			"",
+			fmt.Sprintf("%d%%", allocatedMemoryInMiB*100/capacity.MemoryInMiB),
+			fmt.Sprintf("%d%%", allocatedMilliCPUs/capacity.NumCPUs/10),
+			"",
+			"",
+			fmt.Sprintf("%d%%",
+				allocatedVolumeSize*100/capacity.TotalVolumeBytes),
+			"",
+		)
 		tw.Close()
 		fmt.Fprintln(writer, "<p>")
 		fmt.Fprintln(writer, "VMs by primary owner:<br>")
