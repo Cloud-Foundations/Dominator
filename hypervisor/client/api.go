@@ -53,6 +53,10 @@ func ExportLocalVm(client *srpc.Client, ipAddr net.IP,
 	return exportLocalVm(client, ipAddr, verificationCookie)
 }
 
+func GetCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
+	return getCapacity(client)
+}
+
 func GetRootCookiePath(client *srpc.Client) (string, error) {
 	return getRootCookiePath(client)
 }
