@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
@@ -108,14 +109,20 @@ func (m *Manager) showIPsForHypervisor(writer io.Writer, hIP net.IP) {
 func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
+	capacity := hyper_proto.GetCapacityResponse{
+		MemoryInMiB:      h.memoryInMiB,
+		NumCPUs:          h.numCPUs,
+		TotalVolumeBytes: h.totalVolumeBytes,
+	}
 	vms := getVmListFromMap(h.vms, true)
-	if err := m.listVMs(writer, vms, "", "", url.OutputTypeHtml); err != nil {
+	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)
+	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
 	}
 	fmt.Fprintln(writer, "<br>")
 	fmt.Fprintln(writer, "VMs by primary owner as of last update:<br>")
-	err := m.listVMsByPrimaryOwner(writer, vms, url.OutputTypeHtml)
+	err = m.listVMsByPrimaryOwner(writer, vms, url.OutputTypeHtml)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return

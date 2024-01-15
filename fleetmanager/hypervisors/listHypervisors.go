@@ -68,6 +68,17 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 			volumeBytesTotal>>volumeShift,
 			volumeMultiplier),
 		vmsString)
+	tw.WriteRow("", "",
+		"<b>USAGE</b>",
+		"",
+		"",
+		"",
+		"",
+		"",
+		fmt.Sprintf("%d%%", milliCPUsAllocated/uint64(cpusTotal)/10),
+		fmt.Sprintf("%d%%", memoryInMiBAllocated*100/memoryInMiBTotal),
+		fmt.Sprintf("%d%%", volumeBytesAllocated*100/volumeBytesTotal),
+		"")
 }
 
 func (h *hypervisorType) getHealthStatus() string {

@@ -116,6 +116,7 @@ func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 }
 
 func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
+	capacity *hyper_proto.GetCapacityResponse,
 	locationFilter, primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
@@ -201,6 +202,36 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 			primaryOwnerFilter,
 			"",
 			"")
+		if capacity != nil {
+			tw.WriteRow("", "",
+				"<b>CAPACITY</b>",
+				"",
+				"",
+				format.FormatBytes(capacity.MemoryInMiB<<20),
+				strconv.Itoa(int(capacity.NumCPUs)),
+				"",
+				"",
+				format.FormatBytes(capacity.TotalVolumeBytes),
+				"",
+				"",
+				"",
+			)
+			tw.WriteRow("", "",
+				"<b>USAGE</b>",
+				"",
+				"",
+				fmt.Sprintf("%d%%",
+					totals.MemoryInMiB*100/capacity.MemoryInMiB),
+				fmt.Sprintf("%d%%", totals.MilliCPUs/capacity.NumCPUs/10),
+				"",
+				"",
+				fmt.Sprintf("%d%%",
+					totals.VolumeSize*100/capacity.TotalVolumeBytes),
+				"",
+				"",
+				"",
+			)
+		}
 		tw.Close()
 	case url.OutputTypeJson:
 		json.WriteWithIndent(writer, "   ", vmsToShow)
@@ -285,7 +316,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "<body>")
 	}
 	vms := m.getVMs(true)
-	err := m.listVMs(writer, vms, parsedQuery.Table["location"],
+	err := m.listVMs(writer, vms, nil, parsedQuery.Table["location"],
 		parsedQuery.Table["primaryOwner"], parsedQuery.OutputType())
 	if err != nil {
 		fmt.Fprintln(writer, err)
