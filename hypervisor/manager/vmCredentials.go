@@ -15,7 +15,7 @@ func (m *Manager) replaceVmCredentials(
 		return err
 	}
 	defer vm.mutex.Unlock()
-	identityName, err := validateIdentityKeyPair(
+	identityName, identityExpires, err := validateIdentityKeyPair(
 		request.IdentityCertificate, request.IdentityKey, authInfo.Username)
 	if err != nil {
 		return err
@@ -26,7 +26,9 @@ func (m *Manager) replaceVmCredentials(
 	if err != nil {
 		return err
 	}
-	if vm.IdentityName != identityName {
+	if !vm.IdentityExpires.Equal(identityExpires) ||
+		vm.IdentityName != identityName {
+		vm.IdentityExpires = identityExpires
 		vm.IdentityName = identityName
 		vm.writeAndSendInfo()
 	}

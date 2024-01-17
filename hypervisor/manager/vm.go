@@ -990,10 +990,11 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		return sendError(conn, errors.New("no authentication data"))
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
+	var identityExpires time.Time
 	var identityName string
 	if len(request.IdentityCertificate) > 0 && len(request.IdentityKey) > 0 {
 		var err error
-		identityName, err = validateIdentityKeyPair(
+		identityName, identityExpires, err = validateIdentityKeyPair(
 			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
 		if err != nil {
 			if err := maybeDrainAll(conn, request); err != nil {
@@ -1012,6 +1013,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	defer func() {
 		vm.cleanup() // Evaluate vm at return time, not defer time.
 	}()
+	vm.IdentityExpires = identityExpires
 	vm.IdentityName = identityName
 	var memoryError <-chan error
 	if !request.SkipMemoryCheck {
