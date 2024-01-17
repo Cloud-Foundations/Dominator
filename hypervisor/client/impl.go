@@ -198,6 +198,16 @@ func exportLocalVm(client *srpc.Client, ipAddr net.IP,
 	return reply.VmInfo, nil
 }
 
+func getCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
+	request := proto.GetCapacityRequest{}
+	var reply proto.GetCapacityResponse
+	err := client.RequestReply("Hypervisor.GetCapacity", request, &reply)
+	if err != nil {
+		return proto.GetCapacityResponse{}, err
+	}
+	return reply, nil
+}
+
 func getRootCookiePath(client *srpc.Client) (string, error) {
 	request := proto.GetRootCookiePathRequest{}
 	var reply proto.GetRootCookiePathResponse

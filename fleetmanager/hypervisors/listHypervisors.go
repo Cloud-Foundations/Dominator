@@ -26,6 +26,61 @@ const (
 
 type hypervisorList []*hypervisorType
 
+func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
+	numVMs uint, tw *html.TableWriter) {
+	var memoryInMiBAllocated, memoryInMiBTotal uint64
+	var milliCPUsAllocated uint64
+	var cpusTotal uint
+	var volumeBytesAllocated, volumeBytesTotal uint64
+	for _, h := range hypervisors {
+		memoryInMiBAllocated += h.allocatedMemory
+		memoryInMiBTotal += h.memoryInMiB
+		milliCPUsAllocated += h.allocatedMilliCPUs
+		cpusTotal += h.numCPUs
+		volumeBytesAllocated += h.allocatedVolumeBytes
+		volumeBytesTotal += h.totalVolumeBytes
+	}
+	memoryShift, memoryMultiplier := format.GetMiltiplier(
+		memoryInMiBAllocated << 20)
+	volumeShift, volumeMultiplier := format.GetMiltiplier(
+		volumeBytesAllocated)
+	var vmsString string
+	if location == "" {
+		vmsString = fmt.Sprintf("<a href=\"listVMs\">%d</a>", numVMs)
+	} else {
+		vmsString = fmt.Sprintf("<a href=\"listVMs?location=%s\">%d</a>",
+			location, numVMs)
+	}
+	tw.WriteRow("", "",
+		"<b>TOTAL</b>",
+		"",
+		"",
+		"",
+		"",
+		"",
+		fmt.Sprintf("%s/%d", format.FormatMilli(milliCPUsAllocated), cpusTotal),
+		fmt.Sprintf("%d/%d %sB",
+			memoryInMiBAllocated<<20>>memoryShift,
+			memoryInMiBTotal<<20>>memoryShift,
+			memoryMultiplier),
+		fmt.Sprintf("%d/%d %sB",
+			volumeBytesAllocated>>volumeShift,
+			volumeBytesTotal>>volumeShift,
+			volumeMultiplier),
+		vmsString)
+	tw.WriteRow("", "",
+		"<b>USAGE</b>",
+		"",
+		"",
+		"",
+		"",
+		"",
+		fmt.Sprintf("%d%%", milliCPUsAllocated/uint64(cpusTotal)/10),
+		fmt.Sprintf("%d%%", memoryInMiBAllocated*100/memoryInMiBTotal),
+		fmt.Sprintf("%d%%", volumeBytesAllocated*100/volumeBytesTotal),
+		"")
+}
+
 func (h *hypervisorType) getHealthStatus() string {
 	healthStatus := h.probeStatus.String()
 	if h.probeStatus == probeStatusConnected {
@@ -42,6 +97,55 @@ func (h *hypervisorType) getNumVMs() uint {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return uint(len(h.vms))
+}
+
+func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
+	machine := h.machine
+	machineType := machine.Tags["Type"]
+	if machineTypeURL := machine.Tags["TypeURL"]; machineTypeURL != "" {
+		machineType = `<a href="` + machineTypeURL + `">` + machineType +
+			`</a>`
+	}
+	numShift := 0
+	memoryInMiB := h.memoryInMiB
+	for ; memoryInMiB >= 16; numShift++ {
+		memoryInMiB >>= 1
+	}
+	if memoryInMiB == 15 {
+		memoryInMiB++
+		memoryInMiB <<= numShift
+	} else {
+		memoryInMiB = h.memoryInMiB
+	}
+	memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
+	volumeShift, volumeMultiplier := format.GetMiltiplier(
+		h.totalVolumeBytes)
+	numVMs := h.getNumVMs()
+	tw.WriteRow("", "",
+		fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
+			machine.Hostname, machine.Hostname),
+		fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+			machine.Hostname, constants.HypervisorPortNumber,
+			h.getHealthStatus()),
+		machine.HostIpAddress.String(),
+		h.serialNumber,
+		h.location,
+		machineType,
+		fmt.Sprintf("%s/%d",
+			format.FormatMilli(h.allocatedMilliCPUs), h.numCPUs),
+		fmt.Sprintf("%d/%d %sB",
+			h.allocatedMemory<<20>>memoryShift,
+			memoryInMiB<<20>>memoryShift,
+			memoryMultiplier),
+		fmt.Sprintf("%d/%d %sB",
+			h.allocatedVolumeBytes>>volumeShift,
+			h.totalVolumeBytes>>volumeShift,
+			volumeMultiplier),
+		fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
+			machine.Hostname, constants.HypervisorPortNumber,
+			numVMs),
+	)
+	return numVMs
 }
 
 func (m *Manager) listHypervisors(topologyDir string, showFilter int,
@@ -117,7 +221,8 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	case "off":
 		showFilter = showOff
 	}
-	hypervisors, err := m.listHypervisors("", showFilter, "", nil)
+	locationFilter := parsedQuery.Table["location"]
+	hypervisors, err := m.listHypervisors(locationFilter, showFilter, "", nil)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return
@@ -140,54 +245,12 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	tw, _ := html.NewTableWriter(writer, true,
 		"Name", "Status", "IP Addr", "Serial Number", "Location", "Type",
 		"CPUs", "RAM", "Storage", "NumVMs")
+	var numVMs uint
 	for _, hypervisor := range hypervisors {
-		machine := hypervisor.machine
-		machineType := machine.Tags["Type"]
-		if machineTypeURL := machine.Tags["TypeURL"]; machineTypeURL != "" {
-			machineType = `<a href="` + machineTypeURL + `">` + machineType +
-				`</a>`
-		}
-		numShift := 0
-		memoryInMiB := hypervisor.memoryInMiB
-		for ; memoryInMiB >= 16; numShift++ {
-			memoryInMiB >>= 1
-		}
-		if memoryInMiB == 15 {
-			memoryInMiB++
-			memoryInMiB <<= numShift
-		} else {
-			memoryInMiB = hypervisor.memoryInMiB
-		}
-		memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
-		volumeShift, volumeMultiplier := format.GetMiltiplier(
-			hypervisor.totalVolumeBytes)
-		tw.WriteRow("", "",
-			fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
-				machine.Hostname, machine.Hostname),
-			fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
-				machine.Hostname, constants.HypervisorPortNumber,
-				hypervisor.getHealthStatus()),
-			machine.HostIpAddress.String(),
-			hypervisor.serialNumber,
-			hypervisor.location,
-			machineType,
-			fmt.Sprintf("%.3f/%d",
-				float64(hypervisor.allocatedMilliCPUs)/1000,
-				hypervisor.numCPUs),
-			fmt.Sprintf("%d/%d %sB",
-				hypervisor.allocatedMemory<<20>>memoryShift,
-				memoryInMiB<<20>>memoryShift,
-				memoryMultiplier),
-			fmt.Sprintf("%d/%d %sB",
-				hypervisor.allocatedVolumeBytes>>volumeShift,
-				hypervisor.totalVolumeBytes>>volumeShift,
-				volumeMultiplier),
-			fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
-				machine.Hostname, constants.HypervisorPortNumber,
-				hypervisor.getNumVMs()),
-		)
+		numVMs += hypervisor.writeStats(tw)
 	}
-	fmt.Fprintln(writer, "</table>")
+	writeHypervisorTotalsStats(hypervisors, locationFilter, numVMs, tw)
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 

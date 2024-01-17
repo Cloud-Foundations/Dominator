@@ -72,6 +72,6 @@ func (s state) listPackagesHandler(w http.ResponseWriter, req *http.Request) {
 			format.FormatBytes(pkg.Size),
 		)
 	}
-	fmt.Fprintln(writer, "</table>")
+	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }

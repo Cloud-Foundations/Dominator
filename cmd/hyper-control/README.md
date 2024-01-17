@@ -43,7 +43,10 @@ Some of the sub-commands available are:
 - **enable-hypervisor**: enable a specific *Hypervisor*, enabling VMs to be
                          be created and started. Useful for bringing a
 			 *Hypervisor* back into service
-- **get-machine-info**: get information for a specific *Hypervisor*
+- **get-capacity**: get capacity for a specific *Hypervisor* directly from the
+                    *Hypervisor*
+- **get-machine-info**: get information for a specific *Hypervisor* from the
+                        *Fleet Manager*
 - **get-updates**: get and show a continuous stream of updates from a
                    *Hypervisor* or *Fleet Manager*. This is primarily for
                    debugging
@@ -55,6 +58,8 @@ Some of the sub-commands available are:
 		    write lock
 - **installer-shell**: start a remote shell (via SRPC) to the installer running
                        on a machine
+- **list-volume-directories**: list the volume directories for a specific
+                               *Hypervisor*
 - **make-installer-iso**: make a bootable installation ISO (CD-ROM) image for a
                           machine
 - **move-ip-address**: move a (free) IP address to a specific *Hypervisor*

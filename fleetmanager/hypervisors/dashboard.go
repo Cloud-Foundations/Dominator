@@ -39,7 +39,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	numVMs := uint(len(m.vms))
 	m.mutex.RUnlock()
 	writeCountLinksHT(writer, "Number of hypervisors known",
-		"listHypervisors?state=", numMachines)
+		"listHypervisors", numMachines)
 	writeCountLinksHT(writer, "Number of hypervisors powered off",
 		"listHypervisors?state=off", numOff)
 	writeCountLinksHT(writer, "Number of hypervisors connected",
@@ -49,8 +49,11 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	writeCountLinksHT(writer, "Number of hypervisors OK",
 		"listHypervisors?state=OK", numOK)
 	writeCountLinksHTJ(writer, "Number of VMs known",
-		"listVMs?", numVMs)
-	fmt.Fprintln(writer, `Hypervisor <a href="listLocations">locations</a><br>`)
+		"listVMs", numVMs)
+	writeLinksHTJ(writer, "VMs by primary owner",
+		"listVMsByPrimaryOwner", numVMs)
+	fmt.Fprintln(writer, `Hypervisor <a href="listLocations">locations</a>`)
+	fmt.Fprintln(writer, ` (<a href="listLocations?output=text">text</a>)<br>`)
 }
 
 func writeCountLinksHT(writer io.Writer, text, path string, count uint) {
@@ -67,6 +70,15 @@ func writeCountLinksHTJ(writer io.Writer, text, path string, count uint) {
 		return
 	}
 	fmt.Fprintf(writer,
-		"%s: <a href=\"%s\">%d</a> (<a href=\"%s&output=text\">text</a>, <a href=\"%s&output=json\">JSON</a>)<br>\n",
+		"%s: <a href=\"%s\">%d</a> (<a href=\"%s?output=text\">text</a>, <a href=\"%s?output=json\">JSON</a>)<br>\n",
 		text, path, count, path, path)
+}
+
+func writeLinksHTJ(writer io.Writer, text, path string, count uint) {
+	if count < 1 {
+		return
+	}
+	fmt.Fprintf(writer,
+		"%s: <a href=\"%s\">HTML</a>, <a href=\"%s?output=text\">text</a>, <a href=\"%s?output=json\">JSON</a><br>\n",
+		text, path, path, path)
 }

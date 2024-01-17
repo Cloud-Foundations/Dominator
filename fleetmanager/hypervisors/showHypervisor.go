@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
@@ -43,11 +44,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintf(writer, "<title>Information for Hypervisor %s</title>\n",
 		hostname)
-	fmt.Fprintln(writer, `<style>
-                          table, th, td {
-                          border-collapse: collapse;
-                          }
-                          </style>`)
+	writer.WriteString(commonStyleSheet)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "Machine info:<br>")
 	fmt.Fprintln(writer, `<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
@@ -76,7 +73,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		for _, key := range keys {
 			tw.WriteRow("", "", key, h.localTags[key])
 		}
-		fmt.Fprintln(writer, "</table>")
+		tw.Close()
 	}
 	fmt.Fprintf(writer, "Status: %s<br>\n", h.getHealthStatus())
 	fmt.Fprintf(writer,
@@ -112,8 +109,20 @@ func (m *Manager) showIPsForHypervisor(writer io.Writer, hIP net.IP) {
 func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
+	capacity := hyper_proto.GetCapacityResponse{
+		MemoryInMiB:      h.memoryInMiB,
+		NumCPUs:          h.numCPUs,
+		TotalVolumeBytes: h.totalVolumeBytes,
+	}
 	vms := getVmListFromMap(h.vms, true)
-	_, err := m.listVMs(writer, vms, "", url.OutputTypeHtml)
+	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)
+	if err != nil {
+		fmt.Fprintln(writer, err)
+		return
+	}
+	fmt.Fprintln(writer, "<br>")
+	fmt.Fprintln(writer, "VMs by primary owner as of last update:<br>")
+	err = m.listVMsByPrimaryOwner(writer, vms, url.OutputTypeHtml)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return

@@ -12,6 +12,8 @@ const (
 	highlightBackground = "#fafafa"
 )
 
+var endTable = []byte("</table>\n")
+
 func newTableWriter(writer io.Writer, doHighlighting bool,
 	columns []string) (*TableWriter, error) {
 	if len(columns) > 0 {
@@ -30,6 +32,11 @@ func newTableWriter(writer io.Writer, doHighlighting bool,
 		doHighlighting: doHighlighting,
 		writer:         writer,
 	}, nil
+}
+
+func (tw *TableWriter) close() error {
+	_, err := tw.writer.Write(endTable)
+	return err
 }
 
 func (tw *TableWriter) closeRow() error {

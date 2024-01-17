@@ -110,6 +110,7 @@ var subcommands = []commands.Command{
 	{"connect-to-vm-manager", "IPaddr", 1, 1, connectToVmManagerSubcommand},
 	{"disable-hypervisor", "", 0, 0, disableHypervisorSubcommand},
 	{"enable-hypervisor", "", 0, 0, enableHypervisorSubcommand},
+	{"get-capacity", "", 0, 0, getCapacitySubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
 	{"hold-lock", "", 0, 0, holdLockSubcommand},

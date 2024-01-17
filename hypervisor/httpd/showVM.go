@@ -89,7 +89,7 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		writeTime(writer, "Last state change", vm.ChangedStateOn)
 		writeString(writer, "State", vm.State.String())
 		writeString(writer, "RAM", format.FormatBytes(vm.MemoryInMiB<<20))
-		writeFloat(writer, "CPU", float64(vm.MilliCPUs)*1e-3)
+		writeString(writer, "CPU", format.FormatMilli(uint64(vm.MilliCPUs)))
 		writeStrings(writer, "Volume sizes", volumeSizes)
 		writeString(writer, "Total storage", format.FormatBytes(storage))
 		writeStrings(writer, "Owner users", vm.OwnerGroups)
@@ -119,7 +119,8 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		for _, name := range tagNames {
 			tw.WriteRow("", "", name, vm.Tags[name])
 		}
-		fmt.Fprintln(writer, "</table><br>")
+		tw.Close()
+		fmt.Fprintln(writer, "<br>")
 		fmt.Fprintf(writer,
 			"<a href=\"showVM?%s&output=json\">VM info:</a><br>\n",
 			vm.Address.IpAddress)
@@ -132,10 +133,6 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 
 func writeBool(writer io.Writer, name string, value bool) {
 	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%t</td></tr>\n", name, value)
-}
-
-func writeFloat(writer io.Writer, name string, value float64) {
-	fmt.Fprintf(writer, "  <tr><td>%s</td><td>%g</td></tr>\n", name, value)
 }
 
 func writeInt(writer io.Writer, name string, value int) {

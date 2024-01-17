@@ -266,6 +266,14 @@ func (m *Manager) ExportLocalVm(authInfo *srpc.AuthInformation,
 	return m.exportLocalVm(authInfo, request)
 }
 
+func (m *Manager) GetCapacity() proto.GetCapacityResponse {
+	return proto.GetCapacityResponse{
+		MemoryInMiB:      m.memTotalInMiB,
+		NumCPUs:          m.numCPUs,
+		TotalVolumeBytes: m.totalVolumeBytes,
+	}
+}
+
 func (m *Manager) GetHealthStatus() string {
 	return m.getHealthStatus()
 }

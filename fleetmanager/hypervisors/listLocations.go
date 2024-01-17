@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
+	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
 
 func (m *Manager) listLocations(dirname string) ([]string, error) {
@@ -42,9 +43,23 @@ func (m *Manager) listLocationsHandler(w http.ResponseWriter,
 	req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	if locations, err := m.listLocations(""); err != nil {
+	parsedQuery := url.ParseQuery(req.URL)
+	locations, err := m.listLocations("")
+	if err != nil {
 		fmt.Fprintln(writer, err)
-	} else {
+		return
+	}
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fmt.Fprintf(writer, "<title>List of Hypervisor Locations</title>\n")
+		fmt.Fprintln(writer, "<body>")
+		for _, location := range locations {
+			fmt.Fprintf(writer,
+				"<a href=\"listHypervisors?location=%s\">%s</a><br>\n",
+				location, location)
+		}
+		fmt.Fprintln(writer, "</body>")
+	case url.OutputTypeText:
 		for _, location := range locations {
 			fmt.Fprintln(writer, location)
 		}

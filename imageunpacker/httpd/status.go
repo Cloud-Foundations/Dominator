@@ -89,7 +89,8 @@ func (s state) writeDashboard(writer io.Writer) {
 			s.getStreamStatusLink(streamName, stream, true),
 		)
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 	fmt.Fprintln(writer, "Devices:<br>")
 	fmt.Fprintln(writer, `<table border="1">`)
 	tw, _ = html.NewTableWriter(writer, true, "Device Id", "Device Name",
@@ -110,5 +111,6 @@ func (s state) writeDashboard(writer io.Writer) {
 			s.getStreamStatusLink(deviceInfo.StreamName, stream, ok),
 		)
 	}
-	fmt.Fprintln(writer, "</table><br>")
+	tw.Close()
+	fmt.Fprintln(writer, "<br>")
 }
