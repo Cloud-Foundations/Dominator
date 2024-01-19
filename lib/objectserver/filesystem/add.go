@@ -19,6 +19,14 @@ const (
 	buflen = 65536
 )
 
+// This must be called with the lock held. The object must not already exist.
+func (objSrv *ObjectServer) add(object *objectType) {
+	objSrv.objects[object.hash] = object
+	objSrv.addUnreferenced(object)
+	objSrv.lastMutationTime = time.Now()
+	objSrv.totalBytes += object.size
+}
+
 func (objSrv *ObjectServer) addObject(reader io.Reader, length uint64,
 	expectedHash *hash.Hash) (hash.Hash, bool, error) {
 	hashVal, data, err := objectcache.ReadObject(reader, length, expectedHash)
@@ -31,9 +39,11 @@ func (objSrv *ObjectServer) addObject(reader io.Reader, length uint64,
 	if isNew, err := objSrv.addOrCompare(hashVal, data, filename); err != nil {
 		return hashVal, false, err
 	} else {
+		object := &objectType{hash: hashVal, size: uint64(len(data))}
 		objSrv.rwLock.Lock()
-		objSrv.sizesMap[hashVal] = uint64(len(data))
-		objSrv.lastMutationTime = time.Now()
+		if _, ok := objSrv.objects[object.hash]; !ok {
+			objSrv.add(object)
+		}
 		objSrv.rwLock.Unlock()
 		if objSrv.addCallback != nil {
 			objSrv.addCallback(hashVal, uint64(len(data)), isNew)

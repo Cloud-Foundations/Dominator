@@ -21,15 +21,15 @@ func (objSrv *ObjectServer) checkObjects(hashes []hash.Hash) ([]uint64, error) {
 	return sizesList, nil
 }
 
-func (objSrv *ObjectServer) checkObject(hash hash.Hash) (uint64, error) {
+func (objSrv *ObjectServer) checkObject(hashVal hash.Hash) (uint64, error) {
 	objSrv.rwLock.RLock()
-	size, ok := objSrv.sizesMap[hash]
+	object, ok := objSrv.objects[hashVal]
 	objSrv.rwLock.RUnlock()
 	if ok {
-		return size, nil
+		return object.size, nil
 	}
 	filename := path.Join(objSrv.BaseDirectory,
-		objectcache.HashToFilename(hash))
+		objectcache.HashToFilename(hashVal))
 	fi, err := os.Lstat(filename)
 	if err != nil {
 		return 0, nil
@@ -38,11 +38,7 @@ func (objSrv *ObjectServer) checkObject(hash hash.Hash) (uint64, error) {
 		if fi.Size() < 1 {
 			return 0, fmt.Errorf("zero length file: %s", filename)
 		}
-		size := uint64(fi.Size())
-		objSrv.rwLock.Lock()
-		objSrv.sizesMap[hash] = size
-		objSrv.rwLock.Unlock()
-		return size, nil
+		return uint64(fi.Size()), nil
 	}
 	return 0, nil
 }

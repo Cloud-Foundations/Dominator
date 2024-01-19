@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -16,9 +17,27 @@ import (
 var (
 	objectServerCleanupStartPercent = flag.Int(
 		"objectServerCleanupStartPercent", 95, "")
+	objectServerCleanupStartSize   flagutil.Size
 	objectServerCleanupStopPercent = flag.Int("objectServerCleanupStopPercent",
 		90, "")
+	objectServerCleanupStopSize flagutil.Size
+
+	// Interface check.
+	_ objectserver.FullObjectServer = (*ObjectServer)(nil)
 )
+
+func init() {
+	flag.Var(&objectServerCleanupStartSize, "objectServerCleanupStartSize", "")
+	flag.Var(&objectServerCleanupStopSize, "objectServerCleanupStopSize", "")
+}
+
+type objectType struct {
+	hash              hash.Hash
+	newerUnreferenced *objectType
+	olderUnreferenced *objectType
+	refcount          uint64
+	size              uint64
+}
 
 type Config struct {
 	BaseDirectory     string
@@ -32,10 +51,15 @@ type ObjectServer struct {
 	gc          objectserver.GarbageCollector
 	lockWatcher *lockwatcher.LockWatcher
 	Params
-	rwLock                sync.RWMutex         // Protect the following fields.
-	sizesMap              map[hash.Hash]uint64 // Only set if object is known.
+	rwLock                sync.RWMutex // Protect the following fields.
 	lastGarbageCollection time.Time
 	lastMutationTime      time.Time
+	objects               map[hash.Hash]*objectType // Only set if object known.
+	newestUnreferenced    *objectType
+	numUnreferenced       uint64
+	oldestUnreferenced    *objectType
+	totalBytes            uint64
+	unreferencedBytes     uint64
 }
 
 type Params struct {
@@ -67,6 +91,15 @@ func (objSrv *ObjectServer) AddObject(reader io.Reader, length uint64,
 	return objSrv.addObject(reader, length, expectedHash)
 }
 
+// AdjustRefcounts will increment or decrement the refcounts for each object
+// yielded by the specified objects iterator. If there are missing objects or
+// the iterator returns an error, the adjustments are reverted and an error is
+// returned.
+func (objSrv *ObjectServer) AdjustRefcounts(increment bool,
+	iterator objectserver.ObjectsIterator) error {
+	return objSrv.adjustRefcounts(increment, iterator)
+}
+
 func (objSrv *ObjectServer) CheckObjects(hashes []hash.Hash) ([]uint64, error) {
 	return objSrv.checkObjects(hashes)
 }
@@ -77,11 +110,24 @@ func (objSrv *ObjectServer) CommitObject(hashVal hash.Hash) error {
 }
 
 func (objSrv *ObjectServer) DeleteObject(hashVal hash.Hash) error {
-	return objSrv.deleteObject(hashVal)
+	return objSrv.deleteObject(hashVal, false)
 }
 
 func (objSrv *ObjectServer) DeleteStashedObject(hashVal hash.Hash) error {
 	return objSrv.deleteStashedObject(hashVal)
+}
+
+// DeleteUnreferenced will delete some or all unreferenced objects.
+// The oldest unreferenced objects are deleted first, until both the percentage
+// and bytes thresholds are satisfied. The number of bytes and objects deleted
+// are returned.
+func (objSrv *ObjectServer) DeleteUnreferenced(percentage uint8,
+	bytes uint64) (uint64, uint64, error) {
+	return objSrv.deleteUnreferenced(percentage, bytes)
+}
+
+func (objSrv *ObjectServer) ListUnreferenced() map[hash.Hash]uint64 {
+	return objSrv.listUnreferenced()
 }
 
 func (objSrv *ObjectServer) SetAddCallback(callback objectserver.AddCallback) {
@@ -120,7 +166,7 @@ func (objSrv *ObjectServer) ListObjects() []hash.Hash {
 func (objSrv *ObjectServer) NumObjects() uint64 {
 	objSrv.rwLock.RLock()
 	defer objSrv.rwLock.RUnlock()
-	return uint64(len(objSrv.sizesMap))
+	return uint64(len(objSrv.objects))
 }
 
 // StashOrVerifyObject will stash an object if it is new or it will verify if it
