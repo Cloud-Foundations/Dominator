@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +17,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/logutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
-	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
@@ -49,12 +47,6 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 			Logger:        prefixlogger.New("ImageServer: ", params.Logger),
 			LogTimeout:    config.LockLogTimeout,
 		})
-	imdb.unreferencedObjects, err = loadUnreferencedObjects(
-		path.Join(config.BaseDirectory, unreferencedObjectsFile))
-	if err != nil {
-		return nil, errors.New("error loading unreferenced objects list: " +
-			err.Error())
-	}
 	state := concurrent.NewState(0)
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
@@ -79,14 +71,6 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 			imdb.CountImages(), plural, time.Since(startTime), userTime)
 		logutil.LogMemory(params.Logger, 0, "after loading")
 	}
-	imdb.regenerateUnreferencedObjectsList()
-	if ads, ok := params.ObjectServer.(objectserver.AddCallbackSetter); ok {
-		ads.SetAddCallback(imdb.garbageCollectorAddCallback)
-	}
-	if gcs, ok := params.ObjectServer.(objectserver.GarbageCollectorSetter); ok {
-		gcs.SetGarbageCollector(imdb.garbageCollector)
-	}
-	go imdb.periodicGarbageCollector()
 	return imdb, nil
 }
 
@@ -199,6 +183,9 @@ func (imdb *ImageDataBase) loadFile(filename string,
 	img.ReplaceStrings(imdb.deduper.DeDuplicate)
 	imdb.deduperLock.Unlock()
 	if err := img.Verify(); err != nil {
+		return err
+	}
+	if err := imdb.Params.ObjectServer.AdjustRefcounts(true, &img); err != nil {
 		return err
 	}
 	imdb.scheduleExpiration(&img, filename)

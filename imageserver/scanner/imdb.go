@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
-	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -44,7 +43,12 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 	image.ReplaceStrings(imdb.deduper.DeDuplicate)
 	imdb.deduperLock.Unlock()
 	imdb.Lock()
-	defer imdb.Unlock()
+	doUnlock := true
+	defer func() {
+		if doUnlock {
+			imdb.Unlock()
+		}
+	}()
 	if _, ok := imdb.imageMap[name]; ok {
 		return errors.New("image: " + name + " already exists")
 	} else {
@@ -83,8 +87,9 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		imdb.scheduleExpiration(image, name)
 		imdb.imageMap[name] = image
 		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-		imdb.removeFromUnreferencedObjectsListAndSave(image)
-		return nil
+		doUnlock = false
+		imdb.Unlock()
+		return imdb.Params.ObjectServer.AdjustRefcounts(true, image)
 	}
 }
 
@@ -290,49 +295,14 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 	}
 	delete(imdb.imageMap, name)
 	imdb.rebuildDeDuper()
-	imdb.maybeAddToUnreferencedObjectsList(img.FileSystem)
-}
-
-func (imdb *ImageDataBase) deleteUnreferencedObjects(percentage uint8,
-	bytesThreshold uint64) error {
-	objects := imdb.listUnreferencedObjects()
-	objectsThreshold := uint64(percentage) * uint64(len(objects)) / 100
-	var objectsCount, bytesCount uint64
-	for hashVal, size := range objects {
-		if !(objectsCount < objectsThreshold || bytesCount < bytesThreshold) {
-			break
-		}
-		if err := imdb.Params.ObjectServer.DeleteObject(hashVal); err != nil {
-			imdb.Logger.Printf("Error cleaning up: %x: %s\n", hashVal, err)
-			return fmt.Errorf("error cleaning up: %x: %s\n", hashVal, err)
-		}
-		objectsCount++
-		bytesCount += size
-	}
-	return nil
+	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
 func (imdb *ImageDataBase) doWithPendingImage(image *image.Image,
 	doFunc func() error) error {
 	imdb.pendingImageLock.Lock()
 	defer imdb.pendingImageLock.Unlock()
-	imdb.Lock()
-	changed := imdb.removeFromUnreferencedObjectsList(image)
-	imdb.Unlock()
-	err := doFunc()
-	imdb.Lock()
-	defer imdb.Unlock()
-	for _, img := range imdb.imageMap {
-		if img == image { // image was added, save if change happened above.
-			if changed {
-				imdb.saveUnreferencedObjectsList(false)
-			}
-			return err
-		}
-	}
-	// image was not added: "delete" it by maybe adding to unreferenced list.
-	imdb.maybeAddToUnreferencedObjectsList(image.FileSystem)
-	return err
+	return doFunc()
 }
 
 func (imdb *ImageDataBase) findLatestImage(
@@ -369,14 +339,6 @@ func (imdb *ImageDataBase) getImage(name string) *image.Image {
 	return imdb.imageMap[name]
 }
 
-func (imdb *ImageDataBase) getUnreferencedObjectsStatistics() (uint64, uint64) {
-	imdb.maybeRegenerateUnreferencedObjectsList()
-	imdb.RLock()
-	defer imdb.RUnlock()
-	return uint64(len(imdb.unreferencedObjects.hashToEntry)),
-		imdb.unreferencedObjects.totalBytes
-}
-
 func (imdb *ImageDataBase) listDirectories() []image.Directory {
 	imdb.RLock()
 	defer imdb.RUnlock()
@@ -400,13 +362,6 @@ func (imdb *ImageDataBase) listImages(
 		names = append(names, name)
 	}
 	return names
-}
-
-func (imdb *ImageDataBase) listUnreferencedObjects() map[hash.Hash]uint64 {
-	imdb.maybeRegenerateUnreferencedObjectsList()
-	imdb.RLock()
-	defer imdb.RUnlock()
-	return imdb.unreferencedObjects.list()
 }
 
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,

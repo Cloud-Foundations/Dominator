@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"flag"
 	"io"
 	"sync"
 	"time"
@@ -20,14 +19,6 @@ import (
 //       behind the scanner code.
 
 const metadataFile = ".metadata"
-const unreferencedObjectsFile = ".unreferenced-objects"
-
-var (
-	imageServerMaxUnrefData = flag.Int64("imageServerMaxUnrefData", 0,
-		"maximum number of bytes of unreferenced objects before cleaning")
-	imageServerMaxUnrefAge = flag.Duration("imageServerMaxUnrefAge", 0,
-		"maximum age of unreferenced objects before cleaning")
-)
 
 type Config struct {
 	BaseDirectory     string
@@ -45,12 +36,11 @@ type ImageDataBase struct {
 	lockWatcher *lockwatcher.LockWatcher
 	sync.RWMutex
 	// Protected by main lock.
-	directoryMap        map[string]image.DirectoryMetadata
-	imageMap            map[string]*image.Image
-	addNotifiers        notifiers
-	deleteNotifiers     notifiers
-	mkdirNotifiers      makeDirectoryNotifiers
-	unreferencedObjects *unreferencedObjectsList
+	directoryMap    map[string]image.DirectoryMetadata
+	imageMap        map[string]*image.Image
+	addNotifiers    notifiers
+	deleteNotifiers notifiers
+	mkdirNotifiers  makeDirectoryNotifiers
 	// Unprotected by main lock.
 	deduperLock      sync.Mutex
 	deduper          *stringutil.StringDeduplicator
@@ -123,7 +113,8 @@ func (imdb *ImageDataBase) DeleteImage(name string,
 // may delete objects that the new image will be using.
 func (imdb *ImageDataBase) DeleteUnreferencedObjects(percentage uint8,
 	bytes uint64) error {
-	return imdb.deleteUnreferencedObjects(percentage, bytes)
+	_, _, err := imdb.Params.ObjectServer.DeleteUnreferenced(percentage, bytes)
+	return err
 }
 
 func (imdb *ImageDataBase) DoWithPendingImage(image *image.Image,
@@ -141,7 +132,7 @@ func (imdb *ImageDataBase) GetImage(name string) *image.Image {
 }
 
 func (imdb *ImageDataBase) GetUnreferencedObjectsStatistics() (uint64, uint64) {
-	return imdb.getUnreferencedObjectsStatistics()
+	return 0, 0
 }
 
 func (imdb *ImageDataBase) ListDirectories() []image.Directory {
@@ -163,7 +154,7 @@ func (imdb *ImageDataBase) ListSelectedImages(
 // may not yet be present (i.e. it may be added after missing objects are
 // uploaded).
 func (imdb *ImageDataBase) ListUnreferencedObjects() map[hash.Hash]uint64 {
-	return imdb.listUnreferencedObjects()
+	return imdb.Params.ObjectServer.ListUnreferenced()
 }
 
 func (imdb *ImageDataBase) MakeDirectory(dirname string,
