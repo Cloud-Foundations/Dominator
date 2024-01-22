@@ -15,4 +15,10 @@ func (imdb *ImageDataBase) writeHtml(writer io.Writer) {
 		"Number of  <a href=\"listDirectories?output=text\">directories</a>: "+
 			"<a href=\"listDirectories\">%d</a><br>\n",
 		imdb.CountDirectories())
+	if imdb.ReplicationMaster != "" {
+		fmt.Fprintf(writer,
+			"Replication master: <a href=\"http://%s/\">%s</a><br>\n",
+			imdb.ReplicationMaster,
+			imdb.ReplicationMaster)
+	}
 }
