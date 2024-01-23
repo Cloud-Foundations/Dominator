@@ -47,12 +47,6 @@ var (
 		"Port number to allocate and listen on for HTTP/RPC")
 )
 
-type imageObjectServersType struct {
-	imageServerAddress string
-	imdb               *scanner.ImageDataBase
-	objSrv             *filesystem.ObjectServer
-}
-
 func main() {
 	if os.Geteuid() == 0 {
 		fmt.Fprintln(os.Stderr, "Do not run the Image Server as root")
@@ -125,12 +119,8 @@ func main() {
 			ObjectServer: objSrv,
 		})
 	httpd.AddHtmlWriter(imdb)
-	httpd.AddHtmlWriter(&imageObjectServersType{
-		imageServerAddress: imageServerAddress,
-		imdb:               imdb,
-		objSrv:             objSrv,
-	})
 	httpd.AddHtmlWriter(imgSrvRpcHtmlWriter)
+	httpd.AddHtmlWriter(objSrv)
 	httpd.AddHtmlWriter(objSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
 	if err = httpd.StartServer(*portNum, imdb, objSrv, false); err != nil {
