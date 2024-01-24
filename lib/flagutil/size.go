@@ -33,6 +33,9 @@ var units = []unitType{ // In order of preference.
 }
 
 func (size *Size) String() string {
+	if *size == 0 { // Special case, otherwise we'll get "0EiB".
+		return "0B"
+	}
 	for _, unit := range units {
 		if unit.multiplier == 1 {
 			continue
