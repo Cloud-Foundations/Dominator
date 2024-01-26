@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -410,8 +411,14 @@ func (imdb *ImageDataBase) rebuildDeDuper() {
 	for _, image := range imdb.imageMap {
 		image.ReplaceStrings(imdb.deduper.DeDuplicate)
 	}
-	imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
-		time.Since(startTime))
+	timeTaken := time.Since(startTime)
+	if timeTaken >= time.Second {
+		imdb.Logger.Printf("Rebuilding de-duper state took %s\n",
+			format.Duration(timeTaken))
+	} else {
+		imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
+			format.Duration(timeTaken))
+	}
 }
 
 func (imdb *ImageDataBase) registerAddNotifier() <-chan string {
