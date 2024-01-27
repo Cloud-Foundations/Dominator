@@ -44,6 +44,7 @@ type ImageDataBase struct {
 	// Unprotected by main lock.
 	deduperLock      sync.Mutex
 	deduper          *stringutil.StringDeduplicator
+	deduperTrigger   chan<- struct{}
 	pendingImageLock sync.Mutex
 	objectFetchLock  sync.Mutex
 }
