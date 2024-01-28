@@ -134,6 +134,7 @@ func (objSrv *ObjectServer) SetAddCallback(callback objectserver.AddCallback) {
 	objSrv.addCallback = callback
 }
 
+// SetGarbageCollector is deprecated.
 func (objSrv *ObjectServer) SetGarbageCollector(
 	gc objectserver.GarbageCollector) {
 	objSrv.gc = gc

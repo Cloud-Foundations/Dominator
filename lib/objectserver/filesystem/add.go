@@ -65,7 +65,9 @@ func (objSrv *ObjectServer) addOrCompare(hashVal hash.Hash, data []byte,
 		// No collision and no error: it's the same object. Go home early.
 		return false, nil
 	}
-	objSrv.garbageCollector()
+	if objSrv.gc != nil { // Have external garbage collector: trigger it inline.
+		objSrv.garbageCollector()
+	}
 	err = os.MkdirAll(path.Dir(filename), fsutil.PrivateDirPerms)
 	if err != nil {
 		return false, err

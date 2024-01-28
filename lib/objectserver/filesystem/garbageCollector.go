@@ -53,7 +53,13 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 	if bytesToDelete < 1 {
 		return 0, nil
 	}
-	bytesDeleted, err := objSrv.gc(bytesToDelete)
+	var bytesDeleted uint64
+	var err error
+	if objSrv.gc == nil {
+		bytesDeleted, _, err = objSrv.deleteUnreferenced(0, bytesToDelete)
+	} else {
+		bytesDeleted, err = objSrv.gc(bytesToDelete)
+	}
 	if err != nil {
 		objSrv.Logger.Printf(
 			"Error collecting garbage, only deleted: %s of %s: %s\n",
@@ -62,6 +68,15 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 		return 0, err
 	}
 	return bytesDeleted, nil
+}
+
+// garbageCollectorLoop will periodically delete unreferenced objects if space
+// is running low. It returns if an external (deprecated) garbage collector is
+// set.
+func (objSrv *ObjectServer) garbageCollectorLoop() {
+	for time.Sleep(5 * time.Second); objSrv.gc == nil; time.Sleep(time.Second) {
+		objSrv.garbageCollector()
+	}
 }
 
 // getSpaceMetrics returns freeSpace, capacity.

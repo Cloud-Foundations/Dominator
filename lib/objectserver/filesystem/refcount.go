@@ -98,7 +98,13 @@ func (objSrv *ObjectServer) decrementRefcount(object *objectType) error {
 }
 
 // This must be called without the lock being held.
-func (objSrv *ObjectServer) deleteOldestUnreferenced() (uint64, error) {
+func (objSrv *ObjectServer) deleteOldestUnreferenced(lastPauseTime *time.Time) (
+	uint64, error) {
+	// Inject periodic pauses so that the write lockwatcher is not starved out.
+	if time.Since(*lastPauseTime) > time.Second {
+		time.Sleep(100 * time.Millisecond)
+		*lastPauseTime = time.Now()
+	}
 	objSrv.rwLock.Lock()
 	defer objSrv.rwLock.Unlock()
 	object := objSrv.oldestUnreferenced
@@ -119,8 +125,9 @@ func (objSrv *ObjectServer) deleteUnreferenced(percentage uint8,
 	objSrv.rwLock.RLock()
 	objectsToDelete := uint64(percentage) * objSrv.numUnreferenced / 100
 	objSrv.rwLock.RUnlock()
+	lastPauseTime := time.Now()
 	for bytesDeleted < bytesToDelete || objectsDeleted < objectsToDelete {
-		size, err := objSrv.deleteOldestUnreferenced()
+		size, err := objSrv.deleteOldestUnreferenced(&lastPauseTime)
 		if err != nil {
 			return bytesDeleted, objectsDeleted, err
 		}
@@ -179,11 +186,4 @@ func (objSrv *ObjectServer) removeUnreferenced(object *objectType) {
 		objSrv.unreferencedBytes -= object.size
 	}
 	object.newerUnreferenced = nil
-}
-
-// This must be called without the lock being held.
-func (objSrv *ObjectServer) refcountGarbageCollector(bytesToDelete uint64) (
-	uint64, error) {
-	bytesDeleted, _, err := objSrv.deleteUnreferenced(0, bytesToDelete)
-	return bytesDeleted, err
 }

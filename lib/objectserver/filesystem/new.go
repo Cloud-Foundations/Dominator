@@ -45,7 +45,7 @@ func newObjectServer(config Config, params Params) (*ObjectServer, error) {
 		params.Logger.Printf("Scanned %d object%s in %s (%s user CPUtime)\n",
 			len(objSrv.objects), plural, time.Since(startTime), userTime)
 	}
-	objSrv.gc = objSrv.refcountGarbageCollector
+	go objSrv.garbageCollectorLoop()
 	objSrv.lockWatcher = lockwatcher.New(&objSrv.rwLock,
 		lockwatcher.LockWatcherOptions{
 			CheckInterval: config.LockCheckInterval,
