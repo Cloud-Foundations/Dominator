@@ -52,12 +52,16 @@ type ObjectServer struct {
 	lockWatcher *lockwatcher.LockWatcher
 	Params
 	rwLock                sync.RWMutex // Protect the following fields.
+	duplicatedBytes       uint64       // Sum of refcount*size for all objects.
 	lastGarbageCollection time.Time
 	lastMutationTime      time.Time
 	objects               map[hash.Hash]*objectType // Only set if object known.
 	newestUnreferenced    *objectType
+	numDuplicated         uint64 // Sum of refcount for all objects.
+	numReferenced         uint64
 	numUnreferenced       uint64
 	oldestUnreferenced    *objectType
+	referencedBytes       uint64
 	totalBytes            uint64
 	unreferencedBytes     uint64
 }

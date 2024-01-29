@@ -89,11 +89,15 @@ func (objSrv *ObjectServer) decrementRefcount(object *objectType) error {
 		return fmt.Errorf("cannot decrement zero refcount, object: %x",
 			object.hash)
 	}
+	objSrv.duplicatedBytes -= object.size
+	objSrv.numDuplicated--
 	object.refcount--
 	if object.refcount > 0 {
 		return nil
 	}
 	objSrv.addUnreferenced(object)
+	objSrv.numReferenced--
+	objSrv.referencedBytes -= object.size
 	return nil
 }
 
@@ -143,8 +147,12 @@ func (objSrv *ObjectServer) deleteUnreferenced(percentage uint8,
 // Increment refcount and possibly remove from list of unreferenced objects.
 func (objSrv *ObjectServer) incrementRefcount(object *objectType) error {
 	if object.refcount < 1 {
+		objSrv.numReferenced++
+		objSrv.referencedBytes += object.size
 		objSrv.removeUnreferenced(object)
 	}
+	objSrv.duplicatedBytes += object.size
+	objSrv.numDuplicated++
 	object.refcount++
 	return nil
 }

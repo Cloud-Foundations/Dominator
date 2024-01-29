@@ -25,7 +25,13 @@ func (objSrv *ObjectServer) deleteObject(hashVal hash.Hash,
 	} else {
 		refcount = object.refcount
 		delete(objSrv.objects, hashVal)
+		objSrv.duplicatedBytes -= object.size * object.refcount
 		objSrv.lastMutationTime = time.Now()
+		objSrv.numDuplicated -= object.refcount
+		if object.refcount > 0 {
+			objSrv.numReferenced--
+			objSrv.referencedBytes -= object.size
+		}
 		objSrv.removeUnreferenced(object)
 		objSrv.totalBytes -= object.size
 	}
