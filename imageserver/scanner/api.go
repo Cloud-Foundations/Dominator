@@ -71,9 +71,9 @@ func LoadImageDataBase(baseDir string, objSrv objectserver.FullObjectServer,
 		})
 }
 
-func (imdb *ImageDataBase) AddImage(image *image.Image, name string,
+func (imdb *ImageDataBase) AddImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
-	return imdb.addImage(image, name, authInfo)
+	return imdb.addImage(img, name, authInfo)
 }
 
 func (imdb *ImageDataBase) ChangeImageExpiration(name string,
@@ -118,9 +118,9 @@ func (imdb *ImageDataBase) DeleteUnreferencedObjects(percentage uint8,
 	return err
 }
 
-func (imdb *ImageDataBase) DoWithPendingImage(image *image.Image,
+func (imdb *ImageDataBase) DoWithPendingImage(img *image.Image,
 	doFunc func() error) error {
-	return imdb.doWithPendingImage(image, doFunc)
+	return imdb.doWithPendingImage(img, doFunc)
 }
 
 func (imdb *ImageDataBase) FindLatestImage(

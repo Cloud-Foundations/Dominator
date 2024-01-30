@@ -31,17 +31,17 @@ var (
 	errNoAuthInfo = errors.New("no authentication information")
 )
 
-func (imdb *ImageDataBase) addImage(image *image.Image, name string,
+func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
-	if err := image.Verify(); err != nil {
+	if err := img.Verify(); err != nil {
 		return err
 	}
-	if imageIsExpired(image) {
+	if imageIsExpired(img) {
 		imdb.Logger.Printf("Ignoring already expired image: %s\n", name)
 		return nil
 	}
 	imdb.deduperLock.Lock()
-	image.ReplaceStrings(imdb.deduper.DeDuplicate)
+	img.ReplaceStrings(imdb.deduper.DeDuplicate)
 	imdb.deduperLock.Unlock()
 	imdb.Lock()
 	doUnlock := true
@@ -77,7 +77,7 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		writer := fsutil.NewChecksumWriter(w)
 		defer writer.WriteChecksum()
 		encoder := gob.NewEncoder(writer)
-		if err := encoder.Encode(image); err != nil {
+		if err := encoder.Encode(img); err != nil {
 			os.Remove(filename)
 			return err
 		}
@@ -85,12 +85,12 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 			os.Remove(filename)
 			return err
 		}
-		imdb.scheduleExpiration(image, name)
-		imdb.imageMap[name] = image
+		imdb.scheduleExpiration(img, name)
+		imdb.imageMap[name] = img
 		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 		doUnlock = false
 		imdb.Unlock()
-		return imdb.Params.ObjectServer.AdjustRefcounts(true, image)
+		return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 	}
 }
 
@@ -302,7 +302,7 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
-func (imdb *ImageDataBase) doWithPendingImage(image *image.Image,
+func (imdb *ImageDataBase) doWithPendingImage(img *image.Image,
 	doFunc func() error) error {
 	imdb.pendingImageLock.Lock()
 	defer imdb.pendingImageLock.Unlock()

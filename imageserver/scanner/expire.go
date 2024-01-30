@@ -8,21 +8,21 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 )
 
-func imageIsExpired(image *image.Image) bool {
-	if !image.ExpiresAt.IsZero() && image.ExpiresAt.Sub(time.Now()) <= 0 {
+func imageIsExpired(img *image.Image) bool {
+	if !img.ExpiresAt.IsZero() && img.ExpiresAt.Sub(time.Now()) <= 0 {
 		return true
 	}
 	return false
 }
 
 // This must not be called with the lock held.
-func (imdb *ImageDataBase) expireImage(image *image.Image, name string) {
-	if image.ExpiresAt.IsZero() {
+func (imdb *ImageDataBase) expireImage(img *image.Image, name string) {
+	if img.ExpiresAt.IsZero() {
 		return
 	}
-	duration := image.ExpiresAt.Sub(time.Now())
+	duration := img.ExpiresAt.Sub(time.Now())
 	if duration > 0 {
-		time.AfterFunc(duration, func() { imdb.expireImage(image, name) })
+		time.AfterFunc(duration, func() { imdb.expireImage(img, name) })
 		return
 	}
 	imdb.Lock()
@@ -35,15 +35,15 @@ func (imdb *ImageDataBase) expireImage(image *image.Image, name string) {
 }
 
 // This may be called with the lock held.
-func (imdb *ImageDataBase) scheduleExpiration(image *image.Image,
+func (imdb *ImageDataBase) scheduleExpiration(img *image.Image,
 	name string) {
-	if image.ExpiresAt.IsZero() {
+	if img.ExpiresAt.IsZero() {
 		return
 	}
-	duration := image.ExpiresAt.Sub(time.Now())
+	duration := img.ExpiresAt.Sub(time.Now())
 	if duration <= 0 {
 		return
 	}
-	time.AfterFunc(duration, func() { imdb.expireImage(image, name) })
+	time.AfterFunc(duration, func() { imdb.expireImage(img, name) })
 	return
 }
