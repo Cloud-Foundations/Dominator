@@ -608,10 +608,10 @@ func compareConfigs(oldConf, newConf subproto.Configuration) bool {
 }
 
 // Returns true if all required objects are available.
-func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, image *image.Image,
+func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 	freeSpace *uint64, pushComputedFiles bool) (
 	bool, subStatus) {
-	if image == nil {
+	if img == nil {
 		return false, statusImageNotReady
 	}
 	logger := sub.herd.logger
@@ -622,7 +622,7 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, image *image.Image,
 		ComputedInodes: sub.computedInodes,
 		ObjectCache:    sub.objectCache,
 		ObjectGetter:   sub.herd.objectServer}
-	objectsToFetch, objectsToPush := lib.BuildMissingLists(subObj, image,
+	objectsToFetch, objectsToPush := lib.BuildMissingLists(subObj, img,
 		pushComputedFiles, false, logger)
 	if objectsToPush == nil {
 		return false, statusMissingComputedFile
