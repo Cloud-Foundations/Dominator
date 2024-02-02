@@ -194,11 +194,11 @@ func (m *Manager) rebuildDeDuper() {
 	m.deduper.DeleteUnregistered()
 }
 
-func (m *Manager) scheduleExpiration(image *image.Image, name string) bool {
-	if image.ExpiresAt.IsZero() {
+func (m *Manager) scheduleExpiration(img *image.Image, name string) bool {
+	if img.ExpiresAt.IsZero() {
 		return false
 	}
-	duration := image.ExpiresAt.Sub(time.Now())
+	duration := img.ExpiresAt.Sub(time.Now())
 	if duration <= 0 {
 		return true
 	}
