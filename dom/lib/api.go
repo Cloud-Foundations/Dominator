@@ -1,10 +1,10 @@
 /*
-	Package lib implements some of the core computations in the dominator.
+Package lib implements some of the core computations in the dominator.
 
-	Package lib provides functions for computing differences between a sub and
-	desired image to generate lists of objects for fetching and pushing and
-	update requests. It contains some common code that both the dominator and
-	the push-image subcommand of subtool share.
+Package lib provides functions for computing differences between a sub and
+desired image to generate lists of objects for fetching and pushing and
+update requests. It contains some common code that both the dominator and
+the push-image subcommand of subtool share.
 */
 package lib
 
@@ -55,10 +55,10 @@ type Sub struct {
 // Computed file metadata are specified by sub.ComputedInodes.
 // BuildMissingLists returns a slice of objects to fetch and a map of files to
 // push. The map is nil if there are missing computed files.
-func BuildMissingLists(sub Sub, image *image.Image, pushComputedFiles bool,
+func BuildMissingLists(sub Sub, img *image.Image, pushComputedFiles bool,
 	ignoreMissingComputedFiles bool, logger log.Logger) (
 	map[hash.Hash]uint64, map[hash.Hash]struct{}) {
-	return sub.buildMissingLists(image, pushComputedFiles,
+	return sub.buildMissingLists(img, pushComputedFiles,
 		ignoreMissingComputedFiles, logger)
 }
 
@@ -68,10 +68,10 @@ func BuildMissingLists(sub Sub, image *image.Image, pushComputedFiles bool,
 // If deleteMissingComputedFiles is false and ignoreMissingComputedFiles is true
 // then missing computed files are ignored.
 // It returns true if the function failed due to missing computed files.
-func BuildUpdateRequest(sub Sub, image *image.Image,
+func BuildUpdateRequest(sub Sub, img *image.Image,
 	request *subproto.UpdateRequest, deleteMissingComputedFiles bool,
 	ignoreMissingComputedFiles bool, logger log.Logger) bool {
-	return sub.buildUpdateRequest(image, request, deleteMissingComputedFiles,
+	return sub.buildUpdateRequest(img, request, deleteMissingComputedFiles,
 		ignoreMissingComputedFiles, logger)
 }
 

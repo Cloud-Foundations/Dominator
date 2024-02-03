@@ -15,13 +15,13 @@ import (
 )
 
 // Returns true if there is a failure due to missing computed files.
-func (sub *Sub) buildUpdateRequest(image *image.Image,
+func (sub *Sub) buildUpdateRequest(img *image.Image,
 	request *subproto.UpdateRequest, deleteMissingComputedFiles bool,
 	ignoreMissingComputedFiles bool, slogger log.Logger) bool {
 	logger := debuglogger.Upgrade(slogger)
-	sub.requiredFS = image.FileSystem
-	sub.filter = image.Filter
-	request.Triggers = image.Triggers
+	sub.requiredFS = img.FileSystem
+	sub.filter = img.Filter
+	request.Triggers = img.Triggers
 	sub.requiredInodeToSubInode = make(map[uint64]uint64)
 	sub.inodesMapped = make(map[uint64]struct{})
 	sub.inodesChanged = make(map[uint64]struct{})
