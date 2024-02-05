@@ -32,6 +32,9 @@ type dualBuildLogger struct {
 func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation) error {
 	if authInfo == nil || authInfo.HaveMethodAccess {
+		if request.ExpiresIn > 730*time.Hour {
+			return errors.New("maximum expiration time is 1 month for you")
+		}
 		return nil
 	}
 	if request.ExpiresIn > time.Hour*24 {
