@@ -96,6 +96,9 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 
 func (imdb *ImageDataBase) changeImageExpiration(name string,
 	expiresAt time.Time, authInfo *srpc.AuthInformation) (bool, error) {
+	if err := checkExpiration(expiresAt, authInfo); err != nil {
+		return false, err
+	}
 	imdb.Lock()
 	defer imdb.Unlock()
 	if img, ok := imdb.imageMap[name]; !ok {
@@ -161,6 +164,24 @@ func (imdb *ImageDataBase) checkDirectory(name string) bool {
 	defer imdb.RUnlock()
 	_, ok := imdb.directoryMap[name]
 	return ok
+}
+
+func checkExpiration(expiresAt time.Time,
+	authInfo *srpc.AuthInformation) error {
+	if expiresAt.IsZero() {
+		return nil
+	}
+	expiresIn := time.Until(expiresAt)
+	if authInfo != nil && authInfo.HaveMethodAccess {
+		if expiresIn > 730*time.Hour {
+			return errors.New("maximum expiration time is 1 month for you")
+		}
+		return nil
+	}
+	if expiresIn > time.Hour*24 {
+		return errors.New("maximum expiration time is 1 day")
+	}
+	return nil
 }
 
 func (imdb *ImageDataBase) checkImage(name string) bool {
