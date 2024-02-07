@@ -53,7 +53,7 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	if _, ok := imdb.imageMap[name]; ok {
 		return errors.New("image: " + name + " already exists")
 	} else {
-		if err := imdb.checkPermissions(name, authInfo); err != nil {
+		if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
 			return err
 		}
 		filename := filepath.Join(imdb.BaseDirectory, name)
@@ -103,7 +103,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 	defer imdb.Unlock()
 	if img, ok := imdb.imageMap[name]; !ok {
 		return false, errors.New("image not found")
-	} else if err := imdb.checkPermissions(name, authInfo); err != nil {
+	} else if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 		return false, err
 	} else if img.ExpiresAt.IsZero() {
 		return false, errors.New("image does not expire")
@@ -192,13 +192,19 @@ func (imdb *ImageDataBase) checkImage(name string) bool {
 }
 
 // This must be called with the lock held.
-func (imdb *ImageDataBase) checkPermissions(imageName string,
+func (imdb *ImageDataBase) checkPermissions(imageName string, img *image.Image,
 	authInfo *srpc.AuthInformation) error {
 	if authInfo == nil {
 		return errNoAuthInfo
 	}
 	if authInfo.HaveMethodAccess {
 		return nil
+	}
+	if authInfo.Username != "" && img != nil {
+		if img.CreatedBy == authInfo.Username ||
+			img.CreatedFor == authInfo.Username {
+			return nil
+		}
 	}
 	dirname := filepath.Dir(imageName)
 	if directoryMetadata, ok := imdb.directoryMap[dirname]; !ok {
@@ -293,8 +299,8 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	authInfo *srpc.AuthInformation) error {
 	imdb.Lock()
 	defer imdb.Unlock()
-	if _, ok := imdb.imageMap[name]; ok {
-		if err := imdb.checkPermissions(name, authInfo); err != nil {
+	if img, ok := imdb.imageMap[name]; ok {
+		if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 			return err
 		}
 		filename := filepath.Join(imdb.BaseDirectory, name)
