@@ -173,6 +173,9 @@ func checkExpiration(expiresAt time.Time,
 	}
 	expiresIn := time.Until(expiresAt)
 	if authInfo != nil && authInfo.HaveMethodAccess {
+		if authInfo.Username == "" {
+			return nil // Internal call.
+		}
 		if expiresIn > 730*time.Hour {
 			return errors.New("maximum expiration time is 1 month for you")
 		}
