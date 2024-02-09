@@ -25,11 +25,13 @@ type LockWatcher struct {
 }
 
 type LockWatcherOptions struct {
-	CheckInterval time.Duration // Default: 5 seconds, minimum: 1 second.
-	Function      func()
-	Logger        log.DebugLogger
-	RFunction     func()
-	LogTimeout    time.Duration // Default: 1 second, minumum: 1 millisecond.
+	CheckInterval      time.Duration // Default: 5 seconds, minimum: 1 second.
+	Function           func()
+	Logger             log.DebugLogger
+	RFunction          func()
+	LogTimeout         time.Duration // Default: 1 second, min: 1 millisecond.
+	MaximumTryInterval time.Duration // Default/maximum: LogTimeout/32.
+	MinimumTryInterval time.Duration // Default/maximum: LogTimeout/256.
 }
 
 type LockWatcherStats struct {
@@ -43,6 +45,10 @@ type LockWatcherStats struct {
 
 func New(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	return newLockWatcher(lock, options)
+}
+
+func (lw *LockWatcher) GetOptions() LockWatcherOptions {
+	return lw.LockWatcherOptions
 }
 
 func (lw *LockWatcher) GetStats() LockWatcherStats {

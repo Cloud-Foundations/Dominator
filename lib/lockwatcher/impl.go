@@ -22,6 +22,12 @@ func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	if options.LogTimeout < time.Millisecond {
 		options.LogTimeout = time.Second
 	}
+	if options.MaximumTryInterval > options.LogTimeout>>5 {
+		options.MaximumTryInterval = options.LogTimeout >> 5
+	}
+	if options.MinimumTryInterval > options.LogTimeout>>8 {
+		options.MinimumTryInterval = options.LogTimeout >> 8
+	}
 	rstopChannel := make(chan struct{}, 1)
 	stopChannel := make(chan struct{}, 1)
 	lockWatcher := &LockWatcher{
@@ -173,7 +179,8 @@ func (lw *LockWatcher) rcheck() {
 // lockers.
 func (lw *LockWatcher) wcheck() {
 	rwlock := lw.lock.(RWLock)
-	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>8, lw.LogTimeout>>4,
+	sleeper := backoffdelay.NewExponential(lw.MinimumTryInterval,
+		lw.MaximumTryInterval,
 		1)
 	timeoutTime := time.Now().Add(lw.LogTimeout)
 	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
@@ -187,7 +194,7 @@ func (lw *LockWatcher) wcheck() {
 	}
 	lw.incrementNumWLockTimeouts()
 	lw.logTimeout("w")
-	sleeper = backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
+	sleeper = backoffdelay.NewExponential(lw.MaximumTryInterval, time.Second, 1)
 	for ; true; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
