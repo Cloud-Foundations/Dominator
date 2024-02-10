@@ -104,9 +104,10 @@ func (objSrv *ObjectServer) decrementRefcount(object *objectType) error {
 // This must be called without the lock being held.
 func (objSrv *ObjectServer) deleteOldestUnreferenced(lastPauseTime *time.Time) (
 	uint64, error) {
+	lockWatcherOptions := objSrv.lockWatcher.GetOptions()
 	// Inject periodic pauses so that the write lockwatcher is not starved out.
-	if time.Since(*lastPauseTime) > time.Second {
-		time.Sleep(100 * time.Millisecond)
+	if time.Since(*lastPauseTime) > lockWatcherOptions.LogTimeout>>1 {
+		time.Sleep(lockWatcherOptions.MaximumTryInterval << 1)
 		*lastPauseTime = time.Now()
 	}
 	objSrv.rwLock.Lock()
