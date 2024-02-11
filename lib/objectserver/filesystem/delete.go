@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"time"
@@ -9,19 +10,16 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 )
 
+// deleteObject will delete the specified object. If haveLock is false, the
+// lock is grabbed. In either case, the lock will be released.
 func (objSrv *ObjectServer) deleteObject(hashVal hash.Hash,
 	haveLock bool) error {
-	filename := path.Join(objSrv.BaseDirectory,
-		objectcache.HashToFilename(hashVal))
-	if err := os.Remove(filename); err != nil {
-		return err
-	}
 	var refcount uint64
 	if !haveLock {
 		objSrv.rwLock.Lock()
 	}
 	if object := objSrv.objects[hashVal]; object == nil {
-		objSrv.Logger.Printf("deleteObject(%x): object does not exist", hashVal)
+		return fmt.Errorf("deleteObject(%x): object unknown", hashVal)
 	} else {
 		refcount = object.refcount
 		delete(objSrv.objects, hashVal)
@@ -35,11 +33,11 @@ func (objSrv *ObjectServer) deleteObject(hashVal hash.Hash,
 		objSrv.removeUnreferenced(object)
 		objSrv.totalBytes -= object.size
 	}
-	if !haveLock {
-		objSrv.rwLock.Unlock()
-	}
+	objSrv.rwLock.Unlock()
 	if refcount > 0 {
 		objSrv.Logger.Printf("deleteObject(%x): refcount: %d\n", refcount)
 	}
-	return nil
+	filename := path.Join(objSrv.BaseDirectory,
+		objectcache.HashToFilename(hashVal))
+	return os.Remove(filename)
 }

@@ -111,11 +111,12 @@ func (objSrv *ObjectServer) deleteOldestUnreferenced(lastPauseTime *time.Time) (
 		*lastPauseTime = time.Now()
 	}
 	objSrv.rwLock.Lock()
-	defer objSrv.rwLock.Unlock()
 	object := objSrv.oldestUnreferenced
 	if object == nil {
+		objSrv.rwLock.Unlock()
 		return 0, fmt.Errorf("no more objects to delete")
 	}
+	// deleteObject() will release the lock.
 	if err := objSrv.deleteObject(object.hash, true); err != nil {
 		return 0, err
 	}
