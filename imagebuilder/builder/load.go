@@ -59,6 +59,17 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 			options.CreateSlaveTimeout = options.ImageRebuildInterval
 		}
 	}
+	if options.MaximumExpirationDuration < 1 {
+		options.MaximumExpirationDuration = 24 * time.Hour
+	}
+	if options.MaximumExpirationDurationPrivileged < 1 {
+		options.MaximumExpirationDurationPrivileged = 730 * time.Hour
+	}
+	if options.MaximumExpirationDurationPrivileged <
+		options.MaximumExpirationDuration {
+		options.MaximumExpirationDurationPrivileged =
+			options.MaximumExpirationDuration
+	}
 	if options.MinimumExpirationDuration <= 0 {
 		options.MinimumExpirationDuration = 15 * time.Minute
 	} else if options.MinimumExpirationDuration < 15*time.Second {
@@ -112,26 +123,28 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
-		buildLogArchiver:          params.BuildLogArchiver,
-		bindMounts:                masterConfiguration.BindMounts,
-		createSlaveTimeout:        options.CreateSlaveTimeout,
-		generateDependencyTrigger: generateDependencyTrigger,
-		stateDir:                  options.StateDirectory,
-		imageRebuildInterval:      options.ImageRebuildInterval,
-		imageServerAddress:        options.ImageServerAddress,
-		logger:                    params.Logger,
-		imageStreamsUrl:           masterConfiguration.ImageStreamsUrl,
-		initialNamespace:          initialNamespace,
-		minimumExpirationDuration: options.MinimumExpirationDuration,
-		streamsLoadedChannel:      streamsLoadedChannel,
-		bootstrapStreams:          masterConfiguration.BootstrapStreams,
-		imageStreamsToAutoRebuild: imageStreamsToAutoRebuild,
-		slaveDriver:               params.SlaveDriver,
-		currentBuildInfos:         make(map[string]*currentBuildInfo),
-		lastBuildResults:          make(map[string]buildResultType),
-		packagerTypes:             masterConfiguration.PackagerTypes,
-		relationshipsQuickLinks:   masterConfiguration.RelationshipsQuickLinks,
-		variables:                 variables,
+		buildLogArchiver:            params.BuildLogArchiver,
+		bindMounts:                  masterConfiguration.BindMounts,
+		createSlaveTimeout:          options.CreateSlaveTimeout,
+		generateDependencyTrigger:   generateDependencyTrigger,
+		stateDir:                    options.StateDirectory,
+		imageRebuildInterval:        options.ImageRebuildInterval,
+		imageServerAddress:          options.ImageServerAddress,
+		logger:                      params.Logger,
+		imageStreamsUrl:             masterConfiguration.ImageStreamsUrl,
+		initialNamespace:            initialNamespace,
+		maximumExpiration:           options.MaximumExpirationDuration,
+		maximumExpirationPrivileged: options.MaximumExpirationDurationPrivileged,
+		minimumExpiration:           options.MinimumExpirationDuration,
+		streamsLoadedChannel:        streamsLoadedChannel,
+		bootstrapStreams:            masterConfiguration.BootstrapStreams,
+		imageStreamsToAutoRebuild:   imageStreamsToAutoRebuild,
+		slaveDriver:                 params.SlaveDriver,
+		currentBuildInfos:           make(map[string]*currentBuildInfo),
+		lastBuildResults:            make(map[string]buildResultType),
+		packagerTypes:               masterConfiguration.PackagerTypes,
+		relationshipsQuickLinks:     masterConfiguration.RelationshipsQuickLinks,
+		variables:                   variables,
 	}
 	for name, stream := range b.bootstrapStreams {
 		stream.builder = b

@@ -29,30 +29,6 @@ type dualBuildLogger struct {
 	writer io.Writer
 }
 
-func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
-	authInfo *srpc.AuthInformation) error {
-	if authInfo == nil || authInfo.HaveMethodAccess {
-		if request.ExpiresIn > 730*time.Hour {
-			return errors.New("maximum expiration time is 1 month for you")
-		}
-		return nil
-	}
-	if request.ExpiresIn > time.Hour*24 {
-		return errors.New("maximum expiration time is 1 day")
-	}
-	if builder, ok := builder.(*imageStreamType); ok {
-		if _, ok := builder.builderUsers[authInfo.Username]; ok {
-			return nil
-		}
-		for _, group := range builder.BuilderGroups {
-			if _, ok := authInfo.GroupList[group]; ok {
-				return nil
-			}
-		}
-	}
-	return errors.New("no permission to build: " + request.StreamName)
-}
-
 func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
 	buildLog io.Writer) {
 	fmt.Fprintln(buildLog,
@@ -143,7 +119,7 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	if builder == nil {
 		return nil, "", errors.New("unknown stream: " + request.StreamName)
 	}
-	if err := checkPermission(builder, request, authInfo); err != nil {
+	if err := b.checkPermission(builder, request, authInfo); err != nil {
 		return nil, "", err
 	}
 	buildLogBuffer := &bytes.Buffer{}
@@ -205,9 +181,9 @@ func (b *Builder) buildImage(request proto.BuildImageRequest,
 			disableUntil.Format(format.TimeFormatSeconds),
 			format.Duration(duration))
 	}
-	if request.ExpiresIn < b.minimumExpirationDuration {
+	if request.ExpiresIn < b.minimumExpiration {
 		return nil, "", fmt.Errorf("minimum expiration duration is %s",
-			format.Duration(b.minimumExpirationDuration))
+			format.Duration(b.minimumExpiration))
 	}
 	if err := b.WaitForStreamsLoaded(time.Minute); err != nil {
 		return nil, "", err
@@ -371,6 +347,32 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 			format.Duration(finishTime.Sub(startTime)))
 		return img, name, nil
 	}
+}
+
+func (b *Builder) checkPermission(builder imageBuilder,
+	request proto.BuildImageRequest, authInfo *srpc.AuthInformation) error {
+	if authInfo == nil || authInfo.HaveMethodAccess {
+		if request.ExpiresIn > b.maximumExpirationPrivileged {
+			return fmt.Errorf("maximum expiration time is %s for you",
+				format.Duration(b.maximumExpirationPrivileged))
+		}
+		return nil
+	}
+	if request.ExpiresIn > b.maximumExpiration {
+		return fmt.Errorf("maximum expiration time is %s",
+			format.Duration(b.maximumExpiration))
+	}
+	if builder, ok := builder.(*imageStreamType); ok {
+		if _, ok := builder.builderUsers[authInfo.Username]; ok {
+			return nil
+		}
+		for _, group := range builder.BuilderGroups {
+			if _, ok := authInfo.GroupList[group]; ok {
+				return nil
+			}
+		}
+	}
+	return errors.New("no permission to build: " + request.StreamName)
 }
 
 func (b *Builder) disableAutoBuilds(disableFor time.Duration) (
