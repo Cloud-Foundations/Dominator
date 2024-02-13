@@ -40,6 +40,11 @@ var (
 		"Port number of image server")
 	imageRebuildInterval = flag.Duration("imageRebuildInterval", time.Hour,
 		"time between automatic rebuilds of images")
+	maximumExpirationDuration = flag.Duration("maximumExpirationDuration",
+		24*time.Hour, "Maximum expiration time for regular users")
+	maximumExpirationDurationPrivileged = flag.Duration(
+		"maximumExpirationDurationPrivileged", 730*time.Hour,
+		"Maximum expiration time for privileged users")
 	minimumExpirationDuration = flag.Duration("minimumExpirationDuration",
 		15*time.Minute,
 		"Minimum permitted expiration duration")
@@ -108,9 +113,11 @@ func main() {
 			ImageRebuildInterval: *imageRebuildInterval,
 			ImageServerAddress: fmt.Sprintf("%s:%d",
 				*imageServerHostname, *imageServerPortNum),
-			MinimumExpirationDuration: *minimumExpirationDuration,
-			StateDirectory:            *stateDir,
-			VariablesFile:             *variablesFile,
+			MaximumExpirationDuration:           *maximumExpirationDuration,
+			MaximumExpirationDurationPrivileged: *maximumExpirationDurationPrivileged,
+			MinimumExpirationDuration:           *minimumExpirationDuration,
+			StateDirectory:                      *stateDir,
+			VariablesFile:                       *variablesFile,
 		},
 		builder.BuilderParams{
 			BuildLogArchiver: buildLogArchiver,
