@@ -21,10 +21,12 @@ import (
 const metadataFile = ".metadata"
 
 type Config struct {
-	BaseDirectory     string
-	LockCheckInterval time.Duration
-	LockLogTimeout    time.Duration
-	ReplicationMaster string
+	BaseDirectory                       string
+	LockCheckInterval                   time.Duration
+	LockLogTimeout                      time.Duration
+	MaximumExpirationDuration           time.Duration // Default: 1 day.
+	MaximumExpirationDurationPrivileged time.Duration // Default: 1 month.
+	ReplicationMaster                   string
 }
 
 type notifiers map[<-chan string]chan<- string

@@ -23,6 +23,17 @@ import (
 )
 
 func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
+	if config.MaximumExpirationDuration < 1 {
+		config.MaximumExpirationDuration = 24 * time.Hour
+	}
+	if config.MaximumExpirationDurationPrivileged < 1 {
+		config.MaximumExpirationDurationPrivileged = 730 * time.Hour
+	}
+	if config.MaximumExpirationDurationPrivileged <
+		config.MaximumExpirationDuration {
+		config.MaximumExpirationDurationPrivileged =
+			config.MaximumExpirationDuration
+	}
 	fi, err := os.Stat(config.BaseDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("cannot stat: %s: %s\n",
