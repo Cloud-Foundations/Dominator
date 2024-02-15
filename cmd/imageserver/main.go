@@ -39,6 +39,12 @@ var (
 		"Interval between checks for lock timeouts")
 	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
 		"Timeout before logging that a lock has been held too long")
+	maximumExpirationDuration = flag.Duration("maximumExpirationDuration",
+		24*time.Hour,
+		"Maximum expiration time for regular users")
+	maximumExpirationDurationPrivileged = flag.Duration(
+		"maximumExpirationDurationPrivileged", 730*time.Hour,
+		"Maximum expiration time for privileged users")
 	objectDir = flag.String("objectDir", "/var/lib/objectserver",
 		"Name of image server data directory.")
 	permitInsecureMode = flag.Bool("permitInsecureMode", false,
@@ -87,10 +93,12 @@ func main() {
 	}
 	imdb, err := scanner.Load(
 		scanner.Config{
-			BaseDirectory:     *imageDir,
-			LockCheckInterval: *lockCheckInterval,
-			LockLogTimeout:    *lockLogTimeout,
-			ReplicationMaster: imageServerAddress,
+			BaseDirectory:                       *imageDir,
+			LockCheckInterval:                   *lockCheckInterval,
+			LockLogTimeout:                      *lockLogTimeout,
+			MaximumExpirationDuration:           *maximumExpirationDuration,
+			MaximumExpirationDurationPrivileged: *maximumExpirationDurationPrivileged,
+			ReplicationMaster:                   imageServerAddress,
 		},
 		scanner.Params{
 			Logger:       logger,
