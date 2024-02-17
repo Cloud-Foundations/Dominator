@@ -8,7 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func changeImageExpiration(client *srpc.Client, name string,
+func changeImageExpiration(client srpc.ClientI, name string,
 	expiresAt time.Time) error {
 	request := imageserver.ChangeImageExpirationRequest{
 		ImageName: name,
@@ -23,7 +23,7 @@ func changeImageExpiration(client *srpc.Client, name string,
 	return errors.New(reply.Error)
 }
 
-func getImageExpiration(client *srpc.Client, name string) (time.Time, error) {
+func getImageExpiration(client srpc.ClientI, name string) (time.Time, error) {
 	request := imageserver.GetImageExpirationRequest{ImageName: name}
 	var reply imageserver.GetImageExpirationResponse
 	err := client.RequestReply("ImageServer.GetImageExpiration", request,

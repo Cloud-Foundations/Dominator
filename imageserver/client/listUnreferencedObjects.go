@@ -6,7 +6,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func listUnreferencedObjects(client *srpc.Client) (
+func listUnreferencedObjects(client srpc.ClientI) (
 	map[hash.Hash]uint64, error) {
 	conn, err := client.Call("ImageServer.ListUnreferencedObjects")
 	if err != nil {

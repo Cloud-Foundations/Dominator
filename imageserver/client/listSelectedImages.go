@@ -5,7 +5,7 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func listSelectedImages(client *srpc.Client,
+func listSelectedImages(client srpc.ClientI,
 	request proto.ListSelectedImagesRequest) ([]string, error) {
 	conn, err := client.Call("ImageServer.ListSelectedImages")
 	if err != nil {

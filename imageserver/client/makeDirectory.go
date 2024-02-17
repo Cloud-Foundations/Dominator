@@ -5,7 +5,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func makeDirectory(client *srpc.Client, dirname string) error {
+func makeDirectory(client srpc.ClientI, dirname string) error {
 	request := imageserver.MakeDirectoryRequest{dirname}
 	var reply imageserver.MakeDirectoryResponse
 	return client.RequestReply("ImageServer.MakeDirectory", request, &reply)

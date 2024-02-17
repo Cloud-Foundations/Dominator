@@ -5,7 +5,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func deleteUnreferencedObjects(client *srpc.Client, percentage uint8,
+func deleteUnreferencedObjects(client srpc.ClientI, percentage uint8,
 	bytes uint64) error {
 	request := imageserver.DeleteUnreferencedObjectsRequest{percentage, bytes}
 	var reply imageserver.DeleteUnreferencedObjectsResponse
