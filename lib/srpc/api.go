@@ -361,6 +361,9 @@ func DialHTTPWithDialer(network, address string, dialer Dialer) (
 func DialTlsHTTP(network, address string, tlsConfig *tls.Config,
 	timeout time.Duration) (
 	*Client, error) {
+	if tlsConfig == nil {
+		tlsConfig = clientTlsConfig
+	}
 	return DialTlsHTTPWithDialer(network, address, tlsConfig,
 		&net.Dialer{Timeout: timeout})
 }
