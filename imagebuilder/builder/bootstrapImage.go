@@ -71,7 +71,7 @@ func makeTempDirectory(dir, prefix string) (string, error) {
 	return tmpDir, nil
 }
 
-func (stream *bootstrapStream) build(b *Builder, client *srpc.Client,
+func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	request proto.BuildImageRequest,
 	buildLog buildLogger) (*image.Image, error) {
 	startTime := time.Now()

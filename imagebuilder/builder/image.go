@@ -34,7 +34,7 @@ type gitInfoType struct {
 	gitUrl   string
 }
 
-func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
+func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	request proto.BuildImageRequest, buildLog buildLogger) (
 	*image.Image, error) {
 	manifestDirectory, gitInfo, err := stream.getManifest(b, request.StreamName,
@@ -238,7 +238,7 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 	return cmd.Run()
 }
 
-func buildImageFromManifest(client *srpc.Client, manifestDir string,
+func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	request proto.BuildImageRequest, bindMounts []string,
 	envGetter environmentGetter, gitInfo *gitInfoType,
 	buildLog buildLogger) (*image.Image, error) {
@@ -317,7 +317,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	return img, nil
 }
 
-func buildImageFromManifestAndUpload(client *srpc.Client,
+func buildImageFromManifestAndUpload(client srpc.ClientI,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (*image.Image, string, error) {
 	request := proto.BuildImageRequest{
@@ -392,7 +392,7 @@ func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
 	return &cache, nil
 }
 
-func buildTreeFromManifest(client *srpc.Client, options BuildLocalOptions,
+func buildTreeFromManifest(client srpc.ClientI, options BuildLocalOptions,
 	buildLog io.Writer) (string, error) {
 	rootDir, err := makeTempDirectory("", "tree")
 	if err != nil {
@@ -499,7 +499,7 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	}
 }
 
-func unpackImage(client *srpc.Client, streamName string,
+func unpackImage(client srpc.ClientI, streamName string,
 	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()

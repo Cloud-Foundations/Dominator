@@ -110,7 +110,7 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	return manifestConfig, nil
 }
 
-func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
+func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	maxSourceAge time.Duration, rootDir string, bindMounts []string,
 	applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer) (manifestType, error) {

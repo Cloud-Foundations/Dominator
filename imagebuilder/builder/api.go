@@ -31,7 +31,7 @@ type environmentGetter interface {
 }
 
 type imageBuilder interface {
-	build(b *Builder, client *srpc.Client, request proto.BuildImageRequest,
+	build(b *Builder, client srpc.ClientI, request proto.BuildImageRequest,
 		buildLog buildLogger) (*image.Image, error)
 }
 

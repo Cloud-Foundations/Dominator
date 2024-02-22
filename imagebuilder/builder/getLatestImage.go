@@ -11,7 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
-func getLatestImage(client *srpc.Client, imageStream string,
+func getLatestImage(client srpc.ClientI, imageStream string,
 	buildLog io.Writer) (string, *image.Image, error) {
 	imageName, err := imageclient.FindLatestImage(client, imageStream, false)
 	if err != nil {
@@ -27,7 +27,7 @@ func getLatestImage(client *srpc.Client, imageStream string,
 	}
 }
 
-func getImage(client *srpc.Client, imageName string, buildLog io.Writer) (
+func getImage(client srpc.ClientI, imageName string, buildLog io.Writer) (
 	*image.Image, error) {
 	startTime := time.Now()
 	if img, err := imageclient.GetImage(client, imageName); err != nil {
