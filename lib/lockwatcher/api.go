@@ -16,7 +16,8 @@ type RWLock interface {
 }
 
 type LockWatcher struct {
-	lock sync.Locker
+	blockReadLock sync.Mutex
+	lock          sync.Locker
 	LockWatcherOptions
 	rstopChannel chan<- struct{}
 	stopChannel  chan<- struct{}
