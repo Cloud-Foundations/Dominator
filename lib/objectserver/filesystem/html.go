@@ -25,7 +25,11 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 	totalBytes := objSrv.totalBytes
 	unreferencedBytes := objSrv.unreferencedBytes
 	objSrv.rwLock.RUnlock()
+	referencedUtilisation := float64(referencedBytes) * 100 / float64(capacity)
+	totalUtilisation := float64(totalBytes) * 100 / float64(capacity)
 	unreferencedObjectsPercent := 0.0
+	unreferencedUtilisation := float64(unreferencedBytes) * 100 /
+		float64(capacity)
 	if numObjects > 0 {
 		unreferencedObjectsPercent =
 			100.0 * float64(numUnreferenced) / float64(numObjects)
@@ -36,21 +40,24 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 			100.0 * float64(unreferencedBytes) / float64(totalBytes)
 	}
 	fmt.Fprintf(writer,
-		"Number of objects: %d, consuming %s (FS is %.1f%% full)<br>\n",
-		numObjects, format.FormatBytes(totalBytes), utilisation)
+		"Number of objects: %d, consuming %s (%.1f%% of FS which is %.1f%% full)<br>\n",
+		numObjects, format.FormatBytes(totalBytes), totalUtilisation,
+		utilisation)
 	if numDuplicated > 0 {
 		fmt.Fprintf(writer,
-			"Number of referenced objects: %d (%d duplicates, %.3g*), consuming %s (%s duplicated, %.3g*)<br>\n",
+			"Number of referenced objects: %d (%d duplicates, %.3g*), consuming %s (%.1f%% of FS, %s dups, %.3g*)<br>\n",
 			numReferenced, numDuplicated,
 			float64(numDuplicated)/float64(numReferenced),
 			format.FormatBytes(referencedBytes),
+			referencedUtilisation,
 			format.FormatBytes(duplicatedBytes),
 			float64(duplicatedBytes)/float64(referencedBytes))
 	}
 	fmt.Fprintf(writer,
-		"Number of unreferenced objects: %d (%.1f%%), consuming %s (%.1f%%)<br>\n",
+		"Number of unreferenced objects: %d (%.1f%%), consuming %s (%.1f%%, %.1f%% of FS)<br>\n",
 		numUnreferenced, unreferencedObjectsPercent,
-		format.FormatBytes(unreferencedBytes), unreferencedBytesPercent)
+		format.FormatBytes(unreferencedBytes), unreferencedBytesPercent,
+		unreferencedUtilisation)
 	if numReferenced+numUnreferenced != numObjects {
 		fmt.Fprintf(writer,
 			"<font color=\"red\">Object accounting error: ref+unref:%d != total: %d</font><br>\n",
