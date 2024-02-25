@@ -8,6 +8,12 @@ type DebugRequest struct {
 
 type DebugResponse struct{}
 
+type GetStackTraceRequest struct{}
+
+type GetStackTraceResponse struct {
+	Data []byte
+}
+
 type PrintRequest struct {
 	Args []string
 	Name string
