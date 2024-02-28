@@ -2,15 +2,19 @@ package util
 
 import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 )
 
-func copyMtimes(sourceFs, destFs *filesystem.FileSystem) {
+func copyMtimes(sourceFs, destFs *filesystem.FileSystem, filt *filter.Filter) {
 	sourceFilenameToInodeTable := sourceFs.FilenameToInodeTable()
 	destInodeToFilenamesTable := destFs.InodeToFilenamesTable()
 	for inum, destInode := range destFs.InodeTable {
 		filenames := destInodeToFilenamesTable[inum]
 		var sourceInode filesystem.GenericInode
 		for _, filename := range filenames { // Search for source inode.
+			if filt != nil && filt.Match(filename) {
+				continue
+			}
 			if sourceInum, ok := sourceFilenameToInodeTable[filename]; ok {
 				sourceInode = sourceFs.InodeTable[sourceInum]
 				break
