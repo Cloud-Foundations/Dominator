@@ -44,7 +44,7 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	}
 	defer os.RemoveAll(manifestDirectory)
 	img, err := buildImageFromManifest(client, manifestDirectory, request,
-		b.bindMounts, stream, gitInfo, buildLog)
+		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +241,8 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	request proto.BuildImageRequest, bindMounts []string,
 	envGetter environmentGetter, gitInfo *gitInfoType,
-	buildLog buildLogger) (*image.Image, error) {
+	mtimesCopyFilter *filter.Filter, buildLog buildLogger) (
+	*image.Image, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
 	if err != nil {
@@ -302,9 +303,17 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 		mergeableTriggers.Merge(imageTriggers)
 		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
+	if manifest.mtimesCopyFilter != nil {
+		mtimesCopyFilter = manifest.mtimesCopyFilter
+	} else if manifest.mtimesCopyAddFilter != nil {
+		mf := &filter.MergeableFilter{}
+		mf.Merge(mtimesCopyFilter)
+		mf.Merge(manifest.mtimesCopyAddFilter)
+		mtimesCopyFilter = mf.ExportFilter()
+	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		imageTriggers, buildLog)
+		imageTriggers, mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -334,6 +343,7 @@ func buildImageFromManifestAndUpload(client srpc.ClientI,
 			Variables: options.Variables,
 		},
 		nil,
+		options.MtimesCopyFilter,
 		buildLog)
 	if err != nil {
 		return nil, "", err

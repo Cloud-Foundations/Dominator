@@ -103,6 +103,8 @@ type listCommandType struct {
 type manifestConfigType struct {
 	SourceImage string
 	*filter.Filter
+	MtimesCopyAddFilterLines []string `json:",omitempty"`
+	MtimesCopyFilterLines    []string `json:",omitempty"`
 }
 
 type masterConfigurationType struct {
@@ -111,6 +113,7 @@ type masterConfigurationType struct {
 	ImageStreamsCheckInterval uint                        `json:",omitempty"`
 	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
 	ImageStreamsUrl           string                      `json:",omitempty"`
+	MtimesCopyFilterLines     []string                    `json:",omitempty"`
 	PackagerTypes             map[string]packagerType     `json:",omitempty"`
 	RelationshipsQuickLinks   []WebLink                   `json:",omitempty"`
 }
@@ -123,8 +126,10 @@ type manifestLocationType struct {
 }
 
 type manifestType struct {
-	filter          *filter.Filter
-	sourceImageInfo *sourceImageInfoType
+	filter              *filter.Filter
+	mtimesCopyAddFilter *filter.Filter
+	mtimesCopyFilter    *filter.Filter
+	sourceImageInfo     *sourceImageInfoType
 }
 
 type packagerType struct {
@@ -167,6 +172,7 @@ type WebLink struct {
 type BuildLocalOptions struct {
 	BindMounts        []string
 	ManifestDirectory string
+	MtimesCopyFilter  *filter.Filter
 	Variables         map[string]string
 }
 
@@ -187,6 +193,7 @@ type Builder struct {
 	maximumExpiration           time.Duration
 	maximumExpirationPrivileged time.Duration
 	minimumExpiration           time.Duration
+	mtimesCopyFilter            *filter.Filter
 	streamsLoadedChannel        <-chan struct{} // Closed when streams loaded.
 	streamsLock                 sync.RWMutex
 	bootstrapStreams            map[string]*bootstrapStream

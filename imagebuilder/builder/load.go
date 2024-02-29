@@ -102,6 +102,14 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		params.Logger.Println(
 			"No bootstrap streams configured: some operations degraded")
 	}
+	var mtimesCopyFilter *filter.Filter
+	if len(masterConfiguration.MtimesCopyFilterLines) > 0 {
+		mtimesCopyFilter, err = filter.New(
+			masterConfiguration.MtimesCopyFilterLines)
+		if err != nil {
+			return nil, err
+		}
+	}
 	imageStreamsToAutoRebuild := make([]string, 0)
 	for name := range masterConfiguration.BootstrapStreams {
 		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
@@ -125,6 +133,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	b := &Builder{
 		buildLogArchiver:            params.BuildLogArchiver,
 		bindMounts:                  masterConfiguration.BindMounts,
+		mtimesCopyFilter:            mtimesCopyFilter,
 		createSlaveTimeout:          options.CreateSlaveTimeout,
 		generateDependencyTrigger:   generateDependencyTrigger,
 		stateDir:                    options.StateDirectory,

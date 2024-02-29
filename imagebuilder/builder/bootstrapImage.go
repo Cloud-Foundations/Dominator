@@ -117,7 +117,7 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 		}
 		return packImage(g, client, request, rootDir,
 			stream.Filter, nil, nil, stream.imageFilter, stream.imageTriggers,
-			buildLog)
+			b.mtimesCopyFilter, buildLog)
 	}
 }
 

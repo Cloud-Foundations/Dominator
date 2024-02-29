@@ -149,7 +149,8 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
 	imageFilter *filter.Filter, trig *triggers.Triggers,
-	buildLog buildLogger) (*image.Image, error) {
+	copyMtimesFilter *filter.Filter, buildLog buildLogger) (
+	*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
 	}
@@ -193,7 +194,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 		return nil, fmt.Errorf("error getting latest image: %s", err)
 	} else if oldImage != nil {
 		patchStartTime := time.Now()
-		util.CopyMtimes(oldImage.FileSystem, fs)
+		util.CopyMtimesWithFilter(oldImage.FileSystem, fs, copyMtimesFilter)
 		fmt.Fprintf(buildLog, "Copied mtimes in %s\n",
 			format.Duration(time.Since(patchStartTime)))
 	}
