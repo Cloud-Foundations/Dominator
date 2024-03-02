@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +48,8 @@ func (lb *LogBuffer) addHttpHandlers() {
 		lb.httpShowLastHandler)
 	html.ServeMuxHandleFunc(lb.options.HttpServeMux, "/logs/showPreviousPanic",
 		lb.httpShowPreviousPanicHandler)
+	html.ServeMuxHandleFunc(lb.options.HttpServeMux, "/logs/showStackTrace",
+		lb.httpShowStackTraceHandler)
 }
 
 func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
@@ -131,8 +134,9 @@ func showRecentLinks(w io.Writer, recentFirstString string) {
 		recentFirstString)
 	fmt.Fprintf(w, "           <a href=\"logs/showLast?1M%s\">month</a>\n",
 		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1y%s\">year</a>\n",
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1y%s\">year</a><br>\n",
 		recentFirstString)
+	fmt.Fprintln(w, `Show <a href="logs/showStackTrace">stack trace</a>`)
 }
 
 func (lb *LogBuffer) httpDumpHandler(w http.ResponseWriter, req *http.Request) {
@@ -329,6 +333,23 @@ func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 	if err != nil {
 		fmt.Fprintln(writer, err)
 	}
+}
+
+func (lb *LogBuffer) httpShowStackTraceHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	lb.rwMutex.Lock()
+	if time.Since(lb.lastStackTrace) < 2*time.Second {
+		lb.rwMutex.Unlock()
+		writer.Write([]byte("Too soon\n"))
+		return
+	}
+	lb.lastStackTrace = time.Now()
+	lb.rwMutex.Unlock()
+	buffer := make([]byte, 1<<20)
+	nBytes := runtime.Stack(buffer, true)
+	writer.Write(buffer[:nBytes])
 }
 
 func (lb *LogBuffer) writeHtml(writer io.Writer) {

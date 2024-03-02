@@ -34,16 +34,17 @@ var (
 // LogBuffer is a circular buffer suitable for holding logs. It satisfies the
 // io.Writer interface. It is usually passed to the log.New function.
 type LogBuffer struct {
-	options       Options
-	rwMutex       sync.RWMutex
-	buffer        *ring.Ring // Always points to next insert position.
-	file          *os.File
-	writer        *bufwriter.Writer
-	fileSize      flagutil.Size
-	usage         flagutil.Size
-	writeNotifier chan<- struct{}
-	panicLogfile  *string // Name of last invocation logfile if it has a panic.
-	noLogsEver    bool    // true if no logs ever written (fresh directory).
+	options        Options
+	rwMutex        sync.RWMutex
+	buffer         *ring.Ring // Always points to next insert position.
+	file           *os.File
+	fileSize       flagutil.Size
+	lastStackTrace time.Time
+	noLogsEver     bool    // true if no logs ever written (fresh directory).
+	panicLogfile   *string // Name of last invocation logfile if it has a panic.
+	usage          flagutil.Size
+	writeNotifier  chan<- struct{}
+	writer         *bufwriter.Writer
 }
 
 type Options struct {
