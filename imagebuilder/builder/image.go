@@ -69,7 +69,7 @@ func (stream *imageStreamType) getenv() map[string]string {
 
 // getManifestLocation will expand variables and return the actual manifest
 // location. These data may include secrets (i.e. username and password).
-// If b is nil then secret variables are not expaned and thus the returned
+// If b is nil then secret variables are not expanded and thus the returned
 // data do not contain secrets but may be incorrect.
 func (stream *imageStreamType) getManifestLocation(b *Builder,
 	variables map[string]string) manifestLocationType {
@@ -263,8 +263,13 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
+	vGetter := variablesGetter(envGetter.getenv()).copy()
+	if gitInfo != nil {
+		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
+	}
+	vGetter.add("REQUESTED_GIT_BRANCH", request.GitBranch)
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
-		request.MaxSourceAge, rootDir, bindMounts, false, envGetter, buildLog)
+		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -509,22 +514,31 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	}
 }
 
-func unpackImage(client srpc.ClientI, streamName string,
+func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
 	}
-	imageName, sourceImage, err := getLatestImage(client, streamName, buildLog)
+	imageName, sourceImage, err := getLatestImage(client, streamName,
+		buildCommitId, buildLog)
 	if err != nil {
 		return nil, err
 	}
 	if sourceImage == nil {
-		return nil, errors.New(errNoSourceImage + streamName)
+		if buildCommitId == "" {
+			return nil, errors.New(errNoSourceImage + streamName)
+		}
+		return nil, errors.New(errNoSourceImage + streamName +
+			prefixGitCommitId + buildCommitId)
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		return nil, errors.New(errTooOldSourceImage + streamName)
+		if buildCommitId == "" {
+			return nil, errors.New(errTooOldSourceImage + streamName)
+		}
+		return nil, errors.New(errTooOldSourceImage + streamName +
+			prefixGitCommitId + buildCommitId)
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()

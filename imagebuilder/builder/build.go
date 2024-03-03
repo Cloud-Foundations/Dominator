@@ -21,8 +21,11 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
-const errNoSourceImage = "no source image: "
-const errTooOldSourceImage = "too old source image: "
+const (
+	errNoSourceImage     = "no source image: "
+	errTooOldSourceImage = "too old source image: "
+	prefixGitCommitId    = "@gitCommitId:"
+)
 
 type dualBuildLogger struct {
 	buffer *bytes.Buffer
@@ -62,15 +65,26 @@ func dialServer(address string, retryTimeout time.Duration) (
 	})
 }
 
-func needSourceImage(err error) (bool, string) {
+// needSourceImage returns true if the error indicates that a source image is
+// needed, returning the name of the image stream and an option Git commit ID.
+func needSourceImage(err error) (bool, string, string) {
 	errString := err.Error()
+	var gitCommitId string
+	var sourceImage string
 	if index := strings.Index(errString, errNoSourceImage); index >= 0 {
-		return true, errString[index+len(errNoSourceImage):]
+		sourceImage = errString[index+len(errNoSourceImage):]
 	}
 	if index := strings.Index(errString, errTooOldSourceImage); index >= 0 {
-		return true, errString[index+len(errTooOldSourceImage):]
+		sourceImage = errString[index+len(errTooOldSourceImage):]
 	}
-	return false, ""
+	if sourceImage == "" {
+		return false, "", ""
+	}
+	if index := strings.Index(sourceImage, "@gitCommitId:"); index >= 0 {
+		gitCommitId = sourceImage[index+len(prefixGitCommitId):]
+		sourceImage = sourceImage[:index]
+	}
+	return true, sourceImage, gitCommitId
 }
 
 // checkToAutoExtend will return true if auto building images should have their
@@ -268,7 +282,7 @@ func (b *Builder) buildOnSlave(client srpc.ClientI,
 	err = buildclient.BuildImage(slave.GetClient(), request, &reply, buildLog)
 	copyClientLogs(slave.GetClientAddress(), keepSlave, err, buildLog)
 	if err != nil {
-		if needSource, _ := needSourceImage(err); needSource {
+		if needSource, _, _ := needSourceImage(err); needSource {
 			keepSlave = true
 		}
 		return nil, err
@@ -293,7 +307,7 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 	img, err := b.buildSomewhere(builder, client, request, authInfo,
 		slaveAddress, buildLog)
 	if err != nil {
-		if needSource, sourceImage := needSourceImage(err); needSource {
+		if needSource, sourceImage, gitId := needSourceImage(err); needSource {
 			if request.DisableRecursiveBuild {
 				return nil, "", err
 			}
@@ -303,9 +317,10 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 				expiresIn = request.ExpiresIn
 			}
 			sourceReq := proto.BuildImageRequest{
-				StreamName:   sourceImage,
 				ExpiresIn:    expiresIn,
+				GitBranch:    gitId,
 				MaxSourceAge: request.MaxSourceAge,
+				StreamName:   sourceImage,
 				Variables:    request.Variables,
 			}
 			if _, _, e := b.build(client, sourceReq, nil, buildLog); e != nil {

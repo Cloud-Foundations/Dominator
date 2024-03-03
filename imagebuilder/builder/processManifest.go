@@ -108,6 +108,11 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
+	manifestConfig.SourceImageGitCommitId = expandExpression(
+		manifestConfig.SourceImageGitCommitId,
+		func(name string) string {
+			return envGetter.getenv()[name]
+		})
 	return manifestConfig, nil
 }
 
@@ -134,6 +139,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 		}
 	}
 	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
+		manifestConfig.SourceImageGitCommitId,
 		maxSourceAge, rootDir, buildLog)
 	if err != nil {
 		return manifestType{},
