@@ -53,6 +53,7 @@ Some of the sub-commands available are:
 - **get-build-log**: get build log for an image
 - **get-file-in-image**: get file in an image
 - **get-image-expiration**: get the expiration time for an image
+- **get-image-updates**: get a stream of image updates
 - **get-package-list**: get package list for an image
 - **list**: list all images
 - **listdirs**: list all directories
