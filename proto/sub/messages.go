@@ -68,6 +68,7 @@ type PollResponse struct {
 	CurrentConfiguration         Configuration
 	FetchInProgress              bool // Fetch() and Update() mutually exclusive
 	UpdateInProgress             bool
+	InitialImageName             string
 	LastFetchError               string
 	LastNote                     string // Updated after successful Update().
 	LastSuccessfulImageName      string
