@@ -41,15 +41,15 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "</body>")
 }
 
-func writeImage(tw *html.TableWriter, name string, image *image.Image) {
+func writeImage(tw *html.TableWriter, name string, img *image.Image) {
 	tw.WriteRow("", "",
 		fmt.Sprintf("<a href=\"showImage?%s\">%s</a>", name, name),
 		fmt.Sprintf("<a href=\"listImage?%s\">%s</a>",
-			name, format.FormatBytes(image.FileSystem.TotalDataBytes)),
+			name, format.FormatBytes(img.FileSystem.TotalDataBytes)),
 		fmt.Sprintf("<a href=\"listImage?%s\">%d</a>",
-			name, image.FileSystem.NumRegularInodes),
+			name, img.FileSystem.NumRegularInodes),
 		func() string {
-			if num := image.FileSystem.NumComputedRegularInodes(); num < 1 {
+			if num := img.FileSystem.NumComputedRegularInodes(); num < 1 {
 				return "0"
 			} else {
 				return fmt.Sprintf("<a href=\"listComputedInodes?%s\">%d</a>",
@@ -57,24 +57,24 @@ func writeImage(tw *html.TableWriter, name string, image *image.Image) {
 			}
 		}(),
 		func() string {
-			if image.Filter == nil {
+			if img.Filter == nil {
 				return "(sparse filter)"
-			} else if len(image.Filter.FilterLines) < 1 {
+			} else if len(img.Filter.FilterLines) < 1 {
 				return "0"
 			} else {
 				return fmt.Sprintf("<a href=\"listFilter?%s\">%d</a>",
-					name, len(image.Filter.FilterLines))
+					name, len(img.Filter.FilterLines))
 			}
 		}(),
 		func() string {
-			if image.Triggers == nil || len(image.Triggers.Triggers) < 1 {
+			if img.Triggers == nil || len(img.Triggers.Triggers) < 1 {
 				return "0"
 			} else {
 				return fmt.Sprintf("<a href=\"listTriggers?%s\">%d</a>",
-					name, len(image.Triggers.Triggers))
+					name, len(img.Triggers.Triggers))
 			}
 		}(),
-		image.BuildBranch,
-		image.BuildCommitId,
+		img.BuildBranch,
+		img.BuildCommitId,
 	)
 }

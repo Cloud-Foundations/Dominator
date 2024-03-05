@@ -14,7 +14,7 @@ func (objClient *ObjectClient) close() error {
 	return nil
 }
 
-func (objClient *ObjectClient) getClient() (*srpc.Client, error) {
+func (objClient *ObjectClient) getClient() (srpc.ClientI, error) {
 	if objClient.client != nil {
 		return objClient.client, nil
 	}

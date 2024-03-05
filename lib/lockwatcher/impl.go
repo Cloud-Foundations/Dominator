@@ -22,6 +22,12 @@ func newLockWatcher(lock sync.Locker, options LockWatcherOptions) *LockWatcher {
 	if options.LogTimeout < time.Millisecond {
 		options.LogTimeout = time.Second
 	}
+	if options.MaximumTryInterval > options.LogTimeout>>5 {
+		options.MaximumTryInterval = options.LogTimeout >> 5
+	}
+	if options.MinimumTryInterval > options.LogTimeout>>8 {
+		options.MinimumTryInterval = options.LogTimeout >> 8
+	}
 	rstopChannel := make(chan struct{}, 1)
 	stopChannel := make(chan struct{}, 1)
 	lockWatcher := &LockWatcher{
@@ -143,6 +149,7 @@ func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
 }
 
 func (lw *LockWatcher) rcheck() {
+	lw.blockReadLock.Lock()
 	lockedChannel := make(chan struct{}, 1)
 	timer := time.NewTimer(lw.LogTimeout)
 	rwlock := lw.lock.(RWLock)
@@ -156,12 +163,14 @@ func (lw *LockWatcher) rcheck() {
 	}()
 	select {
 	case <-lockedChannel:
+		lw.blockReadLock.Unlock()
 		if !timer.Stop() {
 			<-timer.C
 		}
 		return
 	case <-timer.C:
 	}
+	lw.blockReadLock.Unlock()
 	lw.incrementNumRLockTimeouts()
 	lw.logTimeout("r")
 	<-lockedChannel
@@ -169,14 +178,17 @@ func (lw *LockWatcher) rcheck() {
 	lw.Logger.Println("eventually got rlock")
 }
 
-// wcheck uses a TryLock() to grab a write lock, so as to not block future read
-// lockers.
+// wcheck initially uses a TryLock() to grab a write lock, so as to not block
+// future read lockers. After a while it falls back to Lock() in case there is
+// a fast loop grabbing and releasing the read lock which would starve out the
+// TryLock().
 func (lw *LockWatcher) wcheck() {
 	rwlock := lw.lock.(RWLock)
-	sleeper := backoffdelay.NewExponential(lw.LogTimeout>>8, lw.LogTimeout>>4,
+	sleeper := backoffdelay.NewExponential(lw.MinimumTryInterval,
+		lw.MaximumTryInterval,
 		1)
-	timeoutTime := time.Now().Add(lw.LogTimeout)
-	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
+	timeoutHalfTime := time.Now().Add(lw.LogTimeout >> 1)
+	for ; time.Until(timeoutHalfTime) > 0; sleeper.Sleep() {
 		if rwlock.TryLock() {
 			if lw.Function != nil {
 				lw.Function()
@@ -185,18 +197,31 @@ func (lw *LockWatcher) wcheck() {
 			return
 		}
 	}
+	lockedChannel := make(chan struct{}, 1)
+	timer := time.NewTimer(lw.LogTimeout >> 1)
+	go func() {
+		// We're about to block read lockers, so stop the checker so that we
+		// don't generate noise logs.
+		lw.blockReadLock.Lock()
+		rwlock.Lock()
+		lockedChannel <- struct{}{}
+		if lw.Function != nil {
+			lw.Function()
+		}
+		rwlock.Unlock()
+		lw.blockReadLock.Unlock()
+	}()
+	select {
+	case <-lockedChannel:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+	}
 	lw.incrementNumWLockTimeouts()
 	lw.logTimeout("w")
-	sleeper = backoffdelay.NewExponential(lw.LogTimeout>>4, time.Second, 1)
-	for ; true; sleeper.Sleep() {
-		if rwlock.TryLock() {
-			if lw.Function != nil {
-				lw.Function()
-			}
-			rwlock.Unlock()
-			break
-		}
-	}
+	<-lockedChannel
 	lw.clearWLockWaiting()
 	lw.Logger.Println("eventually got wlock")
 }

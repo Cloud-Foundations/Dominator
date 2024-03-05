@@ -1,4 +1,4 @@
-// +build linux
+//go:build linux
 
 package main
 
@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/lib/decoders"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -21,10 +22,23 @@ type logWriterType struct {
 }
 
 func buildFromManifestSubcommand(args []string, logger log.DebugLogger) error {
+	return buildFromManifest(args[0], args[1], logger)
+}
+
+func buildFromManifest(manifestDirectory, streamName string,
+	logger log.DebugLogger) error {
 	srpcClient := getImageServerClient()
 	logWriter := &logWriterType{}
 	if *alwaysShowBuildLog {
 		fmt.Fprintln(os.Stderr, "Start of build log ==========================")
+	}
+	var mtimesCopyFilter *filter.Filter
+	if *mtimesCopyFilterFile != "" {
+		var err error
+		mtimesCopyFilter, err = filter.Load(*mtimesCopyFilterFile)
+		if err != nil {
+			return err
+		}
 	}
 	var variables map[string]string
 	if *variablesFilename != "" {
@@ -37,10 +51,11 @@ func buildFromManifestSubcommand(args []string, logger log.DebugLogger) error {
 		srpcClient,
 		builder.BuildLocalOptions{
 			BindMounts:        bindMounts,
-			ManifestDirectory: args[0],
+			ManifestDirectory: manifestDirectory,
+			MtimesCopyFilter:  mtimesCopyFilter,
 			Variables:         variables,
 		},
-		args[1],
+		streamName,
 		*expiresIn,
 		logWriter)
 	if err != nil {

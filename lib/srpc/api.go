@@ -72,6 +72,9 @@ var (
 	ErrorAccessToMethodDenied = errors.New("access to method denied")
 
 	ErrorCloseClient = errors.New("close client")
+
+	// Interface check.
+	_ ClientI = (*Client)(nil)
 )
 
 var (
@@ -133,6 +136,16 @@ type AuthInformation struct {
 	GroupList        map[string]struct{}
 	HaveMethodAccess bool
 	Username         string
+}
+
+type ClientI interface {
+	Call(serviceMethod string) (*Conn, error)
+	Close() error
+	Ping() error
+	RequestReply(serviceMethod string, request interface{},
+		reply interface{}) error
+	SetKeepAlive(keepalive bool) error
+	SetKeepAlivePeriod(d time.Duration) error
 }
 
 // Dialer implements a dialer that can be use to create connections.
@@ -348,6 +361,9 @@ func DialHTTPWithDialer(network, address string, dialer Dialer) (
 func DialTlsHTTP(network, address string, tlsConfig *tls.Config,
 	timeout time.Duration) (
 	*Client, error) {
+	if tlsConfig == nil {
+		tlsConfig = clientTlsConfig
+	}
 	return DialTlsHTTPWithDialer(network, address, tlsConfig,
 		&net.Dialer{Timeout: timeout})
 }

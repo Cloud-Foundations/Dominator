@@ -5,7 +5,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func chownDirectory(client *srpc.Client, dirname, ownerGroup string) error {
+func chownDirectory(client srpc.ClientI, dirname, ownerGroup string) error {
 	request := imageserver.ChangeOwnerRequest{DirectoryName: dirname,
 		OwnerGroup: ownerGroup}
 	var reply imageserver.ChangeOwnerResponse

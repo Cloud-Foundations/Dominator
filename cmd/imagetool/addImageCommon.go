@@ -197,26 +197,26 @@ func buildImageFromRaw(imageSClient *srpc.Client, filter *filter.Filter,
 	return fs, err
 }
 
-func loadImageFiles(image *image.Image, objectClient *objectclient.ObjectClient,
+func loadImageFiles(img *image.Image, objectClient *objectclient.ObjectClient,
 	filterFilename, triggersFilename string) error {
 	var err error
 	if filterFilename != "" {
-		image.Filter, err = filter.Load(filterFilename)
+		img.Filter, err = filter.Load(filterFilename)
 		if err != nil {
 			return err
 		}
 	}
 	if triggersFilename != "" {
-		image.Triggers, err = triggers.Load(triggersFilename)
+		img.Triggers, err = triggers.Load(triggersFilename)
 		if err != nil {
 			return err
 		}
 	}
-	image.BuildLog, err = getAnnotation(objectClient, *buildLog)
+	img.BuildLog, err = getAnnotation(objectClient, *buildLog)
 	if err != nil {
 		return err
 	}
-	image.ReleaseNotes, err = getAnnotation(objectClient, *releaseNotes)
+	img.ReleaseNotes, err = getAnnotation(objectClient, *releaseNotes)
 	if err != nil {
 		return err
 	}

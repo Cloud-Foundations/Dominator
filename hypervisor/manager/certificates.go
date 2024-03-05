@@ -34,19 +34,19 @@ func parseKeyPair(certPEM, keyPEM []byte) (*x509.Certificate, error) {
 }
 
 func validateIdentityKeyPair(certPEM, keyPEM []byte, username string) (
-	string, error) {
+	string, time.Time, error) {
 	x509Cert, err := parseKeyPair(certPEM, keyPEM)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	certUsername, err := x509util.GetUsername(x509Cert)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	if username == certUsername {
-		return "", fmt.Errorf("cannot give VM your own identity")
+		return "", time.Time{}, fmt.Errorf("cannot give VM your own identity")
 	}
-	return certUsername, nil
+	return certUsername, x509Cert.NotAfter, nil
 }
 
 func writeKeyPair(certPEM, keyPEM []byte,

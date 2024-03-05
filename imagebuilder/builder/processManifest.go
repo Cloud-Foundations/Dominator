@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
@@ -110,13 +111,27 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	return manifestConfig, nil
 }
 
-func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
+func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	maxSourceAge time.Duration, rootDir string, bindMounts []string,
 	applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer) (manifestType, error) {
 	manifestConfig, err := readManifestFile(manifestDir, envGetter)
 	if err != nil {
 		return manifestType{}, err
+	}
+	var mtimesCopyAddFilter, mtimesCopyFilter *filter.Filter
+	if len(manifestConfig.MtimesCopyAddFilterLines) > 0 {
+		mtimesCopyAddFilter, err = filter.New(
+			manifestConfig.MtimesCopyAddFilterLines)
+		if err != nil {
+			return manifestType{}, err
+		}
+	}
+	if len(manifestConfig.MtimesCopyFilterLines) > 0 {
+		mtimesCopyFilter, err = filter.New(manifestConfig.MtimesCopyFilterLines)
+		if err != nil {
+			return manifestType{}, err
+		}
 	}
 	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
 		maxSourceAge, rootDir, buildLog)
@@ -138,7 +153,12 @@ func unpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	}
 	fmt.Fprintf(buildLog, "Processed manifest in %s\n",
 		format.Duration(time.Since(startTime)))
-	return manifestType{manifestConfig.Filter, sourceImageInfo}, nil
+	return manifestType{
+		filter:              manifestConfig.Filter,
+		mtimesCopyAddFilter: mtimesCopyAddFilter,
+		mtimesCopyFilter:    mtimesCopyFilter,
+		sourceImageInfo:     sourceImageInfo,
+	}, nil
 }
 
 func processManifest(manifestDir, rootDir string, bindMounts []string,

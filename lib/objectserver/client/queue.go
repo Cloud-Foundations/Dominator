@@ -12,7 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/objectserver"
 )
 
-func newObjectAdderQueue(client *srpc.Client) (*ObjectAdderQueue, error) {
+func newObjectAdderQueue(client srpc.ClientI) (*ObjectAdderQueue, error) {
 	var objQ ObjectAdderQueue
 	var err error
 	objQ.conn, err = client.Call("ObjectServer.AddObjects")

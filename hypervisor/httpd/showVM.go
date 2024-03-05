@@ -94,6 +94,11 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		writeString(writer, "Total storage", format.FormatBytes(storage))
 		writeStrings(writer, "Owner users", vm.OwnerGroups)
 		writeStrings(writer, "Owner users", vm.OwnerUsers)
+		if vm.IdentityName != "" {
+			writeString(writer, "Identity name",
+				fmt.Sprintf("%s, %s",
+					vm.IdentityName, makeExpiration(vm.IdentityExpires)))
+		}
 		writeBool(writer, "Spread volumes", vm.SpreadVolumes)
 		writeString(writer, "Latest boot",
 			fmt.Sprintf("<a href=\"showVmBootLog?%s\">log</a>", ipAddr))
@@ -129,6 +134,16 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 		fmt.Fprintln(writer, "</body>")
 	}
+}
+
+func makeExpiration(value time.Time) string {
+	expiresIn := time.Until(value)
+	if expiresIn >= 0 {
+		return fmt.Sprintf("expires at %s (in %s)",
+			value, format.Duration(expiresIn))
+	}
+	return fmt.Sprintf("expired at %s (%s ago)",
+		value, format.Duration(-expiresIn))
 }
 
 func writeBool(writer io.Writer, name string, value bool) {

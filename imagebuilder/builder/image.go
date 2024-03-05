@@ -34,7 +34,7 @@ type gitInfoType struct {
 	gitUrl   string
 }
 
-func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
+func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	request proto.BuildImageRequest, buildLog buildLogger) (
 	*image.Image, error) {
 	manifestDirectory, gitInfo, err := stream.getManifest(b, request.StreamName,
@@ -44,7 +44,7 @@ func (stream *imageStreamType) build(b *Builder, client *srpc.Client,
 	}
 	defer os.RemoveAll(manifestDirectory)
 	img, err := buildImageFromManifest(client, manifestDirectory, request,
-		b.bindMounts, stream, gitInfo, buildLog)
+		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -238,10 +238,11 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 	return cmd.Run()
 }
 
-func buildImageFromManifest(client *srpc.Client, manifestDir string,
+func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	request proto.BuildImageRequest, bindMounts []string,
 	envGetter environmentGetter, gitInfo *gitInfoType,
-	buildLog buildLogger) (*image.Image, error) {
+	mtimesCopyFilter *filter.Filter, buildLog buildLogger) (
+	*image.Image, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
 	if err != nil {
@@ -302,9 +303,17 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 		mergeableTriggers.Merge(imageTriggers)
 		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
+	if manifest.mtimesCopyFilter != nil {
+		mtimesCopyFilter = manifest.mtimesCopyFilter
+	} else if manifest.mtimesCopyAddFilter != nil {
+		mf := &filter.MergeableFilter{}
+		mf.Merge(mtimesCopyFilter)
+		mf.Merge(manifest.mtimesCopyAddFilter)
+		mtimesCopyFilter = mf.ExportFilter()
+	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		imageTriggers, buildLog)
+		imageTriggers, mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +326,7 @@ func buildImageFromManifest(client *srpc.Client, manifestDir string,
 	return img, nil
 }
 
-func buildImageFromManifestAndUpload(client *srpc.Client,
+func buildImageFromManifestAndUpload(client srpc.ClientI,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (*image.Image, string, error) {
 	request := proto.BuildImageRequest{
@@ -334,6 +343,7 @@ func buildImageFromManifestAndUpload(client *srpc.Client,
 			Variables: options.Variables,
 		},
 		nil,
+		options.MtimesCopyFilter,
 		buildLog)
 	if err != nil {
 		return nil, "", err
@@ -392,7 +402,7 @@ func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
 	return &cache, nil
 }
 
-func buildTreeFromManifest(client *srpc.Client, options BuildLocalOptions,
+func buildTreeFromManifest(client srpc.ClientI, options BuildLocalOptions,
 	buildLog io.Writer) (string, error) {
 	rootDir, err := makeTempDirectory("", "tree")
 	if err != nil {
@@ -499,7 +509,7 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	}
 }
 
-func unpackImage(client *srpc.Client, streamName string,
+func unpackImage(client srpc.ClientI, streamName string,
 	maxSourceAge time.Duration, rootDir string,
 	buildLog io.Writer) (*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()

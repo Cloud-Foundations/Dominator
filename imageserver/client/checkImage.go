@@ -5,7 +5,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func checkImage(client *srpc.Client, name string) (bool, error) {
+func checkImage(client srpc.ClientI, name string) (bool, error) {
 	request := imageserver.CheckImageRequest{name}
 	var reply imageserver.CheckImageResponse
 	err := client.RequestReply("ImageServer.CheckImage", request, &reply)

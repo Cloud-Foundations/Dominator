@@ -33,6 +33,7 @@ var loggerMap *loggerMapT = &loggerMapT{
 	PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 		map[string]uint{
 			"Debug":         1,
+			"GetStackTrace": 1,
 			"Print":         1,
 			"SetDebugLevel": 1,
 			"Watch":         1,
@@ -291,6 +292,15 @@ func (t *loggerMapT) Debug(conn *srpc.Conn,
 			request.Level, strings.Join(request.Args, " "))
 		return nil
 	}
+}
+
+func (t *loggerMapT) GetStackTrace(conn *srpc.Conn,
+	request proto.GetStackTraceRequest,
+	reply *proto.GetStackTraceResponse) error {
+	buffer := make([]byte, 1<<20)
+	nBytes := runtime.Stack(buffer, true)
+	reply.Data = buffer[:nBytes]
+	return nil
 }
 
 func (t *loggerMapT) Print(conn *srpc.Conn,

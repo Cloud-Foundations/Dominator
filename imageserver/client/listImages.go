@@ -4,7 +4,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
-func listImages(client *srpc.Client) ([]string, error) {
+func listImages(client srpc.ClientI) ([]string, error) {
 	conn, err := client.Call("ImageServer.ListImages")
 	if err != nil {
 		return nil, err

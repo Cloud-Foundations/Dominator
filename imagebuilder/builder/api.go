@@ -31,7 +31,7 @@ type environmentGetter interface {
 }
 
 type imageBuilder interface {
-	build(b *Builder, client *srpc.Client, request proto.BuildImageRequest,
+	build(b *Builder, client srpc.ClientI, request proto.BuildImageRequest,
 		buildLog buildLogger) (*image.Image, error)
 }
 
@@ -103,6 +103,8 @@ type listCommandType struct {
 type manifestConfigType struct {
 	SourceImage string
 	*filter.Filter
+	MtimesCopyAddFilterLines []string `json:",omitempty"`
+	MtimesCopyFilterLines    []string `json:",omitempty"`
 }
 
 type masterConfigurationType struct {
@@ -111,6 +113,7 @@ type masterConfigurationType struct {
 	ImageStreamsCheckInterval uint                        `json:",omitempty"`
 	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
 	ImageStreamsUrl           string                      `json:",omitempty"`
+	MtimesCopyFilterLines     []string                    `json:",omitempty"`
 	PackagerTypes             map[string]packagerType     `json:",omitempty"`
 	RelationshipsQuickLinks   []WebLink                   `json:",omitempty"`
 }
@@ -123,8 +126,10 @@ type manifestLocationType struct {
 }
 
 type manifestType struct {
-	filter          *filter.Filter
-	sourceImageInfo *sourceImageInfoType
+	filter              *filter.Filter
+	mtimesCopyAddFilter *filter.Filter
+	mtimesCopyFilter    *filter.Filter
+	sourceImageInfo     *sourceImageInfoType
 }
 
 type packagerType struct {
@@ -167,48 +172,54 @@ type WebLink struct {
 type BuildLocalOptions struct {
 	BindMounts        []string
 	ManifestDirectory string
+	MtimesCopyFilter  *filter.Filter
 	Variables         map[string]string
 }
 
 type Builder struct {
-	buildLogArchiver          logarchiver.BuildLogArchiver
-	bindMounts                []string
-	createSlaveTimeout        time.Duration
-	disableLock               sync.RWMutex
-	disableAutoBuildsUntil    time.Time
-	disableBuildRequestsUntil time.Time
-	generateDependencyTrigger chan<- chan<- struct{}
-	stateDir                  string
-	imageRebuildInterval      time.Duration
-	imageServerAddress        string
-	logger                    log.DebugLogger
-	imageStreamsUrl           string
-	initialNamespace          string // For catching golang bugs.
-	minimumExpirationDuration time.Duration
-	streamsLoadedChannel      <-chan struct{} // Closed when streams loaded.
-	streamsLock               sync.RWMutex
-	bootstrapStreams          map[string]*bootstrapStream
-	imageStreams              map[string]*imageStreamType
-	imageStreamsToAutoRebuild []string
-	relationshipsQuickLinks   []WebLink
-	slaveDriver               *slavedriver.SlaveDriver
-	buildResultsLock          sync.RWMutex
-	currentBuildInfos         map[string]*currentBuildInfo // Key: stream name.
-	lastBuildResults          map[string]buildResultType   // Key: stream name.
-	packagerTypes             map[string]packagerType
-	variables                 map[string]string
-	dependencyDataLock        sync.RWMutex
-	dependencyData            *dependencyDataType
+	buildLogArchiver            logarchiver.BuildLogArchiver
+	bindMounts                  []string
+	createSlaveTimeout          time.Duration
+	disableLock                 sync.RWMutex
+	disableAutoBuildsUntil      time.Time
+	disableBuildRequestsUntil   time.Time
+	generateDependencyTrigger   chan<- chan<- struct{}
+	stateDir                    string
+	imageRebuildInterval        time.Duration
+	imageServerAddress          string
+	logger                      log.DebugLogger
+	imageStreamsUrl             string
+	initialNamespace            string // For catching golang bugs.
+	maximumExpiration           time.Duration
+	maximumExpirationPrivileged time.Duration
+	minimumExpiration           time.Duration
+	mtimesCopyFilter            *filter.Filter
+	streamsLoadedChannel        <-chan struct{} // Closed when streams loaded.
+	streamsLock                 sync.RWMutex
+	bootstrapStreams            map[string]*bootstrapStream
+	imageStreams                map[string]*imageStreamType
+	imageStreamsToAutoRebuild   []string
+	relationshipsQuickLinks     []WebLink
+	slaveDriver                 *slavedriver.SlaveDriver
+	buildResultsLock            sync.RWMutex
+	currentBuildInfos           map[string]*currentBuildInfo // Key: stream name.
+	lastBuildResults            map[string]buildResultType   // Key: stream name.
+	packagerTypes               map[string]packagerType
+	variables                   map[string]string
+	dependencyDataLock          sync.RWMutex
+	dependencyData              *dependencyDataType
 }
 
 type BuilderOptions struct {
-	ConfigurationURL          string
-	CreateSlaveTimeout        time.Duration
-	ImageRebuildInterval      time.Duration
-	ImageServerAddress        string
-	MinimumExpirationDuration time.Duration // Default: 15 minutes. Min: 5 min.
-	StateDirectory            string
-	VariablesFile             string
+	ConfigurationURL                    string
+	CreateSlaveTimeout                  time.Duration
+	ImageRebuildInterval                time.Duration
+	ImageServerAddress                  string
+	MaximumExpirationDuration           time.Duration // Default: 1 day.
+	MaximumExpirationDurationPrivileged time.Duration // Default: 1 month.
+	MinimumExpirationDuration           time.Duration // Def: 15 min. Min: 5 min
+	StateDirectory                      string
+	VariablesFile                       string
 }
 
 type BuilderParams struct {

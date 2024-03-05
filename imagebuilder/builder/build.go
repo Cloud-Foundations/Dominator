@@ -14,9 +14,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
-	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
+	"github.com/Cloud-Foundations/Dominator/lib/retry"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc/retryclient"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -27,27 +27,6 @@ const errTooOldSourceImage = "too old source image: "
 type dualBuildLogger struct {
 	buffer *bytes.Buffer
 	writer io.Writer
-}
-
-func checkPermission(builder imageBuilder, request proto.BuildImageRequest,
-	authInfo *srpc.AuthInformation) error {
-	if authInfo == nil || authInfo.HaveMethodAccess {
-		return nil
-	}
-	if request.ExpiresIn > time.Hour*24 {
-		return errors.New("maximum expiration time is 1 day")
-	}
-	if builder, ok := builder.(*imageStreamType); ok {
-		if _, ok := builder.builderUsers[authInfo.Username]; ok {
-			return nil
-		}
-		for _, group := range builder.BuilderGroups {
-			if _, ok := authInfo.GroupList[group]; ok {
-				return nil
-			}
-		}
-	}
-	return errors.New("no permission to build: " + request.StreamName)
 }
 
 func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
@@ -69,29 +48,18 @@ func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
 		"*********************************************************************")
 }
 
-func getClient(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
-	sleeper := backoffdelay.NewExponential(0, 0, 1)
-	for ; ; sleeper.Sleep() {
-		if client := getClientOnce(cr, logger); client != nil {
-			return client
-		}
-		logger = nulllogger.New()
-	}
-}
-
-func getClientOnce(cr *srpc.ClientResource, logger log.Logger) *srpc.Client {
-	client, err := cr.GetHTTP(nil, 0)
-	if err != nil {
-		logger.Printf("Get failure, will retry connection: %s\n", err)
-		return nil
-	}
-	if err := client.Ping(); err != nil {
-		client.Put()
-		client.Close()
-		logger.Printf("Ping failure, will retry connection: %s\n", err)
-		return nil
-	}
-	return client
+func dialServer(address string, retryTimeout time.Duration) (
+	srpc.ClientI, error) {
+	return retryclient.DialHTTP(retryclient.Params{
+		Address:         address,
+		KeepAlive:       true,
+		KeepAlivePeriod: time.Minute,
+		Network:         "tcp",
+		Params: retry.Params{
+			RetryTimeout: retryTimeout,
+			Sleeper:      backoffdelay.NewExponential(0, 0, 1),
+		},
+	})
 }
 
 func needSourceImage(err error) (bool, string) {
@@ -132,7 +100,7 @@ func (b *Builder) checkToAutoExtend() bool {
 	return true
 }
 
-func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
+func (b *Builder) build(client srpc.ClientI, request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
 	logWriter io.Writer) (*image.Image, string, error) {
 	startTime := time.Now()
@@ -140,7 +108,7 @@ func (b *Builder) build(client *srpc.Client, request proto.BuildImageRequest,
 	if builder == nil {
 		return nil, "", errors.New("unknown stream: " + request.StreamName)
 	}
-	if err := checkPermission(builder, request, authInfo); err != nil {
+	if err := b.checkPermission(builder, request, authInfo); err != nil {
 		return nil, "", err
 	}
 	buildLogBuffer := &bytes.Buffer{}
@@ -202,14 +170,14 @@ func (b *Builder) buildImage(request proto.BuildImageRequest,
 			disableUntil.Format(format.TimeFormatSeconds),
 			format.Duration(duration))
 	}
-	if request.ExpiresIn < b.minimumExpirationDuration {
+	if request.ExpiresIn < b.minimumExpiration {
 		return nil, "", fmt.Errorf("minimum expiration duration is %s",
-			format.Duration(b.minimumExpirationDuration))
+			format.Duration(b.minimumExpiration))
 	}
 	if err := b.WaitForStreamsLoaded(time.Minute); err != nil {
 		return nil, "", err
 	}
-	client, err := srpc.DialHTTP("tcp", b.imageServerAddress, 0)
+	client, err := dialServer(b.imageServerAddress, time.Minute)
 	if err != nil {
 		return nil, "", err
 	}
@@ -221,7 +189,7 @@ func (b *Builder) buildImage(request proto.BuildImageRequest,
 	return nil, name, err
 }
 
-func (b *Builder) buildLocal(builder imageBuilder, client *srpc.Client,
+func (b *Builder) buildLocal(builder imageBuilder, client srpc.ClientI,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
 	buildLog buildLogger) (*image.Image, error) {
 	// Check the namespace to make sure it hasn't changed. This is to catch
@@ -252,7 +220,7 @@ func (b *Builder) buildLocal(builder imageBuilder, client *srpc.Client,
 	return img, nil
 }
 
-func (b *Builder) buildOnSlave(client *srpc.Client,
+func (b *Builder) buildOnSlave(client srpc.ClientI,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
 	slaveAddress *string, buildLog buildLogger) (*image.Image, error) {
 	request.DisableRecursiveBuild = true
@@ -308,7 +276,7 @@ func (b *Builder) buildOnSlave(client *srpc.Client,
 	return reply.Image, nil
 }
 
-func (b *Builder) buildSomewhere(builder imageBuilder, client *srpc.Client,
+func (b *Builder) buildSomewhere(builder imageBuilder, client srpc.ClientI,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
 	slaveAddress *string, buildLog buildLogger) (*image.Image, error) {
 	if b.slaveDriver == nil {
@@ -318,7 +286,7 @@ func (b *Builder) buildSomewhere(builder imageBuilder, client *srpc.Client,
 	}
 }
 
-func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
+func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 	request proto.BuildImageRequest, authInfo *srpc.AuthInformation,
 	startTime time.Time, slaveAddress *string,
 	buildLog buildLogger) (*image.Image, string, error) {
@@ -370,6 +338,32 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client *srpc.Client,
 	}
 }
 
+func (b *Builder) checkPermission(builder imageBuilder,
+	request proto.BuildImageRequest, authInfo *srpc.AuthInformation) error {
+	if authInfo == nil || authInfo.HaveMethodAccess {
+		if request.ExpiresIn > b.maximumExpirationPrivileged {
+			return fmt.Errorf("maximum expiration time is %s for you",
+				format.Duration(b.maximumExpirationPrivileged))
+		}
+		return nil
+	}
+	if request.ExpiresIn > b.maximumExpiration {
+		return fmt.Errorf("maximum expiration time is %s",
+			format.Duration(b.maximumExpiration))
+	}
+	if builder, ok := builder.(*imageStreamType); ok {
+		if _, ok := builder.builderUsers[authInfo.Username]; ok {
+			return nil
+		}
+		for _, group := range builder.BuilderGroups {
+			if _, ok := authInfo.GroupList[group]; ok {
+				return nil
+			}
+		}
+	}
+	return errors.New("no permission to build: " + request.StreamName)
+}
+
 func (b *Builder) disableAutoBuilds(disableFor time.Duration) (
 	time.Time, error) {
 	if b.imageRebuildInterval > 0 {
@@ -399,13 +393,11 @@ func (b *Builder) disableBuildRequests(disableFor time.Duration) (
 
 // extendAutoRebuildImages will return true if image lifetimes were extended and
 // thus auto rebuilding should be skipped.
-func (b *Builder) extendAutoRebuildImages(cr *srpc.ClientResource,
+func (b *Builder) extendAutoRebuildImages(client srpc.ClientI,
 	expiresIn time.Duration) bool {
 	if !b.checkToAutoExtend() {
 		return false
 	}
-	client := getClient(cr, b.logger)
-	defer client.Put()
 	for _, streamName := range b.listStreamsToAutoRebuild() {
 		imageName, err := imgclient.FindLatestImage(client, streamName, false)
 		if err != nil {
@@ -472,10 +464,8 @@ func (b *Builder) getLatestBuildLog(streamName string) ([]byte, error) {
 	}
 }
 
-func (b *Builder) rebuildImage(cr *srpc.ClientResource, streamName string,
+func (b *Builder) rebuildImage(client srpc.ClientI, streamName string,
 	expiresIn time.Duration) {
-	client := getClient(cr, b.logger)
-	defer client.Put()
 	_, _, err := b.build(client, proto.BuildImageRequest{
 		StreamName: streamName,
 		ExpiresIn:  expiresIn,
@@ -486,7 +476,7 @@ func (b *Builder) rebuildImage(cr *srpc.ClientResource, streamName string,
 	}
 	imageName, e := imgclient.FindLatestImage(client, streamName, false)
 	if e != nil {
-		client.Close()
+		b.logger.Printf("Error finding latest image: %s: %s\n", streamName, e)
 	} else if imageName != "" {
 		e := imgclient.ChangeImageExpiration(client, imageName,
 			time.Now().Add(expiresIn))
@@ -495,7 +485,6 @@ func (b *Builder) rebuildImage(cr *srpc.ClientResource, streamName string,
 				streamName, err, imageName)
 			return
 		}
-		client.Close()
 		b.logger.Printf(
 			"Error building image: %s: %s, failed to extend: %s: %s\n",
 			streamName, err, imageName, e)
@@ -508,17 +497,17 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 	if minInterval < 1 {
 		return
 	}
-	cr := srpc.NewClientResource("tcp", b.imageServerAddress)
+	client, _ := dialServer(b.imageServerAddress, 0)
 	var sleepUntil time.Time
 	for ; ; time.Sleep(time.Until(sleepUntil)) {
 		b.logger.Println("Starting automatic image build cycle")
 		startTime := time.Now()
 		sleepUntil = startTime.Add(minInterval)
-		if b.extendAutoRebuildImages(cr, minInterval*2) {
+		if b.extendAutoRebuildImages(client, minInterval*2) {
 			continue
 		}
 		for _, streamName := range b.listStreamsToAutoRebuild() {
-			b.rebuildImage(cr, streamName, minInterval*2)
+			b.rebuildImage(client, streamName, minInterval*2)
 		}
 		b.logger.Printf("Completed automatic image build cycle in %s\n",
 			format.Duration(time.Since(startTime)))

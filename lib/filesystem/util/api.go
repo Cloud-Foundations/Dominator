@@ -44,7 +44,14 @@ type MakeExt4fsParams struct {
 // Directory entry inode pointers are invalidated by this operation, so this
 // should be followed by a call to dest.RebuildInodePointers().
 func CopyMtimes(source, dest *filesystem.FileSystem) {
-	copyMtimes(source, dest)
+	copyMtimes(source, dest, nil)
+}
+
+// CopyMtimesWithFilter is similar to CopyMtimes but files matching the
+// specified filter are not changed.
+func CopyMtimesWithFilter(source, dest *filesystem.FileSystem,
+	filt *filter.Filter) {
+	copyMtimes(source, dest, filt)
 }
 
 func DeletedFilteredFiles(rootDir string, filt *filter.Filter) error {

@@ -744,6 +744,7 @@ type VmInfo struct {
 	DisableVirtIO      bool        `json:",omitempty"`
 	ExtraKernelOptions string      `json:",omitempty"`
 	Hostname           string      `json:",omitempty"`
+	IdentityExpires    time.Time   `json:",omitempty"`
 	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`
 	ImageURL           string      `json:",omitempty"`

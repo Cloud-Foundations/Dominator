@@ -10,6 +10,7 @@ import (
 type FullObjectServer interface {
 	DeleteObject(hashVal hash.Hash) error
 	ObjectServer
+	ObjectsRefcounter
 	LastMutationTime() time.Time
 	ListObjectSizes() map[hash.Hash]uint64
 	ListObjects() []hash.Hash
@@ -43,6 +44,16 @@ type ObjectsChecker interface {
 
 type ObjectsGetter interface {
 	GetObjects(hashes []hash.Hash) (ObjectsReader, error)
+}
+
+type ObjectsIterator interface {
+	ForEachObject(objectFunc func(hash.Hash) error) error
+}
+
+type ObjectsRefcounter interface {
+	AdjustRefcounts(bool, ObjectsIterator) error
+	DeleteUnreferenced(percentage uint8, bytes uint64) (uint64, uint64, error)
+	ListUnreferenced() map[hash.Hash]uint64
 }
 
 type FullObjectsReader interface {

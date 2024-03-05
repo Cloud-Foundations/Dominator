@@ -10,7 +10,7 @@ import (
 
 type ObjectClient struct {
 	address      string
-	client       *srpc.Client
+	client       srpc.ClientI
 	exclusiveGet bool
 }
 
@@ -18,7 +18,7 @@ func NewObjectClient(address string) *ObjectClient {
 	return &ObjectClient{address: address}
 }
 
-func AttachObjectClient(client *srpc.Client) *ObjectClient {
+func AttachObjectClient(client srpc.ClientI) *ObjectClient {
 	return &ObjectClient{client: client}
 }
 
@@ -76,7 +76,7 @@ type ObjectAdderQueue struct {
 	sendSemaphore   chan struct{}
 }
 
-func NewObjectAdderQueue(client *srpc.Client) (*ObjectAdderQueue, error) {
+func NewObjectAdderQueue(client srpc.ClientI) (*ObjectAdderQueue, error) {
 	return newObjectAdderQueue(client)
 }
 

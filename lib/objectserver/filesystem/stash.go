@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
@@ -35,14 +34,13 @@ func (objSrv *ObjectServer) commitObject(hashVal hash.Hash) error {
 	}
 	objSrv.rwLock.Lock()
 	defer objSrv.rwLock.Unlock()
-	if _, ok := objSrv.sizesMap[hashVal]; ok {
+	if _, ok := objSrv.objects[hashVal]; ok {
 		fsutil.ForceRemove(stashFilename)
 		// Run in a goroutine to keep outside of the lock.
 		go objSrv.addCallback(hashVal, uint64(fi.Size()), false)
 		return nil
 	} else {
-		objSrv.sizesMap[hashVal] = uint64(fi.Size())
-		objSrv.lastMutationTime = time.Now()
+		objSrv.add(&objectType{hash: hashVal, size: uint64(fi.Size())})
 		if objSrv.addCallback != nil {
 			// Run in a goroutine to keep outside of the lock.
 			go objSrv.addCallback(hashVal, uint64(fi.Size()), true)

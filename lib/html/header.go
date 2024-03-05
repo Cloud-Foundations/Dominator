@@ -78,11 +78,13 @@ func writeHeader(writer io.Writer, req *http.Request, noGC bool) {
 				memStatsBeforeGC.Sys-memStatsBeforeGC.HeapReleased))
 	} else {
 		var memStatsAfterGC runtime.MemStats
+		startTime := time.Now()
 		runtime.GC()
 		runtime.ReadMemStats(&memStatsAfterGC)
-		fmt.Fprintf(writer, "    <td>Allocated memory: %s (%s after GC)</td>\n",
+		fmt.Fprintf(writer, "    <td>Allocated memory: %s (%s after GC, took %s)</td>\n",
 			format.FormatBytes(memStatsBeforeGC.Alloc),
-			format.FormatBytes(memStatsAfterGC.Alloc))
+			format.FormatBytes(memStatsAfterGC.Alloc),
+			format.Duration(time.Since(startTime)))
 		fmt.Fprintf(writer, "    <td>System memory: %s (%s after GC)</td>\n",
 			format.FormatBytes(
 				memStatsBeforeGC.Sys-memStatsBeforeGC.HeapReleased),

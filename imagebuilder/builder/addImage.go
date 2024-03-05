@@ -91,7 +91,7 @@ func (h *hasher) OpenAndHash(inode *filesystem.RegularInode,
 	return true, nil
 }
 
-func addImage(client *srpc.Client, request proto.BuildImageRequest,
+func addImage(client srpc.ClientI, request proto.BuildImageRequest,
 	img *image.Image) (string, error) {
 	if request.ExpiresIn > 0 {
 		img.ExpiresAt = time.Now().Add(request.ExpiresIn)
@@ -103,7 +103,7 @@ func addImage(client *srpc.Client, request proto.BuildImageRequest,
 	return name, nil
 }
 
-func buildFileSystem(client *srpc.Client, dirname string,
+func buildFileSystem(client srpc.ClientI, dirname string,
 	scanFilter *filter.Filter, cache *treeCache) (
 	*filesystem.FileSystem, error) {
 	h := hasher{cache: cache}
@@ -145,11 +145,12 @@ func makeImageName(streamName string) string {
 	return path.Join(streamName, time.Now().Format(timeFormat))
 }
 
-func packImage(g *goroutine.Goroutine, client *srpc.Client,
+func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
 	imageFilter *filter.Filter, trig *triggers.Triggers,
-	buildLog buildLogger) (*image.Image, error) {
+	copyMtimesFilter *filter.Filter, buildLog buildLogger) (
+	*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
 	}
@@ -168,6 +169,7 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 	if err := util.DeletedFilteredFiles(dirname, tmpFilter); err != nil {
 		return nil, err
 	}
+	fmt.Fprintln(buildLog, "Scanning file-system and uploading objects")
 	buildStartTime := time.Now()
 	fs, err := buildFileSystem(client, dirname, scanFilter, cache)
 	if err != nil {
@@ -192,7 +194,7 @@ func packImage(g *goroutine.Goroutine, client *srpc.Client,
 		return nil, fmt.Errorf("error getting latest image: %s", err)
 	} else if oldImage != nil {
 		patchStartTime := time.Now()
-		util.CopyMtimes(oldImage.FileSystem, fs)
+		util.CopyMtimesWithFilter(oldImage.FileSystem, fs, copyMtimesFilter)
 		fmt.Fprintf(buildLog, "Copied mtimes in %s\n",
 			format.Duration(time.Since(patchStartTime)))
 	}

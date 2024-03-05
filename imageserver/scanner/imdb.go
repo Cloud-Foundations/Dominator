@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
-	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -31,24 +31,29 @@ var (
 	errNoAuthInfo = errors.New("no authentication information")
 )
 
-func (imdb *ImageDataBase) addImage(image *image.Image, name string,
+func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
-	if err := image.Verify(); err != nil {
+	if err := img.Verify(); err != nil {
 		return err
 	}
-	if imageIsExpired(image) {
+	if imageIsExpired(img) {
 		imdb.Logger.Printf("Ignoring already expired image: %s\n", name)
 		return nil
 	}
 	imdb.deduperLock.Lock()
-	image.ReplaceStrings(imdb.deduper.DeDuplicate)
+	img.ReplaceStrings(imdb.deduper.DeDuplicate)
 	imdb.deduperLock.Unlock()
 	imdb.Lock()
-	defer imdb.Unlock()
+	doUnlock := true
+	defer func() {
+		if doUnlock {
+			imdb.Unlock()
+		}
+	}()
 	if _, ok := imdb.imageMap[name]; ok {
 		return errors.New("image: " + name + " already exists")
 	} else {
-		if err := imdb.checkPermissions(name, authInfo); err != nil {
+		if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
 			return err
 		}
 		filename := filepath.Join(imdb.BaseDirectory, name)
@@ -72,7 +77,7 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 		writer := fsutil.NewChecksumWriter(w)
 		defer writer.WriteChecksum()
 		encoder := gob.NewEncoder(writer)
-		if err := encoder.Encode(image); err != nil {
+		if err := encoder.Encode(img); err != nil {
 			os.Remove(filename)
 			return err
 		}
@@ -80,21 +85,25 @@ func (imdb *ImageDataBase) addImage(image *image.Image, name string,
 			os.Remove(filename)
 			return err
 		}
-		imdb.scheduleExpiration(image, name)
-		imdb.imageMap[name] = image
+		imdb.scheduleExpiration(img, name)
+		imdb.imageMap[name] = img
 		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-		imdb.removeFromUnreferencedObjectsListAndSave(image)
-		return nil
+		doUnlock = false
+		imdb.Unlock()
+		return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 	}
 }
 
 func (imdb *ImageDataBase) changeImageExpiration(name string,
 	expiresAt time.Time, authInfo *srpc.AuthInformation) (bool, error) {
+	if err := imdb.checkExpiration(expiresAt, authInfo); err != nil {
+		return false, err
+	}
 	imdb.Lock()
 	defer imdb.Unlock()
 	if img, ok := imdb.imageMap[name]; !ok {
 		return false, errors.New("image not found")
-	} else if err := imdb.checkPermissions(name, authInfo); err != nil {
+	} else if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 		return false, err
 	} else if img.ExpiresAt.IsZero() {
 		return false, errors.New("image does not expire")
@@ -157,6 +166,29 @@ func (imdb *ImageDataBase) checkDirectory(name string) bool {
 	return ok
 }
 
+func (imdb *ImageDataBase) checkExpiration(expiresAt time.Time,
+	authInfo *srpc.AuthInformation) error {
+	if expiresAt.IsZero() {
+		return nil
+	}
+	expiresIn := time.Until(expiresAt)
+	if authInfo != nil && authInfo.HaveMethodAccess {
+		if authInfo.Username == "" {
+			return nil // Internal call.
+		}
+		if expiresIn > imdb.MaximumExpirationDurationPrivileged {
+			return fmt.Errorf("maximum expiration time is %s for you",
+				format.Duration(imdb.MaximumExpirationDurationPrivileged))
+		}
+		return nil
+	}
+	if expiresIn > imdb.MaximumExpirationDuration {
+		return fmt.Errorf("maximum expiration time is %s",
+			format.Duration(imdb.MaximumExpirationDuration))
+	}
+	return nil
+}
+
 func (imdb *ImageDataBase) checkImage(name string) bool {
 	imdb.RLock()
 	defer imdb.RUnlock()
@@ -165,13 +197,19 @@ func (imdb *ImageDataBase) checkImage(name string) bool {
 }
 
 // This must be called with the lock held.
-func (imdb *ImageDataBase) checkPermissions(imageName string,
+func (imdb *ImageDataBase) checkPermissions(imageName string, img *image.Image,
 	authInfo *srpc.AuthInformation) error {
 	if authInfo == nil {
 		return errNoAuthInfo
 	}
 	if authInfo.HaveMethodAccess {
 		return nil
+	}
+	if authInfo.Username != "" && img != nil {
+		if img.CreatedBy == authInfo.Username ||
+			img.CreatedFor == authInfo.Username {
+			return nil
+		}
 	}
 	dirname := filepath.Dir(imageName)
 	if directoryMetadata, ok := imdb.directoryMap[dirname]; !ok {
@@ -266,8 +304,8 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	authInfo *srpc.AuthInformation) error {
 	imdb.Lock()
 	defer imdb.Unlock()
-	if _, ok := imdb.imageMap[name]; ok {
-		if err := imdb.checkPermissions(name, authInfo); err != nil {
+	if img, ok := imdb.imageMap[name]; ok {
+		if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 			return err
 		}
 		filename := filepath.Join(imdb.BaseDirectory, name)
@@ -289,50 +327,18 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 		return
 	}
 	delete(imdb.imageMap, name)
-	imdb.rebuildDeDuper()
-	imdb.maybeAddToUnreferencedObjectsList(img.FileSystem)
-}
-
-func (imdb *ImageDataBase) deleteUnreferencedObjects(percentage uint8,
-	bytesThreshold uint64) error {
-	objects := imdb.listUnreferencedObjects()
-	objectsThreshold := uint64(percentage) * uint64(len(objects)) / 100
-	var objectsCount, bytesCount uint64
-	for hashVal, size := range objects {
-		if !(objectsCount < objectsThreshold || bytesCount < bytesThreshold) {
-			break
-		}
-		if err := imdb.Params.ObjectServer.DeleteObject(hashVal); err != nil {
-			imdb.Logger.Printf("Error cleaning up: %x: %s\n", hashVal, err)
-			return fmt.Errorf("error cleaning up: %x: %s\n", hashVal, err)
-		}
-		objectsCount++
-		bytesCount += size
+	select {
+	case imdb.deduperTrigger <- struct{}{}:
+	default:
 	}
-	return nil
+	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
-func (imdb *ImageDataBase) doWithPendingImage(image *image.Image,
+func (imdb *ImageDataBase) doWithPendingImage(img *image.Image,
 	doFunc func() error) error {
 	imdb.pendingImageLock.Lock()
 	defer imdb.pendingImageLock.Unlock()
-	imdb.Lock()
-	changed := imdb.removeFromUnreferencedObjectsList(image)
-	imdb.Unlock()
-	err := doFunc()
-	imdb.Lock()
-	defer imdb.Unlock()
-	for _, img := range imdb.imageMap {
-		if img == image { // image was added, save if change happened above.
-			if changed {
-				imdb.saveUnreferencedObjectsList(false)
-			}
-			return err
-		}
-	}
-	// image was not added: "delete" it by maybe adding to unreferenced list.
-	imdb.maybeAddToUnreferencedObjectsList(image.FileSystem)
-	return err
+	return doFunc()
 }
 
 func (imdb *ImageDataBase) findLatestImage(
@@ -369,14 +375,6 @@ func (imdb *ImageDataBase) getImage(name string) *image.Image {
 	return imdb.imageMap[name]
 }
 
-func (imdb *ImageDataBase) getUnreferencedObjectsStatistics() (uint64, uint64) {
-	imdb.maybeRegenerateUnreferencedObjectsList()
-	imdb.RLock()
-	defer imdb.RUnlock()
-	return uint64(len(imdb.unreferencedObjects.hashToEntry)),
-		imdb.unreferencedObjects.totalBytes
-}
-
 func (imdb *ImageDataBase) listDirectories() []image.Directory {
 	imdb.RLock()
 	defer imdb.RUnlock()
@@ -400,13 +398,6 @@ func (imdb *ImageDataBase) listImages(
 		names = append(names, name)
 	}
 	return names
-}
-
-func (imdb *ImageDataBase) listUnreferencedObjects() map[hash.Hash]uint64 {
-	imdb.maybeRegenerateUnreferencedObjectsList()
-	imdb.RLock()
-	defer imdb.RUnlock()
-	return imdb.unreferencedObjects.list()
 }
 
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
@@ -455,8 +446,34 @@ func (imdb *ImageDataBase) rebuildDeDuper() {
 	for _, image := range imdb.imageMap {
 		image.ReplaceStrings(imdb.deduper.DeDuplicate)
 	}
-	imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
-		time.Since(startTime))
+	timeTaken := time.Since(startTime)
+	if timeTaken >= time.Second {
+		imdb.Logger.Printf("Rebuilding de-duper state took %s\n",
+			format.Duration(timeTaken))
+	} else {
+		imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
+			format.Duration(timeTaken))
+	}
+}
+
+func (imdb *ImageDataBase) rebuildDeDuperManager(trigger <-chan struct{}) {
+	delayTimer := time.NewTimer(time.Hour)
+	delayTimer.Stop()
+	for {
+		select {
+		case <-trigger:
+			delayTimer.Stop()
+			select {
+			case <-delayTimer.C:
+			default:
+			}
+			delayTimer.Reset(time.Second) // Kick the can down the road.
+		case <-delayTimer.C:
+			imdb.Lock()
+			imdb.rebuildDeDuper()
+			imdb.Unlock()
+		}
+	}
 }
 
 func (imdb *ImageDataBase) registerAddNotifier() <-chan string {

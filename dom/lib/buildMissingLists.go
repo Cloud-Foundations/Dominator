@@ -7,19 +7,19 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-func (sub *Sub) buildMissingLists(image *image.Image, pushComputedFiles bool,
+func (sub *Sub) buildMissingLists(img *image.Image, pushComputedFiles bool,
 	ignoreMissingComputedFiles bool, logger log.Logger) (
 	map[hash.Hash]uint64, map[hash.Hash]struct{}) {
 	objectsToFetch := make(map[hash.Hash]uint64)
 	objectsToPush := make(map[hash.Hash]struct{})
-	for inum, inode := range image.FileSystem.InodeTable {
+	for inum, inode := range img.FileSystem.InodeTable {
 		if rInode, ok := inode.(*filesystem.RegularInode); ok {
 			if rInode.Size > 0 {
 				objectsToFetch[rInode.Hash] = rInode.Size
 			}
 		} else if pushComputedFiles {
 			if _, ok := inode.(*filesystem.ComputedRegularInode); ok {
-				pathname := image.FileSystem.InodeToFilenamesTable()[inum][0]
+				pathname := img.FileSystem.InodeToFilenamesTable()[inum][0]
 				if inode, ok := sub.ComputedInodes[pathname]; !ok {
 					if ignoreMissingComputedFiles {
 						continue

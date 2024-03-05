@@ -8,7 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-func getImage(client *srpc.Client, name string, timeout time.Duration) (
+func getImage(client srpc.ClientI, name string, timeout time.Duration) (
 	*image.Image, error) {
 	request := imageserver.GetImageRequest{ImageName: name, Timeout: timeout}
 	var reply imageserver.GetImageResponse

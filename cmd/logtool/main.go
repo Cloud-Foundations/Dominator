@@ -36,6 +36,7 @@ func printUsage() {
 
 var subcommands = []commands.Command{
 	{"debug", "          level args...", 2, -1, debugSubcommand},
+	{"get-stack-trace", "", 0, 0, getStackTraceSubcommand},
 	{"print", "                args...", 1, -1, printSubcommand},
 	{"set-debug-level", "level", 1, 1, setDebugLevelSubcommand},
 	{"watch", "          level", 1, 1, watchSubcommand},

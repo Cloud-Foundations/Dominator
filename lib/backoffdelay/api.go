@@ -4,6 +4,18 @@ import (
 	"time"
 )
 
+type Exponential struct {
+	growthRate uint
+	interval   time.Duration
+	maximum    time.Duration
+	minimum    time.Duration
+	sleepFunc  func(time.Duration)
+}
+
+type Resetter interface {
+	Reset()
+}
+
 type Sleeper interface {
 	Sleep()
 }
@@ -18,6 +30,14 @@ type Sleeper interface {
 // 1: 0.5x
 // 2: 0.25x
 func NewExponential(minimumDelay, maximumDelay time.Duration,
-	growthRate uint) Sleeper {
+	growthRate uint) *Exponential {
 	return newExponential(minimumDelay, maximumDelay, growthRate)
+}
+
+func (e *Exponential) Reset() {
+	e.reset()
+}
+
+func (e *Exponential) Sleep() {
+	e.sleep()
 }
