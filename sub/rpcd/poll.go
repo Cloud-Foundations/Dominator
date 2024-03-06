@@ -44,6 +44,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 		}
 		response.LastUpdateHadTriggerFailures = t.lastUpdateHadTriggerFailures
 	}
+	response.InitialImageName = t.initialImageName
 	response.LastSuccessfulImageName = t.lastSuccessfulImageName
 	response.LastNote = t.lastNote
 	response.LastWriteError = t.lastWriteError
