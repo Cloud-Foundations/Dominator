@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
@@ -52,6 +53,20 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	imageServerAddress := fmt.Sprintf("%s:%d",
 		*imageServerHostname, *imageServerPortNum)
 	imgChannel := getImageChannel(imageServerAddress, imageName, timeoutTime)
+	if !*forceImageChange {
+		subImageName, err := getSubImage(srpcClient)
+		if err != nil {
+			return err
+		}
+		if subImageName != "" {
+			imageStream := filepath.Dir(imageName)
+			subImageStream := filepath.Dir(subImageName)
+			if imageStream != subImageStream {
+				return fmt.Errorf("changing image from %s to %s is unsafe",
+					subImageStream, imageStream)
+			}
+		}
+	}
 	subObj := lib.Sub{
 		Hostname:       *subHostname,
 		Client:         srpcClient,
