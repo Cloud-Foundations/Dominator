@@ -945,8 +945,8 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
-	vm = nil // Cancel cleanup.
 	vm.setupLockWatcher()
+	vm = nil // Cancel cleanup.
 	m.Logger.Debugln(1, "CopyVm() finished")
 	return nil
 }
