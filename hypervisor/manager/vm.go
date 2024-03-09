@@ -1235,7 +1235,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		}
 		return sendError(conn, err)
 	}
-	vm.mutating = true
+	vm.blockMutations = true
 	switch vm.State {
 	case proto.StateStopped:
 	case proto.StateRunning:
@@ -1246,7 +1246,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		err = errors.New("VM is not running or stopped")
 	}
 	if err != nil {
-		vm.stopMutatingAndUnlock()
+		vm.allowMutationsAndUnlock()
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
@@ -1263,7 +1263,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		if doCleanup {
 			os.Remove(rootFilename)
 		}
-		vm.stopMutatingAndUnlock()
+		vm.allowMutationsAndUnlock()
 	}()
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
@@ -1641,9 +1641,9 @@ func (m *Manager) getVmLockAndAuth(ipAddr net.IP, write bool,
 		return nil, err
 	}
 	if write {
-		if vm.mutating {
+		if vm.blockMutations {
 			vm.mutex.Unlock()
-			return nil, errors.New("cannot mutate already mutating VM")
+			return nil, errors.New("mutations blocked")
 		}
 	}
 	return vm, nil
@@ -1721,12 +1721,17 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	vm, err := m.getVmLockAndAuth(request.IpAddress, false,
+	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
 		conn.GetAuthInformation(), request.AccessToken)
 	if err != nil {
 		return conn.Encode(proto.GetVmVolumeResponse{Error: err.Error()})
 	}
-	defer vm.mutex.RUnlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer func() {
+		vm.mutex.Lock()
+		vm.allowMutationsAndUnlock()
+	}()
 	var initrd, kernel []byte
 	if request.VolumeIndex == 0 {
 		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
@@ -2407,13 +2412,13 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err != nil {
 		return err
 	}
-	vm.mutating = true
+	vm.blockMutations = true
 	haveLock := true
 	defer func() {
 		if !haveLock {
 			vm.mutex.Lock()
 		}
-		vm.stopMutatingAndUnlock()
+		vm.allowMutationsAndUnlock()
 	}()
 	restart := vm.State == proto.StateRunning
 	switch vm.State {
@@ -2798,7 +2803,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		}
 		return sendError(conn, err)
 	}
-	vm.mutating = true
+	vm.blockMutations = true
 	switch vm.State {
 	case proto.StateStopped:
 	case proto.StateRunning:
@@ -2809,7 +2814,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		err = errors.New("VM is not running or stopped")
 	}
 	if err != nil {
-		vm.stopMutatingAndUnlock()
+		vm.allowMutationsAndUnlock()
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
@@ -2822,7 +2827,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if !haveLock {
 			vm.mutex.Lock()
 		}
-		vm.stopMutatingAndUnlock()
+		vm.allowMutationsAndUnlock()
 	}()
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
@@ -3858,11 +3863,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	return false, nil
 }
 
-func (vm *vmInfoType) stopMutatingAndUnlock() {
-	if !vm.mutating {
-		panic(vm.Address.IpAddress.String() + ": mutating flag already unset")
+func (vm *vmInfoType) allowMutationsAndUnlock() {
+	if !vm.blockMutations {
+		panic(vm.Address.IpAddress.String() +
+			": blockMutations flag already unset")
 	}
-	vm.mutating = false
+	vm.blockMutations = false
 	vm.mutex.Unlock()
 }
 
