@@ -142,8 +142,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 		manifestConfig.SourceImageGitCommitId,
 		maxSourceAge, rootDir, buildLog)
 	if err != nil {
-		return manifestType{},
-			errors.New("error unpacking image: " + err.Error())
+		return manifestType{}, fmt.Errorf("error unpacking image: %w", err)
 	}
 	startTime := time.Now()
 	err = processManifest(manifestDir, rootDir, bindMounts, envGetter, buildLog)

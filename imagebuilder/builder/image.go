@@ -526,19 +526,27 @@ func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 	if err != nil {
 		return nil, err
 	}
+	var streamPlusGit string
+	if buildCommitId == "" {
+		streamPlusGit = streamName
+	} else {
+		streamPlusGit = streamName + "@gitCommitId:" + buildCommitId
+	}
 	if sourceImage == nil {
-		if buildCommitId == "" {
-			return nil, errors.New(errNoSourceImage + streamName)
+		return nil, &buildErrorType{
+			error:                  "no source image: " + streamPlusGit,
+			needSourceImage:        true,
+			sourceImage:            streamName,
+			sourceImageGitCommitId: buildCommitId,
 		}
-		return nil, errors.New(errNoSourceImage + streamName +
-			prefixGitCommitId + buildCommitId)
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		if buildCommitId == "" {
-			return nil, errors.New(errTooOldSourceImage + streamName)
+		return nil, &buildErrorType{
+			error:                  "too old source image: " + streamPlusGit,
+			needSourceImage:        true,
+			sourceImage:            streamName,
+			sourceImageGitCommitId: buildCommitId,
 		}
-		return nil, errors.New(errTooOldSourceImage + streamName +
-			prefixGitCommitId + buildCommitId)
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()
