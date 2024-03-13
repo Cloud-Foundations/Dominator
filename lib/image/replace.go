@@ -23,6 +23,10 @@ func (image *Image) registerStrings(registerFunc func(string)) {
 		pkg := &image.Packages[index]
 		pkg.registerStrings(registerFunc)
 	}
+	for key, value := range image.Tags {
+		registerFunc(key)
+		registerFunc(value)
+	}
 }
 
 func (image *Image) replaceStrings(replaceFunc func(string) string) {
@@ -35,6 +39,9 @@ func (image *Image) replaceStrings(replaceFunc func(string) string) {
 	for index := range image.Packages {
 		pkg := &image.Packages[index]
 		pkg.replaceStrings(replaceFunc)
+	}
+	for key, value := range image.Tags {
+		image.Tags[key] = replaceFunc(value)
 	}
 }
 
