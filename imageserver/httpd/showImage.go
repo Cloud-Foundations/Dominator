@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 )
 
 var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
@@ -20,77 +21,83 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(writer, "<title>image %s</title>\n", imageName)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "<h3>")
-	image := s.imageDataBase.GetImage(imageName)
-	if image == nil {
+	img := s.imageDataBase.GetImage(imageName)
+	if img == nil {
 		fmt.Fprintf(writer, "Image: %s UNKNOWN!\n", imageName)
 		return
 	}
 	fmt.Fprintf(writer, "Information for image: %s<br>\n", imageName)
 	fmt.Fprintln(writer, "</h3>")
 	fmt.Fprintf(writer, "Data size: <a href=\"listImage?%s\">%s</a><br>\n",
-		imageName, format.FormatBytes(image.FileSystem.TotalDataBytes))
+		imageName, format.FormatBytes(img.FileSystem.TotalDataBytes))
 	fmt.Fprintf(writer, "Number of data inodes: %d<br>\n",
-		image.FileSystem.NumRegularInodes)
-	if numInodes := image.FileSystem.NumComputedRegularInodes(); numInodes > 0 {
+		img.FileSystem.NumRegularInodes)
+	if numInodes := img.FileSystem.NumComputedRegularInodes(); numInodes > 0 {
 		fmt.Fprintf(writer,
 			"Number of computed inodes: <a href=\"listComputedInodes?%s\">%d</a><br>\n",
 			imageName, numInodes)
 	}
-	if image.Filter == nil {
+	if img.Filter == nil {
 		fmt.Fprintln(writer, "Image has no filter: sparse image<br>")
-	} else if len(image.Filter.FilterLines) < 1 {
+	} else if len(img.Filter.FilterLines) < 1 {
 		fmt.Fprintln(writer,
 			"Filter has 0 lines (empty filter: full coverage)<br>")
 	} else {
 		fmt.Fprintf(writer,
 			"Filter has <a href=\"listFilter?%s\">%d</a> lines<br>\n",
-			imageName, len(image.Filter.FilterLines))
+			imageName, len(img.Filter.FilterLines))
 	}
-	if image.Triggers == nil || len(image.Triggers.Triggers) < 1 {
+	if img.Triggers == nil || len(img.Triggers.Triggers) < 1 {
 		fmt.Fprintln(writer, "Image has no triggers<br>")
 	} else {
 		fmt.Fprintf(writer,
 			"Number of triggers: <a href=\"listTriggers?%s\">%d</a><br>\n",
-			imageName, len(image.Triggers.Triggers))
+			imageName, len(img.Triggers.Triggers))
 	}
-	if !image.ExpiresAt.IsZero() {
+	if !img.ExpiresAt.IsZero() {
 		fmt.Fprintf(writer, "Expires at: %s (in %s)<br>\n",
-			image.ExpiresAt.In(time.Local).Format(timeFormat),
-			format.Duration(time.Until(image.ExpiresAt)))
+			img.ExpiresAt.In(time.Local).Format(timeFormat),
+			format.Duration(time.Until(img.ExpiresAt)))
 	}
-	showAnnotation(writer, image.ReleaseNotes, imageName, "Release notes",
+	showAnnotation(writer, img.ReleaseNotes, imageName, "Release notes",
 		"listReleaseNotes")
-	showAnnotation(writer, image.BuildLog, imageName, "Build log",
+	showAnnotation(writer, img.BuildLog, imageName, "Build log",
 		"listBuildLog")
-	if image.CreatedBy != "" {
-		fmt.Fprintf(writer, "Created by: %s\n<br>", image.CreatedBy)
+	if img.CreatedBy != "" {
+		fmt.Fprintf(writer, "Created by: %s\n<br>", img.CreatedBy)
 	}
-	if image.CreatedFor != "" {
-		fmt.Fprintf(writer, "Created for: %s\n<br>", image.CreatedFor)
+	if img.CreatedFor != "" {
+		fmt.Fprintf(writer, "Created for: %s\n<br>", img.CreatedFor)
 	}
-	if !image.CreatedOn.IsZero() {
+	if !img.CreatedOn.IsZero() {
 		fmt.Fprintf(writer, "Created on: %s (%s old)\n<br>",
-			image.CreatedOn.In(time.Local).Format(timeFormat),
-			format.Duration(time.Since(image.CreatedOn)))
+			img.CreatedOn.In(time.Local).Format(timeFormat),
+			format.Duration(time.Since(img.CreatedOn)))
 	}
-	if len(image.BuildGitUrl) > 0 {
+	if len(img.BuildGitUrl) > 0 {
 		fmt.Fprintf(writer,
 			"Built from Git repository: %s on branch: %s at commit: %s<br>\n",
-			image.BuildGitUrl, image.BuildBranch, image.BuildCommitId)
+			img.BuildGitUrl, img.BuildBranch, img.BuildCommitId)
 	}
-	if len(image.Packages) > 0 {
+	if len(img.Packages) > 0 {
 		fmt.Fprintf(writer,
 			"Packages: <a href=\"listPackages?%s\">%d</a><br>\n",
-			imageName, len(image.Packages))
+			imageName, len(img.Packages))
 	}
-	if image.SourceImage != "" {
-		if s.imageDataBase.CheckImage(image.SourceImage) {
+	if img.SourceImage != "" {
+		if s.imageDataBase.CheckImage(img.SourceImage) {
 			fmt.Fprintf(writer,
 				"Source Image: <a href=\"showImage?%s\">%s</a><br>\n",
-				image.SourceImage, image.SourceImage)
+				img.SourceImage, img.SourceImage)
 		} else {
-			fmt.Fprintf(writer, "Source Image: %s</a><br>\n", image.SourceImage)
+			fmt.Fprintf(writer, "Source Image: %s</a><br>\n", img.SourceImage)
 		}
+	}
+	if len(img.Tags) > 0 {
+		fmt.Fprintln(writer,
+			`<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
+		json.WriteWithIndent(writer, "    ", img.Tags)
+		fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 	}
 	fmt.Fprintln(writer, "</body>")
 }
