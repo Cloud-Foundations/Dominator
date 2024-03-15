@@ -5,6 +5,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 type AddImageRequest struct {
@@ -63,6 +64,7 @@ type FindLatestImageRequest struct {
 	BuildCommitId        string // Optional.
 	DirectoryName        string
 	IgnoreExpiringImages bool
+	TagsToMatch          tags.MatchTags // Empty: match all tags.
 }
 
 type FindLatestImageResponse struct {
@@ -118,6 +120,7 @@ type ImageUpdate struct {
 
 type ListSelectedImagesRequest struct {
 	IgnoreExpiringImages bool
+	TagsToMatch          tags.MatchTags // Empty: match all tags.
 }
 
 // The server sends a stream of strings (image names) with an empty string
