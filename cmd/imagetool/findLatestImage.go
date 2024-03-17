@@ -23,6 +23,7 @@ func findLatestImage(dirname string) error {
 			BuildCommitId:        *buildCommitId,
 			DirectoryName:        dirname,
 			IgnoreExpiringImages: *ignoreExpiring,
+			TagsToMatch:          tagsToMatch,
 		})
 	if err != nil {
 		return err

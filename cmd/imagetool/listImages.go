@@ -22,6 +22,7 @@ func listImages(imageSClient *srpc.Client) error {
 	imageNames, err := client.ListSelectedImages(imageSClient,
 		proto.ListSelectedImagesRequest{
 			IgnoreExpiringImages: *ignoreExpiring,
+			TagsToMatch:          tagsToMatch,
 		})
 	if err != nil {
 		return err
