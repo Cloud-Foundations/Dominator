@@ -64,7 +64,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
-	if err := imdb.scanDirectory(".", state, params.Logger); err != nil {
+	if err := imdb.scanDirectory(".", state); err != nil {
 		return nil, err
 	}
 	if err := state.Reap(); err != nil {
@@ -89,7 +89,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 }
 
 func (imdb *ImageDataBase) scanDirectory(dirname string,
-	state *concurrent.State, logger log.DebugLogger) error {
+	state *concurrent.State) error {
 	directoryMetadata, err := imdb.readDirectoryMetadata(dirname)
 	if err != nil {
 		return err
@@ -118,10 +118,10 @@ func (imdb *ImageDataBase) scanDirectory(dirname string,
 			return err
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			err = imdb.scanDirectory(filename, state, logger)
+			err = imdb.scanDirectory(filename, state)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFREG && stat.Size > 0 {
 			err = state.GoRun(func() error {
-				return imdb.loadFile(filename, logger)
+				return imdb.loadFile(filename)
 			})
 		}
 		if err != nil {
@@ -154,30 +154,22 @@ func (imdb *ImageDataBase) readDirectoryMetadata(dirname string) (
 	return metadata, reader.VerifyChecksum()
 }
 
-func (imdb *ImageDataBase) loadFile(filename string,
-	logger log.DebugLogger) error {
+func (imdb *ImageDataBase) loadFile(filename string) error {
 	pathname := path.Join(imdb.BaseDirectory, filename)
-	file, err := os.Open(pathname)
+	img, err := imdb.loadAndVerifyFile(filename)
 	if err != nil {
-		return err
-	}
-	defer file.Close()
-	reader := fsutil.NewChecksumReader(file)
-	decoder := gob.NewDecoder(reader)
-	var img image.Image
-	if err := decoder.Decode(&img); err != nil {
-		return err
-	}
-	if err := reader.VerifyChecksum(); err != nil {
-		if err == fsutil.ErrorChecksumMismatch {
-			logger.Printf("Checksum mismatch for image: %s\n", filename)
-			return nil
-		}
-		if err != io.EOF {
+		if imdb.ReplicationMaster == "" {
 			return err
 		}
+		e := os.Remove(pathname)
+		if e == nil {
+			imdb.Logger.Printf("Will re-replicate due to %s\n", err)
+			return nil
+		}
+		imdb.Logger.Printf("Error deleting bad file: %s: %s\n", filename, e)
+		return err
 	}
-	if imageIsExpired(&img) {
+	if imageIsExpired(img) {
 		imdb.Logger.Printf("Deleting already expired image: %s\n", filename)
 		return os.Remove(pathname)
 	}
@@ -186,8 +178,8 @@ func (imdb *ImageDataBase) loadFile(filename string,
 			!strings.Contains(err.Error(), "not available") {
 			return fmt.Errorf("error verifying: %s: %s", filename, err)
 		}
-		err = imdb.fetchMissingObjects(&img,
-			prefixlogger.New(filename+": ", logger))
+		err = imdb.fetchMissingObjects(img,
+			prefixlogger.New(filename+": ", imdb.Logger))
 		if err != nil {
 			return err
 		}
@@ -199,14 +191,40 @@ func (imdb *ImageDataBase) loadFile(filename string,
 	if err := img.Verify(); err != nil {
 		return err
 	}
-	if err := imdb.Params.ObjectServer.AdjustRefcounts(true, &img); err != nil {
+	if err := imdb.Params.ObjectServer.AdjustRefcounts(true, img); err != nil {
 		return err
 	}
-	imdb.scheduleExpiration(&img, filename)
+	imdb.scheduleExpiration(img, filename)
 	imdb.Lock()
 	defer imdb.Unlock()
-	imdb.imageMap[filename] = &img
+	imdb.imageMap[filename] = img
 	return nil
+}
+
+func (imdb *ImageDataBase) loadAndVerifyFile(filename string) (
+	*image.Image, error) {
+	pathname := path.Join(imdb.BaseDirectory, filename)
+	file, err := os.Open(pathname)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	reader := fsutil.NewChecksumReader(file)
+	decoder := gob.NewDecoder(reader)
+	var img image.Image
+	if err := decoder.Decode(&img); err != nil {
+		return nil, fmt.Errorf("error reading: %s: %w", filename, err)
+	}
+	if err := reader.VerifyChecksum(); err != nil {
+		if err == fsutil.ErrorChecksumMismatch {
+			return nil,
+				fmt.Errorf("checksum mismatch for image: %s\n", filename)
+		}
+		if err != io.EOF {
+			return nil, err
+		}
+	}
+	return &img, nil
 }
 
 func (imdb *ImageDataBase) fetchMissingObjects(img *image.Image,
