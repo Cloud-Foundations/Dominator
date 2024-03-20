@@ -18,13 +18,14 @@ type BuildImageRequest struct {
 }
 
 type BuildImageResponse struct {
-	Image                  *image.Image
-	ImageName              string
-	BuildLog               []byte
-	ErrorString            string
-	NeedSourceImage        bool // True if source image missing/too old.
-	SourceImage            string
-	SourceImageGitCommitId string
+	Image                     *image.Image
+	ImageName                 string
+	BuildLog                  []byte
+	ErrorString               string
+	NeedSourceImage           bool // True if source image missing/too old.
+	SourceImage               string
+	SourceImageBuildVariables map[string]string
+	SourceImageGitCommitId    string
 }
 
 type DisableAutoBuildsRequest struct {
