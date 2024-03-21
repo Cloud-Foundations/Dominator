@@ -27,10 +27,11 @@ type dualBuildLogger struct {
 }
 
 type buildErrorType struct {
-	error                  string
-	needSourceImage        bool
-	sourceImage            string
-	sourceImageGitCommitId string
+	error                     string
+	needSourceImage           bool
+	sourceImage               string
+	sourceImageBuildVariables map[string]string
+	sourceImageGitCommitId    string
 }
 
 func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
@@ -263,10 +264,11 @@ func (b *Builder) buildOnSlave(client srpc.ClientI,
 	if err != nil {
 		if reply.NeedSourceImage {
 			return nil, &buildErrorType{
-				error:                  err.Error(),
-				needSourceImage:        true,
-				sourceImage:            reply.SourceImage,
-				sourceImageGitCommitId: reply.SourceImageGitCommitId,
+				error:                     err.Error(),
+				needSourceImage:           true,
+				sourceImage:               reply.SourceImage,
+				sourceImageBuildVariables: reply.SourceImageBuildVariables,
+				sourceImageGitCommitId:    reply.SourceImageGitCommitId,
 			}
 		}
 		return nil, err
@@ -301,12 +303,14 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 			if request.ExpiresIn > 0 {
 				expiresIn = request.ExpiresIn
 			}
+			variables := variablesGetter(buildError.sourceImageBuildVariables)
+			variables.merge(request.Variables)
 			sourceReq := proto.BuildImageRequest{
 				ExpiresIn:    expiresIn,
 				GitBranch:    buildError.sourceImageGitCommitId,
 				MaxSourceAge: request.MaxSourceAge,
 				StreamName:   buildError.sourceImage,
-				Variables:    request.Variables,
+				Variables:    variables,
 			}
 			if _, _, e := b.build(client, sourceReq, nil, buildLog); e != nil {
 				return nil, "", e

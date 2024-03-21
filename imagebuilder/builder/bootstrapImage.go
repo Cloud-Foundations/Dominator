@@ -83,10 +83,12 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	}
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
-	for _, arg := range stream.BootstrapCommand {
-		if arg == "$dir" {
-			arg = rootDir
-		}
+	vg := variablesGetter(request.Variables).copy()
+	vg.add("dir", rootDir)
+	for _, exp := range stream.BootstrapCommand {
+		arg := expandExpression(exp, func(name string) string {
+			return vg[name]
+		})
 		args = append(args, arg)
 	}
 	fmt.Fprintf(buildLog, "Running command: %s with args:\n", args[0])

@@ -108,3 +108,9 @@ func (vg variablesGetter) copy() variablesGetter {
 func (vg variablesGetter) getenv() map[string]string {
 	return vg
 }
+
+func (vg variablesGetter) merge(vgToMerge variablesGetter) {
+	for key, value := range vgToMerge {
+		vg.add(key, value)
+	}
+}

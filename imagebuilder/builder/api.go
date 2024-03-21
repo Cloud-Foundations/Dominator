@@ -102,10 +102,11 @@ type listCommandType struct {
 
 type manifestConfigType struct {
 	*filter.Filter
-	MtimesCopyAddFilterLines []string `json:",omitempty"`
-	MtimesCopyFilterLines    []string `json:",omitempty"`
-	SourceImage              string
-	SourceImageGitCommitId   string `json:",omitempty"`
+	MtimesCopyAddFilterLines  []string `json:",omitempty"`
+	MtimesCopyFilterLines     []string `json:",omitempty"`
+	SourceImage               string
+	SourceImageBuildVariables map[string]string `json:",omitempty"`
+	SourceImageGitCommitId    string            `json:",omitempty"`
 }
 
 type masterConfigurationType struct {

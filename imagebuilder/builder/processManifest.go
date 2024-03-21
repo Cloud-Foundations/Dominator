@@ -108,6 +108,12 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
+	for key, value := range manifestConfig.SourceImageBuildVariables {
+		newValue := expandExpression(value, func(name string) string {
+			return envGetter.getenv()[name]
+		})
+		manifestConfig.SourceImageBuildVariables[key] = newValue
+	}
 	manifestConfig.SourceImageGitCommitId = expandExpression(
 		manifestConfig.SourceImageGitCommitId,
 		func(name string) string {
@@ -142,6 +148,11 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 		manifestConfig.SourceImageGitCommitId,
 		maxSourceAge, rootDir, buildLog)
 	if err != nil {
+		var buildError *buildErrorType
+		if errors.As(err, &buildError) {
+			buildError.sourceImageBuildVariables =
+				manifestConfig.SourceImageBuildVariables
+		}
 		return manifestType{}, fmt.Errorf("error unpacking image: %w", err)
 	}
 	startTime := time.Now()

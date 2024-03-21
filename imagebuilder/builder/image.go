@@ -264,6 +264,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vGetter := variablesGetter(envGetter.getenv()).copy()
+	vGetter.merge(request.Variables)
 	if gitInfo != nil {
 		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
 	}
