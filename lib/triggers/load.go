@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,12 +14,7 @@ func load(filename string) (*Triggers, error) {
 		return nil, err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(file)
-	var trig Triggers
-	if err := decoder.Decode(&trig.Triggers); err != nil {
-		return nil, errors.New("error decoding triggers " + err.Error())
-	}
-	return &trig, nil
+	return Read(file)
 }
 
 func decode(jsonData []byte) (*Triggers, error) {
@@ -30,7 +26,7 @@ func decode(jsonData []byte) (*Triggers, error) {
 }
 
 func read(reader io.Reader) (*Triggers, error) {
-	decoder := json.NewDecoder(reader)
+	decoder := json.NewDecoder(bufio.NewReader(reader))
 	var trig Triggers
 	if err := decoder.Decode(&trig.Triggers); err != nil {
 		return nil, errors.New("error decoding triggers " + err.Error())
