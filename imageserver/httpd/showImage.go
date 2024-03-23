@@ -94,6 +94,7 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if len(img.Tags) > 0 {
+		fmt.Fprintln(writer, "Tags:<br>")
 		fmt.Fprintln(writer,
 			`<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
 		json.WriteWithIndent(writer, "    ", img.Tags)
