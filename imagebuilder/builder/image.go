@@ -22,8 +22,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/gitutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -252,6 +254,10 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	if err != nil {
 		return nil, err
 	}
+	tgs, err := loadTags(manifestDir)
+	if err != nil {
+		return nil, err
+	}
 	imageTriggers, addTriggers, err := loadTriggers(manifestDir)
 	if err != nil {
 		return nil, err
@@ -269,6 +275,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
 	}
 	vGetter.add("REQUESTED_GIT_BRANCH", request.GitBranch)
+	request.Variables = vGetter
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
 		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog)
 	if err != nil {
@@ -319,7 +326,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		imageTriggers, mtimesCopyFilter, buildLog)
+		tgs, imageTriggers, mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +498,21 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 	} else {
 		return addFilter, true, nil
 	}
+}
+
+func loadTags(manifestDir string) (tags.Tags, error) {
+	var tgs tags.Tags
+	err := libjson.ReadFromFile(filepath.Join(manifestDir, "tags.json"), &tgs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(tgs) < 1 {
+		return nil, nil
+	}
+	return tgs, nil
 }
 
 func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {

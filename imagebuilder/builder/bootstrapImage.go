@@ -85,6 +85,7 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vg := variablesGetter(request.Variables).copy()
 	vg.add("dir", rootDir)
+	request.Variables = vg
 	for _, exp := range stream.BootstrapCommand {
 		arg := expandExpression(exp, func(name string) string {
 			return vg[name]
@@ -118,8 +119,8 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 			return nil, err
 		}
 		return packImage(g, client, request, rootDir,
-			stream.Filter, nil, nil, stream.imageFilter, stream.imageTriggers,
-			b.mtimesCopyFilter, buildLog)
+			stream.Filter, nil, nil, stream.imageFilter, stream.imageTags,
+			stream.imageTriggers, b.mtimesCopyFilter, buildLog)
 	}
 }
 

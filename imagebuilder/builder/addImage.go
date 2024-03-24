@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -148,7 +149,7 @@ func makeImageName(streamName string) string {
 func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
-	imageFilter *filter.Filter, trig *triggers.Triggers,
+	imageFilter *filter.Filter, rawTags tags.Tags, trig *triggers.Triggers,
 	copyMtimesFilter *filter.Filter, buildLog buildLogger) (
 	*image.Image, error) {
 	if cache == nil {
@@ -212,12 +213,20 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	if err := objClient.Close(); err != nil {
 		return nil, err
 	}
+	tgs := rawTags.Copy()
+	for key, value := range tgs {
+		newValue := expandExpression(value, func(name string) string {
+			return request.Variables[name]
+		})
+		tgs[key] = newValue
+	}
 	img := &image.Image{
 		BuildLog:   &image.Annotation{Object: &hashVal},
 		FileSystem: fs,
 		Filter:     imageFilter,
 		Triggers:   trig,
 		Packages:   packages,
+		Tags:       tgs,
 	}
 	if err := img.Verify(); err != nil {
 		return nil, err

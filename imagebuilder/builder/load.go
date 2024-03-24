@@ -208,35 +208,54 @@ func loadMasterConfiguration(url string) (*masterConfigurationType, error) {
 			return nil, fmt.Errorf("packager type: \"%s\" unknown",
 				stream.PackagerType)
 		}
-		if stream.Filter != nil {
-			if err := stream.Filter.Compile(); err != nil {
-				return nil, err
-			}
-		}
-		if stream.ImageFilterUrl != "" {
-			filterFile, err := urlutil.Open(stream.ImageFilterUrl)
-			if err != nil {
-				return nil, err
-			}
-			defer filterFile.Close()
-			stream.imageFilter, err = filter.Read(filterFile)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if stream.ImageTriggersUrl != "" {
-			triggersFile, err := urlutil.Open(stream.ImageTriggersUrl)
-			if err != nil {
-				return nil, err
-			}
-			defer triggersFile.Close()
-			stream.imageTriggers, err = triggers.Read(triggersFile)
-			if err != nil {
-				return nil, err
-			}
+		if err := stream.loadFiles(); err != nil {
+			return nil, err
 		}
 	}
 	return &configuration, nil
+}
+
+func (stream *bootstrapStream) loadFiles() error {
+	if stream.Filter != nil {
+		if err := stream.Filter.Compile(); err != nil {
+			return err
+		}
+	}
+	if stream.ImageFilterUrl != "" {
+		filterFile, err := urlutil.Open(stream.ImageFilterUrl)
+		if err != nil {
+			return err
+		}
+		defer filterFile.Close()
+		stream.imageFilter, err = filter.Read(filterFile)
+		if err != nil {
+			return err
+		}
+	}
+	if stream.ImageTagsUrl != "" {
+		tagsFile, err := urlutil.Open(stream.ImageTagsUrl)
+		if err != nil {
+			return err
+		}
+		defer tagsFile.Close()
+		reader := bufio.NewReader(tagsFile)
+		decoder := json.NewDecoder(reader)
+		if err := decoder.Decode(&stream.imageTags); err != nil {
+			return err
+		}
+	}
+	if stream.ImageTriggersUrl != "" {
+		triggersFile, err := urlutil.Open(stream.ImageTriggersUrl)
+		if err != nil {
+			return err
+		}
+		defer triggersFile.Close()
+		stream.imageTriggers, err = triggers.Read(triggersFile)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *Builder) delayMakeRequiredDirectories(abortNotifier <-chan struct{}) {

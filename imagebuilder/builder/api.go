@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -46,6 +47,8 @@ type bootstrapStream struct {
 	*filter.Filter
 	imageFilter      *filter.Filter
 	ImageFilterUrl   string
+	ImageTagsUrl     string
+	imageTags        tags.Tags
 	imageTriggers    *triggers.Triggers
 	ImageTriggersUrl string
 	PackagerType     string
