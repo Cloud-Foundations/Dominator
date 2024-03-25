@@ -190,7 +190,8 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 		fs.NumRegularInodes-cache.numHits,
 		format.FormatBytes(fs.TotalDataBytes-cache.hitBytes),
 		format.Duration(duration), format.FormatBytes(speed))
-	_, oldImage, err := getLatestImage(client, request.StreamName, "", buildLog)
+	_, oldImage, err := getLatestImage(client, request.StreamName, "", nil,
+		buildLog)
 	if err != nil {
 		return nil, fmt.Errorf("error getting latest image: %s", err)
 	} else if oldImage != nil {

@@ -538,26 +538,29 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 }
 
 func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
-	maxSourceAge time.Duration, rootDir string,
-	buildLog io.Writer) (*sourceImageInfoType, error) {
+	sourceImageTagsToMatch tags.MatchTags, maxSourceAge time.Duration,
+	rootDir string, buildLog io.Writer) (*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
 	}
 	imageName, sourceImage, err := getLatestImage(client, streamName,
-		buildCommitId, buildLog)
+		buildCommitId, sourceImageTagsToMatch, buildLog)
 	if err != nil {
 		return nil, err
 	}
-	var streamPlusGit string
+	var specifiedStream string
 	if buildCommitId == "" {
-		streamPlusGit = streamName
+		specifiedStream = streamName
 	} else {
-		streamPlusGit = streamName + "@gitCommitId:" + buildCommitId
+		specifiedStream = streamName + "@gitCommitId:" + buildCommitId
+	}
+	if len(sourceImageTagsToMatch) > 0 {
+		specifiedStream += fmt.Sprintf("@tags:%v", sourceImageTagsToMatch)
 	}
 	if sourceImage == nil {
 		return nil, &buildErrorType{
-			error:                  "no source image: " + streamPlusGit,
+			error:                  "no source image: " + specifiedStream,
 			needSourceImage:        true,
 			sourceImage:            streamName,
 			sourceImageGitCommitId: buildCommitId,
@@ -565,7 +568,7 @@ func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
 		return nil, &buildErrorType{
-			error:                  "too old source image: " + streamPlusGit,
+			error:                  "too old source image: " + specifiedStream,
 			needSourceImage:        true,
 			sourceImage:            streamName,
 			sourceImageGitCommitId: buildCommitId,

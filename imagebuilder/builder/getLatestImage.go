@@ -9,15 +9,18 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	image_proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func getLatestImage(client srpc.ClientI, imageStream, buildCommitId string,
+	tagsToMatch tags.MatchTags,
 	buildLog io.Writer) (string, *image.Image, error) {
 	imageName, err := imageclient.FindLatestImageReq(client,
 		image_proto.FindLatestImageRequest{
 			BuildCommitId: buildCommitId,
 			DirectoryName: imageStream,
+			TagsToMatch:   tagsToMatch,
 		})
 	if err != nil {
 		return "", nil, err

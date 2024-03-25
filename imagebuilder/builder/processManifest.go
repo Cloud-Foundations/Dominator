@@ -119,6 +119,14 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
+	for _, values := range manifestConfig.SourceImageTagsToMatch {
+		for index, value := range values {
+			newValue := expandExpression(value, func(name string) string {
+				return envGetter.getenv()[name]
+			})
+			values[index] = newValue
+		}
+	}
 	return manifestConfig, nil
 }
 
@@ -146,6 +154,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	}
 	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
 		manifestConfig.SourceImageGitCommitId,
+		manifestConfig.SourceImageTagsToMatch,
 		maxSourceAge, rootDir, buildLog)
 	if err != nil {
 		var buildError *buildErrorType

@@ -110,6 +110,7 @@ type manifestConfigType struct {
 	SourceImage               string
 	SourceImageBuildVariables map[string]string `json:",omitempty"`
 	SourceImageGitCommitId    string            `json:",omitempty"`
+	SourceImageTagsToMatch    tags.MatchTags    `json:",omitempty"`
 }
 
 type masterConfigurationType struct {
