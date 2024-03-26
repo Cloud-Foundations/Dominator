@@ -67,17 +67,28 @@ the *imaginator* to build an image.
 
 ## Main Configuration URL
 The main configuration URL points to a JSON encoded file that describes all the
-*image streams* and how to build them. The top-level JSON object should contain
-the following fields:
+*image streams* and how to build them. The top-level JSON object defines the
+following fields:
+- `BindMounts`: a list of directories that will be bind-mounted into the build
+                environments
 - `BootstrapStreams`: a table of *bootstrap image* stream names and their
   		      respective configurations
+- `ImageStreamsCheckInterval`: the interval between checks for updated image
+                               streams
 - `ImageStreamsToAutoRebuild`: an array of *image stream* names that should be
   			       rebuilt periodically, in addition to *bootstrap
 			       streams* that are always rebuilt automatically
 - `ImageStreamsUrl`: the URL of a configuration file containing a list of all
   		     the user-defined *image streams*
+- `MtimesCopyFilterLines`: an array of regular expressions matching files which
+                           should be excluded from copying mtimes from older
+			   images (when only the mtime is different). Python
+			   files should probably be specified here
 - `PackagerTypes`: a table of *packager type* names (i.e. `deb` and `rpm`) and
   		   their respective configurations
+- `RelationshipsQuickLinks`: a list of `Name`,`URL` tuples to display on the
+                             image streams relationships dashboard. Useful for
+			     customisation
 
 A [sample configuration file](conf.json) is provided which may be modified to
 suit your environment. This is a fully working configuration and only requires
@@ -93,6 +104,12 @@ fields:
 		      root directory of the image to build
 - `FilterLines`: an array of regular expressions matching files which should not
   		 be included in the image
+- `ImageFilterUrl`: a URL from which a filter lines can be read. The filter will
+                    be attached to the image
+- `ImageTagsUrl`: a URL from which JSON-encoded key:value tags can be read. The
+                  tags will be attached to the image
+- `ImageTriggersUrl`: a URL from which JSON-encoded triggers can be read. The
+                      triggers will be attached to the image
 - `PackagerType`: the name of the packager type to use
 
 ### Image Streams URL
@@ -100,6 +117,10 @@ This is a JSON encoded configuration file listing all the user-defined *image
 streams*. It contains a top-level `Streams` field which in turn contains a table
 of *image stream* names and their respective configurations. The configuration
 for an *image stream* is a JSON object with the following fields:
+- `BuilderGroups`: a list of groups. Members of these groups are permitted to
+                   build images for this stream
+- `BuilderUsers`: a list of users who are permitted to build images for this
+                  stream
 - `ManifestUrl`: the URL of a Git repository containing the
   		 *[image manifest](../../user-guide/image-manifest.md)* for the
 		 image. The special URL scheme `dir` points to a local directory
@@ -110,6 +131,8 @@ for an *image stream* is a JSON object with the following fields:
 		 image. If unspecified, the top-level directory in the
 		 repository is used. The `$IMAGE_STREAM` variable expands to the
 		 name of the *image stream*
+- `Variables`: key:value variables which may be referred to in the `manifest`
+               file. The values undergo variable expansion
 
 An [example configuration file](streams.json) is provided. Note the use of
 variables in different places.
