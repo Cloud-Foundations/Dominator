@@ -28,6 +28,8 @@ type Machine struct {
 	PlannedImage   string       `json:",omitempty"`
 	DisableUpdates bool         `json:",omitempty"`
 	OwnerGroup     string       `json:",omitempty"`
+	OwnerGroups    []string     `json:",omitempty"`
+	OwnerUsers     []string     `json:",omitempty"`
 	Tags           tags.Tags    `json:",omitempty"`
 	AwsMetadata    *AwsMetadata `json:",omitempty"`
 }
