@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	objectserverRpcd "github.com/Cloud-Foundations/Dominator/objectserver/rpcd"
+	"github.com/Cloud-Foundations/tricorder/go/healthserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
@@ -131,6 +132,7 @@ func main() {
 	httpd.AddHtmlWriter(objSrv)
 	httpd.AddHtmlWriter(objSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
+	healthserver.SetReady()
 	if err = httpd.StartServer(*portNum, imdb, objSrv, false); err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
