@@ -24,6 +24,24 @@ type countingWriter struct {
 	prefixLine string
 }
 
+func showRecentLinks(w io.Writer, recentFirstString string) {
+	fmt.Fprintf(w, "Show last: <a href=\"logs/showLast?1m%s\">minute</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?10m%s\">10 min</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1h%s\">hour</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1d%s\">day</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1w%s\">week</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1M%s\">month</a>\n",
+		recentFirstString)
+	fmt.Fprintf(w, "           <a href=\"logs/showLast?1y%s\">year</a><br>\n",
+		recentFirstString)
+	fmt.Fprintln(w, `Show <a href="logs/showStackTrace">stack trace</a>`)
+}
+
 func (w *countingWriter) Write(p []byte) (n int, err error) {
 	if w.prefixLine != "" {
 		w.writer.Write([]byte(w.prefixLine))
@@ -50,6 +68,64 @@ func (lb *LogBuffer) addHttpHandlers() {
 		lb.httpShowPreviousPanicHandler)
 	html.ServeMuxHandleFunc(lb.options.HttpServeMux, "/logs/showStackTrace",
 		lb.httpShowStackTraceHandler)
+}
+
+func (lb *LogBuffer) httpDumpHandler(w http.ResponseWriter, req *http.Request) {
+	parsedQuery := url.ParseQuery(req.URL)
+	name, ok := parsedQuery.Table["name"]
+	if !ok {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	_, recentFirst := parsedQuery.Flags["recentFirst"]
+	if name == "latest" {
+		lbFilename := ""
+		lb.rwMutex.Lock()
+		if lb.file != nil {
+			lbFilename = lb.file.Name()
+		}
+		lb.rwMutex.Unlock()
+		if lbFilename == "" {
+			writer := bufio.NewWriter(w)
+			defer writer.Flush()
+			lb.Dump(writer, "", "", recentFirst)
+			return
+		}
+		name = path.Base(lbFilename)
+	}
+	file, err := os.Open(path.Join(lb.options.Directory,
+		path.Base(path.Clean(name))))
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	if recentFirst {
+		scanner := bufio.NewScanner(file)
+		lines := make([]string, 0)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if len(line) < 1 {
+				continue
+			}
+			lines = append(lines, line)
+		}
+		if err = scanner.Err(); err == nil {
+			reverseStrings(lines)
+			for _, line := range lines {
+				fmt.Fprintln(writer, line)
+			}
+		}
+	} else {
+		_, err = io.Copy(writer, bufio.NewReader(file))
+	}
+	if err != nil {
+		fmt.Fprintln(writer, err)
+	}
 }
 
 func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
@@ -121,82 +197,6 @@ func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "</body>")
 }
 
-func showRecentLinks(w io.Writer, recentFirstString string) {
-	fmt.Fprintf(w, "Show last: <a href=\"logs/showLast?1m%s\">minute</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?10m%s\">10 min</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1h%s\">hour</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1d%s\">day</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1w%s\">week</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1M%s\">month</a>\n",
-		recentFirstString)
-	fmt.Fprintf(w, "           <a href=\"logs/showLast?1y%s\">year</a><br>\n",
-		recentFirstString)
-	fmt.Fprintln(w, `Show <a href="logs/showStackTrace">stack trace</a>`)
-}
-
-func (lb *LogBuffer) httpDumpHandler(w http.ResponseWriter, req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
-	name, ok := parsedQuery.Table["name"]
-	if !ok {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	_, recentFirst := parsedQuery.Flags["recentFirst"]
-	if name == "latest" {
-		lbFilename := ""
-		lb.rwMutex.Lock()
-		if lb.file != nil {
-			lbFilename = lb.file.Name()
-		}
-		lb.rwMutex.Unlock()
-		if lbFilename == "" {
-			writer := bufio.NewWriter(w)
-			defer writer.Flush()
-			lb.Dump(writer, "", "", recentFirst)
-			return
-		}
-		name = path.Base(lbFilename)
-	}
-	file, err := os.Open(path.Join(lb.options.Directory,
-		path.Base(path.Clean(name))))
-	if err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	defer file.Close()
-	writer := bufio.NewWriter(w)
-	defer writer.Flush()
-	if recentFirst {
-		scanner := bufio.NewScanner(file)
-		lines := make([]string, 0)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if len(line) < 1 {
-				continue
-			}
-			lines = append(lines, line)
-		}
-		if err = scanner.Err(); err == nil {
-			reverseStrings(lines)
-			for _, line := range lines {
-				fmt.Fprintln(writer, line)
-			}
-		}
-	} else {
-		_, err = io.Copy(writer, bufio.NewReader(file))
-	}
-	if err != nil {
-		fmt.Fprintln(writer, err)
-	}
-}
-
 func (lb *LogBuffer) httpShowLastHandler(w http.ResponseWriter,
 	req *http.Request) {
 	parsedQuery := url.ParseQuery(req.URL)
@@ -240,75 +240,6 @@ func (lb *LogBuffer) httpShowLastHandler(w http.ResponseWriter,
 	w.WriteHeader(http.StatusBadRequest)
 }
 
-func (lb *LogBuffer) showRecent(w io.Writer, duration time.Duration,
-	recentFirst bool) {
-	writer := bufio.NewWriter(w)
-	defer writer.Flush()
-	names, _, err := lb.list(true)
-	if err != nil {
-		fmt.Fprintln(writer, err)
-		return
-	}
-	earliestTime := time.Now().Add(-duration)
-	// Get a list of names which may be recent enough.
-	tmpNames := make([]string, 0, len(names))
-	for _, name := range names {
-		startTime, err := time.ParseInLocation(timeLayout, name, time.Local)
-		if err != nil {
-			continue
-		}
-		tmpNames = append(tmpNames, name)
-		if startTime.Before(earliestTime) {
-			break
-		}
-	}
-	names = tmpNames
-	if !recentFirst {
-		reverseStrings(names)
-	}
-	fmt.Fprintln(writer, "<body>")
-	cWriter := &countingWriter{writer: writer, prefixLine: "<pre>\n"}
-	lb.flush()
-	for _, name := range names {
-		cWriter.count = 0
-		foundReopenMessage, _ := lb.dumpSince(cWriter, name, earliestTime, "",
-			"\n", recentFirst)
-		if cWriter.count > 0 && !foundReopenMessage {
-			cWriter.prefixLine = "</pre>\n<hr>\n<pre>\n"
-		}
-	}
-	fmt.Fprintln(writer, "</pre>")
-	fmt.Fprintln(writer, "</body>")
-}
-
-func (lb *LogBuffer) list(recentFirst bool) (
-	[]string, map[string]struct{}, error) {
-	file, err := os.Open(lb.options.Directory)
-	if err != nil {
-		return nil, nil, err
-	}
-	fileInfos, err := file.Readdir(-1)
-	file.Close()
-	if err != nil {
-		return nil, nil, err
-	}
-	panicMap := make(map[string]struct{})
-	names := make([]string, 0, len(fileInfos))
-	for _, fi := range fileInfos {
-		if strings.Count(fi.Name(), ":") == 3 {
-			names = append(names, fi.Name())
-			if fi.Mode()&os.ModeSticky != 0 {
-				panicMap[fi.Name()] = struct{}{}
-			}
-		}
-	}
-	sort.Strings(names)
-	if recentFirst {
-		reverseStrings(names)
-	}
-	return names, panicMap, nil
-}
-
 func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 	req *http.Request) {
 	writer := bufio.NewWriter(w)
@@ -350,6 +281,75 @@ func (lb *LogBuffer) httpShowStackTraceHandler(w http.ResponseWriter,
 	buffer := make([]byte, 1<<20)
 	nBytes := runtime.Stack(buffer, true)
 	writer.Write(buffer[:nBytes])
+}
+
+func (lb *LogBuffer) list(recentFirst bool) (
+	[]string, map[string]struct{}, error) {
+	file, err := os.Open(lb.options.Directory)
+	if err != nil {
+		return nil, nil, err
+	}
+	fileInfos, err := file.Readdir(-1)
+	file.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	panicMap := make(map[string]struct{})
+	names := make([]string, 0, len(fileInfos))
+	for _, fi := range fileInfos {
+		if strings.Count(fi.Name(), ":") == 3 {
+			names = append(names, fi.Name())
+			if fi.Mode()&os.ModeSticky != 0 {
+				panicMap[fi.Name()] = struct{}{}
+			}
+		}
+	}
+	sort.Strings(names)
+	if recentFirst {
+		reverseStrings(names)
+	}
+	return names, panicMap, nil
+}
+
+func (lb *LogBuffer) showRecent(w io.Writer, duration time.Duration,
+	recentFirst bool) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	names, _, err := lb.list(true)
+	if err != nil {
+		fmt.Fprintln(writer, err)
+		return
+	}
+	earliestTime := time.Now().Add(-duration)
+	// Get a list of names which may be recent enough.
+	tmpNames := make([]string, 0, len(names))
+	for _, name := range names {
+		startTime, err := time.ParseInLocation(timeLayout, name, time.Local)
+		if err != nil {
+			continue
+		}
+		tmpNames = append(tmpNames, name)
+		if startTime.Before(earliestTime) {
+			break
+		}
+	}
+	names = tmpNames
+	if !recentFirst {
+		reverseStrings(names)
+	}
+	fmt.Fprintln(writer, "<body>")
+	cWriter := &countingWriter{writer: writer, prefixLine: "<pre>\n"}
+	lb.flush()
+	for _, name := range names {
+		cWriter.count = 0
+		foundReopenMessage, _ := lb.dumpSince(cWriter, name, earliestTime, "",
+			"\n", recentFirst)
+		if cWriter.count > 0 && !foundReopenMessage {
+			cWriter.prefixLine = "</pre>\n<hr>\n<pre>\n"
+		}
+	}
+	fmt.Fprintln(writer, "</pre>")
+	fmt.Fprintln(writer, "</body>")
 }
 
 func (lb *LogBuffer) writeHtml(writer io.Writer) {
