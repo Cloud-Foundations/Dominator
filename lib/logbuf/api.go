@@ -39,6 +39,7 @@ type LogBuffer struct {
 	buffer         *ring.Ring // Always points to next insert position.
 	file           *os.File
 	fileSize       flagutil.Size
+	firstFile      string // Since process startup. Leaf name.
 	lastStackTrace time.Time
 	noLogsEver     bool    // true if no logs ever written (fresh directory).
 	panicLogfile   *string // Name of last invocation logfile if it has a panic.
