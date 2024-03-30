@@ -58,6 +58,7 @@ type rpcType struct {
 	updateInProgress             bool
 	startTimeNanoSeconds         int32 // For Fetch() or Update().
 	startTimeSeconds             int64
+	initialImageName             string
 	lastFetchError               error
 	lastNote                     string
 	lastSuccessfulImageName      string
@@ -85,6 +86,7 @@ func Setup(config Config, params Params) *HtmlWriter {
 		config:                  config,
 		params:                  params,
 		systemGoroutine:         goroutine.New(),
+		initialImageName:        readInitialImageFile(),
 		lastSuccessfulImageName: readPatchedImageFile(),
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{

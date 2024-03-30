@@ -127,6 +127,9 @@ func (b *Builder) dependencyGeneratorLoop(
 		case <-timer.C:
 		}
 		dependencyResult, err := b.generateDependencyData()
+		if dependencyResult == nil {
+			dependencyResult = &dependencyResultType{fetchTime: 6 * time.Second}
+		}
 		if err != nil {
 			b.logger.Printf("failed to generate dependencies: %s\n", err)
 			dependencyData := dependencyDataType{

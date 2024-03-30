@@ -14,8 +14,8 @@ const (
 	maximumClientLockDuration = 15 * time.Second
 )
 
-func readPatchedImageFile() string {
-	if file, err := os.Open(constants.PatchedImageNameFile); err != nil {
+func readImageFile(filename string) string {
+	if file, err := os.Open(filename); err != nil {
 		return ""
 	} else {
 		defer file.Close()
@@ -26,6 +26,14 @@ func readPatchedImageFile() string {
 		}
 		return ""
 	}
+}
+
+func readInitialImageFile() string {
+	return readImageFile(constants.InitialImageNameFile)
+}
+
+func readPatchedImageFile() string {
+	return readImageFile(constants.PatchedImageNameFile)
 }
 
 // Check if another client has the client lock. The object lock must be

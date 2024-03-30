@@ -95,7 +95,7 @@ func setupMounts(rootDir string, bindMounts []string) error {
 func stripVariables(input []string, varsToCopy map[string]struct{},
 	varsToSet ...map[string]string) []string {
 	output := make([]string, 0)
-	for _, nameValue := range os.Environ() {
+	for _, nameValue := range input {
 		split := strings.SplitN(nameValue, "=", 2)
 		if len(split) == 2 {
 			if _, ok := varsToCopy[split[0]]; ok {

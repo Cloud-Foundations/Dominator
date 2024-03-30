@@ -53,6 +53,12 @@ func (stream *bootstrapStream) WriteHtml(writer io.Writer) {
 		libjson.WriteWithIndent(writer, "    ", stream.imageTriggers.Triggers)
 		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
 	}
+	if len(stream.imageTags) > 0 {
+		fmt.Fprintln(writer, "Image tags:<br>")
+		fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
+		libjson.WriteWithIndent(writer, "    ", stream.imageTags)
+		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
+	}
 }
 
 func (b *Builder) getHtmlWriter(streamName string) html.HtmlWriter {
@@ -279,6 +285,17 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		fmt.Fprintln(writer, "Contents of <code>package-list</code> file:<br>")
 		fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
 		io.Copy(writer, packagesFile)
+		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
+		return
+	}
+	tagsFile, err := os.Open(path.Join(manifestDirectory, "tags.json"))
+	if err == nil {
+		defer tagsFile.Close()
+		fmt.Fprintln(writer, "Contents of <code>tags.json</code> file:<br>")
+		fmt.Fprintf(writer, "<pre style=\"%s\">\n", codeStyle)
+		io.Copy(writer, tagsFile)
 		fmt.Fprintln(writer, "</pre><p style=\"clear: both;\">")
 	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)

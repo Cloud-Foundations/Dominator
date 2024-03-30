@@ -8,6 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 )
 
@@ -40,6 +41,7 @@ type Image struct {
 	ExpiresAt     time.Time
 	Packages      []Package
 	SourceImage   string // Name of source image.
+	Tags          tags.Tags
 }
 
 type Package struct {

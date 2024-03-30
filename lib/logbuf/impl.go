@@ -220,6 +220,9 @@ func (lb *LogBuffer) openNewFile() error {
 	if err != nil {
 		return err
 	}
+	if lb.firstFile == "" {
+		lb.firstFile = filename
+	}
 	if lb.options.RedirectStderr {
 		wsyscall.Dup2(int(file.Fd()), int(os.Stdout.Fd()))
 		wsyscall.Dup2(int(file.Fd()), int(os.Stderr.Fd()))

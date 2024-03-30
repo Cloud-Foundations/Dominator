@@ -73,6 +73,9 @@ func pollSubcommand(args []string, logger log.DebugLogger) error {
 				f.Close()
 			}
 		}
+		if reply.InitialImageName != "" {
+			fmt.Printf("Initial image: \"%s\"\n", reply.InitialImageName)
+		}
 		if reply.LastSuccessfulImageName != "" {
 			fmt.Printf("Last successful image: \"%s\"\n",
 				reply.LastSuccessfulImageName)

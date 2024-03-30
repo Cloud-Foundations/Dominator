@@ -37,12 +37,20 @@ the following order to build the image contents.
 ### `manifest` file
 This is a required file, containing a JSON encoded object with the following
 fields:
+- `FilterLines`: an array of regular expressions matching files which should not
+                 be included in the image
+- `MtimesCopyAddFilterLines`: add to the common mtime copy filter
+- `MtimesCopyFilterLines`: replace the common mtime copy filter
 - `SourceImage` (required): the name of the image stream that will be used as
                             the starting basis for the image to be built. The
 			    most recent image in the specified stream will be
 			    used as the base
-- `FilterLines` (optional): an array of regular expressions matching files which
-                            should not be included in the image
+- `SourceImageBuildVariables`: key:value variables to be used if a `SourceImage`
+                               must be built
+- `SourceImageGitCommitId`: the Git Commit ID to use when searching for a source
+                            image
+- `SourceImageTagsToMatch`: key:[value] tag matches to use when searching for a
+                            source image
 
 Other fields may be present and they will be ignored by the
 *[imaginator](../cmd/imaginator/README.md)*. This is typically used to store
@@ -116,6 +124,10 @@ only for images which will be lived patched onto machines with the
 This is similar to the `filter` file, except that the filter expressions are
 *added* to the filter of the *SourceImage*, thus inheriting and (if not empty)
 extending the filter. This must not be present if the `filter` file is present.
+
+### `tags.json` file
+An optional JSON encoded file containing key:value tags to add to the image.
+Variable expansion is performed on the values.
 
 ### `triggers` file
 An optional JSON encoded file listing the *triggers* (services which should be

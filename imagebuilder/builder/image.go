@@ -22,8 +22,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/gitutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
@@ -69,7 +71,7 @@ func (stream *imageStreamType) getenv() map[string]string {
 
 // getManifestLocation will expand variables and return the actual manifest
 // location. These data may include secrets (i.e. username and password).
-// If b is nil then secret variables are not expaned and thus the returned
+// If b is nil then secret variables are not expanded and thus the returned
 // data do not contain secrets but may be incorrect.
 func (stream *imageStreamType) getManifestLocation(b *Builder,
 	variables map[string]string) manifestLocationType {
@@ -252,6 +254,10 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	if err != nil {
 		return nil, err
 	}
+	tgs, err := loadTags(manifestDir)
+	if err != nil {
+		return nil, err
+	}
 	imageTriggers, addTriggers, err := loadTriggers(manifestDir)
 	if err != nil {
 		return nil, err
@@ -263,8 +269,15 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
+	vGetter := variablesGetter(envGetter.getenv()).copy()
+	vGetter.merge(request.Variables)
+	if gitInfo != nil {
+		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
+	}
+	vGetter.add("REQUESTED_GIT_BRANCH", request.GitBranch)
+	request.Variables = vGetter
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
-		request.MaxSourceAge, rootDir, bindMounts, false, envGetter, buildLog)
+		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +326,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		imageTriggers, mtimesCopyFilter, buildLog)
+		tgs, imageTriggers, mtimesCopyFilter, buildLog)
 	if err != nil {
 		return nil, err
 	}
@@ -487,6 +500,21 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 	}
 }
 
+func loadTags(manifestDir string) (tags.Tags, error) {
+	var tgs tags.Tags
+	err := libjson.ReadFromFile(filepath.Join(manifestDir, "tags.json"), &tgs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(tgs) < 1 {
+		return nil, nil
+	}
+	return tgs, nil
+}
+
 func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	imageTriggers, err := triggers.Load(filepath.Join(manifestDir, "triggers"))
 	if err != nil && !os.IsNotExist(err) {
@@ -509,22 +537,42 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	}
 }
 
-func unpackImage(client srpc.ClientI, streamName string,
-	maxSourceAge time.Duration, rootDir string,
-	buildLog io.Writer) (*sourceImageInfoType, error) {
+func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
+	sourceImageTagsToMatch tags.MatchTags, maxSourceAge time.Duration,
+	rootDir string, buildLog io.Writer) (*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
 	}
-	imageName, sourceImage, err := getLatestImage(client, streamName, buildLog)
+	imageName, sourceImage, err := getLatestImage(client, streamName,
+		buildCommitId, sourceImageTagsToMatch, buildLog)
 	if err != nil {
 		return nil, err
 	}
+	var specifiedStream string
+	if buildCommitId == "" {
+		specifiedStream = streamName
+	} else {
+		specifiedStream = streamName + "@gitCommitId:" + buildCommitId
+	}
+	if len(sourceImageTagsToMatch) > 0 {
+		specifiedStream += fmt.Sprintf("@tags:%v", sourceImageTagsToMatch)
+	}
 	if sourceImage == nil {
-		return nil, errors.New(errNoSourceImage + streamName)
+		return nil, &buildErrorType{
+			error:                  "no source image: " + specifiedStream,
+			needSourceImage:        true,
+			sourceImage:            streamName,
+			sourceImageGitCommitId: buildCommitId,
+		}
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		return nil, errors.New(errTooOldSourceImage + streamName)
+		return nil, &buildErrorType{
+			error:                  "too old source image: " + specifiedStream,
+			needSourceImage:        true,
+			sourceImage:            streamName,
+			sourceImageGitCommitId: buildCommitId,
+		}
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()

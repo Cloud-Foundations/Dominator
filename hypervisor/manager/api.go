@@ -111,7 +111,7 @@ type vmInfoType struct {
 	manager                    *Manager
 	metadataChannels           map[chan<- string]struct{}
 	monitorSockname            string
-	mutating                   bool
+	blockMutations             bool
 	ownerUsers                 map[string]struct{}
 	serialInput                io.Writer
 	serialOutput               chan<- byte

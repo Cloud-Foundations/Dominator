@@ -91,6 +91,26 @@ func (b *Builder) getVariableFunc(
 
 type variablesGetter map[string]string
 
+func (vg variablesGetter) add(key, value string) {
+	if value != "" {
+		vg[key] = value
+	}
+}
+
+func (vg variablesGetter) copy() variablesGetter {
+	retval := make(variablesGetter, len(vg))
+	for key, value := range vg {
+		retval[key] = value
+	}
+	return retval
+}
+
 func (vg variablesGetter) getenv() map[string]string {
 	return vg
+}
+
+func (vg variablesGetter) merge(vgToMerge variablesGetter) {
+	for key, value := range vgToMerge {
+		vg.add(key, value)
+	}
 }

@@ -35,7 +35,9 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 		"Name", "Data Size", "Data Inodes", "Computed Inodes", "Filter Lines",
 		"Triggers", "Branch", "Commit")
 	for _, name := range imageNames {
-		writeImage(tw, name, s.imageDataBase.GetImage(name))
+		if img := s.imageDataBase.GetImage(name); img != nil {
+			writeImage(tw, name, img)
+		}
 	}
 	tw.Close()
 	fmt.Fprintln(writer, "</body>")

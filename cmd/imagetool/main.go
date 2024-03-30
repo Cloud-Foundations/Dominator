@@ -18,6 +18,7 @@ import (
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 var (
@@ -80,8 +81,9 @@ var (
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
 	skipFields                          = flag.String("skipFields", "",
 		"Fields to skip when showing or diffing images")
-	tableType mbr.TableType = mbr.TABLE_TYPE_MSDOS
-	timeout                 = flag.Duration("timeout", 0,
+	tableType   mbr.TableType = mbr.TABLE_TYPE_MSDOS
+	tagsToMatch tags.MatchTags
+	timeout     = flag.Duration("timeout", 0,
 		"Timeout for get subcommand")
 
 	logger            log.DebugLogger
@@ -94,6 +96,7 @@ func init() {
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		"Comma separated list of patterns to exclude from scanning")
 	flag.Var(&tableType, "tableType", "partition table type for make-raw-image")
+	flag.Var(&tagsToMatch, "tagsToMatch", "Tags to match when finding/listing")
 }
 
 func printUsage() {
@@ -166,6 +169,7 @@ var subcommands = []commands.Command{
 	{"get-file-in-image", "      name imageFile [outfile]", 2, 3,
 		getFileInImageSubcommand},
 	{"get-image-expiration", "   name", 1, 1, getImageExpirationSubcommand},
+	{"get-image-updates", "", 0, 0, getImageUpdatesSubcommand},
 	{"get-package-list", "       name [outfile]", 1, 2,
 		getImagePackageListSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},

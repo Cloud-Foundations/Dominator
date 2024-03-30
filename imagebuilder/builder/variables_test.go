@@ -14,6 +14,18 @@ var (
 	}
 )
 
+func TestVariablesGetterAdder(t *testing.T) {
+	imageStream := &imageStreamType{}
+	vGetter := variablesGetter(imageStream.getenv()).copy()
+	key := "key"
+	value := "value"
+	vGetter.add(key, value)
+	result := vGetter.getenv()[key]
+	if result != value {
+		t.Errorf("expected: %s got: %s", value, result)
+	}
+}
+
 func TestSimpleExpressionExpansion(t *testing.T) {
 	result := expandExpression("${IMAGE_STREAM}", testMappingFunc)
 	if result != testStream.name {

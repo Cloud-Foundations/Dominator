@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
@@ -350,10 +351,12 @@ func (imdb *ImageDataBase) findLatestImage(
 	}
 	var previousCreateTime time.Time
 	var imageName string
+	tagMatcher := tagmatcher.New(request.TagsToMatch, false)
 	for name, img := range imdb.imageMap {
 		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
 			continue
 		}
+		// First filter out images we don't want.
 		if filepath.Dir(name) != request.DirectoryName {
 			continue
 		}
@@ -361,6 +364,10 @@ func (imdb *ImageDataBase) findLatestImage(
 			request.BuildCommitId != img.BuildCommitId {
 			continue
 		}
+		if !tagMatcher.MatchEach(img.Tags) {
+			continue
+		}
+		// Select newer image after filtering.
 		if img.CreatedOn.After(previousCreateTime) {
 			imageName = name
 			previousCreateTime = img.CreatedOn
@@ -388,11 +395,15 @@ func (imdb *ImageDataBase) listDirectories() []image.Directory {
 
 func (imdb *ImageDataBase) listImages(
 	request proto.ListSelectedImagesRequest) []string {
+	tagMatcher := tagmatcher.New(request.TagsToMatch, false)
 	imdb.RLock()
 	defer imdb.RUnlock()
 	names := make([]string, 0)
 	for name, img := range imdb.imageMap {
 		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
+			continue
+		}
+		if !tagMatcher.MatchEach(img.Tags) {
 			continue
 		}
 		names = append(names, name)
