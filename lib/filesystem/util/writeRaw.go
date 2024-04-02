@@ -18,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -518,6 +519,20 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
 }
 
+func waitForRootPartition(bootDevice string, timeout time.Duration) (
+	string, error) {
+	sleeper := backoffdelay.NewExponential(time.Millisecond,
+		100*time.Millisecond, 2)
+	stopTime := time.Now().Add(timeout)
+	for time.Until(stopTime) >= 0 {
+		if partition, err := getRootPartition(bootDevice); err == nil {
+			return partition, nil
+		}
+		sleeper.Sleep()
+	}
+	return "", errors.New("timed out waiting for root partition")
+}
+
 func writeFile(filename string, data []byte) error {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 		fsutil.PublicFilePerms)
@@ -567,7 +582,9 @@ func writeToBlock(fs *filesystem.FileSystem,
 	if err := mbr.WriteDefault(bootDevice, tableType); err != nil {
 		return err
 	}
-	if rootDevice, err := getRootPartition(bootDevice); err != nil {
+	rootDevice, err := waitForRootPartition(bootDevice,
+		options.PartitionWaitTimeout)
+	if err != nil {
 		return err
 	} else {
 		return makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice,
@@ -629,6 +646,9 @@ func writeRaw(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, rawFilename string,
 	perm os.FileMode, tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
+	if options.PartitionWaitTimeout < time.Millisecond {
+		options.PartitionWaitTimeout = 2 * time.Second
+	}
 	if isBlock, err := checkIsBlock(rawFilename); err != nil {
 		if !os.IsNotExist(err) {
 			return err
