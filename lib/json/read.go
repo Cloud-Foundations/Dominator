@@ -1,9 +1,11 @@
 package json
 
 import (
-	"bufio"
 	"encoding/json"
+	"io"
 	"os"
+
+	"github.com/Cloud-Foundations/Dominator/lib/uncommenter"
 )
 
 func readFromFile(filename string, value interface{}) error {
@@ -12,7 +14,12 @@ func readFromFile(filename string, value interface{}) error {
 		return err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(bufio.NewReader(file))
+	return Read(file, value)
+}
+
+func read(reader io.Reader, value interface{}) error {
+	decoder := json.NewDecoder(uncommenter.New(reader,
+		uncommenter.CommentTypeAll))
 	if err := decoder.Decode(value); err != nil {
 		return err
 	}
