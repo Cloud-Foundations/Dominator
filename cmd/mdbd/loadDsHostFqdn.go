@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
@@ -25,8 +25,7 @@ func loadDsHostFqdn(reader io.Reader, datacentre string, logger log.Logger) (
 
 	var inMdb inMdbType
 	var outMdb mdb.Mdb
-	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(&inMdb); err != nil {
+	if err := json.Read(reader, &inMdb); err != nil {
 		return nil, errors.New("error decoding: " + err.Error())
 	}
 	for dsName, dataCentre := range inMdb {
