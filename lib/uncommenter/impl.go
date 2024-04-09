@@ -67,28 +67,39 @@ func (u *uncommenter) readOnce(p []byte) (int, error) {
 		}
 		return len(p), nil
 	}
-	// Start of file/line: read in one or two bytes for analysis.
-	p[0], u.error = u.reader.ReadByte()
-	if u.error != nil {
-		return 0, u.error
-	}
-	nRead := 1
-	if p[0] == '#' && u.commentTypes&CommentTypeHash != 0 {
-		u.error = readUntilNewline(u.reader)
-		return 0, u.error
-	}
-	if p[0] == '/' && u.commentTypes&CommentTypeSlashSlash != 0 {
-		p[1], u.error = u.reader.ReadByte()
+	// Start of file/line: read until first non-whitespace.
+	var nRead int
+	for nRead < len(p) {
+		p[nRead], u.error = u.reader.ReadByte()
 		if u.error != nil {
 			return nRead, u.error
 		}
 		nRead++
-		if p[1] == '/' {
+		if p[nRead-1] == ' ' {
+			continue
+		}
+		if p[nRead-1] == '\t' {
+			continue
+		}
+		break
+	}
+	if p[nRead-1] == '#' && u.commentTypes&CommentTypeHash != 0 {
+		u.error = readUntilNewline(u.reader)
+		return 0, u.error
+	}
+	if p[nRead-1] == '/' && u.commentTypes&CommentTypeSlashSlash != 0 &&
+		nRead < len(p) {
+		p[nRead], u.error = u.reader.ReadByte()
+		if u.error != nil {
+			return nRead - 1, u.error
+		}
+		nRead++
+		if p[nRead-1] == '/' {
 			u.error = readUntilNewline(u.reader)
 			return 0, u.error
 		}
 	}
-	if p[0] == '!' && u.commentTypes&CommentTypeBang != 0 {
+	if p[nRead-1] == '!' && u.commentTypes&CommentTypeBang != 0 {
 		u.error = readUntilNewline(u.reader)
 		return 0, u.error
 	}

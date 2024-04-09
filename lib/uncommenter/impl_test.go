@@ -26,9 +26,9 @@ Final statement.
 	properlyCommentedText = []byte(`First line
 # A comment
 Second line
-// Another comment
+	// Another comment
 Third line
-! More commentary
+     ! More commentary
 Final statement.
 `)
 
