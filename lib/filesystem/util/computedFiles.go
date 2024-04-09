@@ -2,7 +2,6 @@ package util
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 )
 
 func spliceComputedFiles(fs *filesystem.FileSystem,
@@ -63,8 +63,7 @@ func loadComputedFiles(filename string) ([]ComputedFile, error) {
 		}
 		defer file.Close()
 		reader := bufio.NewReader(file)
-		decoder := json.NewDecoder(reader)
-		if err := decoder.Decode(&computedFileList); err != nil {
+		if err := json.Read(reader, &computedFileList); err != nil {
 			return nil, errors.New("error decoding computed files list " +
 				err.Error())
 		}

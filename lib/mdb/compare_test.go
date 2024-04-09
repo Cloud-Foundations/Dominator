@@ -2,9 +2,14 @@ package mdb
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+)
+
+var (
+	stringType = reflect.TypeOf([]string{})
 )
 
 func makeNonzeroMachine(t *testing.T, zeroIndex int) Machine {
@@ -17,11 +22,12 @@ func makeNonzeroMachine(t *testing.T, zeroIndex int) Machine {
 		}
 		fieldValue := machineValue.Field(index)
 		fieldKind := fieldValue.Kind()
+		fieldName := machineType.Field(index).Name
 		switch fieldKind {
 		case reflect.Bool:
 			fieldValue.SetBool(true)
 		case reflect.String:
-			fieldValue.SetString(machineType.Field(index).Name)
+			fieldValue.SetString(fieldName)
 		case reflect.Ptr:
 			fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 		case reflect.Map:
@@ -29,6 +35,11 @@ func makeNonzeroMachine(t *testing.T, zeroIndex int) Machine {
 			fieldValue.Set(mapValue)
 			mapValue.SetMapIndex(reflect.ValueOf("key"),
 				reflect.ValueOf("value"))
+		case reflect.Slice:
+			sliceValue := reflect.MakeSlice(stringType, 2, 2)
+			fieldValue.Set(sliceValue)
+			sliceValue.Index(0).SetString(fieldName)
+			sliceValue.Index(1).SetString(strings.ToLower(fieldName))
 		default:
 			t.Fatalf("Unsupported field type: %s", fieldKind)
 		}

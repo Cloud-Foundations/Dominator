@@ -20,6 +20,12 @@ func (dest *Machine) updateFrom(source Machine) {
 	if source.OwnerGroup != "" {
 		dest.OwnerGroup = source.OwnerGroup
 	}
+	if source.OwnerGroups != nil {
+		dest.OwnerGroups = source.OwnerGroups
+	}
+	if source.OwnerUsers != nil {
+		dest.OwnerUsers = source.OwnerUsers
+	}
 	if source.Tags != nil {
 		dest.Tags = source.Tags
 	}

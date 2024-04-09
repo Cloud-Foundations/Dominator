@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -137,17 +138,18 @@ func WriteImageName(mountPoint, imageName string) error {
 }
 
 type WriteRawOptions struct {
-	AllocateBlocks     bool
-	DoChroot           bool
-	ExtraKernelOptions string
-	InitialImageName   string
-	InstallBootloader  bool
-	MinimumFreeBytes   uint64
-	OverlayDirectories []string
-	OverlayFiles       map[string][]byte
-	RootLabel          string
-	RoundupPower       uint64
-	WriteFstab         bool
+	AllocateBlocks       bool
+	DoChroot             bool
+	ExtraKernelOptions   string
+	InitialImageName     string
+	InstallBootloader    bool
+	MinimumFreeBytes     uint64
+	OverlayDirectories   []string
+	OverlayFiles         map[string][]byte
+	PartitionWaitTimeout time.Duration // Default: 2 seconds.
+	RootLabel            string
+	RoundupPower         uint64
+	WriteFstab           bool
 }
 
 func WriteRaw(fs *filesystem.FileSystem,

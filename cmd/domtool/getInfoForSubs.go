@@ -2,14 +2,13 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
-	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/dominator"
@@ -41,7 +40,7 @@ func getInfoForSubs(client *srpc.Client) error {
 	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
-	libjson.WriteWithIndent(os.Stdout, "    ", reply.Subs)
+	json.WriteWithIndent(os.Stdout, "    ", reply.Subs)
 	return nil
 }
 
@@ -59,8 +58,7 @@ func getSubsFromFile() ([]string, error) {
 		return fsutil.ReadLines(reader)
 	}
 	var data interface{}
-	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(&data); err != nil {
+	if err := json.Read(reader, &data); err != nil {
 		return nil, err
 	}
 	entries, ok := data.([]interface{})

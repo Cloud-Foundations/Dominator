@@ -1,11 +1,12 @@
 package triggers
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
+
+	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 )
 
 func load(filename string) (*Triggers, error) {
@@ -26,9 +27,8 @@ func decode(jsonData []byte) (*Triggers, error) {
 }
 
 func read(reader io.Reader) (*Triggers, error) {
-	decoder := json.NewDecoder(bufio.NewReader(reader))
 	var trig Triggers
-	if err := decoder.Decode(&trig.Triggers); err != nil {
+	if err := libjson.Read(reader, &trig.Triggers); err != nil {
 		return nil, errors.New("error decoding triggers " + err.Error())
 	}
 	return &trig, nil

@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -17,7 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
-	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
@@ -40,8 +39,7 @@ func imageStreamsDecoder(reader io.Reader) (interface{}, error) {
 func imageStreamsRealDecoder(reader io.Reader) (
 	*imageStreamsConfigurationType, error) {
 	var config imageStreamsConfigurationType
-	decoder := json.NewDecoder(bufio.NewReader(reader))
-	if err := decoder.Decode(&config); err != nil {
+	if err := json.Read(reader, &config); err != nil {
 		return nil, err
 	}
 	for _, stream := range config.Streams {
@@ -120,7 +118,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	}
 	var variables map[string]string
 	if options.VariablesFile != "" {
-		err := libjson.ReadFromFile(options.VariablesFile, &variables)
+		err := json.ReadFromFile(options.VariablesFile, &variables)
 		if err != nil {
 			return nil, err
 		}
@@ -198,8 +196,7 @@ func loadMasterConfiguration(url string) (*masterConfigurationType, error) {
 	}
 	defer file.Close()
 	var configuration masterConfigurationType
-	decoder := json.NewDecoder(bufio.NewReader(file))
-	if err := decoder.Decode(&configuration); err != nil {
+	if err := json.Read(file, &configuration); err != nil {
 		return nil, fmt.Errorf("error reading configuration from: %s: %s",
 			url, err)
 	}
@@ -239,8 +236,7 @@ func (stream *bootstrapStream) loadFiles() error {
 		}
 		defer tagsFile.Close()
 		reader := bufio.NewReader(tagsFile)
-		decoder := json.NewDecoder(reader)
-		if err := decoder.Decode(&stream.imageTags); err != nil {
+		if err := json.Read(reader, &stream.imageTags); err != nil {
 			return err
 		}
 	}

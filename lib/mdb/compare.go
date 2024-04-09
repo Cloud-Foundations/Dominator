@@ -26,6 +26,12 @@ func (left Machine) compare(right Machine) bool {
 	if left.OwnerGroup != right.OwnerGroup {
 		return false
 	}
+	if !compareOwners(left.OwnerGroups, right.OwnerGroups) {
+		return false
+	}
+	if !compareOwners(left.OwnerUsers, right.OwnerUsers) {
+		return false
+	}
 	if !compareTags(left.Tags, right.Tags) {
 		return false
 	}
@@ -58,6 +64,18 @@ func compareAwsMetadata(left, right *AwsMetadata) bool {
 		return false
 	}
 	return compareTags(left.Tags, right.Tags)
+}
+
+func compareOwners(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index, value := range left {
+		if right[index] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func compareTags(left, right tags.Tags) bool {

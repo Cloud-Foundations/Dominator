@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"io"
 
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
@@ -15,8 +15,7 @@ func newJsonGenerator(params makeGeneratorParams) (generator, error) {
 func loadJson(reader io.Reader, datacentre string, logger log.Logger) (
 	*mdb.Mdb, error) {
 	var newMdb mdb.Mdb
-	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(&newMdb.Machines); err != nil {
+	if err := json.Read(reader, &newMdb.Machines); err != nil {
 		return nil, err
 	}
 	for index := range newMdb.Machines {

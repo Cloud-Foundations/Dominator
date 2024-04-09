@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/Cloud-Foundations/Dominator/lib/uncommenter"
 )
 
 type decoderMap map[string]DecoderGenerator
@@ -34,7 +36,8 @@ func (decoders decoderMap) decodeFile(filename string,
 		return err
 	} else {
 		defer file.Close()
-		return decoderGenerator(file).Decode(value)
+		reader := uncommenter.New(file, uncommenter.CommentTypeAll)
+		return decoderGenerator(reader).Decode(value)
 	}
 }
 
@@ -49,7 +52,8 @@ func (decoders decoderMap) findAndDecodeFile(basename string,
 			return err
 		} else {
 			defer file.Close()
-			if err := decoderGenerator(file).Decode(value); err != nil {
+			reader := uncommenter.New(file, uncommenter.CommentTypeAll)
+			if err := decoderGenerator(reader).Decode(value); err != nil {
 				return fmt.Errorf("%s: %s", filename, err)
 			}
 			return nil
