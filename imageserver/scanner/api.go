@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
@@ -44,9 +43,6 @@ type ImageDataBase struct {
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
 	// Unprotected by main lock.
-	deduperLock      sync.Mutex
-	deduper          *stringutil.StringDeduplicator
-	deduperTrigger   chan<- struct{}
 	pendingImageLock sync.Mutex
 	objectFetchLock  sync.Mutex
 }

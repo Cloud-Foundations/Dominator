@@ -19,7 +19,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 )
 
 func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
@@ -42,7 +41,6 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 	if !fi.IsDir() {
 		return nil, fmt.Errorf("%s is not a directory\n", config.BaseDirectory)
 	}
-	deduperTrigger := make(chan struct{}, 1)
 	imdb := &ImageDataBase{
 		Config:          config,
 		Params:          params,
@@ -51,8 +49,6 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 		addNotifiers:    make(notifiers),
 		deleteNotifiers: make(notifiers),
 		mkdirNotifiers:  make(makeDirectoryNotifiers),
-		deduper:         stringutil.NewStringDeduplicator(false),
-		deduperTrigger:  deduperTrigger,
 	}
 	imdb.lockWatcher = lockwatcher.New(&imdb.RWMutex,
 		lockwatcher.LockWatcherOptions{
@@ -84,7 +80,6 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 			imdb.CountImages(), plural, time.Since(startTime), userTime)
 		logutil.LogMemory(params.Logger, 0, "after loading")
 	}
-	go imdb.rebuildDeDuperManager(deduperTrigger)
 	return imdb, nil
 }
 
@@ -185,9 +180,6 @@ func (imdb *ImageDataBase) loadFile(filename string) error {
 		}
 	}
 	img.FileSystem.RebuildInodePointers()
-	imdb.deduperLock.Lock()
-	img.ReplaceStrings(imdb.deduper.DeDuplicate)
-	imdb.deduperLock.Unlock()
 	if err := img.Verify(); err != nil {
 		return err
 	}
