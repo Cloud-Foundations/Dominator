@@ -96,6 +96,13 @@ func numSpecifiedVirtualCPUs(milliCPUs, vCPUs uint) uint {
 	return nCpus
 }
 
+func safeDivide(numerator, denominator uint64) uint64 {
+	if denominator > 0 {
+		return numerator / denominator
+	}
+	return 0
+}
+
 func sumOwnerTotals(totalsByOwner map[string]*ownerTotalsType) ownerTotalsType {
 	var totals ownerTotalsType
 	for _, ownerTotals := range totalsByOwner {
@@ -221,12 +228,15 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 				"",
 				"",
 				fmt.Sprintf("%d%%",
-					totals.MemoryInMiB*100/capacity.MemoryInMiB),
-				fmt.Sprintf("%d%%", totals.MilliCPUs/capacity.NumCPUs/10),
+					safeDivide(totals.MemoryInMiB*100, capacity.MemoryInMiB)),
+				fmt.Sprintf("%d%%",
+					safeDivide(uint64(totals.MilliCPUs),
+						uint64(capacity.NumCPUs)*10)),
 				"",
 				"",
 				fmt.Sprintf("%d%%",
-					totals.VolumeSize*100/capacity.TotalVolumeBytes),
+					safeDivide(totals.VolumeSize*100,
+						capacity.TotalVolumeBytes)),
 				"",
 				"",
 				"",
