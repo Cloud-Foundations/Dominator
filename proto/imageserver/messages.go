@@ -108,6 +108,13 @@ type ImageUpdate struct {
 	Operation uint
 }
 
+type GetReplicationMasterRequest struct{}
+
+type GetReplicationMasterResponse struct {
+	Error             string
+	ReplicationMaster string
+}
+
 // The ListDirectories() RPC is fully streamed.
 // The client sends no information to the server.
 // The server sends a stream of image.Directory values with an empty string
