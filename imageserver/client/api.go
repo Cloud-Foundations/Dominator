@@ -64,6 +64,10 @@ func GetImageExpiration(client srpc.ClientI, name string) (time.Time, error) {
 	return getImageExpiration(client, name)
 }
 
+func GetReplicationMaster(client srpc.ClientI) (string, error) {
+	return getReplicationMaster(client)
+}
+
 func GetImageWithTimeout(client srpc.ClientI, name string,
 	timeout time.Duration) (*image.Image, error) {
 	return getImage(client, name, timeout)
