@@ -172,6 +172,7 @@ var subcommands = []commands.Command{
 	{"get-image-updates", "", 0, 0, getImageUpdatesSubcommand},
 	{"get-package-list", "       name [outfile]", 1, 2,
 		getImagePackageListSubcommand},
+	{"get-replication-master", "", 0, 0, getReplicationMasterSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
 	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
