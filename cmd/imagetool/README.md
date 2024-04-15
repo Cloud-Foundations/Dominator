@@ -55,6 +55,7 @@ Some of the sub-commands available are:
 - **get-image-expiration**: get the expiration time for an image
 - **get-image-updates**: get a stream of image updates
 - **get-package-list**: get package list for an image
+- **get-replication-master**: show the replication master for the imageserver
 - **list**: list all images
 - **listdirs**: list all directories
 - **listunrefobj**: list the unreferenced objects on the server
