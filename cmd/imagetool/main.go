@@ -62,6 +62,8 @@ var (
 		"Port number of image server")
 	makeBootable = flag.Bool("makeBootable", true,
 		"If true, make raw image bootable by installing GRUB")
+	masterImageServerHostname = flag.String("masterImageServerHostname", "",
+		"Hostname of master image server (if different)")
 	mdbServerHostname = flag.String("mdbServerHostname", "localhost",
 		"Hostname of MDB server")
 	mdbServerPortNum = flag.Uint("mdbServerPortNum",
@@ -202,24 +204,41 @@ var subcommands = []commands.Command{
 		traceInodeHistorySubcommand},
 }
 
-var imageSrpcClient *srpc.Client
-var theObjectClient *objectclient.ObjectClient
+var (
+	imageSrpcClient       *srpc.Client
+	masterImageSrpcClient *srpc.Client
+	theObjectClient       *objectclient.ObjectClient
+	theMasterObjectClient *objectclient.ObjectClient
 
-var listSelector filesystem.ListSelector
+	listSelector filesystem.ListSelector
+)
 
 func getClients() (*srpc.Client, *objectclient.ObjectClient) {
-	if imageSrpcClient == nil {
+	getPointedClients(*imageServerHostname, &imageSrpcClient, &theObjectClient)
+	return imageSrpcClient, theObjectClient
+}
+
+func getMasterClients() (*srpc.Client, *objectclient.ObjectClient) {
+	if *masterImageServerHostname == "" {
+		return getClients()
+	}
+	getPointedClients(*masterImageServerHostname,
+		&masterImageSrpcClient, &theMasterObjectClient)
+	return masterImageSrpcClient, theMasterObjectClient
+}
+
+func getPointedClients(hostname string, iClient **srpc.Client,
+	oClient **objectclient.ObjectClient) {
+	if *iClient == nil {
 		var err error
-		clientName := fmt.Sprintf("%s:%d",
-			*imageServerHostname, *imageServerPortNum)
-		imageSrpcClient, err = srpc.DialHTTP("tcp", clientName, 0)
+		clientName := fmt.Sprintf("%s:%d", hostname, *imageServerPortNum)
+		*iClient, err = srpc.DialHTTP("tcp", clientName, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error dialing: %s: %s\n", clientName, err)
 			os.Exit(1)
 		}
-		theObjectClient = objectclient.AttachObjectClient(imageSrpcClient)
+		*oClient = objectclient.AttachObjectClient(imageSrpcClient)
 	}
-	return imageSrpcClient, theObjectClient
 }
 
 func makeListSelector(arg string) filesystem.ListSelector {

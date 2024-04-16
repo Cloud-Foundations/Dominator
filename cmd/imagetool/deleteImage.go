@@ -8,7 +8,7 @@ import (
 )
 
 func deleteImageSubcommand(args []string, logger log.DebugLogger) error {
-	imageSClient, _ := getClients()
+	imageSClient, _ := getMasterClients()
 	if err := client.DeleteImage(imageSClient, args[0]); err != nil {
 		return fmt.Errorf("error deleting image: %s", err)
 	}
