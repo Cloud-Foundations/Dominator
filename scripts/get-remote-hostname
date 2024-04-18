@@ -1,0 +1,15 @@
+#! /bin/bash --posix
+
+set -eu
+
+endpoint='getHostname'
+
+WGET='wget -q -O -'
+
+if [ -z "$(which wget)" ]; then
+    WGET='curl'
+fi
+$WGET "http://$1/_goSRPC_/$endpoint" && exit
+rc="$?"
+echo "Error getting remote hostname"
+exit "$rc"
