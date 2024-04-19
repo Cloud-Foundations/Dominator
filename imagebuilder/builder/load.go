@@ -73,6 +73,9 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	} else if options.MinimumExpirationDuration < 15*time.Second {
 		options.MinimumExpirationDuration = 5 * time.Minute
 	}
+	if options.PresentationImageServerAddress == "" {
+		options.PresentationImageServerAddress = options.ImageServerAddress
+	}
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
@@ -137,6 +140,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		stateDir:                    options.StateDirectory,
 		imageRebuildInterval:        options.ImageRebuildInterval,
 		imageServerAddress:          options.ImageServerAddress,
+		linksImageServerAddress:     options.PresentationImageServerAddress,
 		logger:                      params.Logger,
 		imageStreamsUrl:             masterConfiguration.ImageStreamsUrl,
 		initialNamespace:            initialNamespace,

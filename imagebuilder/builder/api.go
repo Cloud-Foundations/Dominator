@@ -193,6 +193,7 @@ type Builder struct {
 	stateDir                    string
 	imageRebuildInterval        time.Duration
 	imageServerAddress          string
+	linksImageServerAddress     string
 	logger                      log.DebugLogger
 	imageStreamsUrl             string
 	initialNamespace            string // For catching golang bugs.
@@ -224,6 +225,7 @@ type BuilderOptions struct {
 	MaximumExpirationDuration           time.Duration // Default: 1 day.
 	MaximumExpirationDurationPrivileged time.Duration // Default: 1 month.
 	MinimumExpirationDuration           time.Duration // Def: 15 min. Min: 5 min
+	PresentationImageServerAddress      string
 	StateDirectory                      string
 	VariablesFile                       string
 }
