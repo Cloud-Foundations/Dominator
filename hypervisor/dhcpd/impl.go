@@ -2,6 +2,7 @@ package dhcpd
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/formatter"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
@@ -34,6 +36,17 @@ type serveIfConn struct {
 	conn             *ipv4.PacketConn
 	cm               *ipv4.ControlMessage
 	requestInterface *string
+}
+
+func getClientIdentifier(options dhcp.Options) (string, string) {
+	rawClientIdentifier := options[dhcp.OptionClientIdentifier]
+	if len(rawClientIdentifier) < 1 {
+		return "", ""
+	}
+	if rawClientIdentifier[0] == 0 {
+		return "(clientId=\"%s\") ", string(rawClientIdentifier[1:])
+	}
+	return "(clientIdType=%s) ", fmt.Sprintf("%d", rawClientIdentifier[0])
 }
 
 func listMyIPs() (map[string][]net.IP, []net.IP, error) {
@@ -640,8 +653,11 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 	switch msgType {
 	case dhcp.Discover:
 		macAddr := req.CHAddr().String()
-		s.logger.Debugf(1, "Discover from: %s on: %s\n",
-			macAddr, s.requestInterface)
+		clientIdFormat, clientIdValue := getClientIdentifier(options)
+		s.logger.Debugln(1, formatter.Pairs(
+			"Discover from: %s ", macAddr,
+			clientIdFormat, clientIdValue,
+			"on: %s", s.requestInterface))
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 		lease, subnet := s.findLease(macAddr, s.requestInterface, nil)
@@ -670,11 +686,14 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 	case dhcp.Request:
 		macAddr := req.CHAddr().String()
 		reqIP := net.IP(options[dhcp.OptionRequestedIPAddress])
+		clientIdFormat, clientIdValue := getClientIdentifier(options)
 		if reqIP == nil {
 			reqIP = net.IP(req.CIAddr())
-			s.logger.Debugf(0,
-				"Request from: %s on: %s did not request an IP, using: %s\n",
-				macAddr, s.requestInterface, reqIP)
+			s.logger.Debugln(0, formatter.Pairs(
+				"Request from: %s ", macAddr,
+				clientIdFormat, clientIdValue,
+				"on: %s ", s.requestInterface,
+				"did not request an IP, using: %s", reqIP.String()))
 		}
 		reqIP = util.ShrinkIP(reqIP)
 		s.notifyRequest(proto.Address{reqIP, macAddr})
@@ -690,9 +709,11 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 					}
 				}
 				if !isMe {
-					s.logger.Debugf(0,
-						"Request for: %s from: %s to: %s is not me\n",
-						reqIP, macAddr, serverIP)
+					s.logger.Debugln(0, formatter.Pairs(
+						"Request for: %s ", reqIP.String(),
+						"from: %s ", macAddr,
+						clientIdFormat, clientIdValue,
+						"to: %s is not me", serverIP.String()))
 					return nil // Message not for this DHCP server.
 				}
 			}
