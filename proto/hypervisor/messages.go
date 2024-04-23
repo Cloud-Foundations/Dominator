@@ -778,3 +778,19 @@ type VolumeInitialisationInfo struct {
 }
 
 type VolumeType uint
+
+// The WatchDhcp() RPC is fully streamed.
+// The client sends a single WatchDhcpRequest message.
+// The server sends a stream of WatchDhcpResponse messages until there is an
+// error.
+
+type WatchDhcpRequest struct {
+	Interface  string // Default: watch all available interfaces.
+	MaxPackets uint64 // Zero means infinite.
+}
+
+type WatchDhcpResponse struct {
+	Error     string
+	Interface string
+	Packet    []byte
+}
