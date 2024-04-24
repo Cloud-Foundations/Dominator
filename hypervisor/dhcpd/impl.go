@@ -92,16 +92,18 @@ func newServer(interfaceNames []string, dynamicLeasesFile string,
 	logger = prefixlogger.New("dhcpd: ", logger)
 	cleanupTriggerChannel := make(chan struct{}, 1)
 	dhcpServer := &DhcpServer{
-		dynamicLeasesFile: dynamicLeasesFile,
-		logger:            logger,
-		cleanupTrigger:    cleanupTriggerChannel,
 		ackChannels:       make(map[string]chan struct{}),
+		cleanupTrigger:    cleanupTriggerChannel,
+		dynamicLeases:     make(map[string]*leaseType),
+		dynamicLeasesFile: dynamicLeasesFile,
 		interfaceSubnets:  make(map[string][]*subnetType),
 		ipAddrToMacAddr:   make(map[string]string),
-		staticLeases:      make(map[string]leaseType),
-		requestChannels:   make(map[string]chan net.IP),
-		routeTable:        make(map[string]*util.RouteEntry),
-		dynamicLeases:     make(map[string]*leaseType),
+		logger:            logger,
+		packetWatchers: make(
+			map[<-chan proto.WatchDhcpResponse]chan<- proto.WatchDhcpResponse),
+		requestChannels: make(map[string]chan net.IP),
+		routeTable:      make(map[string]*util.RouteEntry),
+		staticLeases:    make(map[string]leaseType),
 	}
 	if interfaceIPs, myIPs, err := listMyIPs(); err != nil {
 		return nil, err
@@ -650,6 +652,7 @@ func (s *DhcpServer) removeSubnet(subnetId string) {
 
 func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 	options dhcp.Options) dhcp.Packet {
+	s.sendPacket(s.requestInterface, req)
 	switch msgType {
 	case dhcp.Discover:
 		macAddr := req.CHAddr().String()

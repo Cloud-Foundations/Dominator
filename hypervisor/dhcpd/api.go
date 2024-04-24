@@ -25,8 +25,9 @@ type DhcpServer struct {
 	dynamicLeases     map[string]*leaseType       // Key: MACaddr.
 	interfaceSubnets  map[string][]*subnetType    // Key: interface name.
 	ipAddrToMacAddr   map[string]string           // Key: IPaddr, V: MACaddr.
-	staticLeases      map[string]leaseType        // Key: MACaddr.
-	requestChannels   map[string]chan net.IP      // Key: MACaddr.
+	packetWatchers    map[<-chan proto.WatchDhcpResponse]chan<- proto.WatchDhcpResponse
+	requestChannels   map[string]chan net.IP // Key: MACaddr.
+	staticLeases      map[string]leaseType   // Key: MACaddr.
 	subnets           []*subnetType
 }
 
@@ -64,8 +65,17 @@ func (s *DhcpServer) AddSubnet(subnet proto.Subnet) {
 	s.addSubnet(subnet)
 }
 
+func (s *DhcpServer) ClosePacketWatchChannel(
+	channel <-chan proto.WatchDhcpResponse) {
+	s.closePacketWatchChannel(channel)
+}
+
 func (s *DhcpServer) MakeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{} {
 	return s.makeAcknowledgmentChannel(ipAddr)
+}
+
+func (s *DhcpServer) MakePacketWatchChannel() <-chan proto.WatchDhcpResponse {
+	return s.makePacketWatchChannel()
 }
 
 func (s *DhcpServer) MakeRequestChannel(macAddr string) <-chan net.IP {
