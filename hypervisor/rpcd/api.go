@@ -15,7 +15,9 @@ type DhcpServer interface {
 	AddLease(address proto.Address, hostname string) error
 	AddNetbootLease(address proto.Address, hostname string,
 		subnet *proto.Subnet) error
+	ClosePacketWatchChannel(channel <-chan proto.WatchDhcpResponse)
 	MakeAcknowledgmentChannel(ipAddr net.IP) <-chan struct{}
+	MakePacketWatchChannel() <-chan proto.WatchDhcpResponse
 	RemoveLease(ipAddr net.IP)
 }
 
