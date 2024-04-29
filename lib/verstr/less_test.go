@@ -9,6 +9,9 @@ func TestLess(t *testing.T) {
 		left, right string
 		want        bool
 	}{
+		{"", "", false},
+		{"", "empty", true},
+		{"empty", "", false},
 		{"file.0.ext", "file.1.ext", true},
 		{"file.1.ext", "file.0.ext", false},
 		{"file.1.ext", "file.10.ext", true},
@@ -27,6 +30,8 @@ func TestLess(t *testing.T) {
 		{"os-v10", "os-v9", false},
 		{"sparse", "sparse.0", true},
 		{"sparse.0", "sparse", false},
+		{"token_01", "token_2", true},
+		{"token_2", "token_10", true},
 	}
 	for _, test := range tests {
 		if got := Less(test.left, test.right); got != test.want {
