@@ -41,9 +41,6 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 		imdb.Logger.Printf("Ignoring already expired image: %s\n", name)
 		return nil
 	}
-	imdb.deduperLock.Lock()
-	img.ReplaceStrings(imdb.deduper.DeDuplicate)
-	imdb.deduperLock.Unlock()
 	imdb.Lock()
 	doUnlock := true
 	defer func() {
@@ -321,6 +318,7 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	}
 }
 
+// This must be called with the main lock held.
 func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 	name string) {
 	img := imdb.imageMap[name]
@@ -328,10 +326,6 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 		return
 	}
 	delete(imdb.imageMap, name)
-	select {
-	case imdb.deduperTrigger <- struct{}{}:
-	default:
-	}
 	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
@@ -446,45 +440,6 @@ func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 		return err
 	}
 	return imdb.updateDirectoryMetadata(directory)
-}
-
-// This must be called with the main lock held.
-func (imdb *ImageDataBase) rebuildDeDuper() {
-	imdb.deduperLock.Lock()
-	defer imdb.deduperLock.Unlock()
-	startTime := time.Now()
-	imdb.deduper.Clear()
-	for _, image := range imdb.imageMap {
-		image.ReplaceStrings(imdb.deduper.DeDuplicate)
-	}
-	timeTaken := time.Since(startTime)
-	if timeTaken >= time.Second {
-		imdb.Logger.Printf("Rebuilding de-duper state took %s\n",
-			format.Duration(timeTaken))
-	} else {
-		imdb.Logger.Debugf(0, "Rebuilding de-duper state took %s\n",
-			format.Duration(timeTaken))
-	}
-}
-
-func (imdb *ImageDataBase) rebuildDeDuperManager(trigger <-chan struct{}) {
-	delayTimer := time.NewTimer(time.Hour)
-	delayTimer.Stop()
-	for {
-		select {
-		case <-trigger:
-			delayTimer.Stop()
-			select {
-			case <-delayTimer.C:
-			default:
-			}
-			delayTimer.Reset(time.Second) // Kick the can down the road.
-		case <-delayTimer.C:
-			imdb.Lock()
-			imdb.rebuildDeDuper()
-			imdb.Unlock()
-		}
-	}
 }
 
 func (imdb *ImageDataBase) registerAddNotifier() <-chan string {

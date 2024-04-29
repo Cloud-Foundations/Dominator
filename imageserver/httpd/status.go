@@ -26,7 +26,7 @@ func statusHandler(w http.ResponseWriter, req *http.Request) {
 			`<h1><font color="red">Running in insecure mode. Your images can be pwned!!!</font></h1>`)
 	}
 	fmt.Fprintln(writer, "</center>")
-	html.WriteHeaderWithRequest(writer, req)
+	html.WriteHeaderWithRequestNoGC(writer, req)
 	fmt.Fprintln(writer, "<h3>")
 	for _, htmlWriter := range htmlWriters {
 		htmlWriter.WriteHtml(writer)

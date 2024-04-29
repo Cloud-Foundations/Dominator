@@ -137,6 +137,7 @@ var subcommands = []commands.Command{
 		showNetworkConfigurationSubcommand},
 	{"update-network-configuration", "", 0, 0,
 		updateNetworkConfigurationSubcommand},
+	{"watch-dhcp", "[interface]", 0, 1, watchDhcpSubcommand},
 	{"write-netboot-files", "hostname dirname", 2, 2,
 		writeNetbootFilesSubcommand},
 }

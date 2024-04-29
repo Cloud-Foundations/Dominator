@@ -12,7 +12,7 @@ import (
 
 func changeImageExpirationSubcommand(args []string,
 	logger log.DebugLogger) error {
-	imageSClient, _ := getClients()
+	imageSClient, _ := getMasterClients()
 	err := changeImageExpiration(imageSClient, args[0])
 	if err != nil {
 		return fmt.Errorf("error changing image expiration: %s", err)

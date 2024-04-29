@@ -50,6 +50,9 @@ var (
 		"Minimum permitted expiration duration")
 	portNum = flag.Uint("portNum", constants.ImaginatorPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
+	presentationImageServerHostname = flag.String(
+		"presentationImageServerHostname", "",
+		"Hostname of image server for links presentation")
 	slaveDriverConfigurationFile = flag.String("slaveDriverConfigurationFile",
 		"", "Name of configuration file for slave builders")
 	stateDir = flag.String("stateDir", "/var/lib/imaginator",
@@ -116,8 +119,10 @@ func main() {
 			MaximumExpirationDuration:           *maximumExpirationDuration,
 			MaximumExpirationDurationPrivileged: *maximumExpirationDurationPrivileged,
 			MinimumExpirationDuration:           *minimumExpirationDuration,
-			StateDirectory:                      *stateDir,
-			VariablesFile:                       *variablesFile,
+			PresentationImageServerAddress: fmt.Sprintf("%s:%d",
+				*presentationImageServerHostname, *imageServerPortNum),
+			StateDirectory: *stateDir,
+			VariablesFile:  *variablesFile,
 		},
 		builder.BuilderParams{
 			BuildLogArchiver: buildLogArchiver,

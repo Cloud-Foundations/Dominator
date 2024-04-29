@@ -8,7 +8,7 @@ import (
 )
 
 func makeDirectorySubcommand(args []string, logger log.DebugLogger) error {
-	imageSClient, _ := getClients()
+	imageSClient, _ := getMasterClients()
 	if err := client.MakeDirectory(imageSClient, args[0]); err != nil {
 		return fmt.Errorf("error creating directory: %s", err)
 	}

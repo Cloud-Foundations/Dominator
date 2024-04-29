@@ -88,6 +88,8 @@ Some of the sub-commands available are:
                                   specified *Hypervisor*
 - **update-network-configuration**: update the network configuration for the
                                     local *Hypervisor*
+- **watch-dhcp**: watch for DHCP messages received by the specified *Hypervisor*
+                  and log and write packet data. This is primarily for debugging
 - **write-netboot-files**: write the configuration files for installing a
                            machine. This is primarily for debugging
 

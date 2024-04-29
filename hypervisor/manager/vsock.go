@@ -7,14 +7,12 @@ import (
 )
 
 func (m *Manager) checkVsockets() error {
-	if cid, err := vsock.GetContextID(); err != nil {
+	if err := vsock.CheckVsockets(); err != nil {
+		m.Logger.Debugf(0, "CheckVsockets(): %v\n", err)
 		return nil
-	} else if cid != 2 {
-		m.Logger.Printf("detected VSOCK CID=%d, not enabling\n", cid)
-	} else {
-		m.vsocketsEnabled = true
-		m.Logger.Println("VSOCK enabled")
 	}
+	m.vsocketsEnabled = true
+	m.Logger.Println("VSOCK enabled")
 	return nil
 }
 

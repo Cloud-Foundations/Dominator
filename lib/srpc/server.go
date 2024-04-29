@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -24,11 +26,13 @@ import (
 )
 
 const (
-	connectString         = "200 Connected to Go SRPC"
-	rpcPath               = "/_goSRPC_/"      // Legacy endpoint. GOB coder.
-	tlsRpcPath            = "/_go_TLS_SRPC_/" // Legacy endpoint. GOB coder.
-	jsonRpcPath           = "/_SRPC_/unsecured/JSON"
-	jsonTlsRpcPath        = "/_SRPC_/TLS/JSON"
+	connectString  = "200 Connected to Go SRPC"
+	rpcPath        = "/_goSRPC_/"      // Unsecured endpoint. GOB coder.
+	tlsRpcPath     = "/_go_TLS_SRPC_/" // Secured endpoint. GOB coder.
+	jsonRpcPath    = "/_SRPC_/unsecured/JSON"
+	jsonTlsRpcPath = "/_SRPC_/TLS/JSON"
+
+	getHostnamePath       = rpcPath + "getHostname"
 	listMethodsPath       = rpcPath + "listMethods"
 	listPublicMethodsPath = rpcPath + "listPublicMethods"
 
@@ -77,6 +81,10 @@ var (
 	numRejectedServerConnections uint64
 	registerBuiltin              sync.Once
 	registerBuiltinError         error
+
+	computeHostname sync.Once
+	hostname        string
+	hostnameError   error
 )
 
 // Precompute some reflect types. Can't use the types directly because Typeof
@@ -87,6 +95,7 @@ var typeOfEncoder = reflect.TypeOf((*Encoder)(nil)).Elem()
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
 func init() {
+	http.HandleFunc(getHostnamePath, getHostnameHttpHandler)
 	http.HandleFunc(rpcPath, gobUnsecuredHttpHandler)
 	http.HandleFunc(tlsRpcPath, gobTlsHttpHandler)
 	http.HandleFunc(jsonRpcPath, jsonUnsecuredHttpHandler)
@@ -286,6 +295,24 @@ func (m *methodWrapper) registerMetrics(dir *tricorder.DirectorySpec) error {
 		return err
 	}
 	return nil
+}
+
+func getHostnameHttpHandler(w http.ResponseWriter, req *http.Request) {
+	computeHostname.Do(func() {
+		cmd := exec.Command("hostname", "-f")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			hostname = strings.TrimSpace(string(output))
+			return
+		}
+		hostname, hostnameError = os.Hostname()
+	})
+	if hostnameError != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, hostnameError)
+		return
+	}
+	fmt.Fprintln(w, hostname)
 }
 
 func gobTlsHttpHandler(w http.ResponseWriter, req *http.Request) {
