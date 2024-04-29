@@ -19,8 +19,9 @@ type Trigger struct {
 	MatchLines   []string
 	matchRegexes []*regexp.Regexp
 	Service      string
-	DoReboot     bool `json:",omitempty"`
-	HighImpact   bool `json:",omitempty"`
+	SortName     string `json:",omitempty"`
+	DoReboot     bool   `json:",omitempty"`
+	HighImpact   bool   `json:",omitempty"`
 }
 
 func (trigger *Trigger) RegisterStrings(registerFunc func(string)) {
