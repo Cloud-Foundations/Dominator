@@ -140,10 +140,14 @@ func (s *FifoCpuSharer) grabIdleCpu(minIdleTime, timeout time.Duration) bool {
 }
 
 func (s *FifoCpuSharer) releaseCpu() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.lastYieldEvent = time.Now()
-	<-s.semaphore
+	select {
+	case <-s.semaphore:
+		s.mutex.Lock()
+		defer s.mutex.Unlock()
+		s.lastYieldEvent = time.Now()
+	default:
+		panic("attempt to release when all CPUs are idle")
+	}
 }
 
 func (s *FifoCpuSharer) setGrabTimeout(timeout time.Duration) {
