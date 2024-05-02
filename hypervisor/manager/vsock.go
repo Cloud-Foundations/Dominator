@@ -2,14 +2,23 @@ package manager
 
 import (
 	"net"
+	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/net/vsock"
 )
+
+const vsockVhostDev = "/dev/vhost-vsock"
 
 func (m *Manager) checkVsockets() error {
 	if err := vsock.CheckVsockets(); err != nil {
 		m.Logger.Debugf(0, "CheckVsockets(): %v\n", err)
 		return nil
+	}
+	if fd, err := syscall.Open(vsockVhostDev, 0, 0); err != nil {
+		m.Logger.Printf("VSOCK support broken: %s: %v\n", vsockVhostDev, err)
+		return nil
+	} else {
+		syscall.Close(fd)
 	}
 	m.vsocketsEnabled = true
 	m.Logger.Println("VSOCK enabled")
