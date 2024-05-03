@@ -10,11 +10,16 @@ import (
 )
 
 func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
+	herd.logger.Printf("MDB data received: %d subs\n", len(mdb.Machines))
 	numNew, numDeleted, numChanged, wantedImages, clientResourcesToDelete :=
 		herd.mdbUpdateGetLock(mdb)
+	// Closing resources can lead to a release/grab cycle, so need to grab the
+	// CPU to ensure we don't trigger the release leakage detector and panic.
+	herd.cpuSharer.GrabCpu()
 	for _, clientResource := range clientResourcesToDelete {
 		clientResource.ScheduleClose()
 	}
+	herd.cpuSharer.ReleaseCpu()
 	// Clean up unreferenced images.
 	herd.imageManager.SetImageInterestList(wantedImages, true)
 	pluralNew := "s"
