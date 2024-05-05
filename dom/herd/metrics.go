@@ -54,12 +54,30 @@ func makeCpuSharerMetrics(dir *tricorder.DirectorySpec, name string,
 		cpuSharer.GetStatistics()
 		return time.Now()
 	})
+	dir.RegisterMetricInGroup("last-acquire-event",
+		&cpuSharer.Statistics.LastAcquireEvent, group, units.None,
+		"time of last CPU acquire event")
+	dir.RegisterMetricInGroup("last-idle-event",
+		&cpuSharer.Statistics.LastIdleEvent, group, units.None,
+		"time of last CPU idle event")
+	dir.RegisterMetricInGroup("last-yield-event",
+		&cpuSharer.Statistics.LastYieldEvent, group, units.None,
+		"time of last CPU yield event")
 	dir.RegisterMetricInGroup("num-cpu", &cpuSharer.Statistics.NumCpu, group,
 		units.None, "number of CPUs")
+	dir.RegisterMetricInGroup("num-full-idle-events",
+		&cpuSharer.Statistics.NumFullIdleEvents, group, units.None,
+		"number of times CPU is fully idle")
+	dir.RegisterMetricInGroup("num-full-idle-releases",
+		&cpuSharer.Statistics.NumFullIdleReleases, group, units.None,
+		"number of CPU releases when fully idle (unbalanced releases)")
 	dir.RegisterMetricInGroup("num-idle-events",
 		&cpuSharer.Statistics.NumIdleEvents, group, units.None,
 		"number of CPU idle events")
 	dir.RegisterMetricInGroup("num-running",
 		&cpuSharer.Statistics.NumCpuRunning, group, units.None,
 		"number of running goroutines")
+	dir.RegisterMetricInGroup("num-ungrabbed-releases",
+		&cpuSharer.Statistics.NumUngrabbedReleases, group, units.None,
+		"number of currently unbalanced CPU releases")
 }
