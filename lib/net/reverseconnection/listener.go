@@ -63,15 +63,15 @@ func listen(network string, portNumber uint, logger log.DebugLogger) (
 	if err != nil {
 		return nil, fmt.Errorf("error creating %s listener: %s", network, err)
 	}
-	acceptChannel := make(chan acceptEvent, 1)
+	newConnections := make(chan libnet.TCPConn, 1)
 	listener := &Listener{
-		listener:      rListener,
-		portNumber:    portNumber,
-		logger:        logger,
-		acceptChannel: acceptChannel,
-		connectionMap: make(map[ip4Address]uint),
+		listener:       rListener,
+		portNumber:     portNumber,
+		logger:         logger,
+		newConnections: newConnections,
+		connectionMap:  make(map[ip4Address]uint),
 	}
-	go listener.listen(acceptChannel)
+	go listener.listen(newConnections)
 	return listener, nil
 }
 
@@ -81,6 +81,10 @@ func sleep(minInterval, maxInterval time.Duration) {
 }
 
 func (conn *listenerConn) Close() error {
+	if conn.closed {
+		return net.ErrClosed
+	}
+	conn.closed = true
 	if ip, err := getIp4Address(conn); err != nil {
 		if err != errorLoopback {
 			conn.listener.logger.Println(err)
@@ -91,12 +95,11 @@ func (conn *listenerConn) Close() error {
 	return conn.TCPConn.Close()
 }
 
-func (l *Listener) accept() (*listenerConn, error) {
+func (l *Listener) accept() (net.Conn, error) {
 	if l.isClosed() {
 		return nil, errors.New("listener is closed")
 	}
-	event := <-l.acceptChannel
-	return event.conn, event.error
+	return <-l.newConnections, nil
 }
 
 func (l *Listener) close() error {
@@ -123,7 +126,7 @@ func (l *Listener) isClosed() bool {
 	return l.closed
 }
 
-func (l *Listener) listen(acceptChannel chan<- acceptEvent) {
+func (l *Listener) listen(newConnections chan<- libnet.TCPConn) {
 	for {
 		if l.isClosed() {
 			break
@@ -141,8 +144,7 @@ func (l *Listener) listen(acceptChannel chan<- acceptEvent) {
 			continue
 		}
 		l.remember(conn)
-		acceptChannel <- acceptEvent{
-			&listenerConn{TCPConn: tcpConn, listener: l}, err}
+		newConnections <- tcpConn
 	}
 }
 
@@ -150,6 +152,8 @@ func (l *Listener) remember(conn net.Conn) {
 	l.logger.Debugf(1, "reverse listener: remember(%s): %p\n",
 		conn.RemoteAddr(), conn)
 	if ip, err := getIp4Address(conn); err == nil {
+		l.logger.Debugf(1, "reverse listener: remembering: %d.%d.%d.%d\n",
+			ip[0], ip[1], ip[2], ip[3])
 		l.connectionMapLock.Lock()
 		defer l.connectionMapLock.Unlock()
 		l.connectionMap[ip]++
@@ -297,8 +301,7 @@ func (l *Listener) connect(network, serverAddress string, timeout time.Duration,
 	}
 	logger.Println("remote has consumed, injecting to local listener")
 	l.remember(rawConn)
-	l.acceptChannel <- acceptEvent{
-		&listenerConn{TCPConn: tcpConn, listener: l}, nil}
+	l.newConnections <- tcpConn
 	rawConn = nil // Prevent Close on return.
 	return &message, nil
 }

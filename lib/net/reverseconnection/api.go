@@ -10,12 +10,8 @@ import (
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 )
 
-type acceptEvent struct {
-	conn  *listenerConn
-	error error
-}
-
 type listenerConn struct {
+	closed bool
 	libnet.TCPConn
 	listener *Listener
 }
@@ -35,7 +31,7 @@ type Listener struct {
 	listener          net.Listener
 	portNumber        uint
 	logger            log.DebugLogger
-	acceptChannel     chan acceptEvent
+	newConnections    chan libnet.TCPConn
 	closedLock        sync.Mutex
 	closed            bool
 	connectionMapLock sync.Mutex
