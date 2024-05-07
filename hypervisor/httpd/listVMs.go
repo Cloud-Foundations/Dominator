@@ -122,6 +122,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	var allocatedMemoryInMiB uint64
 	var allocatedMilliCPUs, allocatedVirtualCPUs, numVolumes uint
 	var allocatedVolumeSize uint64
+	primaryOwner := parsedQuery.Table["primaryOwner"]
 	totalsByOwner := make(map[string]*ownerTotalsType)
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
@@ -129,6 +130,9 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		if matchState != "" && matchState != vm.State.String() {
+			continue
+		}
+		if primaryOwner != "" && vm.OwnerUsers[0] != primaryOwner {
 			continue
 		}
 		switch parsedQuery.OutputType() {
@@ -209,8 +213,10 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 		)
 		tw.Close()
 		fmt.Fprintln(writer, "<p>")
-		fmt.Fprintln(writer, "VMs by primary owner:<br>")
-		listVMsByPrimaryOwner(writer, totalsByOwner)
+		if primaryOwner == "" {
+			fmt.Fprintln(writer, "VMs by primary owner:<br>")
+			listVMsByPrimaryOwner(writer, totalsByOwner)
+		}
 		fmt.Fprintln(writer, "</body>")
 	}
 }
