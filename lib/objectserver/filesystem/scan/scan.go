@@ -66,6 +66,13 @@ func scanDirectory(baseDir string, subpath string, state *concurrent.State,
 				}
 			}
 		} else {
+			// Clean up stale temporary file.
+			if name[len(name)-1] == '~' {
+				if err := os.Remove(fullPathName); err != nil {
+					return err
+				}
+				continue
+			}
 			if fi.Size() < 1 {
 				return fmt.Errorf("zero-length file: %s", fullPathName)
 			}
