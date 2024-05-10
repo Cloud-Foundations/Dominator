@@ -38,7 +38,7 @@ type ImageDataBase struct {
 	sync.RWMutex
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
-	imageMap        map[string]*image.Image
+	imageMap        map[string]*image.Image // nil: write in progress.
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
