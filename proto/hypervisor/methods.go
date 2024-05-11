@@ -7,10 +7,14 @@ import (
 	"strings"
 )
 
-const consoleTypeUnknown = "UNKNOWN ConsoleType"
-const stateUnknown = "UNKNOWN State"
-const volumeFormatUnknown = "UNKNOWN VolumeFormat"
-const volumeTypeUnknown = "UNKNOWN VolumeType"
+const (
+	consoleTypeUnknown    = "UNKNOWN ConsoleType"
+	stateUnknown          = "UNKNOWN State"
+	volumeFormatUnknown   = "UNKNOWN VolumeFormat"
+	volumeTypeUnknown     = "UNKNOWN VolumeType"
+	watchdogActionUnknown = "UNKNOWN WatchdogAction"
+	watchdogModelUnknown  = "UNKNOWN WatchdogModel"
+)
 
 var (
 	consoleTypeToText = map[ConsoleType]string{
@@ -45,6 +49,21 @@ var (
 		VolumeTypeMemory:     "memory",
 	}
 	textToVolumeType map[string]VolumeType
+
+	watchdogActionToText = map[WatchdogAction]string{
+		WatchdogActionNone:     "none",
+		WatchdogActionReset:    "reset",
+		WatchdogActionShutdown: "shutdown",
+		WatchdogActionPowerOff: "poweroff",
+	}
+	textToWatchdogAction map[string]WatchdogAction
+
+	watchdogModelToText = map[WatchdogModel]string{
+		WatchdogModelNone:     "none",
+		WatchdogModelIb700:    "ib700",
+		WatchdogModelI6300esb: "i6300esb",
+	}
+	textToWatchdogModel map[string]WatchdogModel
 )
 
 func init() {
@@ -63,6 +82,16 @@ func init() {
 	textToVolumeType = make(map[string]VolumeType, len(volumeTypeToText))
 	for vtype, text := range volumeTypeToText {
 		textToVolumeType[text] = vtype
+	}
+	textToWatchdogAction = make(map[string]WatchdogAction,
+		len(watchdogActionToText))
+	for action, text := range watchdogActionToText {
+		textToWatchdogAction[text] = action
+	}
+	textToWatchdogModel = make(map[string]WatchdogModel,
+		len(watchdogModelToText))
+	for model, text := range watchdogModelToText {
+		textToWatchdogModel[text] = model
 	}
 }
 
@@ -296,7 +325,16 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if !left.Address.Equal(&right.Address) {
 		return false
 	}
+	if !left.ChangedStateOn.Equal(right.ChangedStateOn) {
+		return false
+	}
 	if left.ConsoleType != right.ConsoleType {
+		return false
+	}
+	if !left.CreatedOn.Equal(right.CreatedOn) {
+		return false
+	}
+	if left.DestroyOnPowerdown != right.DestroyOnPowerdown {
 		return false
 	}
 	if left.DestroyProtection != right.DestroyProtection {
@@ -305,7 +343,16 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if left.DisableVirtIO != right.DisableVirtIO {
 		return false
 	}
+	if left.ExtraKernelOptions != right.ExtraKernelOptions {
+		return false
+	}
 	if left.Hostname != right.Hostname {
+		return false
+	}
+	if !left.IdentityExpires.Equal(right.IdentityExpires) {
+		return false
+	}
+	if left.IdentityName != right.IdentityName {
 		return false
 	}
 	if left.ImageName != right.ImageName {
@@ -352,6 +399,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if left.Uncommitted != right.Uncommitted {
 		return false
 	}
+	if left.VirtualCPUs != right.VirtualCPUs {
+		return false
+	}
 	if len(left.Volumes) != len(right.Volumes) {
 		return false
 	}
@@ -359,6 +409,12 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 		if leftVolume != right.Volumes[index] {
 			return false
 		}
+	}
+	if left.WatchdogAction != right.WatchdogAction {
+		return false
+	}
+	if left.WatchdogModel != right.WatchdogModel {
+		return false
 	}
 	return true
 }
@@ -421,5 +477,91 @@ func (volumeType *VolumeType) UnmarshalText(text []byte) error {
 		return nil
 	} else {
 		return errors.New("unknown VolumeType: " + txt)
+	}
+}
+
+func (watchdogAction WatchdogAction) CheckValid() error {
+	if _, ok := watchdogActionToText[watchdogAction]; !ok {
+		return errors.New(watchdogActionUnknown)
+	} else {
+		return nil
+	}
+}
+
+func (watchdogAction WatchdogAction) MarshalText() ([]byte, error) {
+	if text := watchdogAction.String(); text == watchdogActionUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (watchdogAction *WatchdogAction) Set(value string) error {
+	if val, ok := textToWatchdogAction[value]; !ok {
+		return errors.New(watchdogActionUnknown)
+	} else {
+		*watchdogAction = val
+		return nil
+	}
+}
+
+func (watchdogAction WatchdogAction) String() string {
+	if text, ok := watchdogActionToText[watchdogAction]; ok {
+		return text
+	} else {
+		return watchdogActionUnknown
+	}
+}
+
+func (watchdogAction *WatchdogAction) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToWatchdogAction[txt]; ok {
+		*watchdogAction = val
+		return nil
+	} else {
+		return errors.New("unknown WatchdogAction: " + txt)
+	}
+}
+
+func (watchdogModel WatchdogModel) CheckValid() error {
+	if _, ok := watchdogModelToText[watchdogModel]; !ok {
+		return errors.New(watchdogModelUnknown)
+	} else {
+		return nil
+	}
+}
+
+func (watchdogModel WatchdogModel) MarshalText() ([]byte, error) {
+	if text := watchdogModel.String(); text == watchdogModelUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (watchdogModel *WatchdogModel) Set(value string) error {
+	if val, ok := textToWatchdogModel[value]; !ok {
+		return errors.New(watchdogModelUnknown)
+	} else {
+		*watchdogModel = val
+		return nil
+	}
+}
+
+func (watchdogModel WatchdogModel) String() string {
+	if text, ok := watchdogModelToText[watchdogModel]; ok {
+		return text
+	} else {
+		return watchdogModelUnknown
+	}
+}
+
+func (watchdogModel *WatchdogModel) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToWatchdogModel[txt]; ok {
+		*watchdogModel = val
+		return nil
+	} else {
+		return errors.New("unknown WatchdogModel: " + txt)
 	}
 }

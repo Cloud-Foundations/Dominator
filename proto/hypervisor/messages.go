@@ -30,6 +30,15 @@ const (
 
 	VolumeTypePersistent = 0
 	VolumeTypeMemory     = 1
+
+	WatchdogActionNone     = 0
+	WatchdogActionReset    = 1
+	WatchdogActionShutdown = 2
+	WatchdogActionPowerOff = 3
+
+	WatchdogModelNone     = 0
+	WatchdogModelIb700    = 1
+	WatchdogModelI6300esb = 2
 )
 
 type AcknowledgeVmRequest struct {
@@ -754,13 +763,15 @@ type VmInfo struct {
 	OwnerUsers         []string `json:",omitempty"`
 	SpreadVolumes      bool     `json:",omitempty"`
 	State              State
-	SecondaryAddresses []Address `json:",omitempty"`
-	SecondarySubnetIDs []string  `json:",omitempty"`
-	SubnetId           string    `json:",omitempty"`
-	Tags               tags.Tags `json:",omitempty"`
-	Uncommitted        bool      `json:",omitempty"`
-	VirtualCPUs        uint      `json:",omitempty"`
-	Volumes            []Volume  `json:",omitempty"`
+	SecondaryAddresses []Address      `json:",omitempty"`
+	SecondarySubnetIDs []string       `json:",omitempty"`
+	SubnetId           string         `json:",omitempty"`
+	Tags               tags.Tags      `json:",omitempty"`
+	Uncommitted        bool           `json:",omitempty"`
+	VirtualCPUs        uint           `json:",omitempty"`
+	Volumes            []Volume       `json:",omitempty"`
+	WatchdogAction     WatchdogAction `json:",omitempty"`
+	WatchdogModel      WatchdogModel  `json:",omitempty"`
 }
 
 type Volume struct {
@@ -794,3 +805,6 @@ type WatchDhcpResponse struct {
 	Interface string
 	Packet    []byte
 }
+
+type WatchdogAction uint
+type WatchdogModel uint
