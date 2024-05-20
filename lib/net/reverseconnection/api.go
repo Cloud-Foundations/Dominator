@@ -31,7 +31,7 @@ type Listener struct {
 	listener          net.Listener
 	portNumber        uint
 	logger            log.DebugLogger
-	newConnections    chan libnet.TCPConn
+	newConnections    chan *listenerConn
 	closedLock        sync.Mutex
 	closed            bool
 	connectionMapLock sync.Mutex

@@ -63,7 +63,7 @@ func listen(network string, portNumber uint, logger log.DebugLogger) (
 	if err != nil {
 		return nil, fmt.Errorf("error creating %s listener: %s", network, err)
 	}
-	newConnections := make(chan libnet.TCPConn, 1)
+	newConnections := make(chan *listenerConn, 1)
 	listener := &Listener{
 		listener:       rListener,
 		portNumber:     portNumber,
@@ -126,7 +126,7 @@ func (l *Listener) isClosed() bool {
 	return l.closed
 }
 
-func (l *Listener) listen(newConnections chan<- libnet.TCPConn) {
+func (l *Listener) listen(newConnections chan<- *listenerConn) {
 	for {
 		if l.isClosed() {
 			break
@@ -144,7 +144,7 @@ func (l *Listener) listen(newConnections chan<- libnet.TCPConn) {
 			continue
 		}
 		l.remember(conn)
-		newConnections <- tcpConn
+		newConnections <- &listenerConn{TCPConn: tcpConn, listener: l}
 	}
 }
 
@@ -301,7 +301,7 @@ func (l *Listener) connect(network, serverAddress string, timeout time.Duration,
 	}
 	logger.Println("remote has consumed, injecting to local listener")
 	l.remember(rawConn)
-	l.newConnections <- tcpConn
+	l.newConnections <- &listenerConn{TCPConn: tcpConn, listener: l}
 	rawConn = nil // Prevent Close on return.
 	return &message, nil
 }
