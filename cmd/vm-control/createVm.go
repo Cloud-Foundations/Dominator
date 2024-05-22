@@ -187,6 +187,8 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		SubnetId:           *subnetId,
 		VirtualCPUs:        *virtualCPUs,
 		Volumes:            volumes,
+		WatchdogAction:     watchdogAction,
+		WatchdogModel:      watchdogModel,
 	}
 }
 

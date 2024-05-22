@@ -124,9 +124,11 @@ var (
 		"Name of file to write volume data to")
 	volumeIndex = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
-	volumeIndices flagutil.UintList
-	volumeSize    flagutil.Size
-	volumeTypes   volumeTypeList
+	volumeIndices  flagutil.UintList
+	volumeSize     flagutil.Size
+	volumeTypes    volumeTypeList
+	watchdogAction hyper_proto.WatchdogAction
+	watchdogModel  hyper_proto.WatchdogModel
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -154,6 +156,10 @@ func init() {
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
 		"Types for volumes (default persistent)")
+	flag.Var(&watchdogAction, "watchdogAction",
+		"Action to take when watchdog times out (default none)")
+	flag.Var(&watchdogModel, "watchdogModel",
+		"Model of virtual hardware watchdog (default none)")
 }
 
 func printUsage() {
