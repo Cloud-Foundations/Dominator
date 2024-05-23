@@ -1,8 +1,8 @@
 /*
-	Package flagutil provides utility types for the standard flag package.
+Package flagutil provides utility types for the standard flag package.
 
-	Package flagutil provides a collection of types to enhance the standard
-	flag package, such as slices.
+Package flagutil provides a collection of types to enhance the standard
+flag package, such as slices.
 */
 package flagutil
 
@@ -20,6 +20,10 @@ type StringList []string
 
 // A StringToRuneMap satisfies the standard library flag.Value interface.
 type StringToRuneMap map[string]rune
+
+// A StringSet is a map of string keys that satisfies the standard library
+// flag.Value interface.
+type StringSet map[string]struct{}
 
 // A UintList is a slice of uint types that satisfies the standard library
 // flag.Value interface.
