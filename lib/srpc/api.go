@@ -56,6 +56,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
@@ -92,6 +93,8 @@ var (
 		"Proxy to use (only works for some operations)")
 	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
 		"If true, trust the SmallStack VM owners for all method access")
+	srpcTrustedGroups flagutil.StringList
+	srpcTrustedUsers  flagutil.StringSet
 )
 
 // CheckTlsRequired returns true if the server requires TLS connections with

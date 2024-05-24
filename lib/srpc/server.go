@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -95,6 +96,10 @@ var typeOfEncoder = reflect.TypeOf((*Encoder)(nil)).Elem()
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
 func init() {
+	flag.Var(&srpcTrustedGroups, "srpcTrustedGroups",
+		"List of groups trusted for all method access")
+	flag.Var(&srpcTrustedUsers, "srpcTrustedUsers",
+		"List of users trusted for all method access")
 	http.HandleFunc(getHostnamePath, getHostnameHttpHandler)
 	http.HandleFunc(rpcPath, gobUnsecuredHttpHandler)
 	http.HandleFunc(tlsRpcPath, gobTlsHttpHandler)
@@ -618,6 +623,16 @@ func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
 		}
 	}
 	if conn.username != "" {
+		if _, ok := srpcTrustedUsers[conn.username]; ok {
+			return true
+		}
+		if len(srpcTrustedGroups) > 0 {
+			for _, group := range srpcTrustedGroups {
+				if _, ok := conn.groupList[group]; ok {
+					return true
+				}
+			}
+		}
 		smallStackOwners := getSmallStackOwners()
 		if smallStackOwners != nil {
 			if _, ok := smallStackOwners.users[conn.username]; ok {
