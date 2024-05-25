@@ -5,14 +5,14 @@ import (
 )
 
 func (ss *StringSet) String() string {
-	retval := &strings.Builder{}
+	buffer := &strings.Builder{}
 	for str := range *ss {
-		if retval.Len() > 0 {
-			retval.WriteRune(',')
+		if buffer.Len() > 0 {
+			buffer.WriteRune(',')
 		}
-		retval.WriteString(str)
+		buffer.WriteString(str)
 	}
-	return retval.String()
+	return buffer.String()
 }
 
 func (ss *StringSet) Set(value string) error {

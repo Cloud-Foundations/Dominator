@@ -1,21 +1,18 @@
 package flagutil
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 )
 
 func (ul *UintList) String() string {
-	buffer := &bytes.Buffer{}
-	buffer.WriteString(`"`)
-	for index, value := range *ul {
-		buffer.WriteString(strconv.FormatUint(uint64(value), 10))
-		if index < len(*ul)-1 {
-			buffer.WriteString(",")
+	buffer := &strings.Builder{}
+	for _, value := range *ul {
+		if buffer.Len() > 0 {
+			buffer.WriteRune(',')
 		}
+		buffer.WriteString(strconv.FormatUint(uint64(value), 10))
 	}
-	buffer.WriteString(`"`)
 	return buffer.String()
 }
 

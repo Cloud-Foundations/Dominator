@@ -5,7 +5,7 @@ import (
 )
 
 func (sl *StringList) String() string {
-	return `"` + strings.Join(*sl, ",") + `"`
+	return strings.Join(*sl, ",")
 }
 
 func (sl *StringList) Set(value string) error {

@@ -1,20 +1,17 @@
 package flagutil
 
 import (
-	"bytes"
 	"strings"
 )
 
 func (sl *SizeList) String() string {
-	buffer := &bytes.Buffer{}
-	buffer.WriteString(`"`)
-	for index, size := range *sl {
-		buffer.WriteString(size.String())
-		if index < len(*sl)-1 {
-			buffer.WriteString(",")
+	buffer := &strings.Builder{}
+	for _, size := range *sl {
+		if buffer.Len() > 0 {
+			buffer.WriteRune(',')
 		}
+		buffer.WriteString(size.String())
 	}
-	buffer.WriteString(`"`)
 	return buffer.String()
 }
 
