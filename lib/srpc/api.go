@@ -219,7 +219,7 @@ func RegisterServerTlsConfig(config *tls.Config, requireTls bool) {
 // RegisterClientTlsConfig registers the configuration for TLS client
 // connections.
 func RegisterClientTlsConfig(config *tls.Config) {
-	clientTlsConfig = config
+	registerClientTlsConfig(config)
 }
 
 // RegisterFullAuthCA registers the CA certificate pool used for full

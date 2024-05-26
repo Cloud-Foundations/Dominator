@@ -24,11 +24,12 @@ type endpointType struct {
 }
 
 var (
-	attemptTransportUpgrade   = true // Changed by tests.
-	clientMetricsDir          *tricorder.DirectorySpec
-	clientMetricsMutex        sync.Mutex
-	numInUseClientConnections uint64
-	numOpenClientConnections  uint64
+	attemptTransportUpgrade     = true // Changed by tests.
+	clientMetricsDir            *tricorder.DirectorySpec
+	clientMetricsMutex          sync.Mutex
+	numInUseClientConnections   uint64
+	numOpenClientConnections    uint64
+	setupClientExpirationMetric sync.Once
 )
 
 func init() {
@@ -270,6 +271,21 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 
 func newFakeClient(options FakeClientOptions) *Client {
 	return &Client{fakeClientOptions: &options}
+}
+
+func registerClientTlsConfig(config *tls.Config) {
+	clientTlsConfig = config
+	if config == nil {
+		return
+	}
+	setupClientExpirationMetric.Do(func() {
+		clientMetricsDir.RegisterMetric("earliest-certificate-expiration",
+			func() time.Time {
+				return GetEarliestClientCertExpiration()
+			},
+			units.None,
+			"expiration time of the certificate which will expire the soonest")
+	})
 }
 
 func (client *Client) call(serviceMethod string) (*Conn, error) {
