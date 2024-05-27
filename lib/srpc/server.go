@@ -82,6 +82,7 @@ var (
 	numRejectedServerConnections uint64
 	registerBuiltin              sync.Once
 	registerBuiltinError         error
+	setupServerExpirationMetric  sync.Once
 
 	computeHostname sync.Once
 	hostname        string
@@ -149,6 +150,22 @@ func defaultMethodBlocker(methodName string,
 func defaultMethodGranter(serviceMethod string,
 	authInfo *AuthInformation) bool {
 	return defaultGrantMethod(serviceMethod, authInfo)
+}
+
+func registerServerTlsConfig(config *tls.Config, requireTls bool) {
+	serverTlsConfig = config
+	tlsRequired = requireTls
+	if config == nil {
+		return
+	}
+	setupServerExpirationMetric.Do(func() {
+		serverMetricsDir.RegisterMetric("earliest-certificate-expiration",
+			func() time.Time {
+				return getEarliestCertExpiration(serverTlsConfig)
+			},
+			units.None,
+			"expiration time of the certificate which will expire the soonest")
+	})
 }
 
 func registerName(name string, rcvr interface{},

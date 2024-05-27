@@ -108,7 +108,7 @@ func CheckTlsRequired() bool {
 // certificate registered with RegisterClientTlsConfig. The zero value is
 // returned if there are no certificates with an expiration time.
 func GetEarliestClientCertExpiration() time.Time {
-	return getEarliestClientCertExpiration()
+	return getEarliestCertExpiration(clientTlsConfig)
 }
 
 // GetNumPanicedCalls returns the number of server method calls which paniced.
@@ -212,8 +212,7 @@ func RegisterNameWithOptions(name string, rcvr interface{},
 // connections.
 // If requireTls is true, any non-TLS connection will be rejected.
 func RegisterServerTlsConfig(config *tls.Config, requireTls bool) {
-	serverTlsConfig = config
-	tlsRequired = requireTls
+	registerServerTlsConfig(config, requireTls)
 }
 
 // RegisterClientTlsConfig registers the configuration for TLS client
