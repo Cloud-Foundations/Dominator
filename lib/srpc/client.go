@@ -261,14 +261,8 @@ func registerClientTlsConfig(config *tls.Config) {
 	if config == nil {
 		return
 	}
-	setupClientExpirationMetric.Do(func() {
-		clientMetricsDir.RegisterMetric("earliest-certificate-expiration",
-			func() time.Time {
-				return GetEarliestClientCertExpiration()
-			},
-			units.None,
-			"expiration time of the certificate which will expire the soonest")
-	})
+	setupCertExpirationMetric(setupClientExpirationMetric, config,
+		clientMetricsDir)
 }
 
 func (client *Client) call(serviceMethod string) (*Conn, error) {

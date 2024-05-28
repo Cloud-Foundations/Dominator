@@ -155,17 +155,8 @@ func defaultMethodGranter(serviceMethod string,
 func registerServerTlsConfig(config *tls.Config, requireTls bool) {
 	serverTlsConfig = config
 	tlsRequired = requireTls
-	if config == nil {
-		return
-	}
-	setupServerExpirationMetric.Do(func() {
-		serverMetricsDir.RegisterMetric("earliest-certificate-expiration",
-			func() time.Time {
-				return getEarliestCertExpiration(serverTlsConfig)
-			},
-			units.None,
-			"expiration time of the certificate which will expire the soonest")
-	})
+	setupCertExpirationMetric(setupServerExpirationMetric, config,
+		serverMetricsDir)
 }
 
 func registerName(name string, rcvr interface{},
