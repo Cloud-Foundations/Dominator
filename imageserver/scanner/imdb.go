@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -20,17 +19,49 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
-		syscall.S_IROTH
-)
-
 var (
 	errNoAccess   = errors.New("no access to image")
 	errNoAuthInfo = errors.New("no authentication information")
 )
+
+// writeImage will write an image to the specified filename, ensuring that a
+// failure during the process will not leave a corrupted/truncated file.
+// If exclusive is true, an error will be returned if the file already exists.
+func writeImage(filename string, img *image.Image, exclusive bool) error {
+	tmpFilename := filename + "~"
+	os.Remove(tmpFilename)
+	file, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_RDWR|os.O_EXCL,
+		fsutil.PublicFilePerms)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFilename)
+	defer file.Close()
+	w := bufio.NewWriter(file)
+	writer := fsutil.NewChecksumWriter(w)
+	encoder := gob.NewEncoder(writer)
+	if err := encoder.Encode(img); err != nil {
+		return err
+	}
+	if err := writer.WriteChecksum(); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	if err := fsutil.FsyncFile(file); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if exclusive {
+		if err := os.Link(tmpFilename, filename); err != nil {
+			return err
+		}
+	}
+	return os.Rename(tmpFilename, filename)
+}
 
 func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
@@ -41,55 +72,34 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 		imdb.Logger.Printf("Ignoring already expired image: %s\n", name)
 		return nil
 	}
-	imdb.Lock()
-	doUnlock := true
+	if err := imdb.prepareToWrite(name); err != nil {
+		return err
+	}
+	doCleanup := true
 	defer func() {
-		if doUnlock {
+		if doCleanup {
+			imdb.Lock()
+			delete(imdb.imageMap, name)
 			imdb.Unlock()
 		}
 	}()
-	if _, ok := imdb.imageMap[name]; ok {
-		return errors.New("image: " + name + " already exists")
-	} else {
-		if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
-			return err
-		}
-		filename := filepath.Join(imdb.BaseDirectory, name)
-		flags := os.O_CREATE | os.O_RDWR
-		if imdb.ReplicationMaster == "" {
-			flags |= os.O_EXCL // I am the master.
-		} else {
-			flags |= os.O_TRUNC
-		}
-		file, err := os.OpenFile(filename, flags, filePerms)
-		if err != nil {
-			if os.IsExist(err) {
-				return errors.New("cannot add previously deleted image: " +
-					name)
-			}
-			return err
-		}
-		defer file.Close()
-		w := bufio.NewWriter(file)
-		defer w.Flush()
-		writer := fsutil.NewChecksumWriter(w)
-		defer writer.WriteChecksum()
-		encoder := gob.NewEncoder(writer)
-		if err := encoder.Encode(img); err != nil {
-			os.Remove(filename)
-			return err
-		}
-		if err := w.Flush(); err != nil {
-			os.Remove(filename)
-			return err
-		}
-		imdb.scheduleExpiration(img, name)
-		imdb.imageMap[name] = img
-		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-		doUnlock = false
-		imdb.Unlock()
-		return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
+	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
+		return err
 	}
+	filename := filepath.Join(imdb.BaseDirectory, name)
+	if e := writeImage(filename, img, imdb.ReplicationMaster == ""); e != nil {
+		if os.IsExist(e) {
+			return errors.New("cannot add previously deleted image: " + name)
+		}
+		return e
+	}
+	imdb.scheduleExpiration(img, name)
+	imdb.Lock()
+	imdb.imageMap[name] = img
+	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
+	imdb.Unlock()
+	doCleanup = false
+	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 }
 
 func (imdb *ImageDataBase) changeImageExpiration(name string,
@@ -99,7 +109,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 	}
 	imdb.Lock()
 	defer imdb.Unlock()
-	if img, ok := imdb.imageMap[name]; !ok {
+	if img := imdb.imageMap[name]; img == nil {
 		return false, errors.New("image not found")
 	} else if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 		return false, err
@@ -187,11 +197,11 @@ func (imdb *ImageDataBase) checkExpiration(expiresAt time.Time,
 	return nil
 }
 
+// checkImage returns true if the image exists.
 func (imdb *ImageDataBase) checkImage(name string) bool {
 	imdb.RLock()
 	defer imdb.RUnlock()
-	_, ok := imdb.imageMap[name]
-	return ok
+	return imdb.imageMap[name] != nil
 }
 
 // This must be called with the lock held.
@@ -237,6 +247,22 @@ func (imdb *ImageDataBase) chownDirectory(dirname, ownerGroup string,
 		image.Directory{Name: dirname, Metadata: directoryMetadata})
 }
 
+// prepareToWrite returns an error if the image already exists or is being
+// written, otherwise it marks the image as being written and returns nil.
+// The write lock is grabbed and released.
+func (imdb *ImageDataBase) prepareToWrite(name string) error {
+	imdb.Lock()
+	defer imdb.Unlock()
+	if img, ok := imdb.imageMap[name]; ok {
+		if img == nil {
+			return errors.New("image: " + name + " already being written")
+		}
+		return errors.New("image: " + name + " already exists")
+	}
+	imdb.imageMap[name] = nil
+	return nil
+}
+
 // This must be called with the lock held.
 func (imdb *ImageDataBase) updateDirectoryMetadata(
 	directory image.Directory) error {
@@ -262,7 +288,8 @@ func (imdb *ImageDataBase) updateDirectoryMetadataFile(
 		}
 		return os.Remove(filename)
 	}
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, filePerms)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR,
+		fsutil.PublicFilePerms)
 	if err != nil {
 		return err
 	}
@@ -302,7 +329,11 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	authInfo *srpc.AuthInformation) error {
 	imdb.Lock()
 	defer imdb.Unlock()
-	if img, ok := imdb.imageMap[name]; ok {
+	if img, ok := imdb.imageMap[name]; !ok {
+		return errors.New("image: " + name + " does not exist")
+	} else if img == nil {
+		return errors.New("image: " + name + " is being written")
+	} else {
 		if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 			return err
 		}
@@ -313,8 +344,6 @@ func (imdb *ImageDataBase) deleteImage(name string,
 		imdb.deleteImageAndUpdateUnreferencedObjectsList(name)
 		imdb.deleteNotifiers.sendPlain(name, "delete", imdb.Logger)
 		return nil
-	} else {
-		return errors.New("image: " + name + " does not exist")
 	}
 }
 
@@ -347,6 +376,9 @@ func (imdb *ImageDataBase) findLatestImage(
 	var imageName string
 	tagMatcher := tagmatcher.New(request.TagsToMatch, false)
 	for name, img := range imdb.imageMap {
+		if img == nil {
+			continue
+		}
 		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
 			continue
 		}
@@ -394,6 +426,9 @@ func (imdb *ImageDataBase) listImages(
 	defer imdb.RUnlock()
 	names := make([]string, 0)
 	for name, img := range imdb.imageMap {
+		if img == nil {
+			continue
+		}
 		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
 			continue
 		}
@@ -436,8 +471,8 @@ func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 		}
 		directory.Metadata.OwnerGroup = parentMetadata.OwnerGroup
 	}
-	if err := os.Mkdir(pathname, dirPerms); err != nil && !os.IsExist(err) {
-		return err
+	if e := os.Mkdir(pathname, fsutil.DirPerms); e != nil && !os.IsExist(e) {
+		return e
 	}
 	return imdb.updateDirectoryMetadata(directory)
 }
@@ -491,29 +526,7 @@ func (imdb *ImageDataBase) writeNewExpiration(name string,
 	img := *oldImage
 	img.ExpiresAt = expiresAt
 	filename := filepath.Join(imdb.BaseDirectory, name)
-	tmpFilename := filename + "~"
-	file, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_RDWR|os.O_EXCL,
-		filePerms)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	defer os.Remove(tmpFilename)
-	w := bufio.NewWriter(file)
-	defer w.Flush()
-	writer := fsutil.NewChecksumWriter(w)
-	encoder := gob.NewEncoder(writer)
-	if err := encoder.Encode(img); err != nil {
-		return err
-	}
-	if err := writer.WriteChecksum(); err != nil {
-		return err
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	fsutil.FsyncFile(file)
-	return os.Rename(tmpFilename, filename)
+	return writeImage(filename, &img, false)
 }
 
 func (n notifiers) sendPlain(name string, operation string,

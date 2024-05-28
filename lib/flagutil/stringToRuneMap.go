@@ -12,14 +12,16 @@ func (m *StringToRuneMap) String() string {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	retval := `"`
-	for index, key := range keys {
-		if index != 0 {
-			retval += ","
+	buffer := &strings.Builder{}
+	for _, key := range keys {
+		if buffer.Len() > 0 {
+			buffer.WriteRune(',')
 		}
-		retval += key + ":" + string((*m)[key])
+		buffer.WriteString(key)
+		buffer.WriteRune(':')
+		buffer.WriteRune((*m)[key])
 	}
-	return retval + `"`
+	return buffer.String()
 }
 
 func (m *StringToRuneMap) Set(value string) error {

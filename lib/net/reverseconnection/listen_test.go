@@ -132,10 +132,10 @@ func (s *serverType) connectHandler(w http.ResponseWriter, req *http.Request) {
 
 func TestInjectAccept(t *testing.T) {
 	logger := testlogger.New(t)
-	acceptChannel := make(chan acceptEvent, 1)
+	newConnections := make(chan *listenerConn, 1)
 	fakeListener := &Listener{
-		logger:        logger,
-		acceptChannel: acceptChannel,
+		logger:         logger,
+		newConnections: newConnections,
 	}
 	server := &serverType{logger}
 	http.HandleFunc(testUrlPath, server.connectHandler)
@@ -150,8 +150,8 @@ func TestInjectAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fakeListener.acceptChannel <- acceptEvent{
-		&listenerConn{TCPConn: slaveConn}, nil}
+	fakeListener.newConnections <- &listenerConn{TCPConn: slaveConn,
+		listener: fakeListener}
 	if err := testHttpConnection(masterConn, logger); err != nil {
 		t.Fatal(err)
 	}

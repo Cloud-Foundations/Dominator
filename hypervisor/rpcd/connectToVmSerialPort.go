@@ -27,5 +27,5 @@ func (t *srpcType) ConnectToVmSerialPort(conn *srpc.Conn) error {
 	if err != nil {
 		return nil // Have successfully sent the error in the response message.
 	}
-	return connectChannelsToConnection(conn, input, output)
+	return connectChannelsToConnection(conn, input, output, "serial port")
 }

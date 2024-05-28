@@ -7,7 +7,7 @@ import (
 )
 
 func connectChannelsToConnection(conn *srpc.Conn, input chan<- byte,
-	output <-chan byte) error {
+	output <-chan byte, name string) error {
 	closeNotifier := make(chan error, 1)
 	go func() { // Read from connection and write to input until EOF.
 		buffer := make([]byte, 256)
@@ -32,7 +32,7 @@ func connectChannelsToConnection(conn *srpc.Conn, input chan<- byte,
 		case data, ok := <-output:
 			var buffer []byte
 			if !ok {
-				buffer = []byte("VM serial port closed\n")
+				buffer = []byte("VM " + name + " closed\n")
 			} else {
 				buffer = readData(data, output)
 			}

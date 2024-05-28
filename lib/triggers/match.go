@@ -1,5 +1,11 @@
 package triggers
 
+import (
+	"sort"
+
+	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+)
+
 func (triggers *Triggers) match(line string) {
 	triggers.compile()
 	if triggers.matchedTriggers == nil {
@@ -28,6 +34,10 @@ func (triggers *Triggers) getMatchedTriggers() []*Trigger {
 	}
 	triggers.matchedTriggers = nil
 	triggers.unmatchedTriggers = nil
+	sort.SliceStable(mTriggers, func(leftIndex, rightIndex int) bool {
+		return verstr.Less(mTriggers[leftIndex].SortName,
+			mTriggers[rightIndex].SortName)
+	})
 	return mTriggers
 }
 

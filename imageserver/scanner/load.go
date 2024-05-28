@@ -151,6 +151,10 @@ func (imdb *ImageDataBase) readDirectoryMetadata(dirname string) (
 
 func (imdb *ImageDataBase) loadFile(filename string) error {
 	pathname := path.Join(imdb.BaseDirectory, filename)
+	// Clean up stale temporary file.
+	if filename[len(filename)-1] == '~' {
+		return os.Remove(pathname)
+	}
 	img, err := imdb.loadAndVerifyFile(filename)
 	if err != nil {
 		if imdb.ReplicationMaster == "" {

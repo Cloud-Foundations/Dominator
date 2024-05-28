@@ -383,6 +383,12 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if req.VirtualCPUs > 0 && req.VirtualCPUs < minimumCPUs {
 		return nil, fmt.Errorf("VirtualCPUs must be at least %d", minimumCPUs)
 	}
+	if err := req.WatchdogAction.CheckValid(); err != nil {
+		return nil, err
+	}
+	if err := req.WatchdogModel.CheckValid(); err != nil {
+		return nil, err
+	}
 	subnetIDs := map[string]struct{}{req.SubnetId: {}}
 	for _, subnetId := range req.SecondarySubnetIDs {
 		if subnetId == "" {
@@ -462,6 +468,8 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				SubnetId:           subnetId,
 				Tags:               req.Tags,
 				VirtualCPUs:        req.VirtualCPUs,
+				WatchdogAction:     req.WatchdogAction,
+				WatchdogModel:      req.WatchdogModel,
 			},
 		},
 		manager:          m,
@@ -4017,6 +4025,11 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			"-device",
 			fmt.Sprintf("vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=%d",
 				cid))
+	}
+	if vm.WatchdogModel != proto.WatchdogModelNone {
+		cmd.Args = append(cmd.Args,
+			"-watchdog-action", vm.WatchdogAction.String(),
+			"-watchdog", vm.WatchdogModel.String())
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.

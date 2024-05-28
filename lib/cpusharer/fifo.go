@@ -27,7 +27,10 @@ func (s *FifoCpuSharer) getStatistics() Statistics {
 	s.Statistics.LastYieldEvent = s.lastYieldEvent
 	s.Statistics.NumCpuRunning = uint(len(s.semaphore))
 	s.Statistics.NumCpu = uint(cap(s.semaphore))
+	s.Statistics.NumFullIdleEvents = s.numFullIdleEvents
+	s.Statistics.NumFullIdleReleases = s.numFullIdleReleases
 	s.Statistics.NumIdleEvents = s.numIdleEvents
+	s.Statistics.NumUngrabbedReleases = s.numUngrabbedReleases
 	return s.Statistics
 }
 
@@ -44,6 +47,13 @@ func (s *FifoCpuSharer) goWhenIdle(minIdleTime, timeout time.Duration,
 }
 
 func (s *FifoCpuSharer) grabCpu() {
+	s.mutex.Lock()
+	if s.numUngrabbedReleases > 0 {
+		s.numUngrabbedReleases--
+		s.mutex.Unlock()
+		return
+	}
+	s.mutex.Unlock()
 	select {
 	case s.semaphore <- struct{}{}: // A CPU is immediately available.
 		s.mutex.Lock()
@@ -142,8 +152,16 @@ func (s *FifoCpuSharer) grabIdleCpu(minIdleTime, timeout time.Duration) bool {
 func (s *FifoCpuSharer) releaseCpu() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.lastYieldEvent = time.Now()
-	<-s.semaphore
+	select {
+	case <-s.semaphore:
+		s.lastYieldEvent = time.Now()
+		if len(s.semaphore) < 1 {
+			s.numFullIdleEvents++
+		}
+	default:
+		s.numFullIdleReleases++
+		s.numUngrabbedReleases++
+	}
 }
 
 func (s *FifoCpuSharer) setGrabTimeout(timeout time.Duration) {

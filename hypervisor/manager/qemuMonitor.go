@@ -29,6 +29,10 @@ type shutdownDataType struct {
 	Reason string `json:reason",omitempty"`
 }
 
+type watchdogDataType struct {
+	Action string `json:action",omitempty"`
+}
+
 func (r *copyingReader) Read(p []byte) (int, error) {
 	nRead, err := r.r.Read(p)
 	for index := 0; index < nRead; index++ {
@@ -44,7 +48,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 	commandOutput chan<- byte) {
 	reader := &copyingReader{commandOutput, monitorSock}
 	decoder := json.NewDecoder(reader)
-	var guestShutdown, hostQuit bool
+	var guestShutdown, hostQuit, watchdogPowerOff bool
 	for {
 		var message monitorMessageType
 		if err := decoder.Decode(&message); err != nil {
@@ -56,21 +60,32 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 			}
 			vm.logger.Printf("error reading monitor message: %s\n", err)
 		}
-		if message.Event != "SHUTDOWN" {
-			continue
-		}
-		var shutdownData shutdownDataType
-		if err := json.Unmarshal(message.Data, &shutdownData); err != nil {
-			vm.logger.Printf("error unmarshaling shutdown event data: %s\n",
-				err)
-			continue
-		}
-		vm.logger.Debugf(0, "VM shutdown, guest: %v, reason: %s\n",
-			shutdownData.Guest, shutdownData.Reason)
-		if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
-			guestShutdown = true
-		} else if shutdownData.Reason == "host-qmp-quit" {
-			hostQuit = true // Not currently used but may be useful later.
+		switch message.Event {
+		case "SHUTDOWN":
+			var shutdownData shutdownDataType
+			if err := json.Unmarshal(message.Data, &shutdownData); err != nil {
+				vm.logger.Printf("error unmarshaling shutdown event data: %s\n",
+					err)
+				continue
+			}
+			vm.logger.Debugf(0, "VM shutdown, guest: %v, reason: %s\n",
+				shutdownData.Guest, shutdownData.Reason)
+			if shutdownData.Guest && shutdownData.Reason == "guest-shutdown" {
+				guestShutdown = true
+			} else if shutdownData.Reason == "host-qmp-quit" {
+				hostQuit = true // Not currently used but may be useful later.
+			}
+		case "WATCHDOG":
+			var watchdogData watchdogDataType
+			if err := json.Unmarshal(message.Data, &watchdogData); err != nil {
+				vm.logger.Printf("error unmarshaling watchdog event data: %s\n",
+					err)
+				continue
+			}
+			vm.logger.Debugf(0, "VM watchdog action: %s\n", watchdogData.Action)
+			if watchdogData.Action == "poweroff" {
+				watchdogPowerOff = true
+			}
 		}
 	}
 	close(commandOutput)
@@ -94,6 +109,14 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 			} else {
 				vm.setState(proto.StateStopped)
 				vm.logger.Debugln(0, "VM stopped due to guest powerdown")
+			}
+		} else if !vm.manager.shuttingDown && watchdogPowerOff {
+			if vm.DestroyOnPowerdown && !vm.DestroyProtection {
+				vm.delete()
+				vm.logger.Debugln(0, "VM destroyed due to watchdog poweroff")
+			} else {
+				vm.setState(proto.StateCrashed)
+				vm.logger.Debugln(0, "VM crashed due to watchdog poweroff")
 			}
 		} else {
 			vm.setState(proto.StateCrashed)

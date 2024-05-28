@@ -1,24 +1,25 @@
 /*
-	Package cpusharer implements co-operative CPU sharing between goroutines.
+Package cpusharer implements co-operative CPU sharing between goroutines.
 
-	Package cpusharer may be used by groups of co-operating goroutines to share
-	CPU resources so that blocking operations are fully concurrent but avoiding
-	the thundering herd problem when large numbers of goroutines need the CPU,
-	impacting the responsiveness of other goroutines such as dashboards and
-	health checks.
-	Each goroutine calls the GrabCpu method when it starts and wraps blocking
-	operations with a pair of ReleaseCpu/GrabCpu calls.
-	A typical programming pattern is:
-		cpuSharer := cpusharer.New*CpuSharer() // Pick your sharer of choice.
-		for work := range workChannel {
-			cpuSharer.GoWhenIdle(0, -1, func(work workType) {
-				work.compute()
-				cpuSharer.ReleaseCpu()
-				work.block()
-				cpuSharer.GrabCpu()
-				work.moreCompute()
-			}(work)
-		}
+Package cpusharer may be used by groups of co-operating goroutines to share
+CPU resources so that blocking operations are fully concurrent but avoiding
+the thundering herd problem when large numbers of goroutines need the CPU,
+impacting the responsiveness of other goroutines such as dashboards and
+health checks.
+Each goroutine calls the GrabCpu method when it starts and wraps blocking
+operations with a pair of ReleaseCpu/GrabCpu calls.
+A typical programming pattern is:
+
+	cpuSharer := cpusharer.New*CpuSharer() // Pick your sharer of choice.
+	for work := range workChannel {
+		cpuSharer.GoWhenIdle(0, -1, func(work workType) {
+			work.compute()
+			cpuSharer.ReleaseCpu()
+			work.block()
+			cpuSharer.GrabCpu()
+			work.moreCompute()
+		}(work)
+	}
 */
 package cpusharer
 
@@ -41,14 +42,17 @@ type CpuSharer interface {
 }
 
 type FifoCpuSharer struct {
-	semaphore        chan struct{}
-	mutex            sync.Mutex
-	grabTimeout      time.Duration
-	lastAcquireEvent time.Time
-	lastIdleEvent    time.Time
-	lastYieldEvent   time.Time
-	numIdleEvents    uint64
-	Statistics       Statistics
+	semaphore            chan struct{}
+	mutex                sync.Mutex
+	grabTimeout          time.Duration
+	lastAcquireEvent     time.Time
+	lastIdleEvent        time.Time
+	lastYieldEvent       time.Time
+	numFullIdleEvents    uint64
+	numFullIdleReleases  uint64
+	numIdleEvents        uint64
+	numUngrabbedReleases uint64
+	Statistics           Statistics
 }
 
 // NewFifoCpuSharer creates a simple FIFO CpuSharer. CPU access is granted in
@@ -131,10 +135,13 @@ func (s *FifoCpuSharer) Sleep(duration time.Duration) {
 }
 
 type Statistics struct {
-	LastAcquireEvent time.Time
-	LastIdleEvent    time.Time
-	LastYieldEvent   time.Time
-	NumCpuRunning    uint
-	NumCpu           uint
-	NumIdleEvents    uint64
+	LastAcquireEvent     time.Time
+	LastIdleEvent        time.Time
+	LastYieldEvent       time.Time
+	NumCpuRunning        uint
+	NumCpu               uint
+	NumFullIdleEvents    uint64
+	NumFullIdleReleases  uint64
+	NumIdleEvents        uint64
+	NumUngrabbedReleases uint64
 }
