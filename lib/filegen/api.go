@@ -104,6 +104,18 @@ func (m *Manager) RegisterMdbGeneratorForPath(pathname string) {
 	m.registerMdbGeneratorForPath(pathname)
 }
 
+// RegisterProgrammeForPath registers a programme which will be called to
+// generate data for the specified pathname. The pathname will be provided as
+// the first argument to the programme.
+// The MDB data for the machine will be written to the standard input in JSON
+// format.
+// The data and number of seconds it is valid (0 means indefinitely valid) must
+// be written to the standard output in JSON format, stored in the Data and
+// SecondsValid fields.
+func (m *Manager) RegisterProgrammeForPath(pathname, programmePath string) {
+	m.registerProgrammeForPath(pathname, programmePath)
+}
+
 // RegisterTemplateFileForPath registers a template file for a specific
 // pathname.
 // The template file is used to generate the data, modified by the machine data.
