@@ -128,6 +128,18 @@ func (m *Manager) RegisterTemplateFileForPath(pathname string,
 		watchForUpdates)
 }
 
+// RegisterUrlForPath registers a URL where a HTTP POST request may be sent to
+// generate data for the specified pathname. The pathname will be provided in
+// a pathname= query parameter.
+// The MDB data for the machine will be written to the message body in JSON
+// format.
+// The data and number of seconds it is valid (0 means indefinitely valid) must
+// be returned in the response body in JSON format, stored in the Data and
+// SecondsValid fields.
+func (m *Manager) RegisterUrlForPath(pathname, URL string) {
+	m.registerUrlForPath(pathname, URL)
+}
+
 // WriteHtml will write status information about the Manager to w, with
 // appropriate HTML markups.
 func (m *Manager) WriteHtml(writer io.Writer) {
