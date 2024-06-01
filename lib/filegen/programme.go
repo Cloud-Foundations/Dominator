@@ -1,7 +1,10 @@
 package filegen
 
 import (
+	"fmt"
+	"io"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -36,6 +39,10 @@ func (m *Manager) registerProgrammeForPath(pathname, programmePath string) {
 func (progGen *programmeGenerator) Generate(machine mdb.Machine,
 	logger log.Logger) ([]byte, time.Time, error) {
 	cmd := exec.Command(progGen.programmePath, progGen.pathname)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, time.Time{}, err
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, time.Time{}, err
@@ -60,8 +67,13 @@ func (progGen *programmeGenerator) Generate(machine mdb.Machine,
 	if err := stdout.Close(); err != nil {
 		return nil, time.Time{}, err
 	}
+	stderrBuilder := &strings.Builder{}
+	io.Copy(stderrBuilder, stderr)
 	if err := cmd.Wait(); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error running: %s, exit code: %d, stderr: %s",
+				progGen.programmePath, cmd.ProcessState.ExitCode(),
+				strings.TrimSpace(stderrBuilder.String()))
 	}
 	var validUntil time.Time
 	if result.SecondsValid > 0 {
