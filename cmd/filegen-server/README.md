@@ -82,11 +82,11 @@ are supported:
   the form `{{.MyVar}}` then the value of the `MyVar` variable from the MDB for
   the host are used to replace the section. If *filename* changes (replaced with
   a different inode), then the data are regenerated and distributed to all
-  clients
+  machines
 
 - **File** pathname *filename*: the contents of *filename* are used to provide
   the file data. If *filename* changes (replaced with a different inode), then
-  the data are regenerated and distributed to all clients
+  the data are regenerated and distributed to all machines
 
 - **MDB** pathname: the file data are the JSON encoding of the MDB data for the
   host
@@ -170,7 +170,7 @@ You can also use a tag value as the indexing key to the directory:
 ```
 MdbFieldDirectory /etc/myapp/config Tags.Type /var/lib/filegen-server/computed-files/myapp 90s
 ```
-The will use the value of the `Type` tag as the indexing key.
+This will use the value of the `Type` tag as the indexing key.
 
 ### `Programme`
 ```
