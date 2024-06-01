@@ -133,6 +133,8 @@ func (m *Manager) computeFile(machine mdb.Machine, pathname string) (
 	hashVal, length, validUntil, err := pathMgr.generator.generate(machine,
 		m.logger)
 	if err != nil {
+		m.logger.Printf("Error generating path: %s for machine: %s: %s\n",
+			pathname, machine.Hostname, err)
 		return fileInfo, false
 	}
 	fileInfo.Hash = hashVal

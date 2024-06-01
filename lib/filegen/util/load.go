@@ -22,7 +22,9 @@ var configs = map[string]configType{
 	"File":                {1, 1, fileGenerator},
 	"MdbFieldDirectory":   {2, 3, mdbFieldDirectoryGenerator},
 	"MDB":                 {0, 0, mdbGenerator},
+	"Programme":           {1, 1, programmeGenerator},
 	"StaticTemplateFile":  {1, 1, staticTemplateFileGenerator},
+	"URL":                 {1, 1, urlGenerator},
 }
 
 func loadConfiguration(manager *filegen.Manager, filename string) error {
@@ -88,7 +90,19 @@ func mdbGenerator(manager *filegen.Manager, pathname string,
 	return nil
 }
 
+func programmeGenerator(manager *filegen.Manager, pathname string,
+	params []string) error {
+	manager.RegisterProgrammeForPath(pathname, params[0])
+	return nil
+}
+
 func staticTemplateFileGenerator(manager *filegen.Manager, pathname string,
 	params []string) error {
 	return manager.RegisterTemplateFileForPath(pathname, params[0], false)
+}
+
+func urlGenerator(manager *filegen.Manager, pathname string,
+	params []string) error {
+	manager.RegisterUrlForPath(pathname, params[0])
+	return nil
 }
