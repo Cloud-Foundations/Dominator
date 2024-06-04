@@ -16,7 +16,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
-	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/rpcclientpool"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -91,7 +90,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if err == nil {
 		manager.disabled = true
 	}
-	if err := manager.setupVolumes(startOptions); err != nil {
+	if err := manager.setupVolumesAndObjectCache(startOptions); err != nil {
 		return nil, err
 	}
 	if err := manager.checkVsockets(); err != nil {
@@ -208,20 +207,6 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	}
 	if changedPool {
 		manager.writeAddressPoolWithLock(manager.addressPool, false)
-	}
-	if startOptions.ObjectCacheBytes >= 1<<20 {
-		dirname := filepath.Join(filepath.Dir(manager.volumeDirectories[0]),
-			"objectcache")
-		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
-			return nil, err
-		}
-		objSrv, err := cachingreader.NewObjectServer(dirname,
-			startOptions.ObjectCacheBytes, startOptions.ImageServerAddress,
-			startOptions.Logger)
-		if err != nil {
-			return nil, err
-		}
-		manager.objectCache = objSrv
 	}
 	go manager.loopCheckHealthStatus()
 	lockCheckInterval := startOptions.LockCheckInterval
