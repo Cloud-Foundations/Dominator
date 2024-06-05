@@ -427,6 +427,15 @@ func (volumeFormat VolumeFormat) MarshalText() ([]byte, error) {
 	}
 }
 
+func (volumeFormat *VolumeFormat) Set(value string) error {
+	if val, ok := textToVolumeFormat[value]; !ok {
+		return errors.New(volumeFormatUnknown)
+	} else {
+		*volumeFormat = val
+		return nil
+	}
+}
+
 func (volumeFormat VolumeFormat) String() string {
 	if text, ok := volumeFormatToText[volumeFormat]; ok {
 		return text
