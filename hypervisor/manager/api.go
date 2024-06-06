@@ -46,6 +46,8 @@ type Manager struct {
 	notifiersMutex    sync.Mutex
 	notifiers         map[<-chan proto.Update]chan<- proto.Update
 	numCPUs           uint
+	objectCache       *cachingreader.ObjectServer
+	objectVolumeIndex int // -1: not on a volume mount, else index of mount.
 	rootCookie        []byte
 	serialNumber      string
 	shuttingDown      bool
@@ -56,7 +58,6 @@ type Manager struct {
 	mutex             sync.RWMutex          // Lock everything below (those can change).
 	addressPool       addressPoolType
 	disabled          bool
-	objectCache       *cachingreader.ObjectServer
 	ownerGroups       map[string]struct{}
 	ownerUsers        map[string]struct{}
 	subnets           map[string]proto.Subnet // Key: Subnet ID.
@@ -68,18 +69,19 @@ type Manager struct {
 }
 
 type StartOptions struct {
-	BridgeMap          map[string]net.Interface // Key: interface name.
-	DhcpServer         DhcpServer
-	ImageServerAddress string
-	LockCheckInterval  time.Duration
-	LockLogTimeout     time.Duration
-	Logger             log.DebugLogger
-	ObjectCacheBytes   uint64
-	ShowVgaConsole     bool
-	StateDir           string
-	Username           string
-	VlanIdToBridge     map[uint]string // Key: VLAN ID, value: bridge interface.
-	VolumeDirectories  []string
+	BridgeMap            map[string]net.Interface // Key: interface name.
+	DhcpServer           DhcpServer
+	ImageServerAddress   string
+	LockCheckInterval    time.Duration
+	LockLogTimeout       time.Duration
+	Logger               log.DebugLogger
+	ObjectCacheDirectory string
+	ObjectCacheBytes     uint64
+	ShowVgaConsole       bool
+	StateDir             string
+	Username             string
+	VlanIdToBridge       map[uint]string // Key: VLAN ID, value: bridge interface.
+	VolumeDirectories    []string
 }
 
 type summaryData struct {

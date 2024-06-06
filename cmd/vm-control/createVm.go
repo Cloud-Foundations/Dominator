@@ -169,7 +169,12 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 	var volumes []hyper_proto.Volume
 	if len(volumeTypes) > 0 {
 		// If provided, set for root volume. Secondaries are done later.
-		volumes = append(volumes, hyper_proto.Volume{Type: volumeTypes[0]})
+		volumes = append(volumes, hyper_proto.Volume{
+			Format: volumeFormat,
+			Type:   volumeTypes[0],
+		})
+	} else if volumeFormat != hyper_proto.VolumeFormatRaw {
+		volumes = append(volumes, hyper_proto.Volume{Format: volumeFormat})
 	}
 	return hyper_proto.VmInfo{
 		ConsoleType:        consoleType,

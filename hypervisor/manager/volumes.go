@@ -19,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -375,7 +376,7 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 			return "", err
 		}
 		// Remove space reserved for the object cache but not yet used.
-		if *position == 0 && m.objectCache != nil {
+		if m.objectCache != nil && *position == m.objectVolumeIndex {
 			stats := m.objectCache.GetStats()
 			if m.ObjectCacheBytes > stats.CachedBytes {
 				unused := m.ObjectCacheBytes - stats.CachedBytes
@@ -453,7 +454,43 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 	return directoriesToUse, nil
 }
 
-func (m *Manager) setupVolumes(startOptions StartOptions) error {
+func (m *Manager) setupObjectCache(mountTable *mounts.MountTable) error {
+	if m.ObjectCacheBytes < 1<<20 {
+		return nil
+	}
+	if m.ObjectCacheDirectory == "" {
+		m.ObjectCacheDirectory = filepath.Join(
+			filepath.Dir(m.volumeDirectories[0]),
+			"objectcache")
+	} else {
+		m.objectVolumeIndex = -1
+		mountEntry := mountTable.FindEntry(m.ObjectCacheDirectory)
+		if mountEntry == nil {
+			return fmt.Errorf("no mount table entry found for: %s",
+				m.ObjectCacheDirectory)
+		}
+		for index, volumeDirectory := range m.volumeDirectories {
+			if m.volumeInfos[volumeDirectory].MountPoint ==
+				mountEntry.MountPoint {
+				m.objectVolumeIndex = index
+				break
+			}
+		}
+	}
+	if err := os.MkdirAll(m.ObjectCacheDirectory, fsutil.DirPerms); err != nil {
+		return err
+	}
+	objSrv, err := cachingreader.NewObjectServer(m.ObjectCacheDirectory,
+		m.ObjectCacheBytes, m.ImageServerAddress,
+		m.Logger)
+	if err != nil {
+		return err
+	}
+	m.objectCache = objSrv
+	return nil
+}
+
+func (m *Manager) setupVolumesAndObjectCache(startOptions StartOptions) error {
 	mountTable, err := mounts.GetMountTable()
 	if err != nil {
 		return err
@@ -486,6 +523,9 @@ func (m *Manager) setupVolumes(startOptions StartOptions) error {
 			return fmt.Errorf("error statfsing: %s: %s", volumeDirectory, err)
 		}
 		m.totalVolumeBytes += uint64(statbuf.Blocks * uint64(statbuf.Bsize))
+	}
+	if err := m.setupObjectCache(mountTable); err != nil {
+		return err
 	}
 	return nil
 }

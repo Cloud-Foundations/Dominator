@@ -1,6 +1,6 @@
 [Unit]
 Description=Hypervisor
-After=network.target
+After=network.target remote-fs.target
 
 [Service]
 KillMode=process

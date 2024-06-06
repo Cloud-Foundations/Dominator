@@ -179,8 +179,8 @@ Programme /etc/ssh/id_rsa.key /usr/local/bin/genkey
 ```
 The `/usr/local/bin/genkey` programme will be called to generate the SSH key
 pair, once for the private key and once for the public key/certificate. The
-pathname being generated will be passed as an argument to the programme, so it
-can use this to know whether to return the private versus public key.
+pathname being generated will be passed as the first argument to the programme,
+so it can use this to know whether to return the private versus public key.
 An example programme might check the `Hostname` field from the MDB data to
 decide whether to generate a key (this would essentially be DNS-based
 authentication).

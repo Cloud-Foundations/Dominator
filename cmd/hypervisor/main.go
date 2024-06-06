@@ -46,6 +46,8 @@ var (
 		"Timeout before logging that a lock has been held too long")
 	networkBootImage = flag.String("networkBootImage", "pxelinux.0",
 		"Name of boot image passed via DHCP option")
+	objectCacheDirectory = flag.String("objectCacheDirectory", "",
+		"Directory to store object cache (default first volume directory parent)")
 	objectCacheSize = flagutil.Size(10 << 30)
 	portNum         = flag.Uint("portNum", constants.HypervisorPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
@@ -176,18 +178,19 @@ func run() {
 		logger.Fatalf("Cannot start tftpboot server: %s\n", err)
 	}
 	managerObj, err := manager.New(manager.StartOptions{
-		BridgeMap:          bridgeMap,
-		DhcpServer:         dhcpServer,
-		ImageServerAddress: imageServerAddress,
-		LockCheckInterval:  *lockCheckInterval,
-		LockLogTimeout:     *lockLogTimeout,
-		Logger:             logger,
-		ObjectCacheBytes:   uint64(objectCacheSize),
-		ShowVgaConsole:     *showVGA,
-		StateDir:           *stateDir,
-		Username:           *username,
-		VlanIdToBridge:     vlanIdToBridge,
-		VolumeDirectories:  volumeDirectories,
+		BridgeMap:            bridgeMap,
+		DhcpServer:           dhcpServer,
+		ImageServerAddress:   imageServerAddress,
+		LockCheckInterval:    *lockCheckInterval,
+		LockLogTimeout:       *lockLogTimeout,
+		Logger:               logger,
+		ObjectCacheDirectory: *objectCacheDirectory,
+		ObjectCacheBytes:     uint64(objectCacheSize),
+		ShowVgaConsole:       *showVGA,
+		StateDir:             *stateDir,
+		Username:             *username,
+		VlanIdToBridge:       vlanIdToBridge,
+		VolumeDirectories:    volumeDirectories,
 	})
 	if err != nil {
 		logger.Fatalf("Cannot start hypervisor: %s\n", err)

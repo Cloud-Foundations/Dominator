@@ -35,6 +35,9 @@ func copyToFile(destFilename string, perm os.FileMode, reader io.Reader,
 				length, nCopied, tmpFilename)
 		}
 	}
+	if err := destFile.Close(); err != nil {
+		return err
+	}
 	return os.Rename(tmpFilename, destFilename)
 }
 
