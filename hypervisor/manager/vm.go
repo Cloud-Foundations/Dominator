@@ -3511,7 +3511,11 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	vm.Volumes = []proto.Volume{{Size: dataSize}}
+	var format proto.VolumeFormat
+	if len(request.Volumes) > 0 {
+		format = request.Volumes[0].Format
+	}
+	vm.Volumes = []proto.Volume{{Format: format, Size: dataSize}}
 	return nil
 }
 
