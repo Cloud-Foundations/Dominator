@@ -122,7 +122,8 @@ var (
 		"Path to VNC viewer")
 	volumeFilename = flag.String("volumeFilename", "",
 		"Name of file to write volume data to")
-	volumeIndex = flag.Uint("volumeIndex", 0,
+	volumeFormat hyper_proto.VolumeFormat
+	volumeIndex  = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
 	volumeIndices  flagutil.UintList
 	volumeSize     flagutil.Size
@@ -152,6 +153,8 @@ func init() {
 		"Sizes for secondary volumes")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
 	flag.Var(&vmTagsToMatch, "vmTagsToMatch", "Tags to match when listing")
+	flag.Var(&volumeFormat, "volumeFormat",
+		"Format of image provided by file or URL (default raw)")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
