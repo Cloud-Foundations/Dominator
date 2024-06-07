@@ -195,6 +195,7 @@ type Builder struct {
 	imageServerAddress          string
 	linksImageServerAddress     string
 	logger                      log.DebugLogger
+	imageStreamsPublicUrl       string // No variable expansion applied.
 	imageStreamsUrl             string
 	initialNamespace            string // For catching golang bugs.
 	maximumExpiration           time.Duration

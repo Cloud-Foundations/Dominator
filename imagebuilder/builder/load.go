@@ -142,7 +142,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		imageServerAddress:          options.ImageServerAddress,
 		linksImageServerAddress:     options.PresentationImageServerAddress,
 		logger:                      params.Logger,
-		imageStreamsUrl:             masterConfiguration.ImageStreamsUrl,
+		imageStreamsPublicUrl:       masterConfiguration.ImageStreamsUrl,
 		initialNamespace:            initialNamespace,
 		maximumExpiration:           options.MaximumExpirationDuration,
 		maximumExpirationPrivileged: options.MaximumExpirationDurationPrivileged,
@@ -161,8 +161,10 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		stream.builder = b
 		stream.name = name
 	}
+	b.imageStreamsUrl = expandExpression(masterConfiguration.ImageStreamsUrl,
+		b.getVariableFunc(nil, nil))
 	imageStreamsConfigChannel, err := configwatch.WatchWithCache(
-		masterConfiguration.ImageStreamsUrl,
+		b.imageStreamsUrl,
 		time.Second*time.Duration(
 			masterConfiguration.ImageStreamsCheckInterval), imageStreamsDecoder,
 		filepath.Join(options.StateDirectory, "image-streams.json"),
@@ -176,7 +178,8 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	return b, nil
 }
 
-func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
+func loadImageStreams(url, publicUrl string) (
+	*imageStreamsConfigurationType, error) {
 	if url == "" {
 		return &imageStreamsConfigurationType{}, nil
 	}
@@ -188,7 +191,7 @@ func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
 	configuration, err := imageStreamsRealDecoder(file)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding image streams from: %s: %s",
-			url, err)
+			publicUrl, err)
 	}
 	return configuration, nil
 }
@@ -308,7 +311,8 @@ func (b *Builder) makeRequiredDirectories() error {
 }
 
 func (b *Builder) reloadNormalStreamsConfiguration() error {
-	imageStreamsConfiguration, err := loadImageStreams(b.imageStreamsUrl)
+	imageStreamsConfiguration, err := loadImageStreams(b.imageStreamsUrl,
+		b.imageStreamsPublicUrl)
 	if err != nil {
 		return err
 	}
