@@ -109,6 +109,11 @@ func main() {
 			logger.Fatalf("Error starting build log archiver: %s\n", err)
 		}
 	}
+	var presentationImageServerAddress string
+	if *presentationImageServerHostname != "" {
+		presentationImageServerAddress = fmt.Sprintf("%s:%d",
+			*presentationImageServerHostname, *imageServerPortNum)
+	}
 	builderObj, err := builder.LoadWithOptionsAndParams(
 		builder.BuilderOptions{
 			ConfigurationURL:     *configurationUrl,
@@ -119,10 +124,9 @@ func main() {
 			MaximumExpirationDuration:           *maximumExpirationDuration,
 			MaximumExpirationDurationPrivileged: *maximumExpirationDurationPrivileged,
 			MinimumExpirationDuration:           *minimumExpirationDuration,
-			PresentationImageServerAddress: fmt.Sprintf("%s:%d",
-				*presentationImageServerHostname, *imageServerPortNum),
-			StateDirectory: *stateDir,
-			VariablesFile:  *variablesFile,
+			PresentationImageServerAddress:      presentationImageServerAddress,
+			StateDirectory:                      *stateDir,
+			VariablesFile:                       *variablesFile,
 		},
 		builder.BuilderParams{
 			BuildLogArchiver: buildLogArchiver,
