@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
@@ -119,16 +120,6 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	for _, name := range masterConfiguration.ImageStreamsToAutoRebuild {
 		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
 	}
-	var variables map[string]string
-	if options.VariablesFile != "" {
-		err := json.ReadFromFile(options.VariablesFile, &variables)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if variables == nil {
-		variables = make(map[string]string)
-	}
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
@@ -155,7 +146,13 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		lastBuildResults:            make(map[string]buildResultType),
 		packagerTypes:               masterConfiguration.PackagerTypes,
 		relationshipsQuickLinks:     masterConfiguration.RelationshipsQuickLinks,
-		variables:                   variables,
+	}
+	if options.VariablesFile != "" {
+		rcChannel := fsutil.WatchFile(options.VariablesFile, params.Logger)
+		if err := b.readVariables(<-rcChannel); err != nil {
+			return nil, err
+		}
+		go b.readVariablesLoop(rcChannel)
 	}
 	for name, stream := range b.bootstrapStreams {
 		stream.builder = b

@@ -220,12 +220,13 @@ func (b *Builder) buildOnSlave(client srpc.ClientI,
 	request.DisableRecursiveBuild = true
 	request.ReturnImage = true
 	request.StreamBuildLog = true
+	bVariables := b.getVariables()
 	if len(request.Variables) < 1 {
-		request.Variables = b.variables
-	} else if len(b.variables) > 0 {
+		request.Variables = bVariables
+	} else if len(bVariables) > 0 {
 		variables := make(map[string]string,
-			len(b.variables)+len(request.Variables))
-		for key, value := range b.variables {
+			len(bVariables)+len(request.Variables))
+		for key, value := range bVariables {
 			variables[key] = value
 		}
 		for key, value := range request.Variables {

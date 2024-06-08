@@ -213,9 +213,10 @@ type Builder struct {
 	currentBuildInfos           map[string]*currentBuildInfo // Key: stream name.
 	lastBuildResults            map[string]buildResultType   // Key: stream name.
 	packagerTypes               map[string]packagerType
-	variables                   map[string]string
 	dependencyDataLock          sync.RWMutex
 	dependencyData              *dependencyDataType
+	variablesLock               sync.RWMutex
+	variables                   map[string]string
 }
 
 type BuilderOptions struct {
