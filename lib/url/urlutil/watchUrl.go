@@ -65,9 +65,16 @@ func parseUrl(rawUrl string) (*driverDataType, error) {
 			if len(u.RawQuery) < 1 {
 				return nil, errors.New("missing path in repository")
 			}
+			var gitUrl string
+			if u.User == nil {
+				gitUrl = u.Scheme + "://"
+			} else {
+				gitUrl = u.Scheme + "://" + u.User.String() + "@"
+			}
+			gitUrl += u.Host + u.Path
 			return &driverDataType{
 				driverType: driverGit,
-				gitUrl:     u.Scheme + "://" + u.Host + u.Path,
+				gitUrl:     gitUrl,
 				pathname:   u.RawQuery,
 			}, nil
 		}

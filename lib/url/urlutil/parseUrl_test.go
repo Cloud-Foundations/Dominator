@@ -11,7 +11,7 @@ func TestFilePlain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if driverFile != driverData.driverType {
-		t.Fatalf("expected driverType:%d, got: %d",
+		t.Fatalf("expected driverType: %d, got: %d",
 			driverFile, driverData.driverType)
 	}
 	if pathname != driverData.pathname {
@@ -27,7 +27,7 @@ func TestFileUrl(t *testing.T) {
 		t.Fatal(err)
 	}
 	if driverFile != driverData.driverType {
-		t.Fatalf("expected driverType:%d, got: %d",
+		t.Fatalf("expected driverType: %d, got: %d",
 			driverFile, driverData.driverType)
 	}
 	if pathname != driverData.pathname {
@@ -44,7 +44,7 @@ func TestGitHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	if driverGit != driverData.driverType {
-		t.Fatalf("expected driverType:%d, got: %d",
+		t.Fatalf("expected driverType: %d, got: %d",
 			driverGit, driverData.driverType)
 	}
 	if repo != driverData.gitUrl {
@@ -73,6 +73,27 @@ func TestGitHttpMissing(t *testing.T) {
 	}
 }
 
+func TestGitHttpsAuthenticated(t *testing.T) {
+	pathname := "dir0/dir1/file2"
+	repo := "https://user:password@github.com/Cloud-Foundations/bogus.git"
+	driverData, err := parseUrl(repo + "?" + pathname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if driverGit != driverData.driverType {
+		t.Fatalf("expected driverType: %d, got: %d",
+			driverGit, driverData.driverType)
+	}
+	if repo != driverData.gitUrl {
+		t.Fatalf("expected repo: \"%s\", got: \"%s\"",
+			repo, driverData.gitUrl)
+	}
+	if pathname != driverData.pathname {
+		t.Fatalf("expected pathname: \"%s\", got: \"%s\"",
+			pathname, driverData.pathname)
+	}
+}
+
 func TestGitSSH(t *testing.T) {
 	pathname := "dir0/dir1/file2"
 	repo := "git@github.com:Cloud-Foundations/bogus.git"
@@ -81,7 +102,7 @@ func TestGitSSH(t *testing.T) {
 		t.Fatal(err)
 	}
 	if driverGit != driverData.driverType {
-		t.Fatalf("expected driverType:%d, got: %d",
+		t.Fatalf("expected driverType: %d, got: %d",
 			driverGit, driverData.driverType)
 	}
 	if repo != driverData.gitUrl {
@@ -117,7 +138,7 @@ func TestHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	if driverHttp != driverData.driverType {
-		t.Fatalf("expected driverType:%d, got: %d",
+		t.Fatalf("expected driverType: %d, got: %d",
 			driverHttp, driverData.driverType)
 	}
 	if url != driverData.rawUrl {
