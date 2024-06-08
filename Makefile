@@ -1,24 +1,24 @@
 all:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; go install ./cmd/*
+	go install ./cmd/*
 	@cd c; make
 
 build-darwin:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=darwin go build ./cmd/*)
+	(GOOS=darwin go build ./cmd/*)
 
 build-linux:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=linux go build ./cmd/*)
+	(GOOS=linux go build ./cmd/*)
 
 build-windows:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=windows go build ./cmd/*)
+	(GOOS=windows go build ./cmd/*)
 
 install-darwin:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=darwin go install ./cmd/*)
+	(GOOS=darwin go install ./cmd/*)
 
 install-linux:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=linux go install ./cmd/*)
+	(GOOS=linux go install ./cmd/*)
 
 install-windows:
-	@cd $(GOPATH)/src/github.com/Cloud-Foundations/Dominator; (GOOS=windows go install ./cmd/*)
+	(GOOS=windows go install ./cmd/*)
 
 dominator.tarball:
 	@./scripts/make-tarball dominator -C $(ETCDIR) ssl
