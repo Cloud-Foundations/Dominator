@@ -33,7 +33,7 @@ import (
 type gitInfoType struct {
 	branch   string
 	commitId string
-	gitUrl   string
+	gitUrl   string // No variable expansion applied.
 }
 
 func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
@@ -142,7 +142,7 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		gitInfo = &gitInfoType{
 			branch:   gitBranch,
 			commitId: commitId,
-			gitUrl:   manifestLocation.url,
+			gitUrl:   stream.ManifestUrl,
 		}
 	}
 	if err := os.RemoveAll(gitDirectory); err != nil {

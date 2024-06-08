@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
@@ -119,16 +120,6 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	for _, name := range masterConfiguration.ImageStreamsToAutoRebuild {
 		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
 	}
-	var variables map[string]string
-	if options.VariablesFile != "" {
-		err := json.ReadFromFile(options.VariablesFile, &variables)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if variables == nil {
-		variables = make(map[string]string)
-	}
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
@@ -142,7 +133,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		imageServerAddress:          options.ImageServerAddress,
 		linksImageServerAddress:     options.PresentationImageServerAddress,
 		logger:                      params.Logger,
-		imageStreamsUrl:             masterConfiguration.ImageStreamsUrl,
+		imageStreamsPublicUrl:       masterConfiguration.ImageStreamsUrl,
 		initialNamespace:            initialNamespace,
 		maximumExpiration:           options.MaximumExpirationDuration,
 		maximumExpirationPrivileged: options.MaximumExpirationDurationPrivileged,
@@ -155,14 +146,22 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		lastBuildResults:            make(map[string]buildResultType),
 		packagerTypes:               masterConfiguration.PackagerTypes,
 		relationshipsQuickLinks:     masterConfiguration.RelationshipsQuickLinks,
-		variables:                   variables,
+	}
+	if options.VariablesFile != "" {
+		rcChannel := fsutil.WatchFile(options.VariablesFile, params.Logger)
+		if err := b.readVariables(<-rcChannel); err != nil {
+			return nil, err
+		}
+		go b.readVariablesLoop(rcChannel)
 	}
 	for name, stream := range b.bootstrapStreams {
 		stream.builder = b
 		stream.name = name
 	}
+	b.imageStreamsUrl = expandExpression(masterConfiguration.ImageStreamsUrl,
+		b.getVariableFunc(nil, nil))
 	imageStreamsConfigChannel, err := configwatch.WatchWithCache(
-		masterConfiguration.ImageStreamsUrl,
+		b.imageStreamsUrl,
 		time.Second*time.Duration(
 			masterConfiguration.ImageStreamsCheckInterval), imageStreamsDecoder,
 		filepath.Join(options.StateDirectory, "image-streams.json"),
@@ -176,7 +175,8 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	return b, nil
 }
 
-func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
+func loadImageStreams(url, publicUrl string) (
+	*imageStreamsConfigurationType, error) {
 	if url == "" {
 		return &imageStreamsConfigurationType{}, nil
 	}
@@ -188,7 +188,7 @@ func loadImageStreams(url string) (*imageStreamsConfigurationType, error) {
 	configuration, err := imageStreamsRealDecoder(file)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding image streams from: %s: %s",
-			url, err)
+			publicUrl, err)
 	}
 	return configuration, nil
 }
@@ -308,7 +308,8 @@ func (b *Builder) makeRequiredDirectories() error {
 }
 
 func (b *Builder) reloadNormalStreamsConfiguration() error {
-	imageStreamsConfiguration, err := loadImageStreams(b.imageStreamsUrl)
+	imageStreamsConfiguration, err := loadImageStreams(b.imageStreamsUrl,
+		b.imageStreamsPublicUrl)
 	if err != nil {
 		return err
 	}

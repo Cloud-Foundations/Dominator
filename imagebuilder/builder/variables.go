@@ -1,9 +1,12 @@
 package builder
 
 import (
+	"io"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 )
 
 // expandExpression will expand the expression specified by expr and will
@@ -85,7 +88,39 @@ func (b *Builder) getVariableFunc(
 				return varValue
 			}
 		}
-		return b.variables[varName]
+		return b.getVariables()[varName]
+	}
+}
+
+func (b *Builder) getVariables() map[string]string {
+	b.variablesLock.RLock()
+	defer b.variablesLock.RUnlock()
+	return b.variables
+}
+
+func (b *Builder) readVariables(readCloser io.ReadCloser) error {
+	defer readCloser.Close()
+	var variables map[string]string
+	if err := json.Read(readCloser, &variables); err != nil {
+		return err
+	}
+	b.variablesLock.Lock()
+	oldVariables := b.variables
+	b.variables = variables
+	b.variablesLock.Unlock()
+	if oldVariables == nil {
+		b.logger.Println("Loaded variables")
+	} else {
+		b.logger.Println("Loaded new variables")
+	}
+	return nil
+}
+
+func (b *Builder) readVariablesLoop(rcChannel <-chan io.ReadCloser) {
+	for readCloser := range rcChannel {
+		if err := b.readVariables(readCloser); err != nil {
+			b.logger.Printf("Error reading variables: %s\n", err)
+		}
 	}
 }
 
