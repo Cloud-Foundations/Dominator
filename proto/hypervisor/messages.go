@@ -387,6 +387,18 @@ type GetVmInfoResponse struct {
 	Error  string
 }
 
+type GetVmInfosRequest struct {
+	IgnoreStateMask uint64
+	OwnerGroups     []string
+	OwnerUsers      []string
+	VmTagsToMatch   tags.MatchTags // Empty: match all tags.
+}
+
+type GetVmInfosResponse struct {
+	Error   string
+	VmInfos []VmInfo
+}
+
 type GetVmLastPatchLogRequest struct {
 	IpAddress net.IP
 }
