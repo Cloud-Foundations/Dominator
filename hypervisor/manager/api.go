@@ -321,6 +321,11 @@ func (m *Manager) GetVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return m.getVmInfo(ipAddr)
 }
 
+func (m *Manager) GetVmInfos(request proto.GetVmInfosRequest) (
+	[]proto.VmInfo, error) {
+	return m.getVmInfos(request)
+}
+
 func (m *Manager) GetVmLastPatchLog(ipAddr net.IP) (
 	io.ReadCloser, uint64, time.Time, error) {
 	return m.getVmLastPatchLog(ipAddr)
