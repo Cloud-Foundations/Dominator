@@ -234,6 +234,19 @@ func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return reply.VmInfo, nil
 }
 
+func getVmInfos(client *srpc.Client,
+	request proto.GetVmInfosRequest) ([]proto.VmInfo, error) {
+	var reply proto.GetVmInfosResponse
+	err := client.RequestReply("Hypervisor.GetVmInfos", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	return reply.VmInfos, nil
+}
+
 func getVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
 	[]byte, time.Time, error) {
 	conn, err := client.Call("Hypervisor.GetVmLastPatchLog")
@@ -295,6 +308,16 @@ func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 		return nil, err
 	}
 	return reply.Subnets, nil
+}
+
+func listVMs(client *srpc.Client,
+	request proto.ListVMsRequest) ([]net.IP, error) {
+	var reply proto.ListVMsResponse
+	err := client.RequestReply("Hypervisor.ListVMs", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	return reply.IpAddresses, nil
 }
 
 func listVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
