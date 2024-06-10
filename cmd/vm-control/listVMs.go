@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
@@ -88,18 +89,17 @@ func listVMsOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		return err
 	}
 	defer client.Close()
-	request := hyper_proto.ListVMsRequest{
-		OwnerGroups:   ownerGroups,
-		OwnerUsers:    ownerUsers,
-		Sort:          true,
-		VmTagsToMatch: vmTagsToMatch,
-	}
-	var reply hyper_proto.ListVMsResponse
-	err = client.RequestReply("Hypervisor.ListVMs", request, &reply)
+	ipAddresses, err := hyperclient.ListVMs(client,
+		hyper_proto.ListVMsRequest{
+			OwnerGroups:   ownerGroups,
+			OwnerUsers:    ownerUsers,
+			Sort:          true,
+			VmTagsToMatch: vmTagsToMatch,
+		})
 	if err != nil {
 		return err
 	}
-	for _, ipAddress := range reply.IpAddresses {
+	for _, ipAddress := range ipAddresses {
 		if _, err := fmt.Println(ipAddress); err != nil {
 			return err
 		}
