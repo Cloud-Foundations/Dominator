@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"net/smtp"
 	"time"
+
+	"github.com/Cloud-Foundations/Dominator/lib/net/smtp"
 )
 
 var (
@@ -33,8 +34,8 @@ func sendEmail(user string, vms []*vmInfoType) error {
 			vm.Address.IpAddress, vm.Tags["Name"],
 			vm.hypervisor.machine.Hostname, vm.hypervisor.getHealthStatus())
 	}
-	return smtp.SendMail(*smtpServer, nil, fromAddress, []string{toAddress},
-		buffer.Bytes())
+	return smtp.SendMailPlain(*smtpServer, *emailDomain, fromAddress,
+		[]string{toAddress}, buffer.Bytes())
 }
 
 func (h *hypervisorType) addVmsToMap(vmsPerOwner map[string][]*vmInfoType) {
@@ -71,7 +72,7 @@ func (m *Manager) getBadHypervisors() []*hypervisorType {
 }
 
 func (m *Manager) notifierLoop() {
-	if *emailDomain == "" || *smtpServer == "" {
+	if *emailDomain == "" || *smtpServer == "" || !*manageHypervisors {
 		return
 	}
 	for time.Sleep(time.Minute); ; time.Sleep(time.Hour * 48) {
