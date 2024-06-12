@@ -23,7 +23,13 @@ import (
 var (
 	externalLeaseHostnames flagutil.StringList
 	externalLeaseAddresses proto.AddressList
-	fleetManagerHostname   = flag.String("fleetManagerHostname", "",
+	emailBodyFilename      = flag.String("emailBodyFilename", "",
+		"Filename containing body of email message to send (default is to read from stdin")
+	emailDomain = flag.String("emailDomain", "",
+		"Email domain to sent notifications to")
+	emailSubject = flag.String("emailSubject", "Hypervisor %s maintenance",
+		"Subject line contents. The Hypervisor name is inserted")
+	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
 		constants.FleetManagerPortNumber,
@@ -65,6 +71,7 @@ var (
 		2, "Number of DHCP ACKs to wait for")
 	randomSeedBytes = flag.Uint("randomSeedBytes", 0,
 		"Number of bytes of random seed data to inject into installing machine")
+	smtpServer            = flag.String("smtpServer", "", "Address of SMTP server")
 	storageLayoutFilename = flag.String("storageLayoutFilename", "",
 		"Name of file containing storage layout for installing machine")
 	subnetIDs       flagutil.StringList
@@ -133,6 +140,8 @@ var subcommands = []commands.Command{
 	{"remove-ip-address", "IPaddr", 1, 1, removeIpAddressSubcommand},
 	{"remove-mac-address", "MACaddr", 1, 1, removeMacAddressSubcommand},
 	{"rollout-image", "name", 1, 1, rolloutImageSubcommand},
+	{"send-email-to-hypervisor-vm-owners", "", 0, 0,
+		sendEmailToHypervisorVmOwnersSubcommand},
 	{"show-network-configuration", "", 0, 0,
 		showNetworkConfigurationSubcommand},
 	{"update-network-configuration", "", 0, 0,

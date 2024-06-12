@@ -202,6 +202,7 @@ var subcommands = []commands.Command{
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
 	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},
 	{"get-vm-info", "IPaddr", 1, 1, getVmInfoSubcommand},
+	{"get-vm-infos", "", 0, 0, getVmInfosSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
 	{"get-vm-volume", "IPaddr", 1, 1, getVmVolumeSubcommand},
 	{"import-local-vm", "info-file root-volume", 2, 2, importLocalVmSubcommand},

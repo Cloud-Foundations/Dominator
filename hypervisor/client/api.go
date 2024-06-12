@@ -65,6 +65,11 @@ func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
 }
 
+func GetVmInfos(client *srpc.Client,
+	request proto.GetVmInfosRequest) ([]proto.VmInfo, error) {
+	return getVmInfos(client, request)
+}
+
 func GetVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
 	[]byte, time.Time, error) {
 	return getVmLastPatchLog(client, ipAddr)
@@ -82,6 +87,11 @@ func HoldVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
 
 func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	return listSubnets(client, doSort)
+}
+
+func ListVMs(client *srpc.Client,
+	request proto.ListVMsRequest) ([]net.IP, error) {
+	return listVMs(client, request)
 }
 
 func ListVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {

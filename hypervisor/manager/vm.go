@@ -1694,6 +1694,17 @@ func (m *Manager) getVmInfo(ipAddr net.IP) (proto.VmInfo, error) {
 	return vm.VmInfo, nil
 }
 
+func (m *Manager) getVmInfos(request proto.GetVmInfosRequest) (
+	[]proto.VmInfo, error) {
+	var vmInfos []proto.VmInfo
+	m.iterateOverVMs(request.IgnoreStateMask, request.VmTagsToMatch,
+		request.OwnerGroups, request.OwnerUsers,
+		func(ipAddr string, vm *vmInfoType) {
+			vmInfos = append(vmInfos, vm.LocalVmInfo.VmInfo)
+		})
+	return vmInfos, nil
+}
+
 func (m *Manager) getVmLastPatchLog(ipAddr net.IP) (
 	io.ReadCloser, uint64, time.Time, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
@@ -1951,13 +1962,17 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	return nil
 }
 
-func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
-	ownerGroups := stringutil.ConvertListToMap(request.OwnerGroups, false)
-	vmTagMatcher := tagmatcher.New(request.VmTagsToMatch, false)
+// iterateOverVMs will call the specified function for all VMs matching the
+// specified constraints. The Manager read lock will be grabbed and released.
+func (m *Manager) iterateOverVMs(ignoreStateMask uint64,
+	vmTagsToMatch tags.MatchTags, ownerGroupsList, ownerUsers []string,
+	fn func(ipAddr string, vmInfo *vmInfoType)) {
+	ownerGroups := stringutil.ConvertListToMap(ownerGroupsList, false)
+	vmTagMatcher := tagmatcher.New(vmTagsToMatch, false)
 	m.mutex.RLock()
-	ipAddrs := make([]string, 0, len(m.vms))
+	defer m.mutex.RUnlock()
 	for ipAddr, vm := range m.vms {
-		if request.IgnoreStateMask&(1<<vm.State) != 0 {
+		if ignoreStateMask&(1<<vm.State) != 0 {
 			continue
 		}
 		if !vmTagMatcher.MatchEach(vm.Tags) {
@@ -1973,9 +1988,9 @@ func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 				}
 			}
 		}
-		if len(request.OwnerUsers) > 0 {
+		if len(ownerUsers) > 0 {
 			include = false
-			for _, ownerUser := range request.OwnerUsers {
+			for _, ownerUser := range ownerUsers {
 				if _, ok := vm.ownerUsers[ownerUser]; ok {
 					include = true
 					break
@@ -1983,10 +1998,18 @@ func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 			}
 		}
 		if include {
-			ipAddrs = append(ipAddrs, ipAddr)
+			fn(ipAddr, vm)
 		}
 	}
-	m.mutex.RUnlock()
+}
+
+func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
+	var ipAddrs []string
+	m.iterateOverVMs(request.IgnoreStateMask, request.VmTagsToMatch,
+		request.OwnerGroups, request.OwnerUsers,
+		func(ipAddr string, vm *vmInfoType) {
+			ipAddrs = append(ipAddrs, ipAddr)
+		})
 	if request.Sort {
 		verstr.Sort(ipAddrs)
 	}
