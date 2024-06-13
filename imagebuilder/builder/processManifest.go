@@ -157,9 +157,9 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 		manifestConfig.SourceImageTagsToMatch,
 		maxSourceAge, rootDir, buildLog)
 	if err != nil {
-		var buildError *buildErrorType
+		var buildError *BuildErrorType
 		if errors.As(err, &buildError) {
-			buildError.sourceImageBuildVariables =
+			buildError.SourceImageBuildVariables =
 				manifestConfig.SourceImageBuildVariables
 		}
 		return manifestType{}, fmt.Errorf("error unpacking image: %w", err)
