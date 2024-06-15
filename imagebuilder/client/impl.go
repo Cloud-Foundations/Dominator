@@ -35,11 +35,12 @@ func buildImage(client *srpc.Client, request proto.BuildImageRequest,
 		if err := conn.Decode(&reply); err != nil {
 			return fmt.Errorf("error reading reply: %s", err)
 		}
-		if err := errors.New(reply.ErrorString); err != nil {
-			return err
-		}
 		logWriter.Write(reply.BuildLog)
 		reply.BuildLog = nil
+		if err := errors.New(reply.ErrorString); err != nil {
+			*response = reply
+			return err
+		}
 		if reply.Image != nil || reply.ImageName != "" {
 			*response = reply
 			return nil
