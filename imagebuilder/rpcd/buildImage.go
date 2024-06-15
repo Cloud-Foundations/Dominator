@@ -2,10 +2,12 @@ package rpcd
 
 import (
 	"bytes"
+	stderrors "errors"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
@@ -51,6 +53,13 @@ func (t *srpcType) BuildImage(conn *srpc.Conn) error {
 		ImageName:   name,
 		BuildLog:    buildLogBuffer.Bytes(),
 		ErrorString: errors.ErrorToString(err),
+	}
+	var buildError *builder.BuildErrorType
+	if stderrors.As(err, &buildError) {
+		reply.NeedSourceImage = buildError.NeedSourceImage
+		reply.SourceImage = buildError.SourceImage
+		reply.SourceImageBuildVariables = buildError.SourceImageBuildVariables
+		reply.SourceImageGitCommitId = buildError.SourceImageGitCommitId
 	}
 	return conn.Encode(reply)
 }

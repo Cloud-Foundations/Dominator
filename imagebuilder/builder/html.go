@@ -119,6 +119,7 @@ func (b *Builder) writeHtml(writer io.Writer) {
 	currentBuildTimes := make([]time.Time, 0)
 	goodBuilds := make(map[string]buildResultType)
 	failedBuilds := make(map[string]buildResultType)
+	var lastFailedBuild time.Time
 	b.buildResultsLock.RLock()
 	for name, info := range b.currentBuildInfos {
 		currentBuildNames = append(currentBuildNames, name)
@@ -130,6 +131,9 @@ func (b *Builder) writeHtml(writer io.Writer) {
 			goodBuilds[name] = result
 		} else {
 			failedBuilds[name] = result
+			if result.finishTime.After(lastFailedBuild) {
+				lastFailedBuild = result.finishTime
+			}
 		}
 	}
 	b.buildResultsLock.RUnlock()
@@ -174,7 +178,9 @@ func (b *Builder) writeHtml(writer io.Writer) {
 			streamNames = append(streamNames, streamName)
 		}
 		sort.Strings(streamNames)
-		fmt.Fprintln(writer, "Failed image builds:<br>")
+		fmt.Fprintf(writer, "Failed image builds: (last at: %s, %s ago)<br>\n",
+			lastFailedBuild.Format(format.TimeFormatSeconds),
+			format.Duration(time.Since(lastFailedBuild)))
 		fmt.Fprintln(writer, `<table border="1">`)
 		tw, _ := html.NewTableWriter(writer, true,
 			"Image Stream", "Error", "Build log", "Duration", "Last attempt")

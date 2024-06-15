@@ -175,6 +175,14 @@ type WebLink struct {
 	URL  string
 }
 
+type BuildErrorType struct {
+	error                     string
+	NeedSourceImage           bool
+	SourceImage               string
+	SourceImageBuildVariables map[string]string
+	SourceImageGitCommitId    string
+}
+
 type BuildLocalOptions struct {
 	BindMounts        []string
 	ManifestDirectory string
@@ -253,6 +261,10 @@ func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
 			Logger:      logger,
 			SlaveDriver: slaveDriver,
 		})
+}
+
+func (err *BuildErrorType) Error() string {
+	return err.error
 }
 
 func LoadWithOptionsAndParams(options BuilderOptions,

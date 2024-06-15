@@ -559,19 +559,19 @@ func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 		specifiedStream += fmt.Sprintf("@tags:%v", sourceImageTagsToMatch)
 	}
 	if sourceImage == nil {
-		return nil, &buildErrorType{
+		return nil, &BuildErrorType{
 			error:                  "no source image: " + specifiedStream,
-			needSourceImage:        true,
-			sourceImage:            streamName,
-			sourceImageGitCommitId: buildCommitId,
+			NeedSourceImage:        true,
+			SourceImage:            streamName,
+			SourceImageGitCommitId: buildCommitId,
 		}
 	}
 	if maxSourceAge > 0 && time.Since(sourceImage.CreatedOn) > maxSourceAge {
-		return nil, &buildErrorType{
+		return nil, &BuildErrorType{
 			error:                  "too old source image: " + specifiedStream,
-			needSourceImage:        true,
-			sourceImage:            streamName,
-			sourceImageGitCommitId: buildCommitId,
+			NeedSourceImage:        true,
+			SourceImage:            streamName,
+			SourceImageGitCommitId: buildCommitId,
 		}
 	}
 	objClient := objectclient.AttachObjectClient(client)

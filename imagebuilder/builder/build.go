@@ -26,14 +26,6 @@ type dualBuildLogger struct {
 	writer io.Writer
 }
 
-type buildErrorType struct {
-	error                     string
-	needSourceImage           bool
-	sourceImage               string
-	sourceImageBuildVariables map[string]string
-	sourceImageGitCommitId    string
-}
-
 func copyClientLogs(clientAddress string, keepSlave bool, buildError error,
 	buildLog io.Writer) {
 	fmt.Fprintln(buildLog,
@@ -264,12 +256,13 @@ func (b *Builder) buildOnSlave(client srpc.ClientI,
 	copyClientLogs(slave.GetClientAddress(), keepSlave, err, buildLog)
 	if err != nil {
 		if reply.NeedSourceImage {
-			return nil, &buildErrorType{
+			keepSlave = true
+			return nil, &BuildErrorType{
 				error:                     err.Error(),
-				needSourceImage:           true,
-				sourceImage:               reply.SourceImage,
-				sourceImageBuildVariables: reply.SourceImageBuildVariables,
-				sourceImageGitCommitId:    reply.SourceImageGitCommitId,
+				NeedSourceImage:           true,
+				SourceImage:               reply.SourceImage,
+				SourceImageBuildVariables: reply.SourceImageBuildVariables,
+				SourceImageGitCommitId:    reply.SourceImageGitCommitId,
 			}
 		}
 		return nil, err
@@ -294,8 +287,8 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 	img, err := b.buildSomewhere(builder, client, request, authInfo,
 		slaveAddress, buildLog)
 	if err != nil {
-		var buildError *buildErrorType
-		if stderrors.As(err, &buildError) && buildError.needSourceImage {
+		var buildError *BuildErrorType
+		if stderrors.As(err, &buildError) && buildError.NeedSourceImage {
 			if request.DisableRecursiveBuild {
 				return nil, "", err
 			}
@@ -304,13 +297,13 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 			if request.ExpiresIn > 0 {
 				expiresIn = request.ExpiresIn
 			}
-			variables := variablesGetter(buildError.sourceImageBuildVariables)
+			variables := variablesGetter(buildError.SourceImageBuildVariables)
 			variables.merge(request.Variables)
 			sourceReq := proto.BuildImageRequest{
 				ExpiresIn:    expiresIn,
-				GitBranch:    buildError.sourceImageGitCommitId,
+				GitBranch:    buildError.SourceImageGitCommitId,
 				MaxSourceAge: request.MaxSourceAge,
-				StreamName:   buildError.sourceImage,
+				StreamName:   buildError.SourceImage,
 				Variables:    variables,
 			}
 			if _, _, e := b.build(client, sourceReq, nil, buildLog); e != nil {
@@ -517,10 +510,6 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 		b.logger.Printf("Completed automatic image build cycle in %s\n",
 			format.Duration(time.Since(startTime)))
 	}
-}
-
-func (err *buildErrorType) Error() string {
-	return err.error
 }
 
 func (bl *dualBuildLogger) Bytes() []byte {
