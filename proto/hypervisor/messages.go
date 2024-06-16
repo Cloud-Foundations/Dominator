@@ -110,6 +110,15 @@ type ChangeVmDestroyProtectionResponse struct {
 	Error string
 }
 
+type ChangeVmOwnerGroupsRequest struct {
+	IpAddress   net.IP
+	OwnerGroups []string
+}
+
+type ChangeVmOwnerGroupsResponse struct {
+	Error string
+}
+
 type ChangeVmOwnerUsersRequest struct {
 	IpAddress  net.IP
 	OwnerUsers []string
