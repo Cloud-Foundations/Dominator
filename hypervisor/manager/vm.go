@@ -601,6 +601,19 @@ func (m *Manager) changeVmMemory(vm *vmInfoType,
 	return changed, nil
 }
 
+func (m *Manager) changeVmOwnerGroups(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, ownerGroups []string) error {
+	ownerGroups, _ = stringutil.DeduplicateList(ownerGroups, false)
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	vm.OwnerGroups = ownerGroups
+	vm.writeAndSendInfo()
+	return nil
+}
+
 func (m *Manager) changeVmOwnerUsers(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, extraUsers []string) error {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
