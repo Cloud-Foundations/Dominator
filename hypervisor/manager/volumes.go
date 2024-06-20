@@ -70,6 +70,28 @@ func demapDevice(device string) (string, error) {
 	}
 }
 
+// e2fsck will check and fix an ext{2,3,4} file-system. It returns an error if
+// there is a problem checking or fixing, else nil.
+func e2fsck(device string) error {
+	cmd := exec.Command("e2fsck", "-f", "-y", device)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if err, ok := err.(*exec.ExitError); ok {
+		switch err.ExitCode() {
+		case 1:
+			return nil
+		case 2:
+			return nil
+		}
+	}
+	output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
+	output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
+	return fmt.Errorf("error running e2fsck for: %s: %s: %s",
+		device, err, string(output))
+}
+
 func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	uint64, error) {
 	if freeSpace, ok := freeSpaceTable[dirname]; ok {
@@ -219,14 +241,10 @@ func indexToName(index int) string {
 // resize2fs will resize an ext{2,3,4} file-system to fit the specified size.
 // If size is zero, it will resize to fit the device size.
 func resize2fs(device string, size uint64) error {
-	cmd := exec.Command("e2fsck", "-f", "-y", device)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		output = bytes.ReplaceAll(output, carriageReturnLiteral, nil)
-		output = bytes.ReplaceAll(output, newlineLiteral, newlineReplacement)
-		return fmt.Errorf("error running e2fsck for: %s: %s: %s",
-			device, err, string(output))
+	if err := e2fsck(device); err != nil {
+		return err
 	}
-	cmd = exec.Command("resize2fs", device)
+	cmd := exec.Command("resize2fs", device)
 	if size > 0 {
 		if size < 1<<20 {
 			return fmt.Errorf("size: %d too small", size)
