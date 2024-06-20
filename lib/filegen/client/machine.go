@@ -133,6 +133,7 @@ func waitForObjectsAndSendUpdate(objectChannel <-chan hash.Hash,
 		delete(objectsToWaitFor, hashVal)
 		if len(objectsToWaitFor) < 1 {
 			updateChannel <- files // This will panic if the machine went away.
+			return
 		}
 	}
 }
