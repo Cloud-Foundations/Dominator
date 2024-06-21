@@ -101,6 +101,15 @@ type ChangeVmConsoleTypeResponse struct {
 	Error string
 }
 
+type ChangeVmCpuPriorityRequest struct {
+	CpuPriority int
+	IpAddress   net.IP
+}
+
+type ChangeVmCpuPriorityResponse struct {
+	Error string
+}
+
 type ChangeVmDestroyProtectionRequest struct {
 	DestroyProtection bool
 	IpAddress         net.IP
@@ -769,6 +778,7 @@ type VmInfo struct {
 	ChangedStateOn     time.Time   `json:",omitempty"`
 	ConsoleType        ConsoleType `json:",omitempty"`
 	CreatedOn          time.Time   `json:",omitempty"`
+	CpuPriority        int         `json:",omitempty"`
 	DestroyOnPowerdown bool        `json:",omitempty"`
 	DestroyProtection  bool        `json:",omitempty"`
 	DisableVirtIO      bool        `json:",omitempty"`
