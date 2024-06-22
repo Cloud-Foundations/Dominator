@@ -79,7 +79,7 @@ func setAllUid(uid int) error {
 	return syscall.ENOTSUP
 }
 
-func setMyPriority(priority int) error {
+func setPriority(pid, priority int) error {
 	return syscall.ENOTSUP
 }
 
