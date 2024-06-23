@@ -70,6 +70,14 @@ var (
 	newlineReplacement      = []byte{'\\', 'n'}
 )
 
+func checkCpuPriority(authInfo *srpc.AuthInformation, cpuPriority int) error {
+	if cpuPriority < 0 && !authInfo.HaveMethodAccess {
+		return fmt.Errorf("insufficient privilege to set CpuPriority=%d",
+			cpuPriority)
+	}
+	return nil
+}
+
 func computeSize(minimumFreeBytes, roundupPower, size uint64) uint64 {
 	minBytes := size + size>>3 // 12% extra for good luck.
 	minBytes += minimumFreeBytes
@@ -373,6 +381,9 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if err := req.ConsoleType.CheckValid(); err != nil {
 		return nil, err
 	}
+	if err := checkCpuPriority(authInfo, req.CpuPriority); err != nil {
+		return nil, err
+	}
 	if req.MemoryInMiB < 1 {
 		return nil, errors.New("no memory specified")
 	}
@@ -451,6 +462,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				Address:            address,
 				CreatedOn:          time.Now(),
 				ConsoleType:        req.ConsoleType,
+				CpuPriority:        req.CpuPriority,
 				DestroyOnPowerdown: req.DestroyOnPowerdown,
 				DestroyProtection:  req.DestroyProtection,
 				DisableVirtIO:      req.DisableVirtIO,
@@ -515,6 +527,44 @@ func (m *Manager) changeVmConsoleType(ipAddr net.IP,
 		return errors.New("VM is not stopped")
 	}
 	vm.ConsoleType = consoleType
+	vm.writeAndSendInfo()
+	return nil
+}
+
+func (m *Manager) changeVmCpuPriority(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, cpuPriority int) error {
+	if err := checkCpuPriority(authInfo, cpuPriority); err != nil {
+		return err
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if vm.CpuPriority == cpuPriority {
+		return nil
+	}
+	var modifyProcess bool
+	switch vm.State {
+	case proto.StateStarting:
+		return errors.New("VM is starting")
+	case proto.StateRunning, proto.StateDebugging:
+		modifyProcess = true
+	case proto.StateStopping:
+		return errors.New("VM is stopping")
+	case proto.StateStopped, proto.StateFailedToStart, proto.StateMigrating,
+		proto.StateExporting, proto.StateCrashed:
+	case proto.StateDestroying:
+		return errors.New("VM is already destroying")
+	default:
+		return errors.New("unknown state: " + vm.State.String())
+	}
+	if modifyProcess {
+		if err := vm.setCpuPriority(cpuPriority); err != nil {
+			return err
+		}
+	}
+	vm.CpuPriority = cpuPriority
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -3959,6 +4009,37 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 	return bridges, options, nil
 }
 
+func (vm *vmInfoType) readPid() (int, error) {
+	pidfile := filepath.Join(vm.dirname, "pidfile")
+	file, err := os.Open(pidfile)
+	if err != nil {
+		return -1, err
+	}
+	defer file.Close()
+	var pid int
+	if _, err := fmt.Fscanf(file, "%d", &pid); err != nil {
+		return -1, err
+	}
+	return pid, nil
+}
+
+// setCpuPriority does not take any locks. It changes the priority of the
+// virtualiser process.
+func (vm *vmInfoType) setCpuPriority(cpuPriority int) error {
+	pid, err := vm.readPid()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errors.New("unable to read virtualiser PID, try restarting")
+		}
+		return fmt.Errorf("unable to read virtualiser PID: %w", err)
+	}
+	err = wsyscall.SetPriority(pid, cpuPriority)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (vm *vmInfoType) setupLockWatcher() {
 	vm.lockWatcher = lockwatcher.New(&vm.mutex,
 		lockwatcher.LockWatcherOptions{
@@ -3989,6 +4070,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		defer tapFile.Close()
 		tapFiles = append(tapFiles, tapFile)
 	}
+	pidfile := filepath.Join(vm.dirname, "pidfile")
 	cmd := exec.Command("qemu-system-x86_64", "-machine", "pc,accel=kvm",
 		"-cpu", "host", // Allow the VM to take full advantage of host CPU.
 		"-nodefaults",
@@ -4000,6 +4082,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		"-chroot", "/tmp",
 		"-runas", vm.manager.Username,
 		"-qmp", "unix:"+vm.monitorSockname+",server,nowait",
+		"-pidfile", pidfile,
 		"-daemonize")
 	var interfaceDriver string
 	if !vm.DisableVirtIO {
@@ -4079,6 +4162,11 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		vm.logger.Printf("QEMU started. Output: \"%s\"\n", string(output))
 	} else {
 		vm.logger.Println("QEMU started.")
+	}
+	if vm.CpuPriority != 0 {
+		if err := vm.setCpuPriority(vm.CpuPriority); err != nil {
+			return err
+		}
 	}
 	return nil
 }
