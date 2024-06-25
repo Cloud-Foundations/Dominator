@@ -92,7 +92,7 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		writeString(writer, "CPU", format.FormatMilli(uint64(vm.MilliCPUs)))
 		writeStrings(writer, "Volume sizes", volumeSizes)
 		writeString(writer, "Total storage", format.FormatBytes(storage))
-		writeStrings(writer, "Owner users", vm.OwnerGroups)
+		writeStrings(writer, "Owner groups", vm.OwnerGroups)
 		writeStrings(writer, "Owner users", vm.OwnerUsers)
 		if vm.IdentityName != "" {
 			writeString(writer, "Identity name",
