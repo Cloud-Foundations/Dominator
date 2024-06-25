@@ -19,6 +19,11 @@ func AddVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
 	return addVmVolumes(client, ipAddress, sizes)
 }
 
+func ChangeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
+	request proto.ChangeVmCpuPriorityRequest) error {
+	return changeVmCpuPriority(client, ipAddress, request)
+}
+
 func ChangeVmSize(client *srpc.Client,
 	request proto.ChangeVmSizeRequest) error {
 	return changeVmSize(client, request)
