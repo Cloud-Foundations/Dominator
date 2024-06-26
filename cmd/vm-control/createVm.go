@@ -178,6 +178,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 	}
 	return hyper_proto.VmInfo{
 		ConsoleType:        consoleType,
+		CpuPriority:        *cpuPriority,
 		DestroyOnPowerdown: *destroyOnPowerdown,
 		DestroyProtection:  *destroyProtection,
 		DisableVirtIO:      *disableVirtIO,

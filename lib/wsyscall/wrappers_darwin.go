@@ -144,8 +144,8 @@ func setAllUid(uid int) error {
 	return syscall.Setreuid(uid, uid)
 }
 
-func setMyPriority(priority int) error {
-	return syscall.Setpriority(syscall.PRIO_PROCESS, 0, priority)
+func setPriority(pid, priority int) error {
+	return syscall.Setpriority(syscall.PRIO_PROCESS, pid, priority)
 }
 
 func setNetNamespace(namespaceFd int) error {

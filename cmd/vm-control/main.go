@@ -23,7 +23,9 @@ import (
 var (
 	adjacentVM = flag.String("adjacentVM", "",
 		"IP address of VM adjacent (same Hypervisor) to VM being created")
-	consoleType        hyper_proto.ConsoleType
+	consoleType hyper_proto.ConsoleType
+	cpuPriority = flag.Int("cpuPriority", 0,
+		"CPU priority (-20:+19) for VM process on Hypervisor")
 	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
 		"If true, destroy VM if it powers down internally")
 	destroyProtection = flag.Bool("destroyProtection", false,
@@ -178,10 +180,12 @@ var subcommands = []commands.Command{
 	{"add-vm-volumes", "IPaddr", 1, 1, addVmVolumesSubcommand},
 	{"become-primary-vm-owner", "IPaddr", 1, 1, becomePrimaryVmOwnerSubcommand},
 	{"change-vm-console-type", "IPaddr", 1, 1, changeVmConsoleTypeSubcommand},
+	{"change-vm-cpu-priority", "IPaddr", 1, 1, changeVmCpuPrioritySubcommand},
 	{"change-vm-cpus", "IPaddr", 1, 1, changeVmCPUsSubcommand},
 	{"change-vm-destroy-protection", "IPaddr", 1, 1,
 		changeVmDestroyProtectionSubcommand},
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
+	{"change-vm-owner-groups", "IPaddr", 1, 1, changeVmOwnerGroupsSubcommand},
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
 	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
@@ -244,6 +248,11 @@ func doMain() int {
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2
+	}
+	// Sanity check on flags.
+	if *cpuPriority < -20 || *cpuPriority > 19 {
+		fmt.Fprintf(os.Stderr, "invalid cpuPriority: %d\n", *cpuPriority)
+		return 3
 	}
 	if memory > 0 && memory < 1<<20 {
 		fmt.Fprintf(os.Stderr, "unreasonably small memory: %s\n",

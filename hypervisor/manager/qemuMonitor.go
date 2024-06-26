@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -94,6 +96,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 	close(vm.commandInput)
 	vm.commandInput = nil
 	vm.commandOutput = nil
+	os.Remove(filepath.Join(vm.dirname, "pidfile"))
 	switch vm.State {
 	case proto.StateStarting:
 		select {

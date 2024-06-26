@@ -10,6 +10,7 @@ package wsyscall
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"strconv"
@@ -166,12 +167,18 @@ func setAllUid(uid int) error {
 	return syscall.Setresuid(uid, uid, uid)
 }
 
-// setMyPriority sets the priority of the current process, for all OS threads.
+// setPriority sets the priority of the specified process, for all OS threads.
 // It will iterate over all the threads and set the priority on each, since the
 // Linux implementation of setpriority(2) only applies to a thread, not the
 // whole process (contrary to the POSIX specification).
-func setMyPriority(priority int) error {
-	file, err := os.Open("/proc/self/task")
+func setPriority(pid, priority int) error {
+	var filename string
+	if pid == 0 {
+		filename = "/proc/self/task"
+	} else {
+		filename = fmt.Sprintf("/proc/%d/task", pid)
+	}
+	file, err := os.Open(filename)
 	if err != nil {
 		return err
 	}

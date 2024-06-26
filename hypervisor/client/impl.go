@@ -38,6 +38,17 @@ func addVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
 	return errors.New(reply.Error)
 }
 
+func changeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
+	request proto.ChangeVmCpuPriorityRequest) error {
+	var reply proto.ChangeVmCpuPriorityResponse
+	err := client.RequestReply("Hypervisor.ChangeVmCpuPriority", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func changeVmSize(client *srpc.Client,
 	request proto.ChangeVmSizeRequest) error {
 	var reply proto.ChangeVmSizeResponse

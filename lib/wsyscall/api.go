@@ -110,11 +110,19 @@ func SetAllUid(uid int) error {
 	return setAllUid(uid)
 }
 
+// SetPriority sets the CPU priority of the specified process, for all OS
+// threads. If pid is zero, the priority of the calling process is set.
+// On platforms which do not support changing the process priority, an error is
+// always returned.
+func SetPriority(pid, priority int) error {
+	return setPriority(pid, priority)
+}
+
 // SetMyPriority sets the priority of the current process, for all OS threads.
 // On platforms which do not support changing the process priority, an error is
 // always returned.
 func SetMyPriority(priority int) error {
-	return setMyPriority(priority)
+	return setPriority(0, priority)
 }
 
 // SetNetNamespace is a safe wrapper for the Linux setns(fd, CLONE_NEWNET)

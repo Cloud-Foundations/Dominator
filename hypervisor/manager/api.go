@@ -158,9 +158,19 @@ func (m *Manager) ChangeVmConsoleType(ipAddr net.IP,
 	return m.changeVmConsoleType(ipAddr, authInfo, consoleType)
 }
 
+func (m *Manager) ChangeVmCpuPriority(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, cpuPriority int) error {
+	return m.changeVmCpuPriority(ipAddr, authInfo, cpuPriority)
+}
+
 func (m *Manager) ChangeVmDestroyProtection(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, destroyProtection bool) error {
 	return m.changeVmDestroyProtection(ipAddr, authInfo, destroyProtection)
+}
+
+func (m *Manager) ChangeVmOwnerGroups(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, ownerGroups []string) error {
+	return m.changeVmOwnerGroups(ipAddr, authInfo, ownerGroups)
 }
 
 func (m *Manager) ChangeVmOwnerUsers(ipAddr net.IP,
