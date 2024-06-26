@@ -1001,6 +1001,39 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 			return err
 		}
 	}
+	if vm.getActiveKernelPath() != "" {
+		device, err := fsutil.LoopbackSetupAndWaitForPartition(
+			vm.VolumeLocations[0].Filename, "p1", 5*time.Second, vm.logger)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if device != "" {
+				fsutil.LoopbackDeleteAndWaitForPartition(device, "p1",
+					5*time.Second, vm.logger)
+			}
+		}()
+		oldLabel, err := e2getLabel(device + "p1")
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(oldLabel, "rootfs@") {
+			if err := e2setLabel(device+"p1", vm.rootLabel(false)); err != nil {
+				return err
+			}
+		}
+		err = fsutil.LoopbackDeleteAndWaitForPartition(device, "p1",
+			5*time.Second, vm.logger)
+		device = "" // Cancel deferred delete.
+		if err != nil {
+			return err
+		}
+		err = sendVmCopyMessage(conn,
+			"ToDo: edit /etc/fstab to use new root label: "+vm.rootLabel(false))
+		if err != nil {
+			return err
+		}
+	}
 	err = migratevmUserData(hypervisor,
 		filepath.Join(vm.dirname, UserDataFile),
 		request.IpAddress, accessToken)

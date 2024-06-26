@@ -92,6 +92,22 @@ func e2fsck(device string) error {
 		device, err, string(output))
 }
 
+// e2getLabel returns the file-system label if the device hosts an ext{2,3,4}
+// file-system, else it returns an error.
+func e2getLabel(device string) (string, error) {
+	cmd := exec.Command("e2label", device)
+	if stdout, err := cmd.Output(); err != nil {
+		return "", err
+	} else {
+		return strings.TrimSpace(string(stdout)), nil
+	}
+}
+
+// e2setLabel will write a file-sytem label to an ext{2,3,4} file-system.
+func e2setLabel(device, label string) error {
+	return exec.Command("e2label", device, label).Run()
+}
+
 func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
 	uint64, error) {
 	if freeSpace, ok := freeSpaceTable[dirname]; ok {
