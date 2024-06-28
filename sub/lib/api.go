@@ -34,6 +34,14 @@ type uType struct {
 	fsChangeDuration   time.Duration
 }
 
+// MatchTriggersInUpdate will return a list of triggers in an update request
+// that match the list of changes. Since there is file-system to compare to,
+// potential mtime-only changes will also match.
+func MatchTriggersInUpdate(request sub.UpdateRequest) []*triggers.Trigger {
+	return matchTriggersInUpdate(request)
+}
+
+// Update is deprecated. Use UpdateWithOptions instead.
 func Update(request sub.UpdateRequest, rootDirectoryName string,
 	objectsDir string, oldTriggers *triggers.Triggers,
 	skipFilter *filter.Filter, triggersRunner TriggersRunner,
@@ -50,6 +58,8 @@ func Update(request sub.UpdateRequest, rootDirectoryName string,
 	return UpdateWithOptions(request, options)
 }
 
+// UpdateWithOptions will process an update request, modifying the local
+// file-system and running triggers.
 func UpdateWithOptions(request sub.UpdateRequest, options UpdateOptions) (
 	bool, time.Duration, error) {
 	updateObj := &uType{UpdateOptions: options}

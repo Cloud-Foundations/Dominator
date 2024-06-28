@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
+	"github.com/Cloud-Foundations/Dominator/lib/net/rrdialer"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
@@ -90,6 +92,7 @@ var (
 
 	logger            log.DebugLogger
 	minimumExpiration = 15 * time.Minute
+	rrDialer          *rrdialer.Dialer
 )
 
 func init() {
@@ -232,7 +235,7 @@ func getPointedClients(hostname string, iClient **srpc.Client,
 	if *iClient == nil {
 		var err error
 		clientName := fmt.Sprintf("%s:%d", hostname, *imageServerPortNum)
-		*iClient, err = srpc.DialHTTP("tcp", clientName, 0)
+		*iClient, err = srpc.DialHTTPWithDialer("tcp", clientName, rrDialer)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error dialing: %s: %s\n", clientName, err)
 			os.Exit(1)
@@ -298,6 +301,13 @@ func doMain() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	rrDialer, err = rrdialer.New(&net.Dialer{Timeout: time.Second * 10}, "",
+		logger)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer rrDialer.WaitForBackgroundResults(time.Second)
 	return commands.RunCommands(subcommands, printUsage, logger)
 }
 

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/dom/lib"
+	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -22,6 +22,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/client"
+	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
 
 type nullObjectGetterType struct{}
@@ -47,6 +48,19 @@ func pushImageSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
+func expectUpdateToDisconnect(request sub.UpdateRequest) bool {
+	trg := sublib.MatchTriggersInUpdate(request)
+	for _, trigger := range trg {
+		if trigger.DoReboot {
+			return true
+		}
+		if trigger.Service == "subd" {
+			return true
+		}
+	}
+	return false
+}
+
 func pushImage(srpcClient *srpc.Client, imageName string) error {
 	computedInodes := make(map[string]*filesystem.RegularInode)
 	// Start querying the imageserver for the image.
@@ -67,7 +81,7 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 			}
 		}
 	}
-	subObj := lib.Sub{
+	subObj := domlib.Sub{
 		Hostname:       *subHostname,
 		Client:         srpcClient,
 		ComputedInodes: computedInodes}
@@ -114,49 +128,34 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 			return err
 		}
 	}
-	err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, false,
-		logger)
-	if err != nil {
-		return err
-	}
 	if err := srpcClient.SetKeepAlivePeriod(time.Second); err != nil {
 		return fmt.Errorf("error setting keep-alive period: %s", err)
 	}
-	updateRequest := sub.UpdateRequest{
-		ForceDisruption: *forceDisruption,
+	var generationCount, lastGenerationCount, lastScanCount uint64
+	expectDisconnect, err := pollFetchPushAndUpdate(&subObj, img, imageName,
+		imageServerAddress,
+		timeoutTime, deleteMissingComputedFiles, ignoreMissingComputedFiles,
+		&generationCount, &lastGenerationCount, &lastScanCount,
+		logger)
+	if err == nil {
+		return nil
 	}
-	var updateReply sub.UpdateResponse
-	startTime = showStart("lib.BuildUpdateRequest()")
-	if lib.BuildUpdateRequest(subObj, img, &updateRequest,
-		deleteMissingComputedFiles, ignoreMissingComputedFiles, logger) {
-		showBlankLine()
-		return errors.New("missing computed file(s)")
-	}
-	showTimeTaken(startTime)
-	updateRequest.ImageName = imageName
-	updateRequest.Wait = true
-	stopTicker := make(chan struct{}, 1)
-	if !*showTimes {
-		logger.Println("Starting Subd.Update()")
-		go tickerLoop(stopTicker)
-	}
-	startTime = showStart("Subd.Update()")
-	err = client.CallUpdate(srpcClient, updateRequest, &updateReply)
-	stopTicker <- struct{}{}
-	if err != nil {
-		showBlankLine()
+	if !expectDisconnect {
 		return err
 	}
-	if !*showTimes {
-		logger.Println("Subd.Update() complete")
+	logger.Println("Retrying due to expected restart of subd/reboot")
+	srpcClient = getSubClientRetry(logger)
+	defer srpcClient.Close()
+	if err := srpcClient.SetKeepAlivePeriod(time.Second); err != nil {
+		return fmt.Errorf("error setting keep-alive period: %s", err)
 	}
-	showTimeTaken(startTime)
-	pollRequest := sub.PollRequest{ShortPollOnly: true}
-	var pollReply sub.PollResponse
-	if err := client.CallPoll(srpcClient, pollRequest, &pollReply); err != nil {
-		return err
-	}
-	return cleanup(srpcClient, pollReply.GenerationCount, true)
+	subObj.Client = srpcClient
+	_, err = pollFetchPushAndUpdate(&subObj, img, imageName,
+		imageServerAddress,
+		timeoutTime, deleteMissingComputedFiles, ignoreMissingComputedFiles,
+		&generationCount, &lastGenerationCount, &lastScanCount,
+		logger)
+	return err
 }
 
 func getImageChannel(clientName, imageName string,
@@ -203,10 +202,10 @@ func getImageRetry(clientName, imageName string,
 	return nil, errors.New("timed out getting image")
 }
 
-func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
+func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 	imageServerAddress string, timeoutTime time.Time, singleFetch bool,
+	generationCount, lastGenerationCount, lastScanCount *uint64,
 	logger log.DebugLogger) error {
-	var generationCount, lastGenerationCount, lastScanCount uint64
 	deleteEarly := *deleteBeforeFetch
 	ignoreMissingComputedFiles := true
 	pushComputedFiles := true
@@ -223,7 +222,7 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
 			return err
 		}
-		if err := pollAndBuildPointers(subObj.Client, &generationCount,
+		if err := pollAndBuildPointers(subObj.Client, generationCount,
 			&pollReply); err != nil {
 			return err
 		}
@@ -243,8 +242,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 				newlineNeeded = false
 			}
 		}
-		if pollReply.GenerationCount != lastGenerationCount ||
-			pollReply.ScanCount != lastScanCount {
+		if pollReply.GenerationCount != *lastGenerationCount ||
+			pollReply.ScanCount != *lastScanCount {
 			if pollReply.FileSystem == nil {
 				logger.Debugf(0,
 					"Poll Scan: %d, Generation: %d, cached objects: %d\n",
@@ -258,8 +257,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 					len(pollReply.ObjectCache))
 			}
 		}
-		lastGenerationCount = pollReply.GenerationCount
-		lastScanCount = pollReply.ScanCount
+		*lastGenerationCount = pollReply.GenerationCount
+		*lastScanCount = pollReply.ScanCount
 		if pollReply.FileSystem == nil {
 			continue
 		}
@@ -272,8 +271,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		}
 		subObj.FileSystem = pollReply.FileSystem
 		subObj.ObjectCache = pollReply.ObjectCache
-		startTime := showStart("lib.BuildMissingLists()")
-		objectsToFetch, objectsToPush := lib.BuildMissingLists(*subObj, img,
+		startTime := showStart("domlib.BuildMissingLists()")
+		objectsToFetch, objectsToPush := domlib.BuildMissingLists(*subObj, img,
 			pushComputedFiles, ignoreMissingComputedFiles, logger)
 		showTimeTaken(startTime)
 		if len(objectsToFetch) < 1 && len(objectsToPush) < 1 {
@@ -304,8 +303,8 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 		}
 		if len(objectsToPush) > 0 {
 			logger.Debugf(0, "PushObjects(%d)\n", len(objectsToPush))
-			startTime := showStart("lib.PushObjects()")
-			err := lib.PushObjects(*subObj, objectsToPush, logger)
+			startTime := showStart("domlib.PushObjects()")
+			err := domlib.PushObjects(*subObj, objectsToPush, logger)
 			if err != nil {
 				showBlankLine()
 				return err
@@ -316,7 +315,67 @@ func pollFetchAndPush(subObj *lib.Sub, img *image.Image,
 	return errors.New("timed out fetching and pushing objects")
 }
 
-func fetchUntil(subObj *lib.Sub, request sub.FetchRequest,
+// pollFetchPushAndUpdate will:
+// - poll the sub until it has a completed scan
+// - compute updates required
+// - push required objects
+// - send an update request
+// - send a cleanup request.
+// It returns true if the update was expected to restart subd or reboot, and an
+// error if there was a problem.
+func pollFetchPushAndUpdate(subObj *domlib.Sub, img *image.Image,
+	imageName string, imageServerAddress string, timeoutTime time.Time,
+	deleteMissingComputedFiles, ignoreMissingComputedFiles bool,
+	generationCount, lastGenerationCount, lastScanCount *uint64,
+	logger log.DebugLogger) (bool, error) {
+	err := pollFetchAndPush(subObj, img, imageServerAddress, timeoutTime,
+		false, generationCount, lastGenerationCount, lastScanCount, logger)
+	if err != nil {
+		return false, err
+	}
+	updateRequest := sub.UpdateRequest{
+		ForceDisruption: *forceDisruption,
+	}
+	var updateReply sub.UpdateResponse
+	startTime := showStart("domlib.BuildUpdateRequest()")
+	if domlib.BuildUpdateRequest(*subObj, img, &updateRequest,
+		deleteMissingComputedFiles, ignoreMissingComputedFiles, logger) {
+		showBlankLine()
+		return false, errors.New("missing computed file(s)")
+	}
+	showTimeTaken(startTime)
+	expectDisconnect := expectUpdateToDisconnect(updateRequest)
+	updateRequest.ImageName = imageName
+	updateRequest.Wait = true
+	stopTicker := make(chan struct{}, 1)
+	if !*showTimes {
+		logger.Println("Starting Subd.Update()")
+		go tickerLoop(stopTicker)
+	}
+	startTime = showStart("Subd.Update()")
+	err = client.CallUpdate(subObj.Client, updateRequest, &updateReply)
+	stopTicker <- struct{}{}
+	if err != nil {
+		showBlankLine()
+		return expectDisconnect, err
+	}
+	if !*showTimes {
+		logger.Println("Subd.Update() complete")
+	}
+	showTimeTaken(startTime)
+	pollRequest := sub.PollRequest{ShortPollOnly: true}
+	var pollReply sub.PollResponse
+	err = client.CallPoll(subObj.Client, pollRequest, &pollReply)
+	if err != nil {
+		return expectDisconnect, err
+	}
+	if e := cleanup(subObj.Client, pollReply.GenerationCount, true); e != nil {
+		return expectDisconnect, e
+	}
+	return expectDisconnect, nil
+}
+
+func fetchUntil(subObj *domlib.Sub, request sub.FetchRequest,
 	timeoutTime time.Time, logger log.DebugLogger) error {
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
 		stopTicker := make(chan struct{}, 1)
