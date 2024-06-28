@@ -30,6 +30,8 @@ func fetchImage(srpcClient *srpc.Client, imageName string) error {
 		Hostname: *subHostname,
 		Client:   srpcClient,
 	}
+	var generationCount, lastGenerationCount, lastScanCount uint64
 	return pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, true,
+		&generationCount, &lastGenerationCount, &lastScanCount,
 		logger)
 }
