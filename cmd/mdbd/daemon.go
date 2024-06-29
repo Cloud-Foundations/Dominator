@@ -10,12 +10,14 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
@@ -24,6 +26,9 @@ var (
 	latencyBucketer         = tricorder.NewGeometricBucketer(0.1, 100e3)
 	loadCpuTimeDistribution *tricorder.CumulativeDistribution
 	loadTimeDistribution    *tricorder.CumulativeDistribution
+
+	hostsExcludeMapMutex sync.RWMutex
+	hostsExcludeMap      map[string]struct{}
 )
 
 type genericEncoder interface {
@@ -67,7 +72,7 @@ func runDaemon(generators []generator, eventChannel <-chan struct{},
 			logger.Println(err)
 			continue
 		}
-		newMdb = selectHosts(newMdb, hostnameRE)
+		newMdb = selectHosts(newMdb, hostnameRE, getHostsExcludes())
 		sort.Sort(newMdb)
 		if newMdbIsDifferent(prevMdb, newMdb) {
 			updateFunc(prevMdb, newMdb)
@@ -168,14 +173,22 @@ func processValue(value string, variables map[string]string) string {
 	return value
 }
 
-func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp) *mdb.Mdb {
-	if hostnameRE == nil {
+func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp,
+	hostsExcludesMap map[string]struct{}) *mdb.Mdb {
+	if hostnameRE == nil && len(hostsExcludesMap) < 1 {
 		return inMdb
 	}
 	var outMdb mdb.Mdb
 	for _, machine := range inMdb.Machines {
-		if hostnameRE.MatchString(machine.Hostname) {
+		if _, exclude := hostsExcludesMap[machine.Hostname]; exclude {
+			continue
+		}
+		if hostnameRE == nil {
 			outMdb.Machines = append(outMdb.Machines, machine)
+		} else {
+			if hostnameRE.MatchString(machine.Hostname) {
+				outMdb.Machines = append(outMdb.Machines, machine)
+			}
 		}
 	}
 	return &outMdb
@@ -209,4 +222,23 @@ func writeMdb(mdb *mdb.Mdb, mdbFileName string) error {
 		return err
 	}
 	return os.Rename(tmpFileName, mdbFileName)
+}
+
+func getHostsExcludes() map[string]struct{} {
+	hostsExcludeMapMutex.RLock()
+	hostsMap := hostsExcludeMap
+	hostsExcludeMapMutex.RUnlock()
+	return hostsMap
+}
+
+func hostsExcludeReader(dataChannel <-chan interface{},
+	eventChannel chan<- struct{}, logger log.DebugLogger) {
+	for data := range dataChannel {
+		lines := data.([]string)
+		hostsMap := stringutil.ConvertListToMap(lines, false)
+		hostsExcludeMapMutex.Lock()
+		hostsExcludeMap = hostsMap
+		hostsExcludeMapMutex.Unlock()
+		eventChannel <- struct{}{}
+	}
 }

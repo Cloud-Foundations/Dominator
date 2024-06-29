@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -26,6 +28,8 @@ var (
 	debug         = flag.Bool("debug", false, "If true, show debugging output")
 	fetchInterval = flag.Uint("fetchInterval", 59,
 		"Interval between fetches from the MDB source, in seconds")
+	hostnamesExcludeFile = flag.String("hostnamesExcludeFile", "",
+		"A file containing a list of hostnames to exclude")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
 		"A regular expression to match the desired hostnames")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
@@ -226,6 +230,16 @@ func main() {
 		logger.Println("Timed out waiting for initial data")
 	}
 	rpcd := startRpcd(logger)
+	if *hostnamesExcludeFile != "" {
+		dataChannel, err := configwatch.Watch(*hostnamesExcludeFile,
+			time.Minute, func(reader io.Reader) (interface{}, error) {
+				return fsutil.ReadLines(reader)
+			}, logger)
+		if err != nil {
+			showErrorAndDie(err)
+		}
+		go hostsExcludeReader(dataChannel, eventChannel, logger)
+	}
 	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
 		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {
 			rpcd.pushUpdateToAll(old, new)
