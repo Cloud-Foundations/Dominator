@@ -41,12 +41,28 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	fmt.Fprintln(writer, "<title>MDB daemon status page</title>")
+	fmt.Fprintln(writer, `<style>
+	                          table, th, td {
+	                          border-collapse: collapse;
+	                          }
+	                          </style>`)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, "<h1><b>MDB daemon</b> status page</h1>")
 	fmt.Fprintln(writer, "</center>")
 	html.WriteHeaderWithRequestNoGC(writer, req)
 	fmt.Fprintln(writer, "<h3>")
+	fmt.Fprintln(writer, "Data Sources:<br>")
+	fieldArgs := []string{"Type"}
+	for index := uint(1); index < maxGeneratorFields; index++ {
+		fieldArgs = append(fieldArgs, fmt.Sprintf("Arg%d", index))
+	}
+	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+	tw, _ := html.NewTableWriter(writer, true, fieldArgs...)
+	for _, fields := range generatorFields {
+		tw.WriteRow("", "", fields...)
+	}
+	tw.Close()
 	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a><br>\n",
 		len(s.mdb.Machines))
 	for _, htmlWriter := range s.htmlWriters {

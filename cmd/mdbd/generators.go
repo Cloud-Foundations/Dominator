@@ -13,6 +13,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+var (
+	generatorFields    [][]string
+	maxGeneratorFields uint
+)
+
 type makeGeneratorParams struct {
 	args         []string
 	eventChannel chan<- struct{}
@@ -44,6 +49,10 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		if len(fields) < 1 || len(fields[0]) < 1 || fields[0][0] == '#' {
 			continue
 		}
+		generatorFields = append(generatorFields, fields)
+		if uint(len(fields)) > maxGeneratorFields {
+			maxGeneratorFields = uint(len(fields))
+		}
 		driverName := fields[0]
 		args := fields[1:]
 		var drv *driver
@@ -71,6 +80,13 @@ func setupGenerators(reader io.Reader, drivers []driver,
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	// Pad generator fields for display.
+	for lineIndex, fields := range generatorFields {
+		for index := uint(len(fields)); index < maxGeneratorFields; index++ {
+			fields = append(fields, "")
+		}
+		generatorFields[lineIndex] = fields
 	}
 	return generators, nil
 }
