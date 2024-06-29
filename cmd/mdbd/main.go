@@ -92,6 +92,14 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    location: optional location to limit query to")
 	fmt.Fprintln(os.Stderr,
+		"  hostlist: url [required-image [planned-image]]")
+	fmt.Fprintln(os.Stderr,
+		"    url: URL which yields a list of machine hostnames, one per line")
+	fmt.Fprintln(os.Stderr,
+		"    required-image: optional required image for machines")
+	fmt.Fprintln(os.Stderr,
+		"    planned-image: optional planned image for machines")
+	fmt.Fprintln(os.Stderr,
 		"  hypervisor")
 	fmt.Fprintln(os.Stderr,
 		"    Query Hypervisor on this machine")
@@ -129,6 +137,7 @@ var drivers = []driver{
 	{"cis", 1, 1, newCisGenerator},
 	{"ds.host.fqdn", 1, 1, newDsHostFqdnGenerator},
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
+	{"hostlist", 1, 3, newHostlistGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
 	{"json", 1, 1, newJsonGenerator},
 	{"text", 1, 1, newTextGenerator},

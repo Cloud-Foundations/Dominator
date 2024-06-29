@@ -60,7 +60,7 @@ func setupGenerators(reader io.Reader, drivers []driver,
 			return nil, errors.New("insufficient arguments for: " + driverName)
 		}
 		if drv.maxArgs >= 0 && len(args) > drv.maxArgs {
-			return nil, errors.New("too mant arguments for: " + driverName)
+			return nil, errors.New("too many arguments for: " + driverName)
 		}
 		params.args = args
 		gen, err := drv.setupFunc(params)
