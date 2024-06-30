@@ -29,6 +29,9 @@ var (
 
 	hostsExcludeMapMutex sync.RWMutex
 	hostsExcludeMap      map[string]struct{}
+
+	hostsIncludeMapMutex sync.RWMutex
+	hostsIncludeMap      map[string]struct{}
 )
 
 type genericEncoder interface {
@@ -67,12 +70,12 @@ func runDaemon(generators []generator, eventChannel <-chan struct{},
 	intervalTimer := time.NewTimer(fetchIntervalDuration)
 	for ; ; sleepUntil(eventChannel, intervalTimer, cycleStopTime) {
 		cycleStopTime = time.Now().Add(fetchIntervalDuration)
-		newMdb, err := loadFromAll(generators, datacentre, logger)
+		newMdb, err := loadFromAll(generators, datacentre, hostnameRE,
+			getHostsExcludes(), getHostsIncludes(), logger)
 		if err != nil {
 			logger.Println(err)
 			continue
 		}
-		newMdb = selectHosts(newMdb, hostnameRE, getHostsExcludes())
 		sort.Sort(newMdb)
 		if newMdbIsDifferent(prevMdb, newMdb) {
 			updateFunc(prevMdb, newMdb)
@@ -107,6 +110,8 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 }
 
 func loadFromAll(generators []generator, datacentre string,
+	hostnameRE *regexp.Regexp,
+	hostsExcludeMap, hostsIncludeMap map[string]struct{},
 	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
 	var variables map[string]string
@@ -118,7 +123,17 @@ func loadFromAll(generators []generator, datacentre string,
 		if err != nil {
 			return nil, err
 		}
+		mdb = selectHosts(mdb, hostnameRE, hostsExcludeMap, hostsIncludeMap)
 		for _, machine := range mdb.Machines {
+			if machine.Hostname == "" {
+				machine.Hostname = machine.IpAddress
+			}
+			if machine.Hostname == "" {
+				logger.Printf(
+					"ignoring machine with no Hostname or IpAddress: %v\n",
+					machine)
+				continue
+			}
 			if oldMachine, ok := machineMap[machine.Hostname]; ok {
 				oldMachine.UpdateFrom(machine)
 				machineMap[machine.Hostname] = oldMachine
@@ -174,14 +189,21 @@ func processValue(value string, variables map[string]string) string {
 }
 
 func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp,
-	hostsExcludesMap map[string]struct{}) *mdb.Mdb {
-	if hostnameRE == nil && len(hostsExcludesMap) < 1 {
+	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdb.Mdb {
+	if hostnameRE == nil &&
+		len(hostsExcludeMap) < 1 &&
+		len(hostsIncludeMap) < 1 {
 		return inMdb
 	}
 	var outMdb mdb.Mdb
 	for _, machine := range inMdb.Machines {
-		if _, exclude := hostsExcludesMap[machine.Hostname]; exclude {
+		if _, exclude := hostsExcludeMap[machine.Hostname]; exclude {
 			continue
+		}
+		if len(hostsIncludeMap) > 0 && machine.Hostname != "" {
+			if _, include := hostsIncludeMap[machine.Hostname]; !include {
+				continue
+			}
 		}
 		if hostnameRE == nil {
 			outMdb.Machines = append(outMdb.Machines, machine)
@@ -231,6 +253,13 @@ func getHostsExcludes() map[string]struct{} {
 	return hostsMap
 }
 
+func getHostsIncludes() map[string]struct{} {
+	hostsIncludeMapMutex.RLock()
+	hostsMap := hostsIncludeMap
+	hostsIncludeMapMutex.RUnlock()
+	return hostsMap
+}
+
 func hostsExcludeReader(dataChannel <-chan interface{},
 	eventChannel chan<- struct{}, logger log.DebugLogger) {
 	for data := range dataChannel {
@@ -239,6 +268,18 @@ func hostsExcludeReader(dataChannel <-chan interface{},
 		hostsExcludeMapMutex.Lock()
 		hostsExcludeMap = hostsMap
 		hostsExcludeMapMutex.Unlock()
+		eventChannel <- struct{}{}
+	}
+}
+
+func hostsIncludeReader(dataChannel <-chan interface{},
+	eventChannel chan<- struct{}, logger log.DebugLogger) {
+	for data := range dataChannel {
+		lines := data.([]string)
+		hostsMap := stringutil.ConvertListToMap(lines, false)
+		hostsIncludeMapMutex.Lock()
+		hostsIncludeMap = hostsMap
+		hostsIncludeMapMutex.Unlock()
 		eventChannel <- struct{}{}
 	}
 }

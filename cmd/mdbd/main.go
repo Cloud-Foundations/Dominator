@@ -30,6 +30,8 @@ var (
 		"Interval between fetches from the MDB source, in seconds")
 	hostnamesExcludeFile = flag.String("hostnamesExcludeFile", "",
 		"A file containing a list of hostnames to exclude")
+	hostnamesIncludeFile = flag.String("hostnamesIncludeFile", "",
+		"A file containing a list of hostnames to include")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
 		"A regular expression to match the desired hostnames")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
@@ -248,6 +250,16 @@ func main() {
 			showErrorAndDie(err)
 		}
 		go hostsExcludeReader(dataChannel, eventChannel, logger)
+	}
+	if *hostnamesIncludeFile != "" {
+		dataChannel, err := configwatch.Watch(*hostnamesIncludeFile,
+			time.Minute, func(reader io.Reader) (interface{}, error) {
+				return fsutil.ReadLines(reader)
+			}, logger)
+		if err != nil {
+			showErrorAndDie(err)
+		}
+		go hostsIncludeReader(dataChannel, eventChannel, logger)
 	}
 	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
 		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {

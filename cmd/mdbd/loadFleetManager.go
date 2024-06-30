@@ -130,7 +130,6 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 				ownerGroup = vm.OwnerGroups[0]
 			}
 			machine := mdb.Machine{
-				Hostname:       ipAddr,
 				IpAddress:      ipAddr,
 				RequiredImage:  tags["RequiredImage"],
 				PlannedImage:   tags["PlannedImage"],
