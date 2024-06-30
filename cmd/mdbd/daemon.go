@@ -4,18 +4,23 @@ import (
 	"bufio"
 	"encoding/gob"
 	"errors"
+	"io"
 	"os"
 	"path"
 	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
@@ -24,6 +29,12 @@ var (
 	latencyBucketer         = tricorder.NewGeometricBucketer(0.1, 100e3)
 	loadCpuTimeDistribution *tricorder.CumulativeDistribution
 	loadTimeDistribution    *tricorder.CumulativeDistribution
+
+	hostsExcludeMapMutex sync.RWMutex
+	hostsExcludeMap      map[string]struct{}
+
+	hostsIncludeMapMutex sync.RWMutex
+	hostsIncludeMap      map[string]struct{}
 )
 
 type genericEncoder interface {
@@ -43,7 +54,7 @@ func init() {
 	}
 }
 
-func runDaemon(generators []generator, eventChannel <-chan struct{},
+func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	mdbFileName string, hostnameRegex string,
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
 	logger log.DebugLogger, debug bool) {
@@ -62,22 +73,20 @@ func runDaemon(generators []generator, eventChannel <-chan struct{},
 	intervalTimer := time.NewTimer(fetchIntervalDuration)
 	for ; ; sleepUntil(eventChannel, intervalTimer, cycleStopTime) {
 		cycleStopTime = time.Now().Add(fetchIntervalDuration)
-		newMdb, err := loadFromAll(generators, datacentre, logger)
+		newMdb, err := loadFromAll(generators, datacentre, hostnameRE,
+			getHostsExcludes(), getHostsIncludes(), logger)
 		if err != nil {
 			logger.Println(err)
 			continue
 		}
-		newMdb = selectHosts(newMdb, hostnameRE)
 		sort.Sort(newMdb)
 		if newMdbIsDifferent(prevMdb, newMdb) {
 			updateFunc(prevMdb, newMdb)
 			if err := writeMdb(newMdb, mdbFileName); err != nil {
 				logger.Println(err)
 			} else {
-				if debug {
-					logger.Printf("Wrote new MDB data, %d machines\n",
-						len(newMdb.Machines))
-				}
+				logger.Printf("Wrote new MDB data, %d machines\n",
+					len(newMdb.Machines))
 				prevMdb = newMdb
 			}
 		} else if debug {
@@ -101,19 +110,33 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 	}
 }
 
-func loadFromAll(generators []generator, datacentre string,
+func loadFromAll(generators *generatorList, datacentre string,
+	hostnameRE *regexp.Regexp,
+	hostsExcludeMap, hostsIncludeMap map[string]struct{},
 	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
 	var variables map[string]string
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
-	for _, gen := range generators {
-		mdb, err := gen.Generate(datacentre, logger)
+	for _, genInfo := range generators.generatorInfos {
+		mdb, err := genInfo.generator.Generate(datacentre, logger)
 		if err != nil {
 			return nil, err
 		}
+		numRawMachines := uint(len(mdb.Machines))
+		mdb = selectHosts(mdb, hostnameRE, hostsExcludeMap, hostsIncludeMap)
+		numFilteredMachines := uint(len(mdb.Machines))
 		for _, machine := range mdb.Machines {
+			if machine.Hostname == "" {
+				machine.Hostname = machine.IpAddress
+			}
+			if machine.Hostname == "" {
+				logger.Printf(
+					"ignoring machine with no Hostname or IpAddress: %v\n",
+					machine)
+				continue
+			}
 			if oldMachine, ok := machineMap[machine.Hostname]; ok {
 				oldMachine.UpdateFrom(machine)
 				machineMap[machine.Hostname] = oldMachine
@@ -121,13 +144,17 @@ func loadFromAll(generators []generator, datacentre string,
 				machineMap[machine.Hostname] = machine
 			}
 		}
-		if vGen, ok := gen.(variablesGetter); ok {
+		if vGen, ok := genInfo.generator.(variablesGetter); ok {
 			if _variables, err := vGen.GetVariables(); err != nil {
 				return nil, err
 			} else {
 				variables = _variables
 			}
 		}
+		genInfo.mutex.Lock()
+		genInfo.numFilteredMachines = numFilteredMachines
+		genInfo.numRawMachines = numRawMachines
+		genInfo.mutex.Unlock()
 	}
 	var newMdb mdb.Mdb
 	for _, machine := range machineMap {
@@ -168,14 +195,29 @@ func processValue(value string, variables map[string]string) string {
 	return value
 }
 
-func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp) *mdb.Mdb {
-	if hostnameRE == nil {
+func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp,
+	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdb.Mdb {
+	if hostnameRE == nil &&
+		len(hostsExcludeMap) < 1 &&
+		len(hostsIncludeMap) < 1 {
 		return inMdb
 	}
 	var outMdb mdb.Mdb
 	for _, machine := range inMdb.Machines {
-		if hostnameRE.MatchString(machine.Hostname) {
+		if _, exclude := hostsExcludeMap[machine.Hostname]; exclude {
+			continue
+		}
+		if len(hostsIncludeMap) > 0 && machine.Hostname != "" {
+			if _, include := hostsIncludeMap[machine.Hostname]; !include {
+				continue
+			}
+		}
+		if hostnameRE == nil {
 			outMdb.Machines = append(outMdb.Machines, machine)
+		} else {
+			if hostnameRE.MatchString(machine.Hostname) {
+				outMdb.Machines = append(outMdb.Machines, machine)
+			}
 		}
 	}
 	return &outMdb
@@ -209,4 +251,65 @@ func writeMdb(mdb *mdb.Mdb, mdbFileName string) error {
 		return err
 	}
 	return os.Rename(tmpFileName, mdbFileName)
+}
+
+func getHostsExcludes() map[string]struct{} {
+	hostsExcludeMapMutex.RLock()
+	hostsMap := hostsExcludeMap
+	hostsExcludeMapMutex.RUnlock()
+	return hostsMap
+}
+
+func getHostsIncludes() map[string]struct{} {
+	hostsIncludeMapMutex.RLock()
+	hostsMap := hostsIncludeMap
+	hostsIncludeMapMutex.RUnlock()
+	return hostsMap
+}
+
+func hostsFilterReader(dataChannel <-chan interface{},
+	eventChannel chan<- struct{}, waitGroup *sync.WaitGroup, lock sync.RWMutex,
+	hostsMapPtr *map[string]struct{}) {
+	for data := range dataChannel {
+		lines := data.([]string)
+		hostsMap := stringutil.ConvertListToMap(lines, false)
+		lock.Lock()
+		*hostsMapPtr = hostsMap
+		lock.Unlock()
+		if waitGroup != nil {
+			waitGroup.Done()
+			waitGroup = nil
+		}
+		eventChannel <- struct{}{}
+	}
+}
+
+func startHostsExcludeReader(filename string, eventChannel chan<- struct{},
+	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
+	startHostsFilterReader(filename, eventChannel, waitGroup,
+		hostsExcludeMapMutex, &hostsExcludeMap, logger)
+}
+
+func startHostsFilterReader(filename string, eventChannel chan<- struct{},
+	waitGroup *sync.WaitGroup, lock sync.RWMutex,
+	hostsMapPtr *map[string]struct{}, logger log.DebugLogger) {
+	if filename == "" {
+		return
+	}
+	dataChannel, err := configwatch.Watch(filename,
+		time.Minute, func(reader io.Reader) (interface{}, error) {
+			return fsutil.ReadLines(reader)
+		}, logger)
+	if err != nil {
+		showErrorAndDie(err)
+	}
+	waitGroup.Add(1)
+	go hostsFilterReader(dataChannel, eventChannel, waitGroup, lock,
+		hostsMapPtr)
+}
+
+func startHostsIncludeReader(filename string, eventChannel chan<- struct{},
+	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
+	startHostsFilterReader(filename, eventChannel, waitGroup,
+		hostsIncludeMapMutex, &hostsIncludeMap, logger)
 }

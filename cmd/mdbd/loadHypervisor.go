@@ -91,7 +91,6 @@ func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 				ownerGroup = vm.OwnerGroups[0]
 			}
 			newMdb.Machines = append(newMdb.Machines, mdb.Machine{
-				Hostname:       ipAddr,
 				IpAddress:      ipAddr,
 				RequiredImage:  tags["RequiredImage"],
 				PlannedImage:   tags["PlannedImage"],

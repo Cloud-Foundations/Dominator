@@ -13,6 +13,20 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+type generatorInfo struct {
+	args                []string
+	driverName          string
+	generator           generator
+	mutex               sync.Mutex
+	numFilteredMachines uint
+	numRawMachines      uint
+}
+
+type generatorList struct {
+	generatorInfos []*generatorInfo
+	maxArgs        uint
+}
+
 type makeGeneratorParams struct {
 	args         []string
 	eventChannel chan<- struct{}
@@ -36,43 +50,57 @@ type variablesGetter interface {
 }
 
 func setupGenerators(reader io.Reader, drivers []driver,
-	params makeGeneratorParams) ([]generator, error) {
-	var generators []generator
+	params makeGeneratorParams) (*generatorList, error) {
+	genList := &generatorList{}
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 1 || len(fields[0]) < 1 || fields[0][0] == '#' {
 			continue
 		}
-		driverName := fields[0]
-		args := fields[1:]
+		genInfo := &generatorInfo{
+			args:       fields[1:],
+			driverName: fields[0],
+		}
+		if uint(len(genInfo.args)) > genList.maxArgs {
+			genList.maxArgs = uint(len(genInfo.args))
+		}
 		var drv *driver
 		for _, d := range drivers {
-			if d.name == driverName {
+			if d.name == genInfo.driverName {
 				drv = &d
 				break
 			}
 		}
 		if drv == nil {
-			return nil, errors.New("unknown driver: " + driverName)
+			return nil, errors.New("unknown driver: " + genInfo.driverName)
 		}
-		if len(args) < drv.minArgs {
-			return nil, errors.New("insufficient arguments for: " + driverName)
+		if len(genInfo.args) < drv.minArgs {
+			return nil,
+				errors.New("insufficient arguments for: " + genInfo.driverName)
 		}
-		if drv.maxArgs >= 0 && len(args) > drv.maxArgs {
-			return nil, errors.New("too mant arguments for: " + driverName)
+		if drv.maxArgs >= 0 && len(genInfo.args) > drv.maxArgs {
+			return nil,
+				errors.New("too many arguments for: " + genInfo.driverName)
 		}
-		params.args = args
+		params.args = genInfo.args
 		gen, err := drv.setupFunc(params)
 		if err != nil {
 			return nil, err
 		}
-		generators = append(generators, gen)
+		genInfo.generator = gen
+		genList.generatorInfos = append(genList.generatorInfos, genInfo)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	return generators, nil
+	// Pad generator fields for display.
+	for _, genInfo := range genList.generatorInfos {
+		for index := uint(len(genInfo.args)); index < genList.maxArgs; index++ {
+			genInfo.args = append(genInfo.args, "")
+		}
+	}
+	return genList, nil
 }
 
 // sourceGenerator implements the generator interface and generates an *mdb.Mdb

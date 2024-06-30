@@ -26,6 +26,10 @@ var (
 	debug         = flag.Bool("debug", false, "If true, show debugging output")
 	fetchInterval = flag.Uint("fetchInterval", 59,
 		"Interval between fetches from the MDB source, in seconds")
+	hostnamesExcludeFile = flag.String("hostnamesExcludeFile", "",
+		"A file containing a list of hostnames to exclude")
+	hostnamesIncludeFile = flag.String("hostnamesIncludeFile", "",
+		"A file containing a list of hostnames to include")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
 		"A regular expression to match the desired hostnames")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
@@ -88,6 +92,14 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    location: optional location to limit query to")
 	fmt.Fprintln(os.Stderr,
+		"  hostlist: url [required-image [planned-image]]")
+	fmt.Fprintln(os.Stderr,
+		"    url: URL which yields a list of machine hostnames, one per line")
+	fmt.Fprintln(os.Stderr,
+		"    required-image: optional required image for machines")
+	fmt.Fprintln(os.Stderr,
+		"    planned-image: optional planned image for machines")
+	fmt.Fprintln(os.Stderr,
 		"  hypervisor")
 	fmt.Fprintln(os.Stderr,
 		"    Query Hypervisor on this machine")
@@ -125,6 +137,7 @@ var drivers = []driver{
 	{"cis", 1, 1, newCisGenerator},
 	{"ds.host.fqdn", 1, 1, newDsHostFqdnGenerator},
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
+	{"hostlist", 1, 3, newHostlistGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
 	{"json", 1, 1, newJsonGenerator},
 	{"text", 1, 1, newTextGenerator},
@@ -207,11 +220,15 @@ func main() {
 	if err != nil {
 		showErrorAndDie(err)
 	}
-	httpSrv, err := startHttpServer(*portNum)
+	httpSrv, err := startHttpServer(*portNum, generators)
 	if err != nil {
 		showErrorAndDie(err)
 	}
 	httpSrv.AddHtmlWriter(logger)
+	startHostsExcludeReader(*hostnamesExcludeFile, eventChannel, waitGroup,
+		logger)
+	startHostsIncludeReader(*hostnamesIncludeFile, eventChannel, waitGroup,
+		logger)
 	// Wait a minute for any asynronous generators to yield first data.
 	waitTimer := time.NewTimer(time.Minute)
 	waitChannel := make(chan struct{}, 1)
