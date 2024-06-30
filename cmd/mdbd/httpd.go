@@ -19,14 +19,24 @@ type HtmlWriter interface {
 type httpServer struct {
 	htmlWriters []HtmlWriter
 	mdb         *mdb.Mdb
+	generators  *generatorList
 }
 
-func startHttpServer(portNum uint) (*httpServer, error) {
+func makeNumMachinesText(numFilteredMachines, numRawMachines uint) string {
+	if numRawMachines == numFilteredMachines {
+		return fmt.Sprintf("%d", numFilteredMachines)
+	}
+	return fmt.Sprintf("%d<font color=\"grey\">/%d</font>",
+		numFilteredMachines, numRawMachines)
+}
+
+func startHttpServer(portNum uint,
+	generators *generatorList) (*httpServer, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
 	if err != nil {
 		return nil, err
 	}
-	s := &httpServer{mdb: &mdb.Mdb{}}
+	s := &httpServer{mdb: &mdb.Mdb{}, generators: generators}
 	html.HandleFunc("/", s.statusHandler)
 	html.HandleFunc("/showMdb", s.showMdbHandler)
 	go http.Serve(listener, nil)
@@ -54,14 +64,32 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "<h3>")
 	fmt.Fprintln(writer, "Data Sources:<br>")
 	fieldArgs := []string{"Type"}
-	for index := uint(1); index < maxGeneratorFields; index++ {
+	for index := uint(0); index < s.generators.maxArgs; index++ {
 		fieldArgs = append(fieldArgs, fmt.Sprintf("Arg%d", index))
 	}
+	fieldArgs = append(fieldArgs, "Num Machines")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+	var totalFilteredMachines, totalRawMachines uint
 	tw, _ := html.NewTableWriter(writer, true, fieldArgs...)
-	for _, fields := range generatorFields {
-		tw.WriteRow("", "", fields...)
+	for _, genInfo := range s.generators.generatorInfos {
+		columns := make([]string, 0, len(genInfo.args)+2)
+		columns = append(columns, genInfo.driverName)
+		columns = append(columns, genInfo.args...)
+		genInfo.mutex.Lock()
+		numFilteredMachines := genInfo.numFilteredMachines
+		numRawMachines := genInfo.numRawMachines
+		genInfo.mutex.Unlock()
+		totalFilteredMachines += numFilteredMachines
+		totalRawMachines += numRawMachines
+		columns = append(columns,
+			makeNumMachinesText(numFilteredMachines, numRawMachines))
+		tw.WriteRow("", "", columns...)
 	}
+	columns := make([]string, s.generators.maxArgs+2)
+	columns[0] = "<b>TOTAL</b>"
+	columns[s.generators.maxArgs+1] = makeNumMachinesText(totalFilteredMachines,
+		totalRawMachines)
+	tw.WriteRow("", "", columns...)
 	tw.Close()
 	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a><br>\n",
 		len(s.mdb.Machines))

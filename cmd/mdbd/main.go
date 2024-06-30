@@ -3,14 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -222,11 +220,15 @@ func main() {
 	if err != nil {
 		showErrorAndDie(err)
 	}
-	httpSrv, err := startHttpServer(*portNum)
+	httpSrv, err := startHttpServer(*portNum, generators)
 	if err != nil {
 		showErrorAndDie(err)
 	}
 	httpSrv.AddHtmlWriter(logger)
+	startHostsExcludeReader(*hostnamesExcludeFile, eventChannel, waitGroup,
+		logger)
+	startHostsIncludeReader(*hostnamesIncludeFile, eventChannel, waitGroup,
+		logger)
 	// Wait a minute for any asynronous generators to yield first data.
 	waitTimer := time.NewTimer(time.Minute)
 	waitChannel := make(chan struct{}, 1)
@@ -241,26 +243,6 @@ func main() {
 		logger.Println("Timed out waiting for initial data")
 	}
 	rpcd := startRpcd(logger)
-	if *hostnamesExcludeFile != "" {
-		dataChannel, err := configwatch.Watch(*hostnamesExcludeFile,
-			time.Minute, func(reader io.Reader) (interface{}, error) {
-				return fsutil.ReadLines(reader)
-			}, logger)
-		if err != nil {
-			showErrorAndDie(err)
-		}
-		go hostsExcludeReader(dataChannel, eventChannel, logger)
-	}
-	if *hostnamesIncludeFile != "" {
-		dataChannel, err := configwatch.Watch(*hostnamesIncludeFile,
-			time.Minute, func(reader io.Reader) (interface{}, error) {
-				return fsutil.ReadLines(reader)
-			}, logger)
-		if err != nil {
-			showErrorAndDie(err)
-		}
-		go hostsIncludeReader(dataChannel, eventChannel, logger)
-	}
 	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
 		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {
 			rpcd.pushUpdateToAll(old, new)
