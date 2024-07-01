@@ -31,7 +31,7 @@ var (
 	hostnamesIncludeFile = flag.String("hostnamesIncludeFile", "",
 		"A file containing a list of hostnames to include")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
-		"A regular expression to match the desired hostnames")
+		"A regular expression to match the desired hostnames, leading ! inverts")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
 		"Name of file to write filtered MDB data to")
 	portNum = flag.Uint("portNum", constants.SimpleMdbServerPortNumber,

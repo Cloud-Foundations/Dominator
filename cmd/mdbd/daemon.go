@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -41,6 +42,14 @@ type genericEncoder interface {
 	Encode(v interface{}) error
 }
 
+type invertedRegexp struct {
+	stringMatcher
+}
+
+type stringMatcher interface {
+	MatchString(string) bool
+}
+
 func init() {
 	loadCpuTimeDistribution = latencyBucketer.NewCumulativeDistribution()
 	if err := tricorder.RegisterMetric("/load-cpu-time", loadCpuTimeDistribution,
@@ -59,10 +68,17 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
 	logger log.DebugLogger, debug bool) {
 	var prevMdb *mdb.Mdb
-	var hostnameRE *regexp.Regexp
-	var err error
+	var hostnameRE stringMatcher
 	if hostnameRegex != ".*" {
-		hostnameRE, err = regexp.Compile("^" + hostnameRegex)
+		var err error
+		var re *regexp.Regexp
+		if strings.HasPrefix(hostnameRegex, "!") {
+			re, err = regexp.Compile("^" + hostnameRegex[1:])
+			hostnameRE = &invertedRegexp{re}
+		} else {
+			re, err = regexp.Compile("^" + hostnameRegex)
+			hostnameRE = re
+		}
 		if err != nil {
 			logger.Println(err)
 			os.Exit(1)
@@ -111,7 +127,7 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 }
 
 func loadFromAll(generators *generatorList, datacentre string,
-	hostnameRE *regexp.Regexp,
+	hostnameRE stringMatcher,
 	hostsExcludeMap, hostsIncludeMap map[string]struct{},
 	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
@@ -195,7 +211,7 @@ func processValue(value string, variables map[string]string) string {
 	return value
 }
 
-func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp,
+func selectHosts(inMdb *mdb.Mdb, hostnameRE stringMatcher,
 	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdb.Mdb {
 	if hostnameRE == nil &&
 		len(hostsExcludeMap) < 1 &&
@@ -312,4 +328,8 @@ func startHostsIncludeReader(filename string, eventChannel chan<- struct{},
 	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
 	startHostsFilterReader(filename, eventChannel, waitGroup,
 		hostsIncludeMapMutex, &hostsIncludeMap, logger)
+}
+
+func (ir *invertedRegexp) MatchString(s string) bool {
+	return !ir.stringMatcher.MatchString(s)
 }
