@@ -10,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
 
 type HtmlWriter interface {
@@ -91,8 +92,9 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 		totalRawMachines)
 	tw.WriteRow("", "", columns...)
 	tw.Close()
-	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a><br>\n",
+	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a>",
 		len(s.mdb.Machines))
+	fmt.Fprintln(writer, " <a href=\"showMdb?output=text\">(text)</a><br>")
 	for _, htmlWriter := range s.htmlWriters {
 		htmlWriter.WriteHtml(writer)
 	}
@@ -107,9 +109,17 @@ func (s *httpServer) AddHtmlWriter(htmlWriter HtmlWriter) {
 }
 
 func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
+	parsedQuery := url.ParseQuery(req.URL)
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	json.WriteWithIndent(writer, "    ", s.mdb)
+	switch parsedQuery.OutputType() {
+	case url.OutputTypeText:
+		for _, machine := range s.mdb.Machines {
+			fmt.Fprintln(writer, machine.Hostname)
+		}
+	case url.OutputTypeHtml, url.OutputTypeJson:
+		json.WriteWithIndent(writer, "    ", s.mdb)
+	}
 }
 
 func (s *httpServer) UpdateMdb(new *mdb.Mdb) {
