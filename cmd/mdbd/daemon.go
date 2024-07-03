@@ -66,7 +66,7 @@ func init() {
 func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	mdbFileName string, hostnameRegex string,
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
-	logger log.DebugLogger, debug bool) {
+	logger log.DebugLogger) {
 	var prevMdb *mdb.Mdb
 	var hostnameRE stringMatcher
 	if hostnameRegex != ".*" {
@@ -101,12 +101,17 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 			if err := writeMdb(newMdb, mdbFileName); err != nil {
 				logger.Println(err)
 			} else {
-				logger.Printf("Wrote new MDB data, %d machines\n",
-					len(newMdb.Machines))
+				if prevMdb == nil {
+					logger.Printf("Wrote initial MDB data, %d machines\n",
+						len(newMdb.Machines))
+				} else {
+					logger.Debugf(0, "Wrote new MDB data, %d machines\n",
+						len(newMdb.Machines))
+				}
 				prevMdb = newMdb
 			}
-		} else if debug {
-			logger.Printf("Refreshed MDB data, same %d machines\n",
+		} else {
+			logger.Debugf(1, "Refreshed MDB data, same %d machines\n",
 				len(newMdb.Machines))
 		}
 	}
