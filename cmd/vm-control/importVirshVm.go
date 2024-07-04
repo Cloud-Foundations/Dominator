@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
 	"fmt"
 	"net"
@@ -28,9 +29,10 @@ type cpuType struct {
 }
 
 type devicesInfo struct {
-	Volumes     []volumeType    `xml:"disk"`
 	Interfaces  []interfaceType `xml:"interface"`
 	SerialPorts []serialType    `xml:"serial"`
+	Video       []videoType     `xml:"video"`
+	Volumes     []volumeType    `xml:"disk"`
 }
 
 type driverType struct {
@@ -93,6 +95,10 @@ type vCpuInfo struct {
 	Placement string `xml:"placement,attr"`
 }
 
+type videoType struct {
+	Model modelType `xml:"model"`
+}
+
 type virshInfoType struct {
 	XMLName xml.Name    `xml:"domain"`
 	Cpu     cpuType     `xml:"cpu"`
@@ -139,6 +145,27 @@ func importVirshVmSubcommand(args []string, logger log.DebugLogger) error {
 		return fmt.Errorf("error importing VM: %s", err)
 	}
 	return nil
+}
+
+func parseVirshXmlSubcommand(args []string, logger log.DebugLogger) error {
+	if err := parseVirshXml(args[0], logger); err != nil {
+		return fmt.Errorf("error parsing Virsh XML: %s", err)
+	}
+	return nil
+}
+
+func parseVirshXml(filename string, logger log.DebugLogger) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	decoder := xml.NewDecoder(bufio.NewReader(file))
+	var virshInfo virshInfoType
+	if err := decoder.Decode(&virshInfo); err != nil {
+		return err
+	}
+	return json.WriteWithIndent(os.Stdout, "    ", virshInfo)
 }
 
 func ensureDomainIsStopped(domainName string) error {
@@ -261,6 +288,9 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 				virshInfo.Devices.Interfaces[index+1].Mac.Address)
 		}
 		request.SecondaryAddresses = append(request.SecondaryAddresses, sAddr)
+	}
+	if len(virshInfo.Devices.Video) > 0 {
+		request.ConsoleType = proto.ConsoleVNC
 	}
 	switch virshInfo.Memory.Unit {
 	case "KiB":

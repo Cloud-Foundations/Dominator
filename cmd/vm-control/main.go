@@ -216,6 +216,7 @@ var subcommands = []commands.Command{
 	{"list-locations", "[TopLocation]", 0, 1, listLocationsSubcommand},
 	{"list-vms", "", 0, 0, listVMsSubcommand},
 	{"migrate-vm", "IPaddr", 1, 1, migrateVmSubcommand},
+	{"parse-virsh-xml", "filename", 1, 1, parseVirshXmlSubcommand},
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
 	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
