@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -41,6 +42,14 @@ type genericEncoder interface {
 	Encode(v interface{}) error
 }
 
+type invertedRegexp struct {
+	stringMatcher
+}
+
+type stringMatcher interface {
+	MatchString(string) bool
+}
+
 func init() {
 	loadCpuTimeDistribution = latencyBucketer.NewCumulativeDistribution()
 	if err := tricorder.RegisterMetric("/load-cpu-time", loadCpuTimeDistribution,
@@ -57,12 +66,19 @@ func init() {
 func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	mdbFileName string, hostnameRegex string,
 	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
-	logger log.DebugLogger, debug bool) {
+	logger log.DebugLogger) {
 	var prevMdb *mdb.Mdb
-	var hostnameRE *regexp.Regexp
-	var err error
+	var hostnameRE stringMatcher
 	if hostnameRegex != ".*" {
-		hostnameRE, err = regexp.Compile("^" + hostnameRegex)
+		var err error
+		var re *regexp.Regexp
+		if strings.HasPrefix(hostnameRegex, "!") {
+			re, err = regexp.Compile("^" + hostnameRegex[1:])
+			hostnameRE = &invertedRegexp{re}
+		} else {
+			re, err = regexp.Compile("^" + hostnameRegex)
+			hostnameRE = re
+		}
 		if err != nil {
 			logger.Println(err)
 			os.Exit(1)
@@ -85,12 +101,17 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 			if err := writeMdb(newMdb, mdbFileName); err != nil {
 				logger.Println(err)
 			} else {
-				logger.Printf("Wrote new MDB data, %d machines\n",
-					len(newMdb.Machines))
+				if prevMdb == nil {
+					logger.Printf("Wrote initial MDB data, %d machines\n",
+						len(newMdb.Machines))
+				} else {
+					logger.Debugf(0, "Wrote new MDB data, %d machines\n",
+						len(newMdb.Machines))
+				}
 				prevMdb = newMdb
 			}
-		} else if debug {
-			logger.Printf("Refreshed MDB data, same %d machines\n",
+		} else {
+			logger.Debugf(1, "Refreshed MDB data, same %d machines\n",
 				len(newMdb.Machines))
 		}
 	}
@@ -111,7 +132,7 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 }
 
 func loadFromAll(generators *generatorList, datacentre string,
-	hostnameRE *regexp.Regexp,
+	hostnameRE stringMatcher,
 	hostsExcludeMap, hostsIncludeMap map[string]struct{},
 	logger log.DebugLogger) (*mdb.Mdb, error) {
 	machineMap := make(map[string]mdb.Machine)
@@ -195,7 +216,7 @@ func processValue(value string, variables map[string]string) string {
 	return value
 }
 
-func selectHosts(inMdb *mdb.Mdb, hostnameRE *regexp.Regexp,
+func selectHosts(inMdb *mdb.Mdb, hostnameRE stringMatcher,
 	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdb.Mdb {
 	if hostnameRE == nil &&
 		len(hostsExcludeMap) < 1 &&
@@ -312,4 +333,8 @@ func startHostsIncludeReader(filename string, eventChannel chan<- struct{},
 	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
 	startHostsFilterReader(filename, eventChannel, waitGroup,
 		hostsIncludeMapMutex, &hostsIncludeMap, logger)
+}
+
+func (ir *invertedRegexp) MatchString(s string) bool {
+	return !ir.stringMatcher.MatchString(s)
 }

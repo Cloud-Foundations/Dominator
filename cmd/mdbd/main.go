@@ -23,7 +23,7 @@ import (
 var (
 	datacentre = flag.String("datacentre", "",
 		"Datacentre to limit results to (may not be supported by all drivers)")
-	debug         = flag.Bool("debug", false, "If true, show debugging output")
+	debug         = flag.Bool("debug", false, "Deprecated")
 	fetchInterval = flag.Uint("fetchInterval", 59,
 		"Interval between fetches from the MDB source, in seconds")
 	hostnamesExcludeFile = flag.String("hostnamesExcludeFile", "",
@@ -31,7 +31,7 @@ var (
 	hostnamesIncludeFile = flag.String("hostnamesIncludeFile", "",
 		"A file containing a list of hostnames to include")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
-		"A regular expression to match the desired hostnames")
+		"A regular expression to match the desired hostnames, leading ! inverts")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
 		"Name of file to write filtered MDB data to")
 	portNum = flag.Uint("portNum", constants.SimpleMdbServerPortNumber,
@@ -193,6 +193,9 @@ func main() {
 	flag.Parse()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
+	if *debug { // Backwards compatibility.
+		logger.SetLevel(0)
+	}
 	srpc.SetDefaultLogger(logger)
 	// We have to have inputs.
 	if *sourcesFile == "" {
@@ -248,7 +251,7 @@ func main() {
 			rpcd.pushUpdateToAll(old, new)
 			httpSrv.UpdateMdb(new)
 		},
-		logger, *debug)
+		logger)
 	<-readerChannel
 	fsutil.WatchFileStop()
 	if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
