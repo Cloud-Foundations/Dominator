@@ -2,10 +2,12 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -50,7 +52,7 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 	commandOutput chan<- byte) {
 	reader := &copyingReader{commandOutput, monitorSock}
 	decoder := json.NewDecoder(reader)
-	var guestShutdown, hostQuit, watchdogPowerOff bool
+	var guestShutdown, hostQuit, lastDecodeFailed, watchdogPowerOff bool
 	for {
 		var message monitorMessageType
 		if err := decoder.Decode(&message); err != nil {
@@ -60,7 +62,19 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 				}
 				break
 			}
+			if errors.Is(err, syscall.ECONNRESET) {
+				if !guestShutdown && !hostQuit {
+					vm.logger.Debugln(0, "connection reset on monitor socket")
+				}
+				break
+			}
 			vm.logger.Printf("error reading monitor message: %s\n", err)
+			if lastDecodeFailed {
+				break
+			}
+			lastDecodeFailed = true
+		} else {
+			lastDecodeFailed = false
 		}
 		switch message.Event {
 		case "SHUTDOWN":
