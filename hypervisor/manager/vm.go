@@ -795,6 +795,11 @@ func (m *Manager) commitImportedVm(ipAddr net.IP,
 	if err := m.registerAddress(vm.Address); err != nil {
 		return err
 	}
+	for _, address := range vm.SecondaryAddresses {
+		if err := m.registerAddress(address); err != nil {
+			return err
+		}
+	}
 	vm.Uncommitted = false
 	vm.writeAndSendInfo()
 	return nil
