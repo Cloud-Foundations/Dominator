@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
 	"fmt"
 	"net"
@@ -13,6 +14,7 @@ import (
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -28,9 +30,10 @@ type cpuType struct {
 }
 
 type devicesInfo struct {
-	Volumes     []volumeType    `xml:"disk"`
 	Interfaces  []interfaceType `xml:"interface"`
 	SerialPorts []serialType    `xml:"serial"`
+	Video       []videoType     `xml:"video"`
+	Volumes     []volumeType    `xml:"disk"`
 }
 
 type driverType struct {
@@ -93,6 +96,10 @@ type vCpuInfo struct {
 	Placement string `xml:"placement,attr"`
 }
 
+type videoType struct {
+	Model modelType `xml:"model"`
+}
+
 type virshInfoType struct {
 	XMLName xml.Name    `xml:"domain"`
 	Cpu     cpuType     `xml:"cpu"`
@@ -137,6 +144,13 @@ func importVirshVmSubcommand(args []string, logger log.DebugLogger) error {
 	}
 	if err := importVirshVm(macAddr, domainName, sAddrs, logger); err != nil {
 		return fmt.Errorf("error importing VM: %s", err)
+	}
+	return nil
+}
+
+func parseVirshXmlSubcommand(args []string, logger log.DebugLogger) error {
+	if err := parseVirshXml(args[0], logger); err != nil {
+		return fmt.Errorf("error parsing Virsh XML: %s", err)
 	}
 	return nil
 }
@@ -186,6 +200,24 @@ func getDomainState(domainName string) (string, error) {
 			err.(*exec.ExitError).Stderr)
 	}
 	return strings.TrimSpace(string(stdout)), nil
+}
+
+func findVolumeRoot(volumeRoots map[string]string,
+	mountTable *mounts.MountTable, volumeFilename string) string {
+	for dirname := filepath.Dir(volumeFilename); ; {
+		if volumeRoot, ok := volumeRoots[dirname]; ok {
+			return volumeRoot
+		}
+		if dirname == "/" {
+			break
+		}
+		dirname = filepath.Dir(dirname)
+	}
+	mountEntry := mountTable.FindEntry(volumeFilename)
+	if mountEntry != nil {
+		return mountEntry.MountPoint
+	}
+	return ""
 }
 
 func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
@@ -262,6 +294,9 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 		}
 		request.SecondaryAddresses = append(request.SecondaryAddresses, sAddr)
 	}
+	if len(virshInfo.Devices.Video) > 0 {
+		request.ConsoleType = proto.ConsoleVNC
+	}
 	switch virshInfo.Memory.Unit {
 	case "KiB":
 		request.VmInfo.MemoryInMiB = virshInfo.Memory.Value >> 10
@@ -274,10 +309,11 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 	}
 	request.VmInfo.MilliCPUs = virshInfo.VCpu.Num * 1000
 	myPidStr := strconv.Itoa(os.Getpid())
-	if err := ensureDomainIsStopped(domainName); err != nil {
+	logger.Debugln(0, "finding volumes")
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
 		return err
 	}
-	logger.Debugln(0, "finding volumes")
 	for index, inputVolume := range virshInfo.Devices.Volumes {
 		if inputVolume.Device != "disk" {
 			continue
@@ -288,17 +324,7 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 			return err
 		}
 		inputFilename := inputVolume.Source.File
-		var volumeRoot string
-		for dirname := filepath.Dir(inputFilename); ; {
-			if vr, ok := volumeRoots[dirname]; ok {
-				volumeRoot = vr
-				break
-			}
-			if dirname == "/" {
-				break
-			}
-			dirname = filepath.Dir(dirname)
-		}
+		volumeRoot := findVolumeRoot(volumeRoots, mountTable, inputFilename)
 		if volumeRoot == "" {
 			return fmt.Errorf("no Hypervisor directory for: %s", inputFilename)
 		}
@@ -318,6 +344,9 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 			proto.Volume{Format: volumeFormat})
 	}
 	json.WriteWithIndent(os.Stdout, "    ", request)
+	if err := ensureDomainIsStopped(domainName); err != nil {
+		return err
+	}
 	request.VerificationCookie = verificationCookie
 	var reply proto.GetVmInfoResponse
 	logger.Debugln(0, "issuing import RPC")
@@ -359,6 +388,20 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 		return fmt.Errorf("error destroying old VM: %s", err)
 	}
 	return nil
+}
+
+func parseVirshXml(filename string, logger log.DebugLogger) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	decoder := xml.NewDecoder(bufio.NewReader(file))
+	var virshInfo virshInfoType
+	if err := decoder.Decode(&virshInfo); err != nil {
+		return err
+	}
+	return json.WriteWithIndent(os.Stdout, "    ", virshInfo)
 }
 
 func (virshInfo virshInfoType) deleteVolumes() {

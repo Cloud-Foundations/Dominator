@@ -26,6 +26,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -793,6 +794,11 @@ func (m *Manager) commitImportedVm(ipAddr net.IP,
 	}
 	if err := m.registerAddress(vm.Address); err != nil {
 		return err
+	}
+	for _, address := range vm.SecondaryAddresses {
+		if err := m.registerAddress(address); err != nil {
+			return err
+		}
 	}
 	vm.Uncommitted = false
 	vm.writeAndSendInfo()
@@ -1929,6 +1935,10 @@ func (m *Manager) holdVmLock(ipAddr net.IP, timeout time.Duration,
 
 func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	request proto.ImportLocalVmRequest) error {
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
 	requestedIpAddrs := make(map[string]struct{},
 		1+len(request.SecondaryAddresses))
 	requestedMacAddrs := make(map[string]struct{},
@@ -1951,13 +1961,26 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 	}
 	request.VmInfo.OwnerUsers = []string{authInfo.Username}
 	request.VmInfo.Uncommitted = true
-	volumeDirectories := stringutil.ConvertListToMap(m.volumeDirectories, false)
+	volumeDirectories := make([]string, 0, len(request.VolumeFilenames))
 	volumes := make([]proto.Volume, 0, len(request.VolumeFilenames))
 	for index, filename := range request.VolumeFilenames {
-		dirname := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
-		if _, ok := volumeDirectories[dirname]; !ok {
-			return fmt.Errorf("%s not in a volume directory", filename)
+		mountEntry := mountTable.FindEntry(filename)
+		if mountEntry == nil {
+			return fmt.Errorf("unable to find mount entry for: %s", filename)
 		}
+		dirname := filepath.Join(mountEntry.MountPoint, "hyper-volumes")
+		if fi, err := os.Lstat(dirname); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
+				return err
+			}
+			m.Logger.Printf("Created directory: %s\n", dirname)
+		} else if !fi.IsDir() {
+			return fmt.Errorf("%s is not a directory", dirname)
+		}
+		volumeDirectories = append(volumeDirectories, dirname)
 		if fi, err := os.Lstat(filename); err != nil {
 			return err
 		} else if fi.Mode()&os.ModeType != 0 {
@@ -2036,10 +2059,8 @@ func (m *Manager) importLocalVm(authInfo *srpc.AuthInformation,
 		return err
 	}
 	for index, sourceFilename := range request.VolumeFilenames {
-		dirname := filepath.Join(filepath.Dir(filepath.Dir(
-			filepath.Dir(sourceFilename))),
-			ipAddress)
-		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
+		dirname := filepath.Join(volumeDirectories[index], ipAddress)
+		if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		destFilename := filepath.Join(dirname, indexToName(index))
