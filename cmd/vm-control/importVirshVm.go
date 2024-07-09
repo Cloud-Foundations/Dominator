@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -338,6 +339,9 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 		if err := os.Link(inputFilename, outputFilename); err != nil {
 			return err
 		}
+		if inputVolume.Target.Bus != "virtio" {
+			request.DisableVirtIO = true
+		}
 		request.VolumeFilenames = append(request.VolumeFilenames,
 			outputFilename)
 		request.VmInfo.Volumes = append(request.VmInfo.Volumes,
@@ -391,12 +395,17 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 }
 
 func parseVirshXml(filename string, logger log.DebugLogger) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
+	var reader io.Reader
+	if filename == "-" {
+		reader = os.Stdin
+	} else {
+		file, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
 	}
-	defer file.Close()
-	decoder := xml.NewDecoder(bufio.NewReader(file))
+	decoder := xml.NewDecoder(bufio.NewReader(reader))
 	var virshInfo virshInfoType
 	if err := decoder.Decode(&virshInfo); err != nil {
 		return err
