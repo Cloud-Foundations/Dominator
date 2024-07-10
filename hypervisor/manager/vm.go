@@ -1559,7 +1559,12 @@ func (m *Manager) discardVmOldImage(ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer func() {
+		vm.mutex.Lock()
+		vm.allowMutationsAndUnlock()
+	}()
 	if err := removeFile(vm.getInitrdPath() + extension); err != nil {
 		return err
 	}
@@ -1585,7 +1590,12 @@ func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer func() {
+		vm.mutex.Lock()
+		vm.allowMutationsAndUnlock()
+	}()
 	return vm.discardSnapshot()
 }
 
@@ -3353,7 +3363,12 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer func() {
+		vm.mutex.Lock()
+		vm.allowMutationsAndUnlock()
+	}()
 	// TODO(rgooch): First check for sufficient free space.
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
