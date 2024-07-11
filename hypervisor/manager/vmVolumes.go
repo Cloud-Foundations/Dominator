@@ -10,16 +10,23 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+// checkVolumes will check the volume sizes and will return an error if they
+// unexpectedly changed. If grabLock is true, the VM write lock is grabbed,
+// else the lock must be grabbed by the caller.
 func (vm *vmInfoType) checkVolumes(grabLock bool) error {
 	if grabLock {
-		vm.mutex.RLock()
-		defer vm.mutex.RUnlock()
+		vm.mutex.Lock()
+		defer vm.mutex.Unlock()
 	}
 	for index, volume := range vm.VolumeLocations {
 		expectedSize := vm.Volumes[index].Size
 		if fi, err := os.Stat(volume.Filename); err != nil {
 			return fmt.Errorf("error stating volume[%d]: %s", index, err)
-		} else if fi.Size() != int64(expectedSize) {
+		} else if foundSize := uint64(fi.Size()); foundSize != expectedSize {
+			if vm.Volumes[index].Format == proto.VolumeFormatQCOW2 {
+				vm.Volumes[index].Size = foundSize
+				continue
+			}
 			return fmt.Errorf("volume[%d] size expected: %s, found: %s",
 				index, format.FormatBytes(expectedSize),
 				format.FormatBytes(uint64(fi.Size())))
