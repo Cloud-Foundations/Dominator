@@ -296,12 +296,28 @@ func main() {
 		if rootDeviceBytesPerSecond < 1<<20 {
 			os.Exit(1)
 		}
-		bytesPerSecond = uint64(rootDeviceBytesPerSecond)
-		blocksPerSecond = bytesPerSecond >> 9
-		logger.Printf("Falling back to -rootDeviceBytesPerSecond option: %s\n",
-			format.FormatBytes(bytesPerSecond))
+		blocksPerSecond = uint64(rootDeviceBytesPerSecond) >> 9
+		bytesPerSecond = blocksPerSecond << 9
+		logger.Printf(
+			"Falling back to -rootDeviceBytesPerSecond option: %s\n",
+			format.FormatBytes(uint64(rootDeviceBytesPerSecond)))
+		if bytesPerSecond != uint64(rootDeviceBytesPerSecond) {
+			logger.Printf("Block-adjusted speed: %s/s\n",
+				format.FormatBytes(bytesPerSecond))
+		}
+	} else {
+		publishFsSpeed(bytesPerSecond, blocksPerSecond)
+		if rootDeviceBytesPerSecond >= 10<<20 {
+			blocksPerSecond = uint64(rootDeviceBytesPerSecond) >> 9
+			bytesPerSecond = blocksPerSecond << 9
+			logger.Printf("Ignoring measured device speed, using -rootDeviceBytesPerSecond option: %s\n",
+				format.FormatBytes(uint64(rootDeviceBytesPerSecond)))
+			if bytesPerSecond != uint64(rootDeviceBytesPerSecond) {
+				logger.Printf("Block-adjusted speed: %s/s\n",
+					format.FormatBytes(bytesPerSecond))
+			}
+		}
 	}
-	publishFsSpeed(bytesPerSecond, blocksPerSecond)
 	configParams := sub.Configuration{}
 	loadConfiguration(*configDirectory, &configParams, logger)
 	// Command-line flags override file configuration.
