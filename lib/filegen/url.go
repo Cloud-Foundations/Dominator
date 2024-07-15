@@ -3,6 +3,7 @@ package filegen
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,11 +34,13 @@ func (urlGen *urlGenerator) Generate(machine mdb.Machine,
 	logger log.Logger) ([]byte, time.Time, error) {
 	requestBody := &bytes.Buffer{}
 	if err := json.WriteWithIndent(requestBody, "    ", machine); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error writing machine data to request body: %w", err)
 	}
 	resp, err := http.Post(urlGen.fullUrl, "application/json", requestBody)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error sending POST request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -45,7 +48,8 @@ func (urlGen *urlGenerator) Generate(machine mdb.Machine,
 	}
 	var result programmeResult
 	if err := json.Read(resp.Body, &result); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error readding result from response body: %w", err)
 	}
 	var validUntil time.Time
 	if result.SecondsValid > 0 {

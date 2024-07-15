@@ -11,6 +11,8 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
+const generateFailureRetryInterval = 15 * time.Minute
+
 func (t *rpcType) Connect(conn *srpc.Conn) error {
 	return t.manager.connect(conn) // Long-lived.
 }
@@ -135,6 +137,8 @@ func (m *Manager) computeFile(machine mdb.Machine, pathname string) (
 	if err != nil {
 		m.logger.Printf("Error generating path: %s for machine: %s: %s\n",
 			pathname, machine.Hostname, err)
+		m.scheduleTimer(pathname, machine.Hostname,
+			time.Now().Add(generateFailureRetryInterval))
 		return fileInfo, false
 	}
 	fileInfo.Hash = hashVal

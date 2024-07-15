@@ -110,6 +110,10 @@ func (m *Manager) scheduleTimer(pathname string, hostname string,
 		hashVal, length, validUntil, err := pathMgr.generator.generate(
 			mdbData, m.logger)
 		if err != nil {
+			m.logger.Printf("Error regenerating path: %s for machine: %s: %s\n",
+				pathname, hostname, err)
+			m.scheduleTimer(pathname, hostname,
+				time.Now().Add(generateFailureRetryInterval))
 			return
 		}
 		pathMgr.machineHashes[hostname] = expiringHash{
