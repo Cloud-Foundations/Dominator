@@ -14,16 +14,23 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/osutil"
+	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
+
+type flusher interface {
+	Flush() error
+}
 
 func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 	if err := patchDirectory(args[0], args[1], logger); err != nil {
@@ -34,6 +41,21 @@ func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 
 func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	_, objectClient := getClients()
+	var triggersRunner sublib.TriggersRunner
+	if *runTriggers {
+		if dirName != "/" {
+			return errors.New("directory must be / when running triggers")
+		}
+		goRoutine := goroutine.New()
+		triggersRunner = func(triggers []*triggers.Trigger, action string,
+			logger log.Logger) bool {
+			var retval bool
+			goRoutine.Run(func() {
+				retval = runTriggersFunc(triggers, action, logger)
+			})
+			return retval
+		}
+	}
 	logger.Debugf(0, "getting image: %s\n", imageName)
 	img, imageName, err := getTypedImageAndName(imageName)
 	if err != nil {
@@ -51,13 +73,14 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	errorChannel := make(chan error)
 	go func() {
 		errorChannel <- patchRoot(img, objectClient, imageName, dirName,
-			rootDir, logger)
+			rootDir, triggersRunner, logger)
 	}()
 	return <-errorChannel
 }
 
 func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
-	imageName, dirName, rootDir string, logger log.DebugLogger) error {
+	imageName, dirName, rootDir string, triggersRunner sublib.TriggersRunner,
+	logger log.DebugLogger) error {
 	if err := wsyscall.UnshareMountNamespace(); err != nil {
 		return fmt.Errorf("unable to unshare mount namesace: %s", err)
 	}
@@ -111,10 +134,13 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 		return errors.New("failed building update: missing computed files")
 	}
 	subRequest.ImageName = imageName
-	subRequest.Triggers = nil
 	logger.Debugln(0, "starting update")
-	_, _, err = sublib.Update(subRequest, rootDir, objectsDir, nil, nil, nil,
-		logger)
+	_, _, err = sublib.UpdateWithOptions(subRequest, sublib.UpdateOptions{
+		Logger:            logger,
+		ObjectsDir:        objectsDir,
+		RootDirectoryName: rootDir,
+		RunTriggers:       triggersRunner,
+	})
 	if err != nil {
 		return err
 	}
@@ -129,4 +155,50 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 		return err
 	}
 	return fsutil.CopyToFile(filename, fsutil.PrivateFilePerms, reader, length)
+}
+
+// Returns true if there were failures.
+func runTriggersFunc(triggerList []*triggers.Trigger, action string,
+	logger log.Logger) bool {
+	// First process reboot triggers. Process them all.
+	var doReboot, hadFailures bool
+	for _, trigger := range triggerList {
+		if trigger.DoReboot {
+			doReboot = true
+			if !osutil.RunCommand(logger, "service", trigger.Service,
+				"restart") {
+				hadFailures = true
+			}
+		}
+	}
+	if hadFailures {
+		logger.Println("Failures preparing for reboot. Fix and then reboot")
+		return true
+	}
+	if doReboot {
+		logger.Println("Rebooting")
+		failureChannel := osutil.RunCommandBackground(logger, "reboot", "-f")
+		timer := time.NewTimer(30 * time.Second)
+		select {
+		case <-failureChannel:
+			logger.Println("Reboot failed, trying harder")
+		case <-timer.C:
+			logger.Println("Still alive after 30 seconds, rebooting harder")
+		}
+		if logger, ok := logger.(flusher); ok {
+			logger.Flush()
+		}
+		time.Sleep(time.Second)
+		if err := osutil.HardReboot(logger); err != nil {
+			logger.Printf("Hard reboot failed: %s\n", err)
+		}
+		return true
+	}
+	for _, trigger := range triggerList {
+		logger.Printf("Action: service %s %s\n", trigger.Service, "restart")
+		if !osutil.RunCommand(logger, "service", trigger.Service, "restart") {
+			hadFailures = true
+		}
+	}
+	return hadFailures
 }
