@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
@@ -41,9 +42,16 @@ func listComputedInodes(tw *html.TableWriter,
 	directoryInode *filesystem.DirectoryInode, name string) {
 	for _, dirent := range directoryInode.EntryList {
 		if inode, ok := dirent.Inode().(*filesystem.ComputedRegularInode); ok {
+			var source string
+			if strings.HasPrefix(inode.Source, "localhost:") {
+				source = inode.Source
+			} else {
+				source = fmt.Sprintf("<a href=\"http://%s\">%s</a>",
+					inode.Source, inode.Source)
+			}
 			tw.WriteRow("", "",
 				path.Join(name, dirent.Name),
-				inode.Source,
+				source,
 			)
 		} else if inode, ok := dirent.Inode().(*filesystem.DirectoryInode); ok {
 			listComputedInodes(tw, inode, path.Join(name, dirent.Name))

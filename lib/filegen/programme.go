@@ -55,25 +55,33 @@ func (progGen *programmeGenerator) Generate(machine mdb.Machine,
 		return nil, time.Time{}, err
 	}
 	if err := json.WriteWithIndent(stdin, "    ", machine); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error writing machine data to programme: %w", err)
 	}
 	if err := stdin.Close(); err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{},
+			fmt.Errorf("error closing stdin for programme: %w", err)
 	}
 	var result programmeResult
-	if err := json.Read(stdout, &result); err != nil {
-		return nil, time.Time{}, err
-	}
-	if err := stdout.Close(); err != nil {
-		return nil, time.Time{}, err
-	}
+	// Read all of the result from stdout and all errors from stderr.
+	stdoutReadError := json.Read(stdout, &result)
 	stderrBuilder := &strings.Builder{}
 	io.Copy(stderrBuilder, stderr)
+	stderrData := strings.TrimSpace(stderrBuilder.String())
 	if err := cmd.Wait(); err != nil {
 		return nil, time.Time{},
 			fmt.Errorf("error running: %s, exit code: %d, stderr: %s",
-				progGen.programmePath, cmd.ProcessState.ExitCode(),
-				strings.TrimSpace(stderrBuilder.String()))
+				progGen.programmePath, cmd.ProcessState.ExitCode(), stderrData)
+	}
+	if stdoutReadError != nil {
+		if stderrData == "" {
+			return nil, time.Time{},
+				fmt.Errorf("error reading result from programme: %w",
+					stdoutReadError)
+		}
+		return nil, time.Time{},
+			fmt.Errorf("error reading result from programme: %w, stderr: %s",
+				stdoutReadError, stderrData)
 	}
 	var validUntil time.Time
 	if result.SecondsValid > 0 {

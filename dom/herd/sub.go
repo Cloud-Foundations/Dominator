@@ -693,8 +693,10 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 			return false, statusUnsafeUpdate
 		}
 	}
-	if _, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
-		request.ForceDisruption = true
+	if value, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
+		if strings.EqualFold(value, "true") {
+			request.ForceDisruption = true
+		}
 	}
 	if sub.pendingForceDisruptiveUpdate {
 		request.ForceDisruption = true

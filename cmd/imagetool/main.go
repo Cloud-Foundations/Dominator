@@ -82,6 +82,8 @@ var (
 		"Label to write for root file-system when making raw image")
 	roundupPower = flag.Uint64("roundupPower", 24,
 		"power of 2 to round up raw image size")
+	runTriggers = flag.Bool("runTriggers", false,
+		"If true, run image triggers when patching /")
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
 	skipFields                          = flag.String("skipFields", "",
 		"Fields to skip when showing or diffing images")
