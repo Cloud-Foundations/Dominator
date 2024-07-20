@@ -4,8 +4,8 @@ SmallStack Fleet Manager.
 The *fleet-manager* daemon manages a fleet of
 *[Hypervisors](../hypervisor/README.md)* and the Virtual Machines running on
 them. Please read the
-[SmallStack design document](https://bit.ly/SmallStack) to understand the
-architecture.
+[SmallStack design document](../../design-docs/SmallStack/README.md) to
+understand the architecture.
 
 ## Status page
 The *fleet-manager* provides a web interface on port `6977` which shows a status

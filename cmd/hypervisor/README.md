@@ -2,8 +2,8 @@
 SmallStack Virtual Machine Hypervisor.
 
 The *hypervisor* daemon manages virtual machines (VMs). Please read the
-[SmallStack design document](https://bit.ly/SmallStack) to understand the
-architecture.
+[SmallStack design document](../../design-docs/SmallStack/README.md) to
+understand the architecture.
 
 ## Status page
 The *hypervisor* provides a web interface on port `6976` which shows a status
