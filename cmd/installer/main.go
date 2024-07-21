@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -151,7 +152,14 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 }
 
 func doMain() error {
-	var timeLogMessage string
+	if err := loadflags.LoadForDaemon("installer"); err != nil {
+		return err
+	}
+	flag.Parse()
+	tricorder.RegisterFlags()
+	logBuffer, logger := createLogger()
+	defer logBuffer.Flush()
+	var updateHwClock bool
 	if fi, err := os.Stat("/build-timestamp"); err != nil {
 		return err
 	} else {
@@ -161,19 +169,10 @@ func doMain() error {
 			if err := syscall.Settimeofday(&timeval); err != nil {
 				return err
 			}
-			timeLogMessage = fmt.Sprintf("System time: %s is earlier than build time: %s.\nAdvancing to build time",
+			logger.Printf("System time: %s is earlier than build time: %s.\nAdvancing to build time",
 				now, fi.ModTime())
+			updateHwClock = true
 		}
-	}
-	if err := loadflags.LoadForDaemon("installer"); err != nil {
-		return err
-	}
-	flag.Parse()
-	tricorder.RegisterFlags()
-	logBuffer, logger := createLogger()
-	defer logBuffer.Flush()
-	if timeLogMessage != "" {
-		logger.Println(timeLogMessage)
 	}
 	go runShellOnConsole(logger)
 	AddHtmlWriter(logBuffer)
@@ -187,7 +186,7 @@ func doMain() error {
 	} else {
 		logger = newLogger
 	}
-	rebooter, err := install(timeLogMessage != "", logBuffer, logger)
+	rebooter, err := install(updateHwClock, logBuffer, logger)
 	rebooterName := "default"
 	if rebooter != nil {
 		rebooterName = rebooter.String()
