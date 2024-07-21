@@ -1,17 +1,17 @@
 # hyper-control
-A utility to manage SmallStack Hypervisors.
+A utility to manage SmallStack *[Hypervisors](../hypervisor/README.md)*.
 
-The *hyper-control* utility manages [Hypervisors](../hypervisor/README.md). It
+The *hyper-control* utility manages *[Hypervisors](../hypervisor/README.md)*. It
 is typically run on a desktop or bastion machine. Please read the
-[SmallStack design document](https://bit.ly/SmallStack) to understand the
-architecture.
+[SmallStack design document](../../design-docs/SmallStack/README.md) to
+understand the architecture.
 
 ## Usage
 *hyper-control* supports several sub-commands. There are many command-line flags
 which provide parameters for these sub-commands. The most commonly used
 parameters are `-fleetManagerHostname` or `-hypervisorHostname` which specify
-either the Fleet Manager or a specific *Hypervisor* to communicate with. At
-startup, *hyper-control* will read parameters from the
+either the Fleet Manager or a specific *[Hypervisor](../hypervisor/README.md)*
+to communicate with. At startup, *hyper-control* will read parameters from the
 `~/.config/hyper-control/flags.default` and
 `~/.config/hyper-control/flags.extra` files. These are simple `name=value`
 pairs. The basic usage pattern is:
@@ -94,7 +94,8 @@ Some of the sub-commands available are:
                            machine. This is primarily for debugging
 
 ## Security
-The *Hypervisor* restricts RPC access using TLS client authentication.
+The *[Hypervisor](../hypervisor/README.md)* restricts RPC access using TLS
+client authentication.
 *hyper-control* will load certificate and key files from the
 `~/.ssl` directory. *hyper-control* will present these certificates to
 the *Hypervisor* (or *Fleet Manager*). If one of the certificates is signed by a
@@ -106,21 +107,22 @@ The *hyper-control* tool may be used to install *Hypervisors* (OS+Hypervisor) on
 physical machines. This requires that information about machines and subnets is
 recorded in the topology (usually in Git), which is obtained from the
 [Fleet Manager](../fleet-manager/README.md). *Hypervisors* may be installed by
-PXE booting an installer, booting from a custom ISO image or installing over a
-running system. Please read the
+PXE booting an [installer](../installer/README.md), booting from a custom ISO
+image or installing over a running system. Please read the
 [Machine Birthing design document](../../design-docs/MachineBirthing/README.md)
 which describes the principles of installing physical machines.
 
 ### Network (PXE) Installation
 This is the most common method of installing. If there is at least one working
 Hypervisor on the same subnet, you can PXE (network) boot. The *hyper-control*
-tool is used to automatically select a *Hypervisor* to configure as a PXE server
-(it creates a temporary DHCP lease and will serve configuration files via TFTP).
+tool is used to automatically select a *[Hypervisor](../hypervisor/README.md)*
+to configure as a PXE server (it creates a temporary DHCP lease and will serve
+configuration files via TFTP).
 
 The following options must be provided:
-- `fleetManagerHostname`
-- `imageServerHostname`
-- `installerImageStream`
+- `-fleetManagerHostname`
+- `-imageServerHostname`
+- `-installerImageStream`
 
 You may want to increase the `-netbootTimeout` option if the machine takes a
 long time to boot. Run the following command:
@@ -133,6 +135,14 @@ Then, initiate a PXE boot for the target machine. It should boot the installer
 image, configure and install the machine and then reboot into the new OS. In
 principle, multiple machines can be installed in parallel, one machine for each
 time the above command is run.
+
+The content for the TFTP files containing the OS loader and netboot OS is
+fetched from the installer image configured in the
+*[Hypervisor](../hypervisor/README.md)*.
+The default OS loader is `pxelinux.0`. Configuration data for the machine is
+sent to the *[Hypervisor](../hypervisor/README.md)* and will be available via
+TFTP. See the *[installer](../installer/README.md)* documentation for details on
+the configuration files.
 
 ### Installing from an ISO (CD-ROM) image
 If there is no working *Hypervisor* on the subnet and if there is no DHCP relay
