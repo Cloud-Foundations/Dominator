@@ -224,6 +224,7 @@ func makeDefaultStorageLayout() installer_proto.StorageLayout {
 				MinimumFreeBytes: 512 << 20,
 			},
 		},
+		Encrypt:                  *encrypt,
 		ExtraMountPointsBasename: "/data/",
 		UseKexec:                 *useKexec,
 	}

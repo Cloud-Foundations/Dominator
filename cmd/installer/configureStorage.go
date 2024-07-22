@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -126,7 +127,7 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 		partition := partition
 		err := concurrentState.GoRun(func() error {
 			return drive.makeFileSystem(cpuSharer, device, partition.MountPoint,
-				"ext4", &mkfsMutex, 0, logger)
+				"ext4", layout.Encrypt, &mkfsMutex, 0, logger)
 		})
 		if err != nil {
 			return err
@@ -135,8 +136,8 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	concurrentState.GoRun(func() error {
 		device := partitionName(drive.devpath, len(layout.BootDriveLayout)+1)
 		return drive.makeFileSystem(cpuSharer, device,
-			layout.ExtraMountPointsBasename+"0", "ext4", &mkfsMutex, 65536,
-			logger)
+			layout.ExtraMountPointsBasename+"0", "ext4", layout.Encrypt,
+			&mkfsMutex, 65536, logger)
 	})
 	if err := concurrentState.Reap(); err != nil {
 		return err
@@ -144,7 +145,7 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	// Mount all file-systems, except the data file-system.
 	for index, partition := range layout.BootDriveLayout {
 		device := partitionName(drive.devpath, index+1)
-		err := mount(remapDevice(device, partition.MountPoint),
+		err := mount(remapDevice(device, partition.MountPoint, layout.Encrypt),
 			filepath.Join(*mountPoint, partition.MountPoint), "ext4", logger)
 		if err != nil {
 			return err
@@ -165,7 +166,7 @@ func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	dataMountPoint := layout.ExtraMountPointsBasename + strconv.FormatInt(
 		int64(index), 10)
 	return drive.makeFileSystem(cpuSharer, drive.devpath, dataMountPoint,
-		"ext4", nil, 1048576, logger)
+		"ext4", layout.Encrypt, nil, 1048576, logger)
 }
 
 func configureStorage(config fm_proto.GetMachineInfoResponse,
@@ -198,9 +199,12 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		return nil, err
 	}
 	rootDevice := partitionName(drives[0].devpath, rootPartition)
-	randomKey, err := getRandomKey(16, logger)
-	if err != nil {
-		return nil, err
+	var randomKey []byte
+	if layout.Encrypt {
+		randomKey, err = getRandomKey(16, logger)
+		if err != nil {
+			return nil, err
+		}
 	}
 	imageName, img, client, err := getImage(logger)
 	if err != nil {
@@ -242,13 +246,15 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err := installTmpRoot(img.FileSystem, objGetter, logger); err != nil {
 		return nil, err
 	}
-	err = ioutil.WriteFile(filepath.Join(*tmpRoot, keyFile), randomKey,
-		fsutil.PrivateFilePerms)
-	if err != nil {
-		return nil, err
-	}
-	for index := range randomKey { // Scrub key.
-		randomKey[index] = 0
+	if len(randomKey) > 0 {
+		err = ioutil.WriteFile(filepath.Join(*tmpRoot, keyFile), randomKey,
+			fsutil.PrivateFilePerms)
+		if err != nil {
+			return nil, err
+		}
+		for index := range randomKey { // Scrub key.
+			randomKey[index] = 0
+		}
 	}
 	// Configure all drives concurrently, making file-systems.
 	// Use concurrent package because of it's reaping cabability.
@@ -310,24 +316,26 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err != nil {
 		return nil, err
 	}
-	err = ioutil.WriteFile(filepath.Join(*mountPoint, "/etc", "crypttab"),
-		cryptTab.Bytes(), fsutil.PublicFilePerms)
-	if err != nil {
-		return nil, err
-	}
-	// Copy key file and scrub temporary copy.
-	tmpKeyFile := filepath.Join(*tmpRoot, keyFile)
-	err = fsutil.CopyFile(filepath.Join(*mountPoint, keyFile),
-		tmpKeyFile, fsutil.PrivateFilePerms)
-	if err != nil {
-		return nil, err
-	}
-	if file, err := os.OpenFile(tmpKeyFile, os.O_WRONLY, 0); err != nil {
-		return nil, err
-	} else {
-		defer file.Close()
-		if _, err := file.Write(randomKey); err != nil {
+	if len(randomKey) > 0 {
+		err = ioutil.WriteFile(filepath.Join(*mountPoint, "/etc", "crypttab"),
+			cryptTab.Bytes(), fsutil.PublicFilePerms)
+		if err != nil {
 			return nil, err
+		}
+		// Copy key file and scrub temporary copy.
+		tmpKeyFile := filepath.Join(*tmpRoot, keyFile)
+		err = fsutil.CopyFile(filepath.Join(*mountPoint, keyFile),
+			tmpKeyFile, fsutil.PrivateFilePerms)
+		if err != nil {
+			return nil, err
+		}
+		if file, err := os.OpenFile(tmpKeyFile, os.O_WRONLY, 0); err != nil {
+			return nil, err
+		} else {
+			defer file.Close()
+			if _, err := file.Write(randomKey); err != nil {
+				return nil, err
+			}
 		}
 	}
 	logdir := filepath.Join(*mountPoint, "var", "log", "installer")
@@ -616,8 +624,8 @@ func readInt(filename string) (uint64, error) {
 	}
 }
 
-func remapDevice(device, target string) string {
-	if target == "/" {
+func remapDevice(device, target string, encrypt bool) string {
+	if !encrypt || target == "/" || target == "/boot" {
 		return device
 	} else {
 		return filepath.Join("/dev/mapper", filepath.Base(device))
@@ -704,8 +712,8 @@ func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 }
 
 func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
-	device, target, fstype string, mkfsMutex *sync.Mutex, bytesPerInode uint,
-	logger log.DebugLogger) error {
+	device, target, fstype string, encrypt bool, mkfsMutex *sync.Mutex,
+	bytesPerInode uint, logger log.DebugLogger) error {
 	label := target
 	erase := true
 	if label == "/" {
@@ -713,7 +721,7 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 		if drive.discarded {
 			erase = false
 		}
-	} else {
+	} else if label != "/boot" && encrypt {
 		if err := drive.cryptSetup(cpuSharer, device, logger); err != nil {
 			return err
 		}
@@ -753,7 +761,7 @@ func (drive driveType) writeDeviceEntries(device, target, fstype string,
 	label := target
 	if label == "/" {
 		label = "rootfs"
-	} else {
+	} else if label != "/boot" {
 		var options string
 		if drive.discarded {
 			options = "discard"
