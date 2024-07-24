@@ -4,8 +4,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -28,6 +30,11 @@ const logfile = "/var/log/installer/latest"
 
 type flusher interface {
 	Flush() error
+}
+
+type logWriter struct {
+	startTime time.Time
+	writer    io.Writer
 }
 
 type Rebooter interface {
@@ -71,7 +78,8 @@ func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
 	options := logbuf.GetStandardOptions()
 	options.AlsoLogToStderr = true
 	logBuffer := logbuf.NewWithOptions(options)
-	logger := debuglogger.New(stdlog.New(logBuffer, "", 0))
+	logger := debuglogger.New(stdlog.New(&logWriter{time.Now(), logBuffer}, "",
+		0))
 	logger.SetLevel(int16(*logDebugLevel))
 	srpc.SetDefaultLogger(logger)
 	return logBuffer, logger
@@ -216,4 +224,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func (w *logWriter) Write(p []byte) (int, error) {
+	buffer := &bytes.Buffer{}
+	fmt.Fprintf(buffer, "[%7.3f] ", time.Since(w.startTime).Seconds())
+	buffer.Write(p)
+	return w.writer.Write(buffer.Bytes())
 }
