@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
@@ -437,6 +438,10 @@ func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
 func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	rootDir, rootLabel string, doChroot bool, logger log.DebugLogger) error {
 	startTime := time.Now()
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
 	var bootDir, chrootDir string
 	if doChroot {
 		bootDir = "/boot"
@@ -472,10 +477,8 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	}
 	logger.Printf("installed GRUB in %s\n",
 		format.Duration(time.Since(startTime)))
-	if err := bootInfo.writeGrubConfig(grubConfigFile); err != nil {
-		return err
-	}
-	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
+	return bootInfo.writeGrubConfigAndTemplate(rootDir, grubConfigFile,
+		mountTable)
 }
 
 func (bootInfo *BootInfoType) writeGrubConfig(filename string) error {
@@ -488,6 +491,22 @@ func (bootInfo *BootInfoType) writeGrubConfig(filename string) error {
 		return err
 	}
 	return file.Close()
+}
+
+func (bootInfo *BootInfoType) writeGrubConfigAndTemplate(rootDir string,
+	grubConfigFile string, mountTable *mounts.MountTable) error {
+	bootEntry := mountTable.FindEntry(grubConfigFile)
+	rootEntry := mountTable.FindEntry(rootDir)
+	if bootEntry != rootEntry { // "/boot" directory in a separate file-system.
+		newBootInfo := *bootInfo
+		newBootInfo.InitrdImageFile = "/" + newBootInfo.InitrdImageDirent.Name
+		newBootInfo.KernelImageFile = "/" + newBootInfo.KernelImageDirent.Name
+		bootInfo = &newBootInfo
+	}
+	if err := bootInfo.writeGrubConfig(grubConfigFile); err != nil {
+		return err
+	}
+	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
 }
 
 func (bootInfo *BootInfoType) writeGrubTemplate(filename string) error {
@@ -504,8 +523,12 @@ func (bootInfo *BootInfoType) writeGrubTemplate(filename string) error {
 
 func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 	logger log.Logger) error {
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
 	grubConfigFile := filepath.Join(rootDir, "boot", "grub", "grub.cfg")
-	_, err := lookPath("", "grub-install")
+	_, err = lookPath("", "grub-install")
 	if err != nil {
 		_, err = lookPath("", "grub2-install")
 		if err != nil {
@@ -513,10 +536,8 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 		}
 		grubConfigFile = filepath.Join(rootDir, "boot", "grub2", "grub.cfg")
 	}
-	if err := bootInfo.writeGrubConfig(grubConfigFile); err != nil {
-		return err
-	}
-	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
+	return bootInfo.writeGrubConfigAndTemplate(rootDir, grubConfigFile,
+		mountTable)
 }
 
 func waitForRootPartition(bootDevice string, timeout time.Duration) (
