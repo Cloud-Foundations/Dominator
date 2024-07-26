@@ -40,7 +40,8 @@ import (
 )
 
 const (
-	keyFile = "/etc/crypt.key"
+	keyFile        = "/etc/crypt.key"
+	sysFirmwareEfi = "/sys/firmware/efi"
 )
 
 type driveType struct {
@@ -60,6 +61,14 @@ func init() {
 	gob.Register(&filesystem.SymlinkInode{})
 	gob.Register(&filesystem.SpecialInode{})
 	gob.Register(&filesystem.DirectoryInode{})
+}
+
+// Returns true if the system has EFI firmware, else false.
+func checkIsEfi() bool {
+	if _, err := os.Stat(sysFirmwareEfi); err == nil {
+		return true
+	}
+	return false
 }
 
 func closeEncryptedVolumes(logger log.DebugLogger) error {
@@ -85,8 +94,9 @@ func closeEncryptedVolumes(logger log.DebugLogger) error {
 }
 
 func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
-	layout installer_proto.StorageLayout, bootPartition int, img *image.Image,
-	objGetter objectserver.ObjectsGetter, logger log.DebugLogger) error {
+	layout installer_proto.StorageLayout, rootPartition, bootPartition int,
+	img *image.Image, objGetter objectserver.ObjectsGetter,
+	logger log.DebugLogger) error {
 	startTime := time.Now()
 	if run("blkdiscard", *tmpRoot, logger, drive.devpath) == nil {
 		drive.discarded = true
@@ -97,7 +107,13 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 			return err
 		}
 	}
-	args := []string{"-s", "-a", "cylinder", drive.devpath, "mklabel", "msdos"}
+	isEfi := checkIsEfi()
+	args := []string{"-s", "-a", "optimal", drive.devpath}
+	if isEfi {
+		args = append(args, "mklabel", "gpt")
+	} else {
+		args = append(args, "mklabel", "msdos")
+	}
 	unitSize := uint64(1 << 20)
 	unitSuffix := "MiB"
 	offsetInUnits := uint64(1)
@@ -106,8 +122,14 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 		if sizeInUnits*unitSize < partition.MinimumFreeBytes {
 			sizeInUnits++
 		}
-		args = append(args, "mkpart", "primary",
-			partition.FileSystemType.String(),
+		var partType string
+		switch partition.FileSystemType {
+		case installer_proto.FileSystemTypeVfat:
+			partType = "fat32"
+		default:
+			partType = partition.FileSystemType.String()
+		}
+		args = append(args, "mkpart", "primary", partType,
 			strconv.FormatUint(offsetInUnits, 10)+unitSuffix,
 			strconv.FormatUint(offsetInUnits+sizeInUnits, 10)+unitSuffix)
 		offsetInUnits += sizeInUnits
@@ -144,8 +166,17 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	if err := concurrentState.Reap(); err != nil {
 		return err
 	}
-	// Mount all file-systems, except the data file-system.
+	// Mount all file-systems, except the data file-system. First do the root
+	// partition, which might not be first in the list.
+	err := mount(partitionName(drive.devpath, rootPartition), *mountPoint,
+		layout.BootDriveLayout[rootPartition-1].FileSystemType.String(), logger)
+	if err != nil {
+		return err
+	}
 	for index, partition := range layout.BootDriveLayout {
+		if index+1 == rootPartition {
+			continue
+		}
 		device := partitionName(drive.devpath, index+1)
 		err := mount(remapDevice(device, partition.MountPoint, layout.Encrypt),
 			filepath.Join(*mountPoint, partition.MountPoint),
@@ -182,6 +213,23 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		&layout)
 	if err != nil {
 		return nil, err
+	}
+	isEfi := checkIsEfi()
+	if isEfi {
+		newPartitions := make([]installer_proto.Partition, 1,
+			len(layout.BootDriveLayout)+1)
+		newPartitions[0] = installer_proto.Partition{
+			FileSystemType:   installer_proto.FileSystemTypeVfat,
+			MountPoint:       "/boot",
+			MinimumFreeBytes: 128 << 20,
+		}
+		for _, partition := range layout.BootDriveLayout {
+			if partition.MountPoint == "/boot" {
+				continue
+			}
+			newPartitions = append(newPartitions, partition)
+		}
+		layout.BootDriveLayout = newPartitions
 	}
 	var bootPartition, rootPartition int
 	for index, partition := range layout.BootDriveLayout {
@@ -266,8 +314,8 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	concurrentState := concurrent.NewState(uint(len(drives)))
 	cpuSharer := cpusharer.NewFifoCpuSharer()
 	err = concurrentState.GoRun(func() error {
-		return configureBootDrive(cpuSharer, drives[0], layout, bootPartition,
-			img, objGetter, logger)
+		return configureBootDrive(cpuSharer, drives[0], layout, rootPartition,
+			bootPartition, img, objGetter, logger)
 	})
 	if err != nil {
 		return nil, concurrentState.Reap()
@@ -315,12 +363,14 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			return nil, err
 		}
 	}
+	logger.Printf("Writing /etc/fstab:\n%s", string(fsTab.Bytes()))
 	err = ioutil.WriteFile(filepath.Join(*mountPoint, "etc", "fstab"),
 		fsTab.Bytes(), fsutil.PublicFilePerms)
 	if err != nil {
 		return nil, err
 	}
 	if len(randomKey) > 0 {
+		logger.Printf("Writing /etc/crypttab:\n%s", string(cryptTab.Bytes()))
 		err = ioutil.WriteFile(filepath.Join(*mountPoint, "/etc", "crypttab"),
 			cryptTab.Bytes(), fsutil.PublicFilePerms)
 		if err != nil {
@@ -725,7 +775,12 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 		if drive.discarded {
 			erase = false
 		}
-	} else if label != "/boot" && encrypt {
+	} else if label == "/boot" {
+		label = "bootfs"
+		if drive.discarded {
+			erase = false
+		}
+	} else if encrypt {
 		if err := drive.cryptSetup(cpuSharer, device, logger); err != nil {
 			return err
 		}
@@ -741,13 +796,22 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 		mkfsMutex.Lock()
 	}
 	startTime := time.Now()
-	if bytesPerInode > 0 {
-		err = run("mkfs.ext4", *tmpRoot, logger,
-			"-i", strconv.Itoa(int(bytesPerInode)), "-L", label,
-			"-E", "lazy_itable_init=0,lazy_journal_init=0", device)
-	} else {
-		err = run("mkfs.ext4", *tmpRoot, logger, "-L", label,
-			"-E", "lazy_itable_init=0,lazy_journal_init=0", device)
+	switch fstype {
+	case installer_proto.FileSystemTypeExt4:
+		if bytesPerInode > 0 {
+			err = run("mkfs.ext4", *tmpRoot, logger,
+				"-i", strconv.Itoa(int(bytesPerInode)), "-L", label,
+				"-E", "lazy_itable_init=0,lazy_journal_init=0", device)
+		} else {
+			err = run("mkfs.ext4", *tmpRoot, logger, "-L", label,
+				"-E", "lazy_itable_init=0,lazy_journal_init=0", device)
+		}
+	case installer_proto.FileSystemTypeVfat:
+		err = run("mkfs.vfat", *tmpRoot, logger, "--codepage=437",
+			"-n", label, device)
+	default:
+		return fmt.Errorf("unsupported file-system type: %d (%s)",
+			fstype, fstype)
 	}
 	if mkfsMutex != nil {
 		mkfsMutex.Unlock()
@@ -766,7 +830,9 @@ func (drive driveType) writeDeviceEntries(device, target string,
 	label := target
 	if label == "/" {
 		label = "rootfs"
-	} else if label != "/boot" {
+	} else if label == "/boot" {
+		label = "bootfs"
+	} else {
 		var options string
 		if drive.discarded {
 			options = "discard"
