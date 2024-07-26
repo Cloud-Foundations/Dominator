@@ -2,6 +2,7 @@ package installer
 
 const (
 	FileSystemTypeExt4 = 0
+	FileSystemTypeVfat = 1
 )
 
 type FileSystemType uint

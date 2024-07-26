@@ -11,6 +11,7 @@ const (
 var (
 	fileSystemTypeToText = map[FileSystemType]string{
 		FileSystemTypeExt4: "ext4",
+		FileSystemTypeVfat: "vfat",
 	}
 	textToFileSystemType map[string]FileSystemType
 )
