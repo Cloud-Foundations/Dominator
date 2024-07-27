@@ -1,10 +1,13 @@
+//go:build linux
 // +build linux
 
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -14,6 +17,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
@@ -27,6 +31,10 @@ const logfile = "/var/log/installer/latest"
 
 type flusher interface {
 	Flush() error
+}
+
+type logWriter struct {
+	writer io.Writer
 }
 
 type Rebooter interface {
@@ -56,6 +64,8 @@ var (
 		"Directory containing (possibly injected) TFTP data")
 	tmpRoot = flag.String("tmpRoot", "/tmproot",
 		"Mount point for temporary (tmpfs) root file-system")
+
+	processStartTime = time.Now()
 )
 
 func copyLogs(logFlusher flusher) error {
@@ -70,7 +80,7 @@ func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
 	options := logbuf.GetStandardOptions()
 	options.AlsoLogToStderr = true
 	logBuffer := logbuf.NewWithOptions(options)
-	logger := debuglogger.New(stdlog.New(logBuffer, "", 0))
+	logger := debuglogger.New(stdlog.New(&logWriter{logBuffer}, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
 	srpc.SetDefaultLogger(logger)
 	return logBuffer, logger
@@ -151,7 +161,21 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 }
 
 func doMain() error {
-	var timeLogMessage string
+	if err := loadflags.LoadForDaemon("installer"); err != nil {
+		return err
+	}
+	flag.Parse()
+	tricorder.RegisterFlags()
+	logBuffer, logger := createLogger()
+	defer logBuffer.Flush()
+	var sysinfo syscall.Sysinfo_t
+	if err := syscall.Sysinfo(&sysinfo); err != nil {
+		logger.Printf("Error getting system info: %s\n", err)
+	} else {
+		logger.Printf("installer started %s after system bootup\n",
+			format.Duration(time.Second*time.Duration(sysinfo.Uptime)))
+	}
+	var updateHwClock bool
 	if fi, err := os.Stat("/build-timestamp"); err != nil {
 		return err
 	} else {
@@ -161,19 +185,10 @@ func doMain() error {
 			if err := syscall.Settimeofday(&timeval); err != nil {
 				return err
 			}
-			timeLogMessage = fmt.Sprintf("System time: %s is earlier than build time: %s.\nAdvancing to build time",
+			logger.Printf("System time: %s is earlier than build time: %s.\nAdvancing to build time",
 				now, fi.ModTime())
+			updateHwClock = true
 		}
-	}
-	if err := loadflags.LoadForDaemon("installer"); err != nil {
-		return err
-	}
-	flag.Parse()
-	tricorder.RegisterFlags()
-	logBuffer, logger := createLogger()
-	defer logBuffer.Flush()
-	if timeLogMessage != "" {
-		logger.Println(timeLogMessage)
 	}
 	go runShellOnConsole(logger)
 	AddHtmlWriter(logBuffer)
@@ -187,7 +202,7 @@ func doMain() error {
 	} else {
 		logger = newLogger
 	}
-	rebooter, err := install(timeLogMessage != "", logBuffer, logger)
+	rebooter, err := install(updateHwClock, logBuffer, logger)
 	rebooterName := "default"
 	if rebooter != nil {
 		rebooterName = rebooter.String()
@@ -217,4 +232,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func (w *logWriter) Write(p []byte) (int, error) {
+	buffer := &bytes.Buffer{}
+	fmt.Fprintf(buffer, "[%7.3f] ", time.Since(processStartTime).Seconds())
+	buffer.Write(p)
+	return w.writer.Write(buffer.Bytes())
 }

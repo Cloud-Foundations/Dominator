@@ -29,6 +29,8 @@ var (
 		"Email domain to sent notifications to")
 	emailSubject = flag.String("emailSubject", "Hypervisor %s maintenance",
 		"Subject line contents. The Hypervisor name is inserted")
+	encrypt = flag.Bool("encrypt", true,
+		"If true, encrypt file-systems when installing OS")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",

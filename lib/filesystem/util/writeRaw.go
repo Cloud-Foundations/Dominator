@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
@@ -38,8 +39,10 @@ const (
 var (
 	mutex               sync.Mutex
 	defaultMkfsFeatures map[string]struct{} // Key: feature name.
-	grubTemplate        = template.Must(template.New("grub").Parse(
-		grubTemplateString))
+	grubTemplateDos     = template.Must(template.New("grub").Parse(
+		grubTemplateStringDos))
+	grubTemplateEfi = template.Must(template.New("grub").Parse(
+		grubTemplateStringEfi))
 )
 
 func checkIfPartition(device string) (bool, error) {
@@ -437,6 +440,10 @@ func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
 func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	rootDir, rootLabel string, doChroot bool, logger log.DebugLogger) error {
 	startTime := time.Now()
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
 	var bootDir, chrootDir string
 	if doChroot {
 		bootDir = "/boot"
@@ -445,6 +452,11 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 		bootDir = filepath.Join(rootDir, "boot")
 	}
 	grubConfigFile := filepath.Join(rootDir, "boot", "grub", "grub.cfg")
+	bootEntry := mountTable.FindEntry(grubConfigFile)
+	var isEfi bool
+	if bootEntry != nil && bootEntry.Type == "vfat" {
+		isEfi = true
+	}
 	grubInstaller, err := lookPath(chrootDir, "grub-install")
 	if err != nil {
 		grubInstaller, err = lookPath(chrootDir, "grub2-install")
@@ -455,8 +467,17 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	}
 	cmd := exec.Command(grubInstaller,
 		"--boot-directory="+bootDir,
-		"--target=i386-pc", // TODO(rgooch): make this configurable.
 		deviceName)
+	if isEfi {
+		cmd.Args = append(cmd.Args,
+			"--efi-directory="+bootDir,
+			"--target=x86_64-efi",
+		)
+	} else {
+		cmd.Args = append(cmd.Args,
+			"--target=i386-pc",
+		)
+	}
 	if doChroot {
 		cmd.Dir = "/"
 		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: chrootDir}
@@ -472,31 +493,59 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	}
 	logger.Printf("installed GRUB in %s\n",
 		format.Duration(time.Since(startTime)))
-	if err := bootInfo.writeGrubConfig(grubConfigFile); err != nil {
-		return err
-	}
-	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
+	return bootInfo.writeGrubConfigAndTemplate(rootDir, grubConfigFile,
+		mountTable, isEfi)
 }
 
-func (bootInfo *BootInfoType) writeGrubConfig(filename string) error {
+func (bootInfo *BootInfoType) writeGrubConfig(filename string,
+	isEfi bool) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error creating GRUB config file: %s", err)
 	}
 	defer file.Close()
-	if err := grubTemplate.Execute(file, bootInfo); err != nil {
+	var tmpl *template.Template
+	if isEfi {
+		tmpl = grubTemplateEfi
+	} else {
+		tmpl = grubTemplateDos
+	}
+	if err := tmpl.Execute(file, bootInfo); err != nil {
 		return err
 	}
 	return file.Close()
 }
 
-func (bootInfo *BootInfoType) writeGrubTemplate(filename string) error {
+func (bootInfo *BootInfoType) writeGrubConfigAndTemplate(rootDir string,
+	grubConfigFile string, mountTable *mounts.MountTable, isEfi bool) error {
+	bootEntry := mountTable.FindEntry(grubConfigFile)
+	rootEntry := mountTable.FindEntry(rootDir)
+	if bootEntry != rootEntry { // "/boot" directory in a separate file-system.
+		newBootInfo := *bootInfo
+		newBootInfo.InitrdImageFile = "/" + newBootInfo.InitrdImageDirent.Name
+		newBootInfo.KernelImageFile = "/" + newBootInfo.KernelImageDirent.Name
+		bootInfo = &newBootInfo
+	}
+	if err := bootInfo.writeGrubConfig(grubConfigFile, isEfi); err != nil {
+		return err
+	}
+	return bootInfo.writeGrubTemplate(grubConfigFile+".template", isEfi)
+}
+
+func (bootInfo *BootInfoType) writeGrubTemplate(filename string,
+	isEfi bool) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error creating GRUB config file template: %s", err)
 	}
+	var data string
+	if isEfi {
+		data = grubTemplateStringEfi
+	} else {
+		data = grubTemplateStringDos
+	}
 	defer file.Close()
-	if _, err := file.Write([]byte(grubTemplateString)); err != nil {
+	if _, err := file.Write([]byte(data)); err != nil {
 		return err
 	}
 	return file.Close()
@@ -504,8 +553,12 @@ func (bootInfo *BootInfoType) writeGrubTemplate(filename string) error {
 
 func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 	logger log.Logger) error {
+	mountTable, err := mounts.GetMountTable()
+	if err != nil {
+		return err
+	}
 	grubConfigFile := filepath.Join(rootDir, "boot", "grub", "grub.cfg")
-	_, err := lookPath("", "grub-install")
+	_, err = lookPath("", "grub-install")
 	if err != nil {
 		_, err = lookPath("", "grub2-install")
 		if err != nil {
@@ -513,10 +566,13 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 		}
 		grubConfigFile = filepath.Join(rootDir, "boot", "grub2", "grub.cfg")
 	}
-	if err := bootInfo.writeGrubConfig(grubConfigFile); err != nil {
-		return err
+	bootEntry := mountTable.FindEntry(grubConfigFile)
+	var isEfi bool
+	if bootEntry != nil && bootEntry.Type == "vfat" {
+		isEfi = true
 	}
-	return bootInfo.writeGrubTemplate(grubConfigFile + ".template")
+	return bootInfo.writeGrubConfigAndTemplate(rootDir, grubConfigFile,
+		mountTable, isEfi)
 }
 
 func waitForRootPartition(bootDevice string, timeout time.Duration) (
@@ -693,7 +749,7 @@ func writeRootFstabEntry(rootDir, rootLabel string) error {
 	}
 }
 
-const grubTemplateString string = `# Generated from simple template.
+const grubTemplateStringDos string = `# Generated from simple template.
 insmod serial
 serial --unit=0 --speed=115200
 terminal_output serial
@@ -703,6 +759,25 @@ menuentry 'Linux' 'Solitary Linux' {
         insmod gzio
         insmod part_msdos
         insmod ext2
+        echo    'Loading Linux {{.KernelImageFile}} ...'
+        linux   {{.KernelImageFile}} {{.KernelOptions}}
+        echo    'Loading initial ramdisk ...'
+        initrd  {{.InitrdImageFile}}
+}
+`
+
+const grubTemplateStringEfi string = `# Generated from simple template.
+insmod serial
+serial --unit=0 --speed=115200
+terminal_input  serial console
+terminal_output serial console
+set timeout=2
+
+menuentry 'Linux' 'Solitary Linux' {
+        insmod efi_gop
+        insmod gzio
+        insmod part_gpt
+        insmod fat
         echo    'Loading Linux {{.KernelImageFile}} ...'
         linux   {{.KernelImageFile}} {{.KernelOptions}}
         echo    'Loading initial ramdisk ...'

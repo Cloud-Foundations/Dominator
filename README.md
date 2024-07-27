@@ -8,10 +8,13 @@ push image updates to a large fleet of machines and keep them in sync.
 
 Please see the
 [design document](design-docs/Dominator/README.md),
+the [architectural overview](design-docs/Dominator/ArchitecturalOverview.md),
 the [user guide](user-guide/README.md)
 and the
 [online code documentation](https://godoc.org/?q=github.com%2FCloud-Foundations%2FDominator%2F)
 for more information.
+
+The source code is available [here](https://github.com/Cloud-Foundations/Dominator).
 
 ## Contributions
 
@@ -22,7 +25,7 @@ patents and contracts.
 ## LICENSE
 
 Copyright 2015 Symantec Corporation.
-Copyright 2019 cloud-foundations.org
+Copyright 2019-2024 cloud-foundations.org
 
 Licensed under the Apache License, Version 2.0 (the “License”); you
 may not use this file except in compliance with the License.

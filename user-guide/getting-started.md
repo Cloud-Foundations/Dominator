@@ -60,7 +60,7 @@ the source code by using the following command in each:
 git pull
 ```
 
-You will need [go1.7](https://golang.org/dl/) or newer to to compile the
+You will need [go1.19](https://golang.org/dl/) or newer to to compile the
 **Dominator** software. Create the `$HOME/go/bin` directory and set the `GOPATH`
 environment variable to `$HOME/go`. The following command will compile the
 software:
@@ -114,8 +114,8 @@ Some components (endpoints) permit access to selected RPC methods based on
 identity only (these are "public" RPC methods). The same root CA may be used to
 sign these identity-only certificates if needed, however this requires you to
 build a certificate issuing system for users. An alternate *Identity CA* is
-supported. The *[Keymaster](https://github.com/Symantec/keymaster)* is a good
-choice for issuing these certificates. This root CA should be placed in
+supported. The *[Keymaster](https://github.com/Cloud-Foundations/keymaster)* is
+a good choice for issuing these certificates. This root CA should be placed in
 `/etc/ssl/IdentityCA.pem` and will be trusted for identity only (not for
 granting unlimited access to RPC methods).
 

@@ -1,0 +1,60 @@
+#! /bin/bash --posix
+
+set -eu
+set -o pipefail
+
+readonly target_dir="$1"
+
+rm -rf "$target_dir"
+mkdir -p "$target_dir"
+
+# Copy *.css files.
+for file in $(find . -type f -name '*.css' -print); do
+    mkdir -p "${target_dir}/${file%/*}"
+    cp -p "$file" "${target_dir}/${file}"
+done
+
+# Compile *.md files except GitHub README.md
+for infile in $(find . -type f -name '*.md' -printf '%P\n'); do
+    if [ "${infile%/*}" = "$infile" ]; then
+        css_url=common.css
+        outdir="$target_dir"
+    else
+        css_url="$(realpath --relative-to=${infile%/*} common.css)"
+        outdir="${target_dir}/${infile%/*}"
+    fi
+    leaf_file="${infile##*/}"
+    if [ "$leaf_file" = "README.md" ]; then
+        outfile="${outdir}/index.html"
+    else
+        outfile="${outdir}/${leaf_file%.md}.html"
+    fi
+    mkdir -p "$outdir"
+    tmpfile="${outdir}/${leaf_file}"
+    sed -r                                             \
+        -e 's/(README[.]md)/index.md/g'                \
+        -e 's/\(([^)]*)[.]md\)/(\1.html)/g' "$infile"  \
+        -e 's@\(.*/init[.]d/?\)@(https://github.com/Cloud-Foundations/Dominator/tree/master/init.d)@g'  \
+        > "$tmpfile"
+    if [ "$infile" = 'user-guide/README.md' ]; then
+        echo '## Command-line tools' >> "$tmpfile"
+        for cmddir in $(ls cmd); do
+            [ -r "cmd/$cmddir/README.md" ] || continue
+            echo "- [$cmddir](../cmd/$cmddir/index.html)" >> "$tmpfile"
+        done
+    fi
+    pandoc -f gfm -o "$outfile" -s --css "$css_url" "$tmpfile"
+    rm "$tmpfile"
+done
+
+# Copy *.svg files.
+for file in $(find . -type f -name '*.svg' -print); do
+    mkdir -p "${target_dir}/${file%/*}"
+    cp -p "$file" "${target_dir}/${file}"
+done
+
+# Compile *.dot files.
+for file in $(find . -type f -name '*.dot' -print); do
+    mkdir -p "${target_dir}/${file%/*}"
+    dot -Tsvg -o"${target_dir}/${file%.*}.svg" "$file"
+done

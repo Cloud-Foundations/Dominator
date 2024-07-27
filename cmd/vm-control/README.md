@@ -104,7 +104,8 @@ The *Hypervisor* restricts RPC access using TLS client authentication.
 the *Hypervisor*. If one of the certificates is signed by a certificate
 authority that the *Hypervisor* trusts, the *Hypervisor* will grant access.
 Most operations only require a certificate that proves *identity*.
-The *[Keymaster](https://github.com/Symantec/keymaster)* is a good choice for issuing these certificates.
+The *[Keymaster](https://github.com/Cloud-Foundations/keymaster)* is a good
+choice for issuing these certificates.
 
 ## Importing virsh (libvirt) VMs
 A libvirt VM may be imported into the *Hypervisor*. Once the VM is *committed*

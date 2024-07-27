@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -54,7 +55,7 @@ func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
 	if err := srpc.RegisterName("Installer", srpcObj); err != nil {
 		logger.Printf("error registering SRPC receiver: %s\n", err)
 	}
-	sprayLogger := debuglogger.New(stdlog.New(srpcObj, "", 0))
+	sprayLogger := debuglogger.New(stdlog.New(&logWriter{srpcObj}, "", 0))
 	sprayLogger.SetLevel(int16(*logDebugLevel))
 	go http.Serve(listener, nil)
 	return teelogger.New(logger, sprayLogger), nil

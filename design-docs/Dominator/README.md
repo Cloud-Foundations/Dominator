@@ -5,10 +5,15 @@ Richard Gooch
 
 Overview
 ========
-Richard Gooch
--------------    
 
-This document describes the design of a robust, reliable and efficient architecture which can scale to the very largest fleet of machines (physical or virtual). The design target is that a single system and administrator can manage the content of *at least* 10,000 systems with negligible performance impact on the managed systems, fast response to global changes and nearly atomic changes on those systems. The software system that implements this architecture is called the **Dominator**. This software is Open Source and available on [GitHub](https://github.com/Cloud-Foundations/Dominator).
+This document describes the design of a robust, reliable and efficient architecture which can scale to the very largest fleet of machines (physical or virtual). The design target is that a single system and administrator can manage the content of *at least* 10,000 systems with negligible performance impact on the managed systems, fast response to global changes and nearly atomic changes on those systems. The software system that implements this architecture is called the **Dominator**.
+
+Please see
+[https://github.com/Cloud-Foundations/Dominator](https://github.com/Cloud-Foundations/Dominator)
+for the source code,
+the [architectural overview](ArchitecturalOverview.md),
+the [fact sheet](FactSheet.md) and
+the [user guide](../../user-guide/README.md).
 
 Background
 ==========
