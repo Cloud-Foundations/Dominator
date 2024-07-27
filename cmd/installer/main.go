@@ -17,6 +17,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
@@ -33,8 +34,7 @@ type flusher interface {
 }
 
 type logWriter struct {
-	startTime time.Time
-	writer    io.Writer
+	writer io.Writer
 }
 
 type Rebooter interface {
@@ -64,6 +64,8 @@ var (
 		"Directory containing (possibly injected) TFTP data")
 	tmpRoot = flag.String("tmpRoot", "/tmproot",
 		"Mount point for temporary (tmpfs) root file-system")
+
+	processStartTime = time.Now()
 )
 
 func copyLogs(logFlusher flusher) error {
@@ -78,8 +80,7 @@ func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
 	options := logbuf.GetStandardOptions()
 	options.AlsoLogToStderr = true
 	logBuffer := logbuf.NewWithOptions(options)
-	logger := debuglogger.New(stdlog.New(&logWriter{time.Now(), logBuffer}, "",
-		0))
+	logger := debuglogger.New(stdlog.New(&logWriter{logBuffer}, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
 	srpc.SetDefaultLogger(logger)
 	return logBuffer, logger
@@ -167,6 +168,13 @@ func doMain() error {
 	tricorder.RegisterFlags()
 	logBuffer, logger := createLogger()
 	defer logBuffer.Flush()
+	var sysinfo syscall.Sysinfo_t
+	if err := syscall.Sysinfo(&sysinfo); err != nil {
+		logger.Printf("Error getting system info: %s\n", err)
+	} else {
+		logger.Printf("installer started %s after system bootup\n",
+			format.Duration(time.Second*time.Duration(sysinfo.Uptime)))
+	}
 	var updateHwClock bool
 	if fi, err := os.Stat("/build-timestamp"); err != nil {
 		return err
@@ -228,7 +236,7 @@ func main() {
 
 func (w *logWriter) Write(p []byte) (int, error) {
 	buffer := &bytes.Buffer{}
-	fmt.Fprintf(buffer, "[%7.3f] ", time.Since(w.startTime).Seconds())
+	fmt.Fprintf(buffer, "[%7.3f] ", time.Since(processStartTime).Seconds())
 	buffer.Write(p)
 	return w.writer.Write(buffer.Bytes())
 }
