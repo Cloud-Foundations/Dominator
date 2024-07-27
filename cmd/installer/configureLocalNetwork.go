@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -75,8 +76,9 @@ func dhcpRequest(interfaces map[string]net.Interface,
 		defer client.Close()
 		clients[name] = client
 	}
+	logger.Println("waiting for carrier on interfaces")
 	stopTime := time.Now().Add(time.Minute * 5)
-	for ; time.Until(stopTime) > 0; time.Sleep(time.Second) {
+	for ; time.Until(stopTime) > 0; time.Sleep(100 * time.Millisecond) {
 		for name, client := range clients {
 			if libnet.TestCarrier(name) {
 				logger.Debugf(1, "%s: DHCP attempt\n", name)
