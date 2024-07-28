@@ -17,7 +17,7 @@ type DhcpServer struct {
 	cleanupTrigger    chan<- struct{}
 	interfaceIPs      map[string][]net.IP // Key: interface name.
 	myIPs             []net.IP
-	networkBootImage  []byte
+	networkBootImage  string
 	requestInterface  string
 	routeTable        map[string]*util.RouteEntry // Key: interface name.
 	mutex             sync.RWMutex                // Protect everything below.
@@ -91,7 +91,7 @@ func (s *DhcpServer) RemoveSubnet(subnetId string) {
 }
 
 func (s *DhcpServer) SetNetworkBootImage(nbiName string) error {
-	s.networkBootImage = []byte(nbiName)
+	s.networkBootImage = nbiName
 	return nil
 }
 
