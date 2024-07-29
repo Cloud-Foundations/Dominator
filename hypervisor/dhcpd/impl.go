@@ -508,7 +508,7 @@ func (s *DhcpServer) makeDynamicLease(macAddr string, subnet *subnetType,
 }
 
 func (s *DhcpServer) makeOptions(subnet *subnetType,
-	lease *leaseType) dhcp.Options {
+	lease *leaseType, reqOptions dhcp.Options) dhcp.Options {
 	dnsServers := make([]byte, 0)
 	for _, dnsServer := range subnet.DomainNameServers {
 		dnsServers = append(dnsServers, dnsServer...)
@@ -525,7 +525,12 @@ func (s *DhcpServer) makeOptions(subnet *subnetType,
 		leaseOptions[dhcp.OptionHostName] = []byte(lease.hostname)
 	}
 	if lease.doNetboot {
-		leaseOptions[dhcp.OptionBootFileName] = s.networkBootImage
+		var clientArchitecture uint16
+		if ca := reqOptions[dhcp.OptionClientArchitecture]; len(ca) > 1 {
+			clientArchitecture = uint16(ca[0])<<8 + uint16(ca[1])
+		}
+		leaseOptions[dhcp.OptionBootFileName] = []byte(
+			fmt.Sprintf(s.networkBootImage, clientArchitecture))
 	}
 	return leaseOptions
 }
@@ -679,7 +684,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		}
 		s.logger.Debugf(0, "Offer: %s for: %s, server: %s\n",
 			lease.IpAddress, macAddr, subnet.myIP)
-		leaseOptions := s.makeOptions(subnet, lease)
+		leaseOptions := s.makeOptions(subnet, lease, options)
 		packet := dhcp.ReplyPacket(req, dhcp.Offer, subnet.myIP,
 			lease.IpAddress, s.computeLeaseTime(lease, true),
 			leaseOptions.SelectOrderOrAll(
@@ -742,7 +747,7 @@ func (s *DhcpServer) ServeDHCP(req dhcp.Packet, msgType dhcp.MessageType,
 		}
 		if reqIP.Equal(lease.IpAddress) &&
 			s.checkRouteOnInterface(lease.IpAddress, s.requestInterface) {
-			leaseOptions := s.makeOptions(subnet, lease)
+			leaseOptions := s.makeOptions(subnet, lease, options)
 			go s.acknowledgeLease(lease.IpAddress)
 			lease.clientHostname = hostname
 			s.logger.Debugf(0, "ACK for: %s to: %s on: %s, server: %s\n",

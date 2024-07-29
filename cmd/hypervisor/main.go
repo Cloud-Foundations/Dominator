@@ -44,7 +44,7 @@ var (
 		"Interval between checks for lock timeouts")
 	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
 		"Timeout before logging that a lock has been held too long")
-	networkBootImage = flag.String("networkBootImage", "pxelinux.0",
+	networkBootImage = flag.String("networkBootImage", "pxelinux.%d",
 		"Name of boot image passed via DHCP option")
 	objectCacheDirectory = flag.String("objectCacheDirectory", "",
 		"Directory to store object cache (default first volume directory parent)")
