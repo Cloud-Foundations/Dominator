@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -9,9 +10,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
@@ -31,6 +34,31 @@ type objectsReader struct {
 	hashes []hash.Hash
 }
 
+type scanStateType struct {
+	copy            bool
+	device          uint64
+	mutex           sync.Mutex // Protect below and also objectsCache.
+	foundObjects    map[hash.Hash]uint64
+	requiredObjects map[hash.Hash]uint64
+	scannedInodes   map[uint64]struct{}
+}
+
+// createFile will create a file. If there are missing parent directories, they
+// will be created automatically.
+func createFile(filename string) (*os.File, error) {
+	file, err := os.Create(filename)
+	if err == nil {
+		return file, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(filename), fsutil.DirPerms); err != nil {
+		return nil, err
+	}
+	return os.Create(filename)
+}
+
 func hashFile(filename string) (hash.Hash, uint64, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -45,6 +73,22 @@ func hashFile(filename string) (hash.Hash, uint64, error) {
 	var hashVal hash.Hash
 	copy(hashVal[:], hasher.Sum(nil))
 	return hashVal, uint64(nCopied), nil
+}
+
+// symlink will create a symlink called newname pointing oldname. If there are
+// missing parent directories, they will be created automatically.
+func symlink(oldname, newname string) error {
+	err := os.Symlink(oldname, newname)
+	if err == nil {
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(newname), fsutil.DirPerms); err != nil {
+		return err
+	}
+	return os.Symlink(oldname, newname)
 }
 
 func (cache *objectsCache) computeMissing(
@@ -204,37 +248,37 @@ func (cache *objectsCache) getNextObject(hashVal hash.Hash,
 	return nil
 }
 
-func (cache *objectsCache) handleFile(filename string, copy bool,
-	requiredObjects, foundObjects map[hash.Hash]uint64) error {
+func (cache *objectsCache) handleFile(scanState *scanStateType,
+	filename string) error {
 	if hashVal, size, err := hashFile(filename); err != nil {
 		return err
 	} else if size < 1 {
 		return nil
 	} else {
+		scanState.mutex.Lock()
 		cache.bytesScanned += size
 		if _, ok := cache.objects[hashVal]; ok {
+			scanState.mutex.Unlock()
 			return nil
 		}
-		if _, ok := requiredObjects[hashVal]; !ok {
+		if _, ok := scanState.requiredObjects[hashVal]; !ok {
+			scanState.mutex.Unlock()
 			return nil
 		}
 		cache.objects[hashVal] = size
-		if foundObjects != nil {
-			foundObjects[hashVal] = size
+		if scanState.foundObjects != nil {
+			scanState.foundObjects[hashVal] = size
 		}
+		scanState.mutex.Unlock()
 		hashName := filepath.Join(*objectsDirectory,
 			objectcache.HashToFilename(hashVal))
-		err := os.MkdirAll(filepath.Dir(hashName), fsutil.DirPerms)
-		if err != nil {
-			return err
-		}
-		if copy {
+		if scanState.copy {
 			reader, err := os.Open(filename)
 			if err != nil {
 				return err
 			}
 			defer reader.Close()
-			writer, err := os.Create(hashName)
+			writer, err := createFile(hashName)
 			if err != nil {
 				return err
 			}
@@ -244,7 +288,7 @@ func (cache *objectsCache) handleFile(filename string, copy bool,
 			}
 			return nil
 		}
-		return os.Symlink(filename, hashName)
+		return symlink(filename, hashName)
 	}
 }
 
@@ -302,11 +346,18 @@ func (cache *objectsCache) scanTree(topDir string, copy bool,
 	if err := syscall.Lstat(topDir, &rootStat); err != nil {
 		return err
 	}
-	return cache.walk(topDir, rootStat.Dev, copy, requiredObjects, foundObjects)
+	scanState := &scanStateType{
+		copy:            copy,
+		device:          rootStat.Dev,
+		foundObjects:    foundObjects,
+		requiredObjects: requiredObjects,
+		scannedInodes:   make(map[uint64]struct{}),
+	}
+	return cache.walk(topDir, scanState)
 }
 
-func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
-	requiredObjects, foundObjects map[hash.Hash]uint64) error {
+func (cache *objectsCache) walk(dirname string,
+	scanState *scanStateType) error {
 	file, err := os.Open(dirname)
 	if err != nil {
 		return err
@@ -316,6 +367,7 @@ func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
 	if err != nil {
 		return err
 	}
+	var directoriesToScan, filesToScan []string
 	for _, name := range names {
 		pathname := filepath.Join(dirname, name)
 		var stat syscall.Stat_t
@@ -324,20 +376,34 @@ func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
 			return err
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			if stat.Dev != device {
+			if stat.Dev != scanState.device {
 				continue
 			}
-			err := cache.walk(pathname, device, copy, requiredObjects,
-				foundObjects)
-			if err != nil {
-				return err
-			}
+			directoriesToScan = append(directoriesToScan, pathname)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
-			err := cache.handleFile(pathname, copy, requiredObjects,
-				foundObjects)
-			if err != nil {
-				return err
+			if _, ok := scanState.scannedInodes[stat.Ino]; ok {
+				continue
 			}
+			scanState.scannedInodes[stat.Ino] = struct{}{}
+			filesToScan = append(filesToScan, pathname)
+		}
+	}
+	concurrentState := concurrent.NewState(0)
+	for _, pathname := range filesToScan {
+		pathname := pathname
+		err := concurrentState.GoRun(func() error {
+			return cache.handleFile(scanState, pathname)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if err := concurrentState.Reap(); err != nil {
+		return err
+	}
+	for _, pathname := range directoriesToScan {
+		if err := cache.walk(pathname, scanState); err != nil {
+			return err
 		}
 	}
 	return nil

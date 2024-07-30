@@ -769,22 +769,17 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 	device, target string, fstype installer_proto.FileSystemType, encrypt bool,
 	mkfsMutex *sync.Mutex, bytesPerInode uint, logger log.DebugLogger) error {
 	label := target
-	erase := true
+	erase := !drive.discarded
 	if label == "/" {
 		label = "rootfs"
-		if drive.discarded {
-			erase = false
-		}
 	} else if label == "/boot" {
 		label = "bootfs"
-		if drive.discarded {
-			erase = false
-		}
 	} else if encrypt {
 		if err := drive.cryptSetup(cpuSharer, device, logger); err != nil {
 			return err
 		}
 		device = filepath.Join("/dev/mapper", filepath.Base(device))
+		erase = true
 	}
 	if erase {
 		if err := eraseStart(device, logger); err != nil {
