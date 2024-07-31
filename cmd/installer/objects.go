@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha512"
 	"errors"
 	"fmt"
@@ -16,17 +17,14 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
-	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
-	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type objectsCache struct {
 	bytesScanned uint64
-	objects      map[hash.Hash]uint64
+	objects      map[hash.Hash][]byte
 }
 
 type objectsReader struct {
@@ -35,7 +33,6 @@ type objectsReader struct {
 }
 
 type scanStateType struct {
-	copy            bool
 	device          uint64
 	mutex           sync.Mutex // Protect below and also objectsCache.
 	foundObjects    map[hash.Hash]uint64
@@ -43,52 +40,16 @@ type scanStateType struct {
 	scannedInodes   map[uint64]struct{}
 }
 
-// createFile will create a file. If there are missing parent directories, they
-// will be created automatically.
-func createFile(filename string) (*os.File, error) {
-	file, err := os.Create(filename)
-	if err == nil {
-		return file, nil
-	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(filename), fsutil.DirPerms); err != nil {
-		return nil, err
-	}
-	return os.Create(filename)
-}
-
-func hashFile(filename string) (hash.Hash, uint64, error) {
-	file, err := os.Open(filename)
+func hashFile(filename string) (hash.Hash, []byte, error) {
+	object, err := os.ReadFile(filename)
 	if err != nil {
-		return hash.Hash{}, 0, err
+		return hash.Hash{}, nil, err
 	}
-	defer file.Close()
 	hasher := sha512.New()
-	nCopied, err := io.Copy(hasher, file)
-	if err != nil {
-		return hash.Hash{}, 0, err
-	}
+	hasher.Write(object)
 	var hashVal hash.Hash
 	copy(hashVal[:], hasher.Sum(nil))
-	return hashVal, uint64(nCopied), nil
-}
-
-// symlink will create a symlink called newname pointing oldname. If there are
-// missing parent directories, they will be created automatically.
-func symlink(oldname, newname string) error {
-	err := os.Symlink(oldname, newname)
-	if err == nil {
-		return nil
-	}
-	if !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(newname), fsutil.DirPerms); err != nil {
-		return err
-	}
-	return os.Symlink(oldname, newname)
+	return hashVal, object, nil
 }
 
 func (cache *objectsCache) computeMissing(
@@ -98,8 +59,8 @@ func (cache *objectsCache) computeMissing(
 	missingObjects := make(map[hash.Hash]uint64, len(requiredObjects))
 	for hashVal, requiredSize := range requiredObjects {
 		requiredBytes += requiredSize
-		if size, ok := cache.objects[hashVal]; ok {
-			presentBytes += size
+		if object, ok := cache.objects[hashVal]; ok {
+			presentBytes += uint64(len(object))
 		} else {
 			missingObjects[hashVal] = requiredSize
 		}
@@ -110,30 +71,18 @@ func (cache *objectsCache) computeMissing(
 func createObjectsCache(requiredObjects map[hash.Hash]uint64,
 	objGetter objectserver.ObjectsGetter, rootDevice string,
 	logger log.DebugLogger) (*objectsCache, error) {
-	cache := &objectsCache{objects: make(map[hash.Hash]uint64)}
-	if fi, err := os.Stat(*objectsDirectory); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-		logger.Debugln(0, "scanning root")
-		cache.bytesScanned = 0
-		startTime := time.Now()
-		if err := cache.scanRoot(requiredObjects); err != nil {
-			return nil, err
-		}
-		duration := time.Since(startTime)
-		logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
-			format.FormatBytes(cache.bytesScanned), format.Duration(duration),
-			format.FormatBytes(
-				uint64(float64(cache.bytesScanned)/duration.Seconds())))
-	} else if !fi.IsDir() {
-		return nil,
-			fmt.Errorf("%s exists but is not a directory", *objectsDirectory)
-	} else {
-		if err := cache.scanCache(*objectsDirectory, ""); err != nil {
-			return nil, err
-		}
+	cache := &objectsCache{objects: make(map[hash.Hash][]byte)}
+	logger.Debugln(0, "scanning root")
+	cache.bytesScanned = 0
+	startTime := time.Now()
+	if err := cache.scanRoot(requiredObjects); err != nil {
+		return nil, err
 	}
+	duration := time.Since(startTime)
+	logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
+		format.FormatBytes(cache.bytesScanned), format.Duration(duration),
+		format.FormatBytes(
+			uint64(float64(cache.bytesScanned)/duration.Seconds())))
 	missingObjects, requiredBytes, presentBytes := cache.computeMissing(
 		requiredObjects)
 	if len(missingObjects) < 1 {
@@ -196,7 +145,7 @@ func (cache *objectsCache) findAndScanUntrusted(
 	cache.bytesScanned = 0
 	startTime := time.Now()
 	foundObjects := make(map[hash.Hash]uint64)
-	err := cache.scanTree(*mountPoint, true, requiredObjects, foundObjects)
+	err := cache.scanTree(*mountPoint, requiredObjects, foundObjects)
 	if err != nil {
 		return err
 	}
@@ -226,100 +175,37 @@ func (cache *objectsCache) GetObjects(hashes []hash.Hash) (
 
 func (cache *objectsCache) getNextObject(hashVal hash.Hash,
 	objectsReader objectserver.ObjectsReader) error {
-	size, reader, err := objectsReader.NextObject()
+	_, reader, err := objectsReader.NextObject()
 	if err != nil {
 		return err
 	}
-	hashName := filepath.Join(*objectsDirectory,
-		objectcache.HashToFilename(hashVal))
-	if err := os.MkdirAll(filepath.Dir(hashName), fsutil.DirPerms); err != nil {
+	if object, err := io.ReadAll(reader); err != nil {
 		return err
+	} else {
+		cache.objects[hashVal] = object
 	}
-	defer reader.Close()
-	writer, err := os.Create(hashName)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	if _, err := io.Copy(writer, reader); err != nil {
-		return err
-	}
-	cache.objects[hashVal] = size
 	return nil
 }
 
 func (cache *objectsCache) handleFile(scanState *scanStateType,
 	filename string) error {
-	if hashVal, size, err := hashFile(filename); err != nil {
+	if hashVal, object, err := hashFile(filename); err != nil {
 		return err
-	} else if size < 1 {
+	} else if size := uint64(len(object)); size < 1 {
 		return nil
 	} else {
 		scanState.mutex.Lock()
+		defer scanState.mutex.Unlock()
 		cache.bytesScanned += size
 		if _, ok := cache.objects[hashVal]; ok {
-			scanState.mutex.Unlock()
 			return nil
 		}
 		if _, ok := scanState.requiredObjects[hashVal]; !ok {
-			scanState.mutex.Unlock()
 			return nil
 		}
-		cache.objects[hashVal] = size
+		cache.objects[hashVal] = object
 		if scanState.foundObjects != nil {
 			scanState.foundObjects[hashVal] = size
-		}
-		scanState.mutex.Unlock()
-		hashName := filepath.Join(*objectsDirectory,
-			objectcache.HashToFilename(hashVal))
-		if scanState.copy {
-			reader, err := os.Open(filename)
-			if err != nil {
-				return err
-			}
-			defer reader.Close()
-			writer, err := createFile(hashName)
-			if err != nil {
-				return err
-			}
-			defer writer.Close()
-			if _, err := io.Copy(writer, reader); err != nil {
-				return err
-			}
-			return nil
-		}
-		return symlink(filename, hashName)
-	}
-}
-
-func (cache *objectsCache) scanCache(topDir, subpath string) error {
-	myPathName := filepath.Join(topDir, subpath)
-	file, err := os.Open(myPathName)
-	if err != nil {
-		return err
-	}
-	names, err := file.Readdirnames(-1)
-	file.Close()
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		pathname := filepath.Join(myPathName, name)
-		fi, err := os.Stat(pathname)
-		if err != nil {
-			return err
-		}
-		filename := filepath.Join(subpath, name)
-		if fi.IsDir() {
-			if err := cache.scanCache(topDir, filename); err != nil {
-				return err
-			}
-		} else {
-			hashVal, err := objectcache.FilenameToHash(filename)
-			if err != nil {
-				return err
-			}
-			cache.objects[hashVal] = uint64(fi.Size())
 		}
 	}
 	return nil
@@ -327,27 +213,19 @@ func (cache *objectsCache) scanCache(topDir, subpath string) error {
 
 func (cache *objectsCache) scanRoot(
 	requiredObjects map[hash.Hash]uint64) error {
-	if err := os.Mkdir(*objectsDirectory, fsutil.DirPerms); err != nil {
-		return err
-	}
-	err := wsyscall.Mount("none", *objectsDirectory, "tmpfs", 0, "")
-	if err != nil {
-		return err
-	}
-	if err := cache.scanTree("/", false, requiredObjects, nil); err != nil {
+	if err := cache.scanTree("/", requiredObjects, nil); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (cache *objectsCache) scanTree(topDir string, copy bool,
+func (cache *objectsCache) scanTree(topDir string,
 	requiredObjects, foundObjects map[hash.Hash]uint64) error {
 	var rootStat syscall.Stat_t
 	if err := syscall.Lstat(topDir, &rootStat); err != nil {
 		return err
 	}
 	scanState := &scanStateType{
-		copy:            copy,
 		device:          rootStat.Dev,
 		foundObjects:    foundObjects,
 		requiredObjects: requiredObjects,
@@ -419,11 +297,9 @@ func (or *objectsReader) NextObject() (uint64, io.ReadCloser, error) {
 	}
 	hashVal := or.hashes[0]
 	or.hashes = or.hashes[1:]
-	hashName := filepath.Join(*objectsDirectory,
-		objectcache.HashToFilename(hashVal))
-	if file, err := os.Open(hashName); err != nil {
-		return 0, nil, err
+	if object, ok := or.cache.objects[hashVal]; !ok {
+		return 0, nil, fmt.Errorf("no such object: %x", hashVal)
 	} else {
-		return or.cache.objects[hashVal], file, nil
+		return uint64(len(object)), io.NopCloser(bytes.NewReader(object)), nil
 	}
 }

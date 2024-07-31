@@ -47,8 +47,6 @@ var (
 		"If true, do not make changes")
 	mountPoint = flag.String("mountPoint", "/mnt",
 		"Mount point for new root file-system")
-	objectsDirectory = flag.String("objectsDirectory", "/objects",
-		"Directory where cached objects will be written")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
 	portNum       = flag.Uint("portNum", constants.InstallerPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
