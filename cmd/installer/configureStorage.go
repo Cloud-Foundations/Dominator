@@ -277,12 +277,28 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		}
 		layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes += imageSize
 	}
+	bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
+	if err != nil {
+		return nil, err
+	}
+	if layout.BootDriveLayout[bootPartition-1].FileSystemType ==
+		installer_proto.FileSystemTypeVfat {
+		// Only directories and regular files supported on VFAT, so strip
+		// everything else out.
+		var entryList []*filesystem.DirectoryEntry
+		for _, entry := range bootInfo.BootDirectory.EntryList {
+			switch entry.Inode().(type) {
+			case *filesystem.DirectoryInode, *filesystem.RegularInode:
+				entryList = append(entryList, entry)
+			}
+		}
+		if len(bootInfo.BootDirectory.EntryList) != len(entryList) {
+			bootInfo.BootDirectory.EntryList = entryList
+			bootInfo.BootDirectory.BuildEntryMap()
+		}
+	}
 	var rebooter Rebooter
 	if layout.UseKexec {
-		bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
-		if err != nil {
-			return nil, err
-		}
 		rebooter = kexecRebooter{
 			BootInfoType: *bootInfo,
 			logger:       logger,
