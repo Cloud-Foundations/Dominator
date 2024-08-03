@@ -25,6 +25,11 @@ import (
 	"github.com/pin/tftp"
 )
 
+type dhcpResponse struct {
+	name   string
+	packet dhcp4.Packet
+}
+
 var (
 	tftpFiles = []string{
 		"config.json",
@@ -59,38 +64,54 @@ func configureLocalNetwork(logger log.DebugLogger) (
 
 func dhcpRequest(interfaces map[string]net.Interface,
 	logger log.DebugLogger) (string, dhcp4.Packet, error) {
-	clients := make(map[string]*dhcp4client.Client, len(interfaces))
-	for name, iface := range interfaces {
-		packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
-		if err != nil {
-			return "", nil, err
-		}
-		defer packetSocket.Close()
-		client, err := dhcp4client.New(
-			dhcp4client.HardwareAddr(iface.HardwareAddr),
-			dhcp4client.Connection(packetSocket),
-			dhcp4client.Timeout(time.Second*5))
-		if err != nil {
-			return "", nil, err
-		}
-		defer client.Close()
-		clients[name] = client
-	}
+	responseChannel := make(chan dhcpResponse, 1)
 	logger.Println("waiting for carrier on interfaces")
 	stopTime := time.Now().Add(time.Minute * 5)
+	for _, iface := range interfaces {
+		go dhcpRequestOnInterface(iface, stopTime, responseChannel, logger)
+	}
+	timer := time.NewTimer(time.Minute * 5)
+	select {
+	case response := <-responseChannel:
+		timer.Stop()
+		return response.name, response.packet, nil
+	case <-timer.C:
+		return "", nil, errors.New("timed out waiting for DHCP")
+	}
+}
+
+func dhcpRequestOnInterface(iface net.Interface, stopTime time.Time,
+	responseChannel chan<- dhcpResponse, logger log.DebugLogger) {
+	packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
+	if err != nil {
+		logger.Println(err)
+		return
+	}
+	defer packetSocket.Close()
+	client, err := dhcp4client.New(
+		dhcp4client.HardwareAddr(iface.HardwareAddr),
+		dhcp4client.Connection(packetSocket),
+		dhcp4client.Timeout(time.Second*5))
+	if err != nil {
+		logger.Println(err)
+		return
+	}
+	defer client.Close()
 	for ; time.Until(stopTime) > 0; time.Sleep(100 * time.Millisecond) {
-		for name, client := range clients {
-			if libnet.TestCarrier(name) {
-				logger.Debugf(1, "%s: DHCP attempt\n", name)
-				if ok, packet, err := client.Request(); err != nil {
-					logger.Debugf(1, "%s: DHCP failed: %s\n", name, err)
-				} else if ok {
-					return name, packet, nil
-				}
+		if !libnet.TestCarrier(iface.Name) {
+			continue
+		}
+		logger.Debugf(1, "%s: DHCP attempt\n", iface.Name)
+		if ok, packet, err := client.Request(); err != nil {
+			logger.Debugf(1, "%s: DHCP failed: %s\n", iface.Name, err)
+		} else if ok {
+			response := dhcpResponse{name: iface.Name, packet: packet}
+			select {
+			case responseChannel <- response:
+				return
 			}
 		}
 	}
-	return "", nil, errors.New("timed out waiting for DHCP")
 }
 
 func findInterfaceToConfigure(interfaces map[string]net.Interface,
