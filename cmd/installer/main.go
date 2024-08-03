@@ -43,12 +43,16 @@ type Rebooter interface {
 }
 
 var (
+	configurationLoader = flag.String("configurationLoader", "",
+		"Pathname of programme to run to load configuration data")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
-	mountPoint = flag.String("mountPoint", "/mnt",
-		"Mount point for new root file-system")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
-	portNum       = flag.Uint("portNum", constants.InstallerPortNumber,
+	mountPoint    = flag.String("mountPoint", "/mnt",
+		"Mount point for new root file-system")
+	networkConfigurator = flag.String("networkConfigurator", "",
+		"Pathname of programme to run to configure the network")
+	portNum = flag.Uint("portNum", constants.InstallerPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
 	procDirectory = flag.String("procDirectory", "/proc",
 		"Directory where procfs is mounted")
@@ -94,7 +98,8 @@ func ifUnprivileged() bool {
 func install(updateHwClock bool, logFlusher flusher,
 	logger log.DebugLogger) (Rebooter, error) {
 	var rebooter Rebooter
-	machineInfo, interfaces, err := configureLocalNetwork(logger)
+	machineInfo, interfaces, activeInterface, err := configureLocalNetwork(
+		logger)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +117,8 @@ func install(updateHwClock bool, logFlusher flusher,
 		}
 	}
 	if !*skipNetwork {
-		err := configureNetwork(*machineInfo, interfaces, logger)
+		err := configureNetwork(*machineInfo, interfaces, activeInterface,
+			logger)
 		if err != nil {
 			return nil, err
 		}

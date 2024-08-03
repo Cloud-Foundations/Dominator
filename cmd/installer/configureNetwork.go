@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -29,7 +30,12 @@ func addMapping(mappings map[string]string, name string) error {
 }
 
 func configureNetwork(machineInfo fm_proto.GetMachineInfoResponse,
-	interfaces map[string]net.Interface, logger log.DebugLogger) error {
+	interfaces map[string]net.Interface, activeInterface string,
+	logger log.DebugLogger) error {
+	if *networkConfigurator != "" {
+		return run(*networkConfigurator, "", logger, *tftpDirectory,
+			*mountPoint, activeInterface)
+	}
 	hostname := strings.Split(machineInfo.Machine.Hostname, ".")[0]
 	err := ioutil.WriteFile(filepath.Join(*mountPoint, "etc", "hostname"),
 		[]byte(hostname+"\n"), fsutil.PublicFilePerms)

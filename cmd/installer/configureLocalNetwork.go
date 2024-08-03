@@ -42,25 +42,25 @@ var (
 )
 
 func configureLocalNetwork(logger log.DebugLogger) (
-	*fm_proto.GetMachineInfoResponse, map[string]net.Interface, error) {
+	*fm_proto.GetMachineInfoResponse, map[string]net.Interface, string, error) {
 	if err := run("ifconfig", "", logger, "lo", "up"); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	_, interfaces, err := libnet.ListBroadcastInterfaces(
 		libnet.InterfaceTypeEtherNet, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	// Raise interfaces so that by the time the OS is installed link status
 	// should be stable. This is how we discover connected interfaces.
 	if err := raiseInterfaces(interfaces, logger); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	machineInfo, err := getConfiguration(interfaces, logger)
+	machineInfo, activeInterface, err := getConfiguration(interfaces, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	return machineInfo, interfaces, nil
+	return machineInfo, interfaces, activeInterface, nil
 }
 
 func dhcpRequest(interfaces map[string]net.Interface,
@@ -145,29 +145,53 @@ func findInterfaceToConfigure(interfaces map[string]net.Interface,
 }
 
 func getConfiguration(interfaces map[string]net.Interface,
-	logger log.DebugLogger) (*fm_proto.GetMachineInfoResponse, error) {
+	logger log.DebugLogger) (*fm_proto.GetMachineInfoResponse, string, error) {
 	var machineInfo fm_proto.GetMachineInfoResponse
 	err := json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
 		&machineInfo)
 	if err == nil { // Configuration was injected.
-		err := setupNetworkFromConfig(interfaces, machineInfo, logger)
+		activeInterface, err := setupNetworkFromConfig(interfaces, machineInfo,
+			logger)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &machineInfo, nil
+		return &machineInfo, activeInterface, nil
 	}
 	if !os.IsNotExist(err) {
-		return nil, err
+		return nil, "", err
 	}
-	if err := setupNetworkFromDhcp(interfaces, logger); err != nil {
-		return nil, err
+	tftpServer, activeInterface, err := setupNetworkFromDhcp(interfaces, logger)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.MkdirAll(*tftpDirectory, fsutil.DirPerms); err != nil {
+		return nil, "", err
+	}
+	if *configurationLoader != "" {
+		err := run(*configurationLoader, "", logger, *tftpDirectory,
+			activeInterface)
+		if err != nil {
+			return nil, "", err
+		}
+		err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
+			&machineInfo)
+		if err != nil {
+			return nil, "", err
+		}
+		return &machineInfo, activeInterface, nil
+	}
+	if tftpServer.Equal(zeroIP) {
+		return nil, "", errors.New("no TFTP server given")
+	}
+	if err := loadTftpFiles(tftpServer, logger); err != nil {
+		return nil, "", err
 	}
 	err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
 		&machineInfo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &machineInfo, nil
+	return &machineInfo, activeInterface, nil
 }
 
 func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
@@ -196,9 +220,6 @@ func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
 func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 	client, err := tftp.NewClient(tftpServer.String() + ":69")
 	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(*tftpDirectory, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for _, name := range tftpFiles {
@@ -260,26 +281,30 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 }
 
 func setupNetworkFromConfig(interfaces map[string]net.Interface,
-	machineInfo fm_proto.GetMachineInfoResponse, logger log.DebugLogger) error {
+	machineInfo fm_proto.GetMachineInfoResponse, logger log.DebugLogger) (
+	string, error) {
 	iface, ipAddr, subnet, err := findInterfaceToConfigure(interfaces,
 		machineInfo, logger)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return setupNetwork(iface.Name, ipAddr, subnet, logger)
+	if err := setupNetwork(iface.Name, ipAddr, subnet, logger); err != nil {
+		return "", err
+	}
+	return iface.Name, nil
 }
 
 func setupNetworkFromDhcp(interfaces map[string]net.Interface,
-	logger log.DebugLogger) error {
+	logger log.DebugLogger) (net.IP, string, error) {
 	ifName, packet, err := dhcpRequest(interfaces, logger)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
 	if hostname := options[dhcp4.OptionHostName]; len(hostname) > 0 {
 		if err := syscall.Sethostname(hostname); err != nil {
-			return err
+			return nil, "", err
 		}
 		logger.Printf("set hostname=\"%s\" from DHCP HostName option",
 			string(hostname))
@@ -295,24 +320,24 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 				net.IP(dnsServersBuffer[:4]))
 			dnsServersBuffer = dnsServersBuffer[4:]
 		} else {
-			return errors.New("truncated DNS server address")
+			return nil, "", errors.New("truncated DNS server address")
 		}
 	}
 	if domainName := options[dhcp4.OptionDomainName]; len(domainName) > 0 {
 		subnet.DomainName = string(domainName)
 	}
 	if err := setupNetwork(ifName, ipAddr, &subnet, logger); err != nil {
-		return err
+		return nil, "", err
 	}
 	tftpServer := packet.SIAddr()
 	if tftpServer.Equal(zeroIP) {
 		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
 		if tftpServer.Equal(zeroIP) {
-			return errors.New("no TFTP server given")
+			return nil, "", nil
 		}
 		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
 	} else {
 		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
 	}
-	return loadTftpFiles(tftpServer, logger)
+	return tftpServer, ifName, nil
 }

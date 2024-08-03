@@ -9,6 +9,10 @@ storage media such as a USB flash drive or a CD-ROM containg an ISO-format
 image. Some machines have a BMC (Baseboard Management Controller) which supports
 network mounting a remote ISO image and booting from that.
 
+The *installer image* is recommended to be small so that it may be loaded
+quickly. A common pattern is have only a kernel, modules, a *busybox*-based
+shell, some device discovery boot scripts and the *installer* binary.
+
 The *installer* will scan the storage devices for a previously installed OS. If
 present, it will copy files from the old OS into a temporary object cache,
 computing checksums of the files. It uses this cache to skip downloading objects
@@ -93,11 +97,21 @@ The broadcast (EtherNet) interfaces are discovered and turned on. This gives
 some time for the links to become stable before active link detection is
 performed.
 
+### Load configuration
+
 If the `config.json` file is not present, a DHCP request is issued to discover
 the IP address for the machine and the address of a TFTP server from where it
-will fetch configuration data. The primary network interface is configured based
-on the DHCP response. The configuration files are downloaded from the TFTP
-server.
+may fetch configuration data. The primary network interface is configured based
+on the DHCP response. By default, the configuration files are downloaded from
+the TFTP server.
+
+If the `-configurationLoader` option is specified then the specified programme
+is run instead of fetching the configuration files from the TFTP server. This
+allows you to integrate into an existing system for publishing configuration
+data and converting to the format that the *installer* expects. The following
+command-line arguments will be provided:
+1. The name of the directory where to write the configuration files
+2. The name of the active (configured) network interface
 
 ### Configure storage
 The storage devices are discovered and the image (without objects) is downloaded
@@ -132,7 +146,15 @@ The broadcast interfaces are checked to see which have an active link (i.e.
 connected to an active switch port). The machine configuration is consulted and
 a network configuration file is rendered and written to the new root
 file-system. The configuration file specifies interfaces, trunks, VLANs and
-bridges.
+bridges. Further, the DNS configuration is written.
+
+Alternatively, if the `-networkConfigurator` option is specified then the
+specified programme is run instead to perform all network configuration. This
+allows you to provide an alternate implementation for configuring the target OS
+network. The following command-line arguments will be provided:
+1. The name of the directory containing the previously downloaded configuration files
+2. The root directory of the new OS file-system
+3. The name of the active (configured) network interface
 
 ### Copy installation logs
 The installation logs are written to `/var/log/installer/log`.
