@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -276,6 +277,13 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
+	if hostname := options[dhcp4.OptionHostName]; len(hostname) > 0 {
+		if err := syscall.Sethostname(hostname); err != nil {
+			return err
+		}
+		logger.Printf("set hostname=\"%s\" from DHCP HostName option",
+			string(hostname))
+	}
 	subnet := hyper_proto.Subnet{
 		IpGateway: net.IP(options[dhcp4.OptionRouter]),
 		IpMask:    net.IP(options[dhcp4.OptionSubnetMask]),
