@@ -72,17 +72,9 @@ func createObjectsCache(requiredObjects map[hash.Hash]uint64,
 	objGetter objectserver.ObjectsGetter, rootDevice string,
 	logger log.DebugLogger) (*objectsCache, error) {
 	cache := &objectsCache{objects: make(map[hash.Hash][]byte)}
-	logger.Debugln(0, "scanning root")
-	cache.bytesScanned = 0
-	startTime := time.Now()
-	if err := cache.scanRoot(requiredObjects); err != nil {
+	if err := cache.scanRoot(requiredObjects, logger); err != nil {
 		return nil, err
 	}
-	duration := time.Since(startTime)
-	logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
-		format.FormatBytes(cache.bytesScanned), format.Duration(duration),
-		format.FormatBytes(
-			uint64(float64(cache.bytesScanned)/duration.Seconds())))
 	missingObjects, requiredBytes, presentBytes := cache.computeMissing(
 		requiredObjects)
 	if len(missingObjects) < 1 {
@@ -211,11 +203,18 @@ func (cache *objectsCache) handleFile(scanState *scanStateType,
 	return nil
 }
 
-func (cache *objectsCache) scanRoot(
-	requiredObjects map[hash.Hash]uint64) error {
+func (cache *objectsCache) scanRoot(requiredObjects map[hash.Hash]uint64,
+	logger log.DebugLogger) error {
+	logger.Debugln(0, "scanning root")
+	startTime := time.Now()
 	if err := cache.scanTree("/", requiredObjects, nil); err != nil {
 		return err
 	}
+	duration := time.Since(startTime)
+	logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
+		format.FormatBytes(cache.bytesScanned), format.Duration(duration),
+		format.FormatBytes(
+			uint64(float64(cache.bytesScanned)/duration.Seconds())))
 	return nil
 }
 
