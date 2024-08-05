@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -65,6 +67,7 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 		return err
 	}
 	cmd := exec.Command(path, args...)
+	cmd.WaitDelay = time.Second
 	if chroot != "" {
 		cmd.Dir = "/"
 		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: chroot}
@@ -74,7 +77,11 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 		logger.Debugf(0, "running: %s %s\n", name, strings.Join(args, " "))
 	}
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error running: %s: %s", name, output)
+		if err == exec.ErrWaitDelay {
+			return nil
+		}
+		return fmt.Errorf("error running: %s: %s, output: %s",
+			name, err, output)
 	} else {
 		return nil
 	}

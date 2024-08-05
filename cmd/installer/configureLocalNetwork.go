@@ -178,6 +178,7 @@ func getConfiguration(interfaces map[string]net.Interface,
 		if err != nil {
 			return nil, "", err
 		}
+		logger.Printf("loaded configuration using: %s\n", *configurationLoader)
 		return &machineInfo, activeInterface, nil
 	}
 	if tftpServer.Equal(zeroIP) {
