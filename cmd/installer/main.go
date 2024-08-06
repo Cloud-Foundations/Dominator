@@ -43,6 +43,8 @@ type Rebooter interface {
 }
 
 var (
+	completionNotifier = flag.String("completionNotifier", "",
+		"Pathname of programme to run when installation is complete and reboot is imminent")
 	configurationLoader = flag.String("configurationLoader", "",
 		"Pathname of programme to run to load configuration data")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
@@ -128,6 +130,13 @@ func install(updateHwClock bool, logFlusher flusher,
 	}
 	if err := unmountStorage(logger); err != nil {
 		return nil, fmt.Errorf("error unmounting: %s", err)
+	}
+	if *completionNotifier != "" {
+		err := run(*completionNotifier, "", logger, *tftpDirectory,
+			activeInterface)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rebooter, nil
 }

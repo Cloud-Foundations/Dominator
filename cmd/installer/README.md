@@ -162,6 +162,13 @@ The installation logs are written to `/var/log/installer/log`.
 ### Unmount storage
 The storage devices are unmounted.
 
+If the `-completionNotifier` option is specified then the specified programme is
+run after the storage devices are unmounted. This allows you to signal to an
+external system that installation is complete and the new OS is about to be
+booted. The following command-line arguments will be provided:
+1. The name of the directory containing the previously downloaded configuration files
+2. The name of the active (configured) network interface
+
 ### Reboot
 If the `-useKexec=true` option was passed to
 *[hyper-control](../hyper-control/README.md)* when requesting the network boot,
