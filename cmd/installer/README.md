@@ -105,7 +105,7 @@ may fetch configuration data. The primary network interface is configured based
 on the DHCP response. By default, the configuration files are downloaded from
 the TFTP server.
 
-If the `-configurationLoader` option is specified then the specified programme
+If the `-configurationLoader` option is given then the specified programme
 is run instead of fetching the configuration files from the TFTP server. This
 allows you to integrate into an existing system for publishing configuration
 data and converting to the format that the *installer* expects. The following
@@ -130,6 +130,11 @@ cache. This ensures that all objects are available prior to modifying the
 storage devices. It also provides various utilities required for partitioning,
 encrypting and formatting storage devices.
 
+If the `-driveSelector` option is given then the specified programme is run to
+select the drives that should be configured. The list of discovered, usable
+drives is provided as command-line arguments. The list of selected drives must
+be written to the standard output, one per line.
+
 The storage devices are erased (either with `blkdiscard` or by writing 1 MiB of
 zeros at the beginning) and then partitioned. Except for the partition which
 will contain the new root file-system, they are by default encrypted.
@@ -148,10 +153,10 @@ a network configuration file is rendered and written to the new root
 file-system. The configuration file specifies interfaces, trunks, VLANs and
 bridges. Further, the DNS configuration is written.
 
-Alternatively, if the `-networkConfigurator` option is specified then the
-specified programme is run instead to perform all network configuration. This
-allows you to provide an alternate implementation for configuring the target OS
-network. The following command-line arguments will be provided:
+Alternatively, if the `-networkConfigurator` option is given then the specified
+programme is run instead to perform all network configuration. This allows you
+to provide an alternate implementation for configuring the target OS network.
+The following command-line arguments will be provided:
 1. The name of the directory containing the previously downloaded configuration files
 2. The root directory of the new OS file-system
 3. The name of the active (configured) network interface
@@ -162,8 +167,8 @@ The installation logs are written to `/var/log/installer/log`.
 ### Unmount storage
 The storage devices are unmounted.
 
-If the `-completionNotifier` option is specified then the specified programme is
-run after the storage devices are unmounted. This allows you to signal to an
+If the `-completionNotifier` option is given then the specified programme is run
+after the storage devices are unmounted. This allows you to signal to an
 external system that installation is complete and the new OS is about to be
 booted. The following command-line arguments will be provided:
 1. The name of the directory containing the previously downloaded configuration files

@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -247,6 +248,10 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		bootPartition = rootPartition
 	}
 	drives, err := listDrives(logger)
+	if err != nil {
+		return nil, err
+	}
+	drives, err = selectDrives(drives, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -700,6 +705,42 @@ func remapDevice(device, target string, encrypt bool) string {
 	} else {
 		return filepath.Join("/dev/mapper", filepath.Base(device))
 	}
+}
+
+func selectDrives(input []*driveType, logger log.DebugLogger) (
+	[]*driveType, error) {
+	if *driveSelector == "" {
+		logger.Println("selecting all usable drives")
+		return input, nil
+	}
+	names := make([]string, 0, len(input))
+	table := make(map[string]*driveType, len(input))
+	for _, drive := range input {
+		names = append(names, drive.name)
+		table[drive.name] = drive
+	}
+	stderr := &bytes.Buffer{}
+	cmd := exec.Command(*driveSelector, names...)
+	cmd.Stderr = stderr
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("error running: %s: %s, output: %s",
+			*driveSelector, err, stderr)
+	}
+	names, err = fsutil.ReadLines(bytes.NewReader(stdout))
+	if err != nil {
+		return nil, err
+	}
+	output := make([]*driveType, 0, len(names))
+	for _, name := range names {
+		if drive := table[name]; drive == nil {
+			return nil, fmt.Errorf("cannot select non-existant drive: %s", name)
+		} else {
+			output = append(output, drive)
+			logger.Printf("selected drive: %s\n", name)
+		}
+	}
+	return output, nil
 }
 
 func unmountStorage(logger log.DebugLogger) error {

@@ -47,6 +47,8 @@ var (
 		"Pathname of programme to run when installation is complete and reboot is imminent")
 	configurationLoader = flag.String("configurationLoader", "",
 		"Pathname of programme to run to load configuration data")
+	driveSelector = flag.String("driveSelector", "",
+		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
