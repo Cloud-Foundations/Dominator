@@ -655,6 +655,23 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	if len(drives) < 1 {
 		return nil, fmt.Errorf("no drives found")
 	}
+	// Sort drives based on their bus location. This is a cheap attempt at
+	// stable naming.
+	sort.SliceStable(drives, func(left, right int) bool {
+		leftName, err := os.Readlink(
+			filepath.Join(*sysfsDirectory, "class", "block",
+				drives[left].name))
+		if err != nil {
+			return false
+		}
+		rightName, err := os.Readlink(
+			filepath.Join(*sysfsDirectory, "class", "block",
+				drives[right].name))
+		if err != nil {
+			return false
+		}
+		return leftName < rightName
+	})
 	return drives, nil
 }
 
