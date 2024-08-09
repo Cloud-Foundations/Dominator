@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,10 +14,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type writeCloser struct{}
+
+var standardBindMounts = []string{"dev", "proc", "sys", "tmp"}
 
 func create(filename string) (io.WriteCloser, error) {
 	if *dryRun {
@@ -56,6 +64,20 @@ func lookPath(rootDir, file string) (string, error) {
 	return "", fmt.Errorf("(chroot=%s) %s not found in PATH", rootDir, file)
 }
 
+// readString will read a string from the specified filename.
+// If the file does not exist an empty string is returned if ignoreMissing is
+// true, else an error is returned.
+func readString(filename string, ignoreMissing bool) (string, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if ignoreMissing && os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
 func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 	if *dryRun {
 		logger.Debugf(0, "dry run: skipping: %s %s\n",
@@ -85,6 +107,35 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 	} else {
 		return nil
 	}
+}
+
+func unpackAndMount(rootDir string, fileSystem *filesystem.FileSystem,
+	objGetter objectserver.ObjectsGetter, doInTmpfs bool,
+	logger log.DebugLogger) error {
+	if err := os.MkdirAll(rootDir, fsutil.DirPerms); err != nil {
+		return err
+	}
+	for _, mountPoint := range standardBindMounts {
+		syscall.Unmount(filepath.Join(rootDir, mountPoint), 0)
+	}
+	syscall.Unmount(rootDir, 0)
+	if doInTmpfs {
+		if err := wsyscall.Mount("none", rootDir, "tmpfs", 0, ""); err != nil {
+			return err
+		}
+	}
+	if err := util.Unpack(fileSystem, objGetter, rootDir, logger); err != nil {
+		return err
+	}
+	for _, mountPoint := range standardBindMounts {
+		err := wsyscall.Mount("/"+mountPoint,
+			filepath.Join(rootDir, mountPoint), "",
+			wsyscall.MS_BIND, "")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (wc *writeCloser) Close() error {

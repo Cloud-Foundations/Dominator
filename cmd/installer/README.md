@@ -30,11 +30,28 @@ present, the configuration data are not fetched via TFTP. This mode supports
 iteratively writing the configuration data and testing the *installer* code
 itself.
 
+In addition, the *installer* supports some sub-commands which may be used for
+building custom workflows and debugging.
+The basic usage pattern is:
+
+```
+installer [flags...] command [args...]
+```
+
 Built-in help is available with the command:
 
 ```
 installer -h
 ```
+
+The sub-commands available are:
+
+- **load-image**: load the specified image and unpack it into the specified
+                  directory. The `/dev`, `/proc`, `/sys` and `/tmp` directories
+		  are bind-mounted in so that the image may be used in a chroot
+		  environment. This may be used to download a debugging image or
+		  it may be used by plugin programmes to download extra tools
+		  they require
 
 When network booting, the *[hyper-control](../hyper-control/README.md)* tool may
 be used to request that a nearby *[Hypervisor](../hypervisor/README.md)* serve
@@ -98,6 +115,10 @@ some time for the links to become stable before active link detection is
 performed.
 
 ### Load configuration
+
+If the `config.json` file is present, the configuration is read immediately. No
+DHCP requests are performed and the `-configurationLoader` option is ignored.
+This is meant for development.
 
 If the `config.json` file is not present, a DHCP request is issued to discover
 the IP address for the machine and the address of a TFTP server from where it

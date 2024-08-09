@@ -35,7 +35,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	installer_proto "github.com/Cloud-Foundations/Dominator/proto/installer"
 )
@@ -263,11 +262,18 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			return nil, err
 		}
 	}
-	imageName, img, client, err := getImage(logger)
+	imageName, err := readString(filepath.Join(*tftpDirectory, "imagename"),
+		true)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	imageName, img, client, err := getImage(imageName, logger)
+	if err != nil {
+		return nil, err
+	}
+	if client != nil {
+		defer client.Close()
+	}
 	if img == nil {
 		logger.Println("no image specified, skipping paritioning")
 		return nil, nil
@@ -446,21 +452,16 @@ func eraseStart(device string, logger log.DebugLogger) error {
 	return nil
 }
 
-func getImage(logger log.DebugLogger) (
+func getImage(imageName string, logger log.DebugLogger) (
 	string, *image.Image, *srpc.Client, error) {
-	data, err := ioutil.ReadFile(filepath.Join(*tftpDirectory, "imagename"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil, nil, nil
-		}
-		return "", nil, nil, err
+	if imageName == "" {
+		return "", nil, nil, nil
 	}
-	imageName := strings.TrimSpace(string(data))
-	data, err = ioutil.ReadFile(filepath.Join(*tftpDirectory, "imageserver"))
+	imageServerAddress, err := readString(
+		filepath.Join(*tftpDirectory, "imageserver"), false)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	imageServerAddress := strings.TrimSpace(string(data))
 	logger.Printf("dialing imageserver: %s\n", imageServerAddress)
 	startTime := time.Now()
 	client, err := srpc.DialHTTP("tcp", imageServerAddress, time.Second*15)
@@ -540,22 +541,7 @@ func installRoot(device string, fileSystem *filesystem.FileSystem,
 		return nil
 	}
 	logger.Debugln(0, "unpacking root")
-	err := util.Unpack(fileSystem, objGetter, *mountPoint, logger)
-	if err != nil {
-		return err
-	}
-	err = wsyscall.Mount("/dev", filepath.Join(*mountPoint, "dev"), "",
-		wsyscall.MS_BIND, "")
-	if err != nil {
-		return err
-	}
-	err = wsyscall.Mount("/proc", filepath.Join(*mountPoint, "proc"), "",
-		wsyscall.MS_BIND, "")
-	if err != nil {
-		return err
-	}
-	err = wsyscall.Mount("/sys", filepath.Join(*mountPoint, "sys"), "",
-		wsyscall.MS_BIND, "")
+	err := unpackAndMount(*mountPoint, fileSystem, objGetter, false, logger)
 	if err != nil {
 		return err
 	}
@@ -576,31 +562,7 @@ func installTmpRoot(fileSystem *filesystem.FileSystem,
 		return nil
 	}
 	logger.Debugln(0, "unpacking tmproot")
-	if err := os.MkdirAll(*tmpRoot, fsutil.DirPerms); err != nil {
-		return err
-	}
-	syscall.Unmount(filepath.Join(*tmpRoot, "sys"), 0)
-	syscall.Unmount(filepath.Join(*tmpRoot, "proc"), 0)
-	syscall.Unmount(filepath.Join(*tmpRoot, "dev"), 0)
-	syscall.Unmount(*tmpRoot, 0)
-	if err := wsyscall.Mount("none", *tmpRoot, "tmpfs", 0, ""); err != nil {
-		return err
-	}
-	if err := util.Unpack(fileSystem, objGetter, *tmpRoot, logger); err != nil {
-		return err
-	}
-	err := wsyscall.Mount("/dev", filepath.Join(*tmpRoot, "dev"), "",
-		wsyscall.MS_BIND, "")
-	if err != nil {
-		return err
-	}
-	err = wsyscall.Mount("/proc", filepath.Join(*tmpRoot, "proc"), "",
-		wsyscall.MS_BIND, "")
-	if err != nil {
-		return err
-	}
-	err = wsyscall.Mount("/sys", filepath.Join(*tmpRoot, "sys"), "",
-		wsyscall.MS_BIND, "")
+	err := unpackAndMount(*tmpRoot, fileSystem, objGetter, true, logger)
 	if err != nil {
 		return err
 	}

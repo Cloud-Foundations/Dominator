@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -73,6 +74,20 @@ var (
 
 	processStartTime = time.Now()
 )
+
+func printUsage() {
+	w := flag.CommandLine.Output()
+	fmt.Fprintln(w,
+		"Usage: installer [flags...] [command [args...]]")
+	fmt.Fprintln(w, "Common flags:")
+	flag.PrintDefaults()
+	fmt.Fprintln(w, "Commands:")
+	commands.PrintCommands(w, subcommands)
+}
+
+var subcommands = []commands.Command{
+	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
+}
 
 func copyLogs(logFlusher flusher) error {
 	logFlusher.Flush()
@@ -175,11 +190,7 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 	}
 }
 
-func doMain() error {
-	if err := loadflags.LoadForDaemon("installer"); err != nil {
-		return err
-	}
-	flag.Parse()
+func runDaemon() error {
 	tricorder.RegisterFlags()
 	logBuffer, logger := createLogger()
 	defer logBuffer.Flush()
@@ -242,11 +253,27 @@ func doMain() error {
 	return nil
 }
 
+func processCommand(args []string) {
+	if len(args) < 1 {
+		runSubcommand(nil, nil)
+	}
+	logger := debuglogger.New(stdlog.New(os.Stderr, "", 0))
+	logger.SetLevel(int16(*logDebugLevel))
+	os.Exit(commands.RunCommands(subcommands, printUsage, logger))
+}
+
 func main() {
-	if err := doMain(); err != nil {
+	if err := loadflags.LoadForDaemon("installer"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	flag.Usage = printUsage
+	flag.Parse()
+	processCommand(flag.Args())
+}
+
+func runSubcommand(args []string, logger log.DebugLogger) error {
+	return runDaemon()
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {
