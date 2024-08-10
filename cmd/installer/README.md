@@ -46,6 +46,8 @@ installer -h
 
 The sub-commands available are:
 
+- **dhcp-request**: issue a DHCP request for debugging. The response data will
+                    be logged but no other action will be taken
 - **load-image**: load the specified image and unpack it into the specified
                   directory. The `/dev`, `/proc`, `/sys` and `/tmp` directories
 		  are bind-mounted in so that the image may be used in a chroot

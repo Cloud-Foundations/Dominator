@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,6 +21,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
+	"github.com/d2g/dhcp4"
+	dhcp "github.com/krolaw/dhcp4" // Used for option strings.
 )
 
 type writeCloser struct{}
@@ -42,6 +45,71 @@ func findExecutable(rootDir, file string) error {
 		}
 		return os.ErrPermission
 	}
+}
+
+func formatText(data []byte) string {
+	for _, ch := range data {
+		if ch < 0x20 || ch > 0x7e {
+			return ""
+		}
+	}
+	return "(\"" + string(data) + "\")"
+}
+
+func logDhcpPacket(ifName string, packet dhcp4.Packet,
+	options dhcp4.Options) (string, error) {
+	topdir := filepath.Join("/var", "log", "installer", "dhcp")
+	if err := os.MkdirAll(topdir, fsutil.DirPerms); err != nil {
+		return "", err
+	}
+	// Brute-force way to create the next log directory.
+	var logdir string
+	for count := 0; true; count++ {
+		if count > 100 {
+			return "",
+				fmt.Errorf("reached DHCP logging limit: empty out: %s", topdir)
+		}
+		logdir = fmt.Sprintf("%s/%d", topdir, count)
+		if err := os.Mkdir(logdir, fsutil.DirPerms); err != nil {
+			if os.IsExist(err) {
+				continue
+			}
+			return "", err
+		}
+		break
+	}
+	err := os.WriteFile(filepath.Join(logdir, "interface"), []byte(ifName),
+		fsutil.PublicFilePerms)
+	if err != nil {
+		return "", err
+	}
+	if file, err := os.Create(filepath.Join(logdir, "packet")); err != nil {
+		return "", err
+	} else {
+		file.Write(packet)
+		file.Close()
+	}
+	optionsFile, err := os.Create(filepath.Join(logdir, "options"))
+	if err != nil {
+		return "", err
+	}
+	defer optionsFile.Close()
+	writer := bufio.NewWriter(optionsFile)
+	defer writer.Flush()
+	for code, value := range options {
+		stringCode := dhcp.OptionCode(code).String()
+		fmt.Fprintf(writer, "Code: %3d/%s\n", code, stringCode)
+		fmt.Fprintf(writer, "  value: %#x%s\n", value, formatText(value))
+		optionFilename := filepath.Join(logdir,
+			fmt.Sprintf("option.%d_%s", code, stringCode))
+		if file, err := os.Create(optionFilename); err != nil {
+			return "", err
+		} else {
+			file.Write(value)
+			file.Close()
+		}
+	}
+	return logdir, nil
 }
 
 func lookPath(rootDir, file string) (string, error) {

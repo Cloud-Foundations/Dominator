@@ -303,6 +303,11 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
+	if logdir, err := logDhcpPacket(ifName, packet, options); err != nil {
+		logger.Printf("error logging DHCP packet: %w", err)
+	} else {
+		logger.Printf("logged DHCP response in: %s\n", logdir)
+	}
 	if hostname := options[dhcp4.OptionHostName]; len(hostname) > 0 {
 		if err := syscall.Sethostname(hostname); err != nil {
 			return nil, "", err

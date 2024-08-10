@@ -86,6 +86,7 @@ func printUsage() {
 }
 
 var subcommands = []commands.Command{
+	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
 	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
 }
 
