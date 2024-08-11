@@ -19,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/d2g/dhcp4"
@@ -130,6 +131,18 @@ func lookPath(rootDir, file string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("(chroot=%s) %s not found in PATH", rootDir, file)
+}
+
+// readMbr will read the MBR from a file. It returns an error if there is a
+// problem opening or reading the file. If there is no MBR signature, a nil
+// object is returned along with no error.
+func readMbr(filename string) (*mbr.Mbr, error) {
+	if file, err := os.Open(filename); err != nil {
+		return nil, err
+	} else {
+		defer file.Close()
+		return mbr.Decode(file)
+	}
 }
 
 // readString will read a string from the specified filename.

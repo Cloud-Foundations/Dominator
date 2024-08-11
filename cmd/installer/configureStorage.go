@@ -32,6 +32,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -47,6 +48,7 @@ const (
 type driveType struct {
 	discarded bool
 	devpath   string
+	mbr       *mbr.Mbr
 	name      string
 	size      uint64 // Bytes
 }
@@ -602,16 +604,19 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 			logger.Debugf(2, "skipping removable device: %s\n", name)
 			continue
 		}
+		drive := &driveType{
+			devpath: filepath.Join("/dev", name),
+			name:    name,
+		}
 		if val, err := readInt(filepath.Join(dirname, "size")); err != nil {
 			return nil, err
+		} else if drive.mbr, err = readMbr(drive.devpath); err != nil {
+			logger.Debugf(2, "skipping unreadable device: %s\n", name)
 		} else {
 			logger.Debugf(1, "found: %s %d GiB (%d GB)\n",
 				name, val>>21, val<<9/1000000000)
-			drives = append(drives, &driveType{
-				devpath: filepath.Join("/dev", name),
-				name:    name,
-				size:    val << 9,
-			})
+			drive.size = val << 9
+			drives = append(drives, drive)
 		}
 	}
 	if len(drives) < 1 {
