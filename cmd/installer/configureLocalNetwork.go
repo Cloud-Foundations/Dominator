@@ -252,6 +252,34 @@ func raiseInterfaces(interfaces map[string]net.Interface,
 	return nil
 }
 
+func setHostname(optionHostName []byte, logger log.DebugLogger) error {
+	if hostname := optionHostName; len(hostname) > 0 {
+		if isValidHostname(hostname) {
+			if err := syscall.Sethostname(hostname); err != nil {
+				return err
+			}
+			logger.Printf("set hostname=\"%s\" from DHCP HostName option",
+				string(hostname))
+			return nil
+		}
+		logger.Printf("ignoring invalid DHCP HostName option: %s\n",
+			string(hostname))
+	}
+	if hostname := readHostnameFromKernelCmdline(); len(hostname) > 0 {
+		if isValidHostname(hostname) {
+			if err := syscall.Sethostname(hostname); err != nil {
+				return err
+			}
+			logger.Printf("set hostname=\"%s\" from hostname= kernel cmdline",
+				string(hostname))
+			return nil
+		}
+		logger.Printf("ignoring invalid hostname= from kernel cmdline: %s\n",
+			string(hostname))
+	}
+	return nil
+}
+
 func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 	logger log.DebugLogger) error {
 	err := run("ifconfig", "", logger, ifName, ipAddr.String(), "netmask",
@@ -308,12 +336,8 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 	} else {
 		logger.Printf("logged DHCP response in: %s\n", logdir)
 	}
-	if hostname := options[dhcp4.OptionHostName]; len(hostname) > 0 {
-		if err := syscall.Sethostname(hostname); err != nil {
-			return nil, "", err
-		}
-		logger.Printf("set hostname=\"%s\" from DHCP HostName option",
-			string(hostname))
+	if err := setHostname(options[dhcp4.OptionHostName], logger); err != nil {
+		return nil, "", err
 	}
 	subnet := hyper_proto.Subnet{
 		IpGateway: net.IP(options[dhcp4.OptionRouter]),

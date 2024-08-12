@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -55,6 +56,35 @@ func formatText(data []byte) string {
 		}
 	}
 	return "(\"" + string(data) + "\")"
+}
+
+// getVariableFromBytes will search for a "name=value" tuple in a
+// space separated slice of bytes. It will return the value if found.
+func getVariableFromBytes(data []byte, name string) []byte {
+	equals := []byte("=")
+	nameBytes := []byte(name)
+	for _, arg := range bytes.Fields(data) {
+		if fields := bytes.Split(arg, equals); len(fields) == 2 {
+			if bytes.Equal(fields[0], nameBytes) {
+				return fields[1]
+			}
+		}
+	}
+	return nil
+}
+
+// isValidHostname returns true if the specified hostname contains valid
+// characters.
+func isValidHostname(hostname []byte) bool {
+	for _, ch := range hostname {
+		if (ch >= 'A' && ch <= 'Z') ||
+			(ch >= 'a' && ch <= 'z') ||
+			(ch == '-') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func logDhcpPacket(ifName string, packet dhcp4.Packet,
@@ -131,6 +161,19 @@ func lookPath(rootDir, file string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("(chroot=%s) %s not found in PATH", rootDir, file)
+}
+
+// readHostnameFromKernelCmdline will read the kernel command-line and will
+// return the value of the "hostname=" argument if found.
+func readHostnameFromKernelCmdline() []byte {
+	if data, err := readKernelCmdline(); err == nil {
+		return getVariableFromBytes(data, "hostname")
+	}
+	return nil
+}
+
+func readKernelCmdline() ([]byte, error) {
+	return os.ReadFile(filepath.Join(*procDirectory, "cmdline"))
 }
 
 // readMbr will read the MBR from a file. It returns an error if there is a
