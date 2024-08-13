@@ -100,7 +100,7 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	img *image.Image, objGetter objectserver.ObjectsGetter,
 	logger log.DebugLogger) error {
 	startTime := time.Now()
-	if run("blkdiscard", *tmpRoot, logger, drive.devpath) == nil {
+	if run("blkdiscard", "", logger, drive.devpath) == nil {
 		drive.discarded = true
 		logger.Printf("discarded %s in %s\n",
 			drive.devpath, format.Duration(time.Since(startTime)))
@@ -194,7 +194,7 @@ func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	index int, layout installer_proto.StorageLayout,
 	logger log.DebugLogger) error {
 	startTime := time.Now()
-	if run("blkdiscard", *tmpRoot, logger, drive.devpath) == nil {
+	if run("blkdiscard", "", logger, drive.devpath) == nil {
 		drive.discarded = true
 		logger.Printf("discarded %s in %s\n",
 			drive.devpath, format.Duration(time.Since(startTime)))
