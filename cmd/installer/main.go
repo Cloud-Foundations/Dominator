@@ -87,6 +87,7 @@ func printUsage() {
 
 var subcommands = []commands.Command{
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
+	{"list-images", "", 0, 0, listImagesSubcommand},
 	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
 }
 
@@ -260,6 +261,10 @@ func processCommand(args []string) {
 	}
 	logger := debuglogger.New(stdlog.New(os.Stderr, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
+		logger.Println(err)
+	}
 	os.Exit(commands.RunCommands(subcommands, printUsage, logger))
 }
 
