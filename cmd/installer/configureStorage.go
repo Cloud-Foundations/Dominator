@@ -54,7 +54,6 @@ type driveType struct {
 }
 
 type kexecRebooter struct {
-	util.BootInfoType
 	logger log.DebugLogger
 }
 
@@ -98,7 +97,7 @@ func closeEncryptedVolumes(logger log.DebugLogger) error {
 func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	layout installer_proto.StorageLayout, rootPartition, bootPartition int,
 	img *image.Image, objGetter objectserver.ObjectsGetter,
-	logger log.DebugLogger) error {
+	bootInfo *util.BootInfoType, logger log.DebugLogger) error {
 	startTime := time.Now()
 	if run("blkdiscard", "", logger, drive.devpath) == nil {
 		drive.discarded = true
@@ -187,7 +186,8 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 			return err
 		}
 	}
-	return installRoot(drive.devpath, img.FileSystem, objGetter, logger)
+	return installRoot(drive.devpath, layout, img.FileSystem, objGetter,
+		bootInfo, logger)
 }
 
 func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
@@ -312,10 +312,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	}
 	var rebooter Rebooter
 	if layout.UseKexec {
-		rebooter = kexecRebooter{
-			BootInfoType: *bootInfo,
-			logger:       logger,
-		}
+		rebooter = kexecRebooter{logger: logger}
 	}
 	objClient := objectclient.AttachObjectClient(client)
 	defer objClient.Close()
@@ -344,7 +341,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	cpuSharer := cpusharer.NewFifoCpuSharer()
 	err = concurrentState.GoRun(func() error {
 		return configureBootDrive(cpuSharer, drives[0], layout, rootPartition,
-			bootPartition, img, objGetter, logger)
+			bootPartition, img, objGetter, bootInfo, logger)
 	})
 	if err != nil {
 		return nil, concurrentState.Reap()
@@ -536,8 +533,9 @@ func getRandomKey(numBytes uint, logger log.DebugLogger) ([]byte, error) {
 	}
 }
 
-func installRoot(device string, fileSystem *filesystem.FileSystem,
-	objGetter objectserver.ObjectsGetter, logger log.DebugLogger) error {
+func installRoot(device string, layout installer_proto.StorageLayout,
+	fileSystem *filesystem.FileSystem, objGetter objectserver.ObjectsGetter,
+	bootInfo *util.BootInfoType, logger log.DebugLogger) error {
 	if *dryRun {
 		logger.Debugln(0, "dry run: skipping installing root")
 		return nil
@@ -547,8 +545,29 @@ func installRoot(device string, fileSystem *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
-	return util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
+	var waiter sync.Mutex
+	if layout.UseKexec { // Install target OS kernel while it's still mounted.
+		waiter.Lock()
+		go func() {
+			defer waiter.Unlock()
+			startTime := time.Now()
+			err := run("kexec", *mountPoint, logger,
+				"-l", bootInfo.KernelImageFile,
+				"--append="+bootInfo.KernelOptions,
+				"--console-serial", "--serial-baud=115200",
+				"--initrd="+bootInfo.InitrdImageFile)
+			if err != nil {
+				logger.Printf("error loading new kernel: %w\n", err)
+			} else {
+				logger.Printf("loaded kernel in %s\n", time.Since(startTime))
+			}
+		}()
+	}
+	err = util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
 		true, logger)
+	waiter.Lock()
+	waiter.Unlock()
+	return err
 }
 
 func installTmpRoot(fileSystem *filesystem.FileSystem,
@@ -888,12 +907,7 @@ func (drive driveType) writeDeviceEntries(device, target string,
 }
 
 func (rebooter kexecRebooter) Reboot() error {
-	return run("kexec", *tmpRoot, rebooter.logger,
-		"-l", rebooter.KernelImageFile,
-		"--append="+rebooter.KernelOptions,
-		"--console-serial", "--serial-baud=115200",
-		"--initrd="+rebooter.InitrdImageFile,
-		"-f")
+	return run("kexec", *tmpRoot, rebooter.logger, "-e")
 }
 
 func (rebooter kexecRebooter) String() string {
