@@ -258,6 +258,7 @@ func raiseInterfaces(interfaces map[string]net.Interface,
 
 func setHostname(optionHostName []byte, logger log.DebugLogger) error {
 	if hostname := optionHostName; len(hostname) > 0 {
+		hostname = bytes.ToLower(hostname)
 		if isValidHostname(hostname) {
 			if err := syscall.Sethostname(hostname); err != nil {
 				return err
@@ -270,6 +271,7 @@ func setHostname(optionHostName []byte, logger log.DebugLogger) error {
 			string(hostname))
 	}
 	if hostname := readHostnameFromKernelCmdline(); len(hostname) > 0 {
+		hostname = bytes.ToLower(hostname)
 		if isValidHostname(hostname) {
 			if err := syscall.Sethostname(hostname); err != nil {
 				return err

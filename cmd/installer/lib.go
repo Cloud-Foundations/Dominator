@@ -77,8 +77,8 @@ func getVariableFromBytes(data []byte, name string) []byte {
 // characters.
 func isValidHostname(hostname []byte) bool {
 	for _, ch := range hostname {
-		if (ch >= 'A' && ch <= 'Z') ||
-			(ch >= 'a' && ch <= 'z') ||
+		if (ch >= 'a' && ch <= 'z') ||
+			(ch >= '0' && ch <= '9') ||
 			(ch == '-') {
 			continue
 		}
