@@ -279,17 +279,16 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if img == nil {
 		logger.Println("no image specified, skipping paritioning")
 		return nil, nil
-	} else {
-		if err := img.FileSystem.RebuildInodePointers(); err != nil {
-			return nil, err
-		}
-		imageSize := img.FileSystem.EstimateUsage(0)
-		if layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes <
-			imageSize {
-			layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes = imageSize
-		}
-		layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes += imageSize
 	}
+	if err := img.FileSystem.RebuildInodePointers(); err != nil {
+		return nil, err
+	}
+	imageSize := img.FileSystem.EstimateUsage(0)
+	if layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes <
+		imageSize {
+		layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes = imageSize
+	}
+	layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes += imageSize
 	bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
 	if err != nil {
 		return nil, err
@@ -321,7 +320,30 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err != nil {
 		return nil, err
 	}
-	if err := installTmpRoot(img.FileSystem, objGetter, logger); err != nil {
+	toolsFileSystem := img.FileSystem
+	toolsImageName, err := readString(filepath.Join(*tftpDirectory,
+		"tools-imagename"), true)
+	if err != nil {
+		return nil, err
+	}
+	if toolsImageName != "" {
+		_, img, err := getImageFromClient(client, toolsImageName, true, logger)
+		if err != nil {
+			return nil, err
+		}
+		if img != nil {
+			if err := img.FileSystem.RebuildInodePointers(); err != nil {
+				return nil, err
+			}
+			err = objGetter.downloadMissing(img.FileSystem.GetObjects(),
+				objClient, logger)
+			if err != nil {
+				return nil, err
+			}
+			toolsFileSystem = img.FileSystem
+		}
+	}
+	if err := installTmpRoot(toolsFileSystem, objGetter, logger); err != nil {
 		return nil, err
 	}
 	if len(randomKey) > 0 {
@@ -469,48 +491,58 @@ func getImage(imageName string, logger log.DebugLogger) (
 	}
 	logger.Printf("dialed imageserver after: %s\n",
 		format.Duration(time.Since(startTime)))
-	startTime = time.Now()
-	if img, _ := imageclient.GetImage(client, imageName); img != nil {
+	imageName, img, err := getImageFromClient(client, imageName, false, logger)
+	if err != nil {
+		client.Close()
+		return "", nil, nil, err
+	}
+	return imageName, img, client, nil
+}
+
+func getImageFromClient(client *srpc.Client, imageName string,
+	ignoreMissing bool, logger log.DebugLogger) (string, *image.Image, error) {
+	startTime := time.Now()
+	img, err := imageclient.GetImage(client, imageName)
+	if err != nil {
+		return "", nil, err
+	}
+	if img != nil {
 		logger.Debugf(0, "got image: %s in %s\n",
 			imageName, format.Duration(time.Since(startTime)))
-		return imageName, img, client, nil
+		return imageName, img, nil
 	}
 	streamName := imageName
 	isDir, err := imageclient.CheckDirectory(client, streamName)
 	if err != nil {
-		client.Close()
-		return "", nil, nil, err
+		return "", nil, err
 	}
 	if !isDir {
 		streamName = filepath.Dir(streamName)
 		isDir, err = imageclient.CheckDirectory(client, streamName)
 		if err != nil {
-			client.Close()
-			return "", nil, nil, err
+			return "", nil, err
 		}
 	}
 	if !isDir {
-		client.Close()
-		return "", nil, nil, fmt.Errorf("%s is not a directory", streamName)
+		return "", nil, fmt.Errorf("%s is not a directory", streamName)
 	}
 	imageName, err = imageclient.FindLatestImage(client, streamName, false)
 	if err != nil {
-		client.Close()
-		return "", nil, nil, err
+		return "", nil, err
 	}
 	if imageName == "" {
-		client.Close()
-		return "", nil, nil, fmt.Errorf("no image found in: %s on: %s",
-			streamName, imageServerAddress)
+		if ignoreMissing {
+			return "", nil, nil
+		}
+		return "", nil, fmt.Errorf("no image found in: %s", streamName)
 	}
 	startTime = time.Now()
 	if img, err := imageclient.GetImage(client, imageName); err != nil {
-		client.Close()
-		return "", nil, nil, err
+		return "", nil, err
 	} else {
 		logger.Debugf(0, "got image: %s in %s\n",
 			imageName, format.Duration(time.Since(startTime)))
-		return imageName, img, client, nil
+		return imageName, img, nil
 	}
 }
 

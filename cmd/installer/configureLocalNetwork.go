@@ -32,11 +32,12 @@ type dhcpResponse struct {
 }
 
 var (
-	tftpFiles = []string{
-		"config.json",
-		"imagename",
-		"imageserver",
-		"storage-layout.json",
+	tftpFiles = map[string]bool{ // If true, file is required.
+		"config.json":         true,
+		"imagename":           true,
+		"imageserver":         true,
+		"storage-layout.json": true,
+		"tools-imagename":     false,
 	}
 	zeroIP = net.IP(make([]byte, 4))
 )
@@ -223,9 +224,12 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range tftpFiles {
+	for name, required := range tftpFiles {
 		logger.Debugf(1, "downloading: %s\n", name)
 		if wt, err := client.Receive(name, "octet"); err != nil {
+			if strings.Contains(err.Error(), "does not exist") && !required {
+				continue
+			}
 			return err
 		} else {
 			filename := filepath.Join(*tftpDirectory, name)

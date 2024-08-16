@@ -54,7 +54,7 @@ The sub-commands available are:
 		  are bind-mounted in so that the image may be used in a chroot
 		  environment. This may be used to download a debugging image or
 		  it may be used by plugin programmes to download extra tools
-		  they require
+		  they require (in addition to the normal tools image)
 
 When network booting, the *[hyper-control](../hyper-control/README.md)* tool may
 be used to request that a nearby *[Hypervisor](../hypervisor/README.md)* serve
@@ -93,13 +93,19 @@ present):
 - `config.json`: the machine configuration. The schema is defined in the
   [GetMachineInfoResponse](https://github.com/Cloud-Foundations/Dominator/blob/master/proto/fleetmanager/messages.go) type
 
-- `imagename`: the name of the image to fetch from the *[imageserver](../imageserver/README.md)*
+- `imagename`: the name of the image to fetch from the *[imageserver](../imageserver/README.md)* and install on the machine (aka. the *target OS*)
 
 - `imageserver`: the address of the *[imageserver](../imageserver/README.md)*
 
 - `storage-layout.json`: the desired configuration of the storage devices. The
   schema is defined in the
   [StorageLayout](https://github.com/Cloud-Foundations/Dominator/blob/master/proto/installer/messages.go) type
+
+- `tools-imagename`: the name of an optional image containing tools that are
+  required for custom configuration scripts. The default is to use the same
+  image as used for the target OS, but a smaller, entirely different image can
+  be used instead, providing a consistent environment for your configuration
+  scripts regardless of the OS being installed
 
 ## Sequence
 The following sections describe the sequence of operations that the *installer*
@@ -136,6 +142,13 @@ data and converting to the format that the *installer* expects. The following
 command-line arguments will be provided:
 1. The name of the directory where to write the configuration files
 2. The name of the active (configured) network interface
+
+### Load tools
+
+The [BusyBox](https://www.busybox.net/)-based image probably does not have all
+the tools necessary to configure the storage. By default, the target OS image is
+unpacked to the directory specified by the `-tmpRoot` option. If the
+`tools-imagename` file is present, the specified image is used instead.
 
 ### Configure storage
 The storage devices are discovered and the image (without objects) is downloaded
