@@ -87,6 +87,7 @@ func printUsage() {
 
 var subcommands = []commands.Command{
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
+	{"generate-random", "", 0, 0, generateRandomSubcommand},
 	{"list-images", "", 0, 0, listImagesSubcommand},
 	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
 }
