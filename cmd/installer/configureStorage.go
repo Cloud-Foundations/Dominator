@@ -384,10 +384,25 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	// Make table entries for the boot device file-systems, except data FS.
 	fsTab := &bytes.Buffer{}
 	cryptTab := &bytes.Buffer{}
+	// Write the root file-system entry first.
+	bootCheckCount := uint(1)
+	{
+		device := partitionName(drives[0].devpath, rootPartition)
+		partition := layout.BootDriveLayout[rootPartition-1]
+		err = drives[0].writeDeviceEntries(device, partition.MountPoint,
+			partition.FileSystemType, fsTab, cryptTab, bootCheckCount)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for index, partition := range layout.BootDriveLayout {
+		if index+1 == rootPartition {
+			continue
+		}
+		bootCheckCount++
 		device := partitionName(drives[0].devpath, index+1)
 		err = drives[0].writeDeviceEntries(device, partition.MountPoint,
-			partition.FileSystemType, fsTab, cryptTab, uint(index+1))
+			partition.FileSystemType, fsTab, cryptTab, bootCheckCount)
 		if err != nil {
 			return nil, err
 		}
