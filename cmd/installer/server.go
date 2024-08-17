@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"sync"
 	"syscall"
 
@@ -20,24 +21,68 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/teelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 )
 
 type HtmlWriter interface {
 	WriteHtml(writer io.Writer)
 }
 
-type state struct {
-	logger log.DebugLogger
+type sessionType struct {
+	device   string
+	username string
 }
 
 type srpcType struct {
 	remoteShellWaitGroup *sync.WaitGroup
 	logger               log.DebugLogger
 	mutex                sync.RWMutex
-	connections          map[*srpc.Conn]struct{}
+	connections          map[*srpc.Conn]sessionType
+}
+
+type state struct {
+	logger  log.DebugLogger
+	srpcObj *srpcType
 }
 
 var htmlWriters []HtmlWriter
+
+func copyFromPty(conn *srpc.Conn, pty io.Reader, killed *bool,
+	logger log.Logger) {
+	buffer := make([]byte, 256)
+	for {
+		if nRead, err := pty.Read(buffer); err != nil {
+			if *killed {
+				break
+			}
+			logger.Printf("error reading from pty: %s", err)
+			break
+		} else if _, err := conn.Write(buffer[:nRead]); err != nil {
+			logger.Printf("error writing to connection: %s\n", err)
+			break
+		}
+		if err := conn.Flush(); err != nil {
+			logger.Printf("error flushing connection: %s\n", err)
+			break
+		}
+	}
+}
+
+func copyToPty(pty io.Writer, reader io.Reader) error {
+	buffer := make([]byte, 256)
+	for {
+		if nRead, err := reader.Read(buffer); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		} else {
+			if _, err := pty.Write(buffer[:nRead]); err != nil {
+				return fmt.Errorf("error writing to pty: %w", err)
+			}
+		}
+	}
+}
 
 func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
 	logger log.DebugLogger) (log.DebugLogger, error) {
@@ -45,13 +90,13 @@ func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
 	if err != nil {
 		return nil, err
 	}
-	myState := state{logger}
-	html.HandleFunc("/", myState.statusHandler)
 	srpcObj := &srpcType{
 		remoteShellWaitGroup: remoteShellWaitGroup,
 		logger:               logger,
-		connections:          make(map[*srpc.Conn]struct{}),
+		connections:          make(map[*srpc.Conn]sessionType),
 	}
+	myState := state{logger, srpcObj}
+	html.HandleFunc("/", myState.statusHandler)
 	if err := srpc.RegisterName("Installer", srpcObj); err != nil {
 		logger.Printf("error registering SRPC receiver: %s\n", err)
 	}
@@ -95,10 +140,28 @@ func AddHtmlWriter(htmlWriter HtmlWriter) {
 }
 
 func (s state) writeDashboard(writer io.Writer) {
+	var sessions []sessionType
+	s.srpcObj.mutex.RLock()
+	for _, session := range s.srpcObj.connections {
+		sessions = append(sessions, session)
+	}
+	s.srpcObj.mutex.RUnlock()
+	if len(sessions) < 1 {
+		return
+	}
+	sort.SliceStable(sessions, func(left, right int) bool {
+		return verstr.Less(sessions[left].device, sessions[right].device)
+	})
+	fmt.Fprintln(writer, "Login sessions:<br>")
+	fmt.Fprintln(writer, `<table border="1">`)
+	tw, _ := html.NewTableWriter(writer, true, "Terminal", "Username")
+	for _, session := range sessions {
+		tw.WriteRow("", "", session.device, session.username)
+	}
+	tw.Close()
 }
 
 func (t *srpcType) Shell(conn *srpc.Conn) error {
-	t.logger.Println("starting shell on SRPC connection")
 	t.remoteShellWaitGroup.Add(1)
 	defer t.remoteShellWaitGroup.Done()
 	pty, tty, err := openPty()
@@ -107,6 +170,13 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 	}
 	defer pty.Close()
 	defer tty.Close()
+	session := sessionType{
+		device:   tty.Name(),
+		username: conn.Username(),
+	}
+	t.logger.Printf(
+		"shell on SRPC connection started for user: %s with tty: %s\n",
+		session.username, session.device)
 	if file, err := os.Open("/var/log/installer/latest"); err != nil {
 		t.logger.Println(err)
 	} else {
@@ -127,6 +197,10 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 		file.Close()
 		conn.Flush()
 	}
+	// Begin sending new logs back.
+	t.mutex.Lock()
+	t.connections[conn] = session
+	t.mutex.Unlock()
 	cmd := exec.Command("/bin/busybox", "sh", "-i")
 	cmd.Env = make([]string, 0)
 	cmd.Stdin = tty
@@ -134,55 +208,31 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 	cmd.Stderr = tty
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
 	if err := cmd.Start(); err != nil {
+		t.mutex.Lock()
+		delete(t.connections, conn)
+		t.mutex.Unlock()
 		return err
 	}
-	fmt.Fprintln(conn, "Starting shell...\r")
+	fmt.Fprintf(conn, "Starting shell on: %s...\r\n", tty.Name())
 	conn.Flush()
 	killed := false
 	go func() { // Read from pty until killed.
-		for {
-			t.mutex.Lock()
-			t.connections[conn] = struct{}{}
-			t.mutex.Unlock()
-			buffer := make([]byte, 256)
-			if nRead, err := pty.Read(buffer); err != nil {
-				if killed {
-					break
-				}
-				t.logger.Printf("error reading from pty: %s", err)
-				break
-			} else if _, err := conn.Write(buffer[:nRead]); err != nil {
-				t.logger.Printf("error writing to connection: %s\n", err)
-				break
-			}
-			if err := conn.Flush(); err != nil {
-				t.logger.Printf("error flushing connection: %s\n", err)
-				break
-			}
-		}
+		copyFromPty(conn, pty, &killed, t.logger)
 		t.mutex.Lock()
 		delete(t.connections, conn)
 		t.mutex.Unlock()
 	}()
 	// Read from connection, write to pty.
-	for {
-		buffer := make([]byte, 256)
-		if nRead, err := conn.Read(buffer); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		} else {
-			if _, err := pty.Write(buffer[:nRead]); err != nil {
-				return err
-			}
-		}
-	}
+	err = copyToPty(pty, conn)
 	killed = true
 	cmd.Process.Kill()
 	cmd.Wait()
-	t.logger.Println("shell for SRPC connection exited")
-	return nil
+	if err == nil {
+		t.logger.Printf(
+			"shell on SRPC connection exited for user: %s with tty: %s\n",
+			session.username, session.device)
+	}
+	return err
 }
 
 func (t *srpcType) Write(p []byte) (int, error) {
