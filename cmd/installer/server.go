@@ -5,12 +5,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	stdlog "log"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"sort"
 	"sync"
@@ -28,14 +28,19 @@ type HtmlWriter interface {
 	WriteHtml(writer io.Writer)
 }
 
+type dumper interface {
+	Dump(writer io.Writer, prefix, postfix string, recentFirst bool) error
+}
+
 type sessionType struct {
 	device   string
 	username string
 }
 
 type srpcType struct {
-	remoteShellWaitGroup *sync.WaitGroup
+	logDumper            dumper
 	logger               log.DebugLogger
+	remoteShellWaitGroup *sync.WaitGroup
 	mutex                sync.RWMutex
 	connections          map[*srpc.Conn]sessionType
 }
@@ -45,7 +50,11 @@ type state struct {
 	srpcObj *srpcType
 }
 
-var htmlWriters []HtmlWriter
+var (
+	htmlWriters           []HtmlWriter
+	newline               = []byte("\n")
+	carriageReturnNewline = []byte("\r\n")
+)
 
 func copyFromPty(conn *srpc.Conn, pty io.Reader, killed *bool,
 	logger log.Logger) {
@@ -85,14 +94,15 @@ func copyToPty(pty io.Writer, reader io.Reader) error {
 }
 
 func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
-	logger log.DebugLogger) (log.DebugLogger, error) {
+	logBuffer dumper, logger log.DebugLogger) (log.DebugLogger, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
 	if err != nil {
 		return nil, err
 	}
 	srpcObj := &srpcType{
-		remoteShellWaitGroup: remoteShellWaitGroup,
+		logDumper:            logBuffer,
 		logger:               logger,
+		remoteShellWaitGroup: remoteShellWaitGroup,
 		connections:          make(map[*srpc.Conn]sessionType),
 	}
 	myState := state{logger, srpcObj}
@@ -177,30 +187,26 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 	t.logger.Printf(
 		"shell on SRPC connection started for user: %s with tty: %s\n",
 		session.username, session.device)
-	if file, err := os.Open("/var/log/installer/latest"); err != nil {
-		t.logger.Println(err)
-	} else {
-		fmt.Fprintln(conn, "Logs so far:\r")
-		// Need to inject carriage returns for each line, so have to do this the
-		// hard way.
-		reader := bufio.NewReader(file)
-		for {
-			if chunk, isPrefix, err := reader.ReadLine(); err != nil {
-				break
-			} else {
-				conn.Write(chunk)
-				if !isPrefix {
-					conn.Write([]byte("\r\n"))
-				}
-			}
+	fmt.Fprintln(conn, "Logs so far:\r")
+	oldLogs := &bytes.Buffer{}
+	if err := t.logDumper.Dump(oldLogs, "", "", false); err != nil {
+		return err
+	}
+	// Need to inject carriage returns for each line, so have to do this the
+	// hard way.
+	for _, line := range bytes.Split(oldLogs.Bytes(), newline) {
+		if _, err := conn.Write(line); err != nil {
+			return err
 		}
-		file.Close()
-		conn.Flush()
+		if _, err := conn.Write(carriageReturnNewline); err != nil {
+			return err
+		}
 	}
 	// Begin sending new logs back.
 	t.mutex.Lock()
 	t.connections[conn] = session
 	t.mutex.Unlock()
+	conn.Flush() // Try to delay I/O until connections table is updated.
 	cmd := exec.Command("/bin/busybox", "sh", "-i")
 	cmd.Env = make([]string, 0)
 	cmd.Stdin = tty

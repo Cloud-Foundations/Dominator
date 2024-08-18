@@ -226,10 +226,10 @@ func runDaemon() error {
 		logger.Println(err)
 	}
 	waitGroup := &sync.WaitGroup{}
-	if newLogger, err := startServer(*portNum, waitGroup, logger); err != nil {
-		logger.Printf("cannot start server: %s\n", err)
+	if l, e := startServer(*portNum, waitGroup, logBuffer, logger); e != nil {
+		logger.Printf("cannot start server: %s\n", e)
 	} else {
-		logger = newLogger
+		logger = l
 	}
 	rebooter, err := install(updateHwClock, logBuffer, logger)
 	rebooterName := "default"
