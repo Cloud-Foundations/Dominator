@@ -457,6 +457,7 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	if bootEntry != nil && bootEntry.Type == "vfat" {
 		isEfi = true
 	}
+	var isGrub2 bool
 	grubInstaller, err := lookPath(chrootDir, "grub-install")
 	if err != nil {
 		grubInstaller, err = lookPath(chrootDir, "grub2-install")
@@ -464,6 +465,7 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			return fmt.Errorf("cannot find GRUB installer: %s", err)
 		}
 		grubConfigFile = filepath.Join(rootDir, "boot", "grub2", "grub.cfg")
+		isGrub2 = true
 	}
 	cmd := exec.Command(grubInstaller,
 		"--boot-directory="+bootDir,
@@ -473,6 +475,14 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			"--efi-directory="+bootDir,
 			"--target=x86_64-efi",
 		)
+		if isGrub2 {
+			// Likely RedHat or derivative: work around their controlling
+			// behaviour.
+			cmd.Args = append(cmd.Args,
+				"--removable",
+				"--force",
+			)
+		}
 	} else {
 		cmd.Args = append(cmd.Args,
 			"--target=i386-pc",
@@ -689,7 +699,8 @@ func writeToFile(fs *filesystem.FileSystem,
 		logger)
 	if options.AllocateBlocks { // mkfs discards blocks, so do this after.
 		if err := fsutil.Fallocate(tmpFilename, imageSize); err != nil {
-			return err
+			return fmt.Errorf("error fallocating file: %s: %s",
+				tmpFilename, err)
 		}
 	}
 	if err != nil {
