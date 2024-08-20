@@ -86,6 +86,7 @@ func printUsage() {
 }
 
 var subcommands = []commands.Command{
+	{"decode-base64", "", 0, 0, decodeBase64Subcommand},
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
 	{"generate-random", "", 0, 0, generateRandomSubcommand},
 	{"list-images", "", 0, 0, listImagesSubcommand},

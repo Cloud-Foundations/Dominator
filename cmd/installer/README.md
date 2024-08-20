@@ -46,6 +46,8 @@ installer -h
 
 The sub-commands available are:
 
+- **decode-base64**: read base64-encoded data from the standard input and write
+                     the decoded data to the stdandard output
 - **dhcp-request**: issue a DHCP request for debugging. The response data will
                     be logged but no other action will be taken
 - **generate-random**: generate pseudo-random data (NOT cryptographically
