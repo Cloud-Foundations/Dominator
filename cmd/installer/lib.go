@@ -212,7 +212,17 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 	if err != nil {
 		return err
 	}
+	// BusyBox ash sometimes closes standard output or standard error, which can
+	// lead to "write to closed pipe" error if using the exec.CombinedOuput()
+	// method (which gives the same file desriptor to the process), because the
+	// close will effectively close both standard output and standard error.
+	// Ensure standard output and standard error are separate file descriptors.
+	stdout := &strings.Builder{}
+	stderr := &strings.Builder{}
 	cmd := exec.Command(path, args...)
+	cmd.Env = make([]string, 0)
+	cmd.Stderr = stderr
+	cmd.Stdout = stdout
 	cmd.WaitDelay = time.Second
 	if chroot != "" {
 		cmd.Dir = "/"
@@ -222,15 +232,23 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 	} else {
 		logger.Debugf(0, "running: %s %s\n", name, strings.Join(args, " "))
 	}
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if err := cmd.Run(); err != nil {
 		if err == exec.ErrWaitDelay {
+			logger.Debugf(2,
+				"%s succeeded, forced closed pipes, stdout: %s, stderr: %s\n",
+				name, strings.TrimSpace(stdout.String()),
+				strings.TrimSpace(stderr.String()))
 			return nil
 		}
-		return fmt.Errorf("error running: %s: %s, output: %s",
-			name, err, output)
-	} else {
-		return nil
+		return fmt.Errorf("error running: %s: %s, stdout: %s, stderr: %s",
+			name, strings.TrimSpace(stdout.String()),
+			strings.TrimSpace(stderr.String()), err)
+	} else if stdout.Len() > 0 || stderr.Len() > 0 {
+		logger.Debugf(3, "%s succeeded, stdout: %s, stderr: %s\n",
+			name, strings.TrimSpace(stdout.String()),
+			strings.TrimSpace(stderr.String()))
 	}
+	return nil
 }
 
 func unpackAndMount(rootDir string, fileSystem *filesystem.FileSystem,
