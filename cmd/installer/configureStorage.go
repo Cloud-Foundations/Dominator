@@ -227,6 +227,11 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		}
 		for _, partition := range layout.BootDriveLayout {
 			if partition.MountPoint == "/boot" {
+				if partition.MinimumFreeBytes >
+					newPartitions[0].MinimumFreeBytes {
+					newPartitions[0].MinimumFreeBytes =
+						partition.MinimumFreeBytes
+				}
 				continue
 			}
 			newPartitions = append(newPartitions, partition)
