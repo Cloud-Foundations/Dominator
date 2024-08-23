@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -61,7 +62,8 @@ var (
 		"Port number to allocate and listen on for HTTP/RPC")
 	procDirectory = flag.String("procDirectory", "/proc",
 		"Directory where procfs is mounted")
-	skipNetwork = flag.Bool("skipNetwork", false,
+	shellCommand = flagutil.StringList{"/bin/busybox", "sh", "-i"}
+	skipNetwork  = flag.Bool("skipNetwork", false,
 		"If true, do not update target network configuration")
 	skipStorage = flag.Bool("skipStorage", false,
 		"If true, do not update storage")
@@ -74,6 +76,11 @@ var (
 
 	processStartTime = time.Now()
 )
+
+func init() {
+	flag.Var(&shellCommand, "shellCommand",
+		"Shell command with optional comma separated arguments")
+}
 
 func printUsage() {
 	w := flag.CommandLine.Output()
@@ -100,15 +107,17 @@ func copyLogs(logFlusher flusher) error {
 		fsutil.PublicFilePerms)
 }
 
-func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
-	os.MkdirAll("/var/log/installer", fsutil.DirPerms)
+func createLogger() (*logbuf.LogBuffer, log.DebugLogger, error) {
+	if err := os.MkdirAll("/var/log/installer", fsutil.DirPerms); err != nil {
+		return nil, nil, err
+	}
 	options := logbuf.GetStandardOptions()
 	options.AlsoLogToStderr = true
 	logBuffer := logbuf.NewWithOptions(options)
 	logger := debuglogger.New(stdlog.New(&logWriter{logBuffer}, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
 	srpc.SetDefaultLogger(logger)
-	return logBuffer, logger
+	return logBuffer, logger, nil
 }
 
 func ifUnprivileged() bool {
@@ -196,7 +205,10 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 
 func runDaemon() error {
 	tricorder.RegisterFlags()
-	logBuffer, logger := createLogger()
+	logBuffer, logger, err := createLogger()
+	if err != nil {
+		return err
+	}
 	defer logBuffer.Flush()
 	var sysinfo syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
@@ -207,7 +219,9 @@ func runDaemon() error {
 	}
 	var updateHwClock bool
 	if fi, err := os.Stat("/build-timestamp"); err != nil {
-		return err
+		if !*dryRun {
+			return err
+		}
 	} else {
 		now := time.Now()
 		if fi.ModTime().After(now) {
@@ -259,7 +273,10 @@ func runDaemon() error {
 
 func processCommand(args []string) {
 	if len(args) < 1 {
-		runSubcommand(nil, nil)
+		if err := runSubcommand(nil, nil); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
 	}
 	logger := debuglogger.New(stdlog.New(os.Stderr, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))

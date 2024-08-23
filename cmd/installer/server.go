@@ -207,7 +207,7 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 	t.connections[conn] = session
 	t.mutex.Unlock()
 	conn.Flush() // Try to delay I/O until connections table is updated.
-	cmd := exec.Command("/bin/busybox", "sh", "-i")
+	cmd := exec.Command(shellCommand[0], shellCommand[1:]...)
 	cmd.Env = make([]string, 0)
 	cmd.Stdin = tty
 	cmd.Stdout = tty
