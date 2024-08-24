@@ -799,6 +799,10 @@ func selectDrives(input []*driveType, logger log.DebugLogger) (
 }
 
 func unmountStorage(logger log.DebugLogger) error {
+	if *dryRun {
+		logger.Debugln(0, "dry run: skipping unmounting")
+		return nil
+	}
 	syscall.Sync()
 	time.Sleep(time.Millisecond * 100)
 	file, err := os.Open("/proc/mounts")

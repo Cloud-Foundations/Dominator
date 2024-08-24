@@ -247,6 +247,11 @@ func runDaemon() error {
 		logger = l
 	}
 	rebooter, err := install(updateHwClock, logBuffer, logger)
+	if *dryRun {
+		logger.Println(err)
+		logger.Println("dry run: sleeping indefinitely instead of rebooting")
+		select {}
+	}
 	rebooterName := "default"
 	if rebooter != nil {
 		rebooterName = rebooter.String()
