@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -27,6 +28,7 @@ import (
 )
 
 type dhcpResponse struct {
+	error  error
 	name   string
 	packet dhcp4.Packet
 }
@@ -66,27 +68,37 @@ func configureLocalNetwork(logger log.DebugLogger) (
 
 func dhcpRequest(interfaces map[string]net.Interface,
 	logger log.DebugLogger) (string, dhcp4.Packet, error) {
-	responseChannel := make(chan dhcpResponse, 1)
-	logger.Println("waiting for carrier on interfaces")
-	stopTime := time.Now().Add(time.Minute * 5)
+	responseChannel := make(chan dhcpResponse, len(interfaces))
+	logger.Println("waiting for carrier and DHCP response for each interface")
+	cancelChannel := make(chan struct{})
 	for _, iface := range interfaces {
-		go dhcpRequestOnInterface(iface, stopTime, responseChannel, logger)
+		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel, logger)
 	}
 	timer := time.NewTimer(time.Minute * 5)
-	select {
-	case response := <-responseChannel:
-		timer.Stop()
-		return response.name, response.packet, nil
-	case <-timer.C:
-		return "", nil, errors.New("timed out waiting for DHCP")
+	for range interfaces {
+		select {
+		case response := <-responseChannel:
+			if response.error != nil {
+				logger.Println(response.error)
+				continue
+			}
+			close(cancelChannel)
+			timer.Stop()
+			return response.name, response.packet, nil
+		case <-timer.C:
+			return "", nil, errors.New("timed out waiting for DHCP")
+		}
 	}
+	return "", nil, errors.New("unable to issue DHCP request on any interface")
 }
 
-func dhcpRequestOnInterface(iface net.Interface, stopTime time.Time,
+func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 	responseChannel chan<- dhcpResponse, logger log.DebugLogger) {
 	packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
 	if err != nil {
-		logger.Println(err)
+		responseChannel <- dhcpResponse{
+			error: fmt.Errorf("%s: failed to create DHCP socket: %s",
+				iface.Name, err)}
 		return
 	}
 	defer packetSocket.Close()
@@ -95,23 +107,37 @@ func dhcpRequestOnInterface(iface net.Interface, stopTime time.Time,
 		dhcp4client.Connection(packetSocket),
 		dhcp4client.Timeout(time.Second*5))
 	if err != nil {
-		logger.Println(err)
+		responseChannel <- dhcpResponse{
+			error: fmt.Errorf("%s: failed to create DHCP client: %s\n",
+				iface.Name, err)}
 		return
 	}
 	defer client.Close()
-	for ; time.Until(stopTime) > 0; time.Sleep(100 * time.Millisecond) {
-		if !libnet.TestCarrier(iface.Name) {
-			continue
+	for ; ; time.Sleep(100 * time.Millisecond) {
+		select {
+		case <-cancelChannel:
+			logger.Debugf(1, "%s: cancelling carrier tests\n", iface.Name)
+			return
+		default:
+		}
+		if libnet.TestCarrier(iface.Name) {
+			break
+		}
+	}
+	logger.Debugf(1, "%s: carrier detected\n", iface.Name)
+	for ; ; time.Sleep(100 * time.Millisecond) {
+		select {
+		case <-cancelChannel:
+			logger.Debugf(1, "%s: cancelling DHCP attempts\n", iface.Name)
+			return
+		default:
 		}
 		logger.Debugf(1, "%s: DHCP attempt\n", iface.Name)
 		if ok, packet, err := client.Request(); err != nil {
 			logger.Debugf(1, "%s: DHCP failed: %s\n", iface.Name, err)
 		} else if ok {
-			response := dhcpResponse{name: iface.Name, packet: packet}
-			select {
-			case responseChannel <- response:
-				return
-			}
+			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+			return
 		}
 	}
 }
