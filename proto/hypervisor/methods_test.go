@@ -27,6 +27,8 @@ func makeNonzeroVmInfo(t *testing.T, zeroIndex int) (VmInfo, bool) {
 		switch fieldKind {
 		case reflect.Bool:
 			fieldValue.SetBool(true)
+		case reflect.Int, reflect.Int64:
+			fieldValue.SetInt(1)
 		case reflect.String:
 			fieldValue.SetString(fieldName)
 		case reflect.Ptr:
