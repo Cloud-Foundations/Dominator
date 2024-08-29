@@ -1263,7 +1263,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 					return sendError(conn, err)
 				}
 				if err := setVolumeSize(fname, volume.Size); err != nil {
-					return err
+					return fmt.Errorf("error setting size on volume: %s: %s",
+						fname, err)
 				}
 			}
 			vm.Volumes = append(vm.Volumes, volume)
