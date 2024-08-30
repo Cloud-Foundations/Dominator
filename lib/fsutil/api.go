@@ -67,6 +67,14 @@ func Fallocate(filename string, size uint64) error {
 	return fallocate(filename, size)
 }
 
+// FallocateOrFill will allocate blocks for the file named filename, up to size
+// specified in bytes. If allocation is not supported/available, the file will
+// be filled with zeros (and a debug message will be logged).
+func FallocateOrFill(filename string, size uint64,
+	logger log.DebugLogger) error {
+	return fallocateOrFill(filename, size, logger)
+}
+
 // ForceLink creates newname as a hard link to the oldname file. It first
 // attempts to link using os.Link. If the first attempt fails due to
 // a permission error, it blindly calls MakeMutable and then retries. If the
