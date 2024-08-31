@@ -264,7 +264,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			return err
 		}
 	}
-	err = MakeExt4fs(rootDevice, options.RootLabel, unsupportedOptions, 8192,
+	err = MakeExt4fsWithParams(rootDevice, MakeExt4fsParams{
+		BytesPerInode:      8192,
+		Label:              options.RootLabel,
+		NoDiscard:          options.AllocateBlocks,
+		UnsupportedOptions: unsupportedOptions,
+	},
 		logger)
 	if err != nil {
 		return err
@@ -378,6 +383,9 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 	if params.ReservedBlocksPercentage != 0 {
 		cmd.Args = append(cmd.Args, "-m",
 			strconv.FormatUint(uint64(params.ReservedBlocksPercentage), 10))
+	}
+	if params.NoDiscard {
+		cmd.Args = append(cmd.Args, "-E", "nodiscard")
 	}
 	if len(options) > 0 {
 		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
@@ -683,6 +691,13 @@ func writeToFile(fs *filesystem.FileSystem,
 	if err := os.Truncate(tmpFilename, int64(imageSize)); err != nil {
 		return err
 	}
+	if options.AllocateBlocks {
+		err := fsutil.FallocateOrFill(tmpFilename, imageSize, logger)
+		if err != nil {
+			return fmt.Errorf("error fallocating file: %s: %s",
+				tmpFilename, err)
+		}
+	}
 	if err := mbr.WriteDefault(tmpFilename, tableType); err != nil {
 		return err
 	}
@@ -697,12 +712,6 @@ func writeToFile(fs *filesystem.FileSystem,
 	rootDevice := loopDevice + partition
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
 		logger)
-	if options.AllocateBlocks { // mkfs discards blocks, so do this after.
-		if err := fsutil.Fallocate(tmpFilename, imageSize); err != nil {
-			return fmt.Errorf("error fallocating file: %s: %s",
-				tmpFilename, err)
-		}
-	}
 	if err != nil {
 		return err
 	}

@@ -35,6 +35,7 @@ type ComputedFilesData struct {
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
 	Label                    string
+	NoDiscard                bool
 	ReservedBlocksPercentage uint16
 	Size                     uint64
 	UnsupportedOptions       []string
