@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	boardSerialFile   = "/sys/class/dmi/id/board_serial"
 	productSerialFile = "/sys/class/dmi/id/product_serial"
 
 	uuidLength = 16
@@ -77,7 +78,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		memTotalInMiB: memInfo.Total >> 20,
 		notifiers:     make(map[<-chan proto.Update]chan<- proto.Update),
 		numCPUs:       uint(runtime.NumCPU()),
-		serialNumber:  readProductSerial(),
+		serialNumber:  readSystemSerial(),
 		vms:           make(map[string]*vmInfoType),
 		uuid:          uuid,
 	}
@@ -235,8 +236,8 @@ func randString(length uint) (string, error) {
 	}
 }
 
-func readProductSerial() string {
-	if file, err := os.Open(productSerialFile); err != nil {
+func readSerialFile(filename string) string {
+	if file, err := os.Open(filename); err != nil {
 		return ""
 	} else {
 		defer file.Close()
@@ -247,12 +248,27 @@ func readProductSerial() string {
 			return ""
 		} else {
 			serial := strings.TrimSpace(string(buffer[:nRead]))
-			if serial == "System Serial Number" {
+			// Ignore some common bogus serial numbers.
+			switch serial {
+			case "0123456789":
+				serial = ""
+			case "System Serial Number":
+				serial = ""
+			case "To be filled by O.E.M.":
 				serial = ""
 			}
 			return serial
 		}
 	}
+}
+
+// readSystemSerial will read the product serial number and if not valid/found
+// will fall back to reading the board serial number.
+func readSystemSerial() string {
+	if serial := readSerialFile(productSerialFile); serial != "" {
+		return serial
+	}
+	return readSerialFile(boardSerialFile)
 }
 
 func (m *Manager) loopCheckHealthStatus() {
