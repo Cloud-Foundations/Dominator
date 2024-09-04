@@ -9,17 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
-)
-
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
-		syscall.S_IROTH
 )
 
 func (s *Storer) addIPsForHypervisor(hypervisor net.IP,
@@ -140,7 +132,7 @@ func (s *Storer) writeIPsForHypervisor(hypervisor IP, ipList []IP,
 	flags int) error {
 	dirname := s.getHypervisorDirectory(hypervisor)
 	if dirfile, err := os.Open(dirname); err != nil {
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 	} else {
@@ -163,7 +155,10 @@ func (s *Storer) writeMachineSerialNumber(hypervisor net.IP,
 		}
 		return nil
 	}
-	file, err := fsutil.CreateRenamingWriter(filename, filePerms)
+	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
+		return err
+	}
+	file, err := fsutil.CreateRenamingWriter(filename, fsutil.PublicFilePerms)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -195,7 +190,7 @@ func (s *Storer) writeMachineTags(hypervisor net.IP, tgs tags.Tags) error {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	file, err := fsutil.CreateRenamingWriter(filename, filePerms)
+	file, err := fsutil.CreateRenamingWriter(filename, fsutil.PublicFilePerms)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -216,7 +211,8 @@ func (s *Storer) writeMachineTags(hypervisor net.IP, tgs tags.Tags) error {
 }
 
 func writeIpList(filename string, ipList []IP, flags int) error {
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|flags, filePerms)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|flags,
+		fsutil.PublicFilePerms)
 	if err != nil {
 		return err
 	}
