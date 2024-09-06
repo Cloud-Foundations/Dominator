@@ -33,6 +33,14 @@ func extractSerialNumber(input string) string {
 	return serial
 }
 
+func (m *Manager) ipmiGetSlot() {
+	m.ipmiLimiter <- struct{}{}
+}
+
+func (m *Manager) ipmiReleaseSlot() {
+	<-m.ipmiLimiter
+}
+
 func (m *Manager) powerOnMachine(hostname string,
 	authInfo *srpc.AuthInformation) error {
 	h, err := m.getLockedHypervisor(hostname, false)
@@ -156,10 +164,12 @@ func (m *Manager) probeUnreachable(h *hypervisorType) probeStatus {
 }
 
 func (m *Manager) readSerialNumber(ipmiHostname string) string {
+	m.ipmiGetSlot()
 	cmd := exec.Command("ipmitool", "-f", m.ipmiPasswordFile,
 		"-H", ipmiHostname, "-I", "lanplus", "-U", m.ipmiUsername,
 		"fru", "print")
 	output, err := cmd.Output()
+	m.ipmiReleaseSlot()
 	if err != nil {
 		return ""
 	}

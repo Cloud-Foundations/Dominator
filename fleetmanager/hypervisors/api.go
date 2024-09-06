@@ -70,6 +70,7 @@ type locationType struct {
 }
 
 type Manager struct {
+	ipmiLimiter      chan struct{}
 	ipmiPasswordFile string
 	ipmiUsername     string
 	logger           log.DebugLogger
