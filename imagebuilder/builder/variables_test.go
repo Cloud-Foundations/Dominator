@@ -54,3 +54,11 @@ func TestSubExpressionExpansion(t *testing.T) {
 		t.Errorf("expected: %s got: %s", expected, result)
 	}
 }
+
+func TestSubExpressionExpansionNegativeIndex(t *testing.T) {
+	result := expandExpression("${IMAGE_STREAM[/-2:]}", testMappingFunc)
+	expected := "Debian-10/amd64"
+	if result != expected {
+		t.Errorf("expected: %s got: %s", expected, result)
+	}
+}

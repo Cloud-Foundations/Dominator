@@ -54,6 +54,9 @@ func expandVariable(variable string, mappingFunc func(string) string) string {
 		if err != nil {
 			return ""
 		}
+		if start < 0 {
+			start += len(splitValue)
+		}
 	}
 	if len(splitRange[1]) > 0 {
 		end, err = strconv.Atoi(splitRange[1])
