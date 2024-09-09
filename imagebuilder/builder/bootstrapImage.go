@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
@@ -87,7 +88,7 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	vg.add("dir", rootDir)
 	request.Variables = vg
 	for _, exp := range stream.BootstrapCommand {
-		arg := expandExpression(exp, func(name string) string {
+		arg := expand.Expression(exp, func(name string) string {
 			return vg[name]
 		})
 		args = append(args, arg)
