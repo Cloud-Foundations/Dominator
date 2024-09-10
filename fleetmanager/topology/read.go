@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -463,8 +464,15 @@ func (t *Topology) loadMachines(directory *Directory, dirname string,
 }
 
 func (t *Topology) readVariables(topDir, dirname string) error {
+	localVariables := make(map[string]string)
+	filename := filepath.Join(topDir, dirname, "local_variables.json")
+	if err := json.ReadFromFile(filename, &localVariables); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
 	variables := make(map[string]string)
-	filename := filepath.Join(topDir, dirname, "variables.json")
+	filename = filepath.Join(topDir, dirname, "variables.json")
 	if err := json.ReadFromFile(filename, &variables); err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -474,6 +482,11 @@ func (t *Topology) readVariables(topDir, dirname string) error {
 		t.Variables = make(map[string]string)
 	}
 	for key, value := range variables {
+		if len(localVariables) > 0 {
+			value = expand.Expression(value, func(variable string) string {
+				return localVariables[variable]
+			})
+		}
 		t.Variables[filepath.Join(dirname, key)] = value
 	}
 	dirpath := filepath.Join(topDir, dirname)
