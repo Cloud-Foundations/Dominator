@@ -2,13 +2,13 @@ package amipublisher
 
 import (
 	"errors"
-	"os"
 	"path"
 	"sync"
 
 	iclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	uclient "github.com/Cloud-Foundations/Dominator/imageunpacker/client"
 	"github.com/Cloud-Foundations/Dominator/lib/awsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -271,7 +271,7 @@ func expandBucketName(expr, accountProfileName, region string) string {
 	if expr == "" {
 		return ""
 	}
-	return os.Expand(expr, func(variable string) string {
+	return expand.Expression(expr, func(variable string) string {
 		if variable == "region" {
 			return region
 		}
