@@ -81,11 +81,13 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 		}
 		return nil, fmt.Errorf("unable to load keypair: %s", err)
 	}
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		return nil, err
+	if cert.Leaf == nil {
+		x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return nil, err
+		}
+		cert.Leaf = x509Cert
 	}
-	cert.Leaf = x509Cert
 	params.Logger.Debugf(0, "Loaded certifcate and key from: %s and %s\n",
 		*certFile, *keyFile)
 	return &cert, nil
