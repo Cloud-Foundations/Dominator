@@ -46,19 +46,21 @@ func loadCertificates(directory string) ([]tls.Certificate, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to load keypair: %s", err)
 		}
-		x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-		if err != nil {
-			return nil, err
+		if cert.Leaf == nil {
+			x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+			if err != nil {
+				return nil, err
+			}
+			cert.Leaf = x509Cert
 		}
-		if notYet := x509Cert.NotBefore.Sub(now); notYet > 0 {
+		if notYet := cert.Leaf.NotBefore.Sub(now); notYet > 0 {
 			return nil, fmt.Errorf("%s will not be valid for %s",
 				certName, format.Duration(notYet))
 		}
-		if expired := now.Sub(x509Cert.NotAfter); expired > 0 {
+		if expired := now.Sub(cert.Leaf.NotAfter); expired > 0 {
 			return nil, fmt.Errorf("%s expired %s ago",
 				certName, format.Duration(expired))
 		}
-		cert.Leaf = x509Cert
 		certs = append(certs, cert)
 	}
 	if len(certs) < 1 {
