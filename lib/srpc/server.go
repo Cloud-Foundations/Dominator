@@ -81,6 +81,7 @@ var (
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
+	numRunningMethods            uint64
 	registerBuiltin              sync.Once
 	registerBuiltinError         error
 	setupServerExpirationMetric  sync.Once
@@ -137,6 +138,11 @@ func registerServerMetrics() {
 	err = serverMetricsDir.RegisterMetric("num-rejected-connections",
 		&numRejectedServerConnections, units.None,
 		"number of rejected connections")
+	if err != nil {
+		panic(err)
+	}
+	err = serverMetricsDir.RegisterMetric("num-running-methods",
+		&numRunningMethods, units.None, "number of running methods")
 	if err != nil {
 		panic(err)
 	}
@@ -704,12 +710,20 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 }
 
 func (m *methodWrapper) _call(conn *Conn, makeCoder coderMaker) error {
+	serverMetricsMutex.Lock()
+	numRunningMethods++
+	serverMetricsMutex.Unlock()
 	defer func() {
 		if err := recover(); err != nil {
 			serverMetricsMutex.Lock()
 			numPanicedCalls++
+			numRunningMethods--
 			serverMetricsMutex.Unlock()
 			panic(err)
+		} else {
+			serverMetricsMutex.Lock()
+			numRunningMethods--
+			serverMetricsMutex.Unlock()
 		}
 	}()
 	connValue := reflect.ValueOf(conn)
