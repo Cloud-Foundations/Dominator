@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	consoleTypeUnknown    = "UNKNOWN ConsoleType"
-	stateUnknown          = "UNKNOWN State"
-	volumeFormatUnknown   = "UNKNOWN VolumeFormat"
-	volumeTypeUnknown     = "UNKNOWN VolumeType"
-	watchdogActionUnknown = "UNKNOWN WatchdogAction"
-	watchdogModelUnknown  = "UNKNOWN WatchdogModel"
+	consoleTypeUnknown     = "UNKNOWN ConsoleType"
+	stateUnknown           = "UNKNOWN State"
+	volumeFormatUnknown    = "UNKNOWN VolumeFormat"
+	volumeInterfaceUnknown = "UNKNOWN VolumeInterface"
+	volumeTypeUnknown      = "UNKNOWN VolumeType"
+	watchdogActionUnknown  = "UNKNOWN WatchdogAction"
+	watchdogModelUnknown   = "UNKNOWN WatchdogModel"
 )
 
 var (
@@ -43,6 +44,12 @@ var (
 		VolumeFormatQCOW2: "qcow2",
 	}
 	textToVolumeFormat map[string]VolumeFormat
+
+	volumeInterfaceToText = map[VolumeInterface]string{
+		VolumeInterfaceVirtIO: "virtio",
+		VolumeInterfaceIDE:    "ide",
+	}
+	textToVolumeInterface map[string]VolumeInterface
 
 	volumeTypeToText = map[VolumeType]string{
 		VolumeTypePersistent: "persistent",
@@ -78,6 +85,11 @@ func init() {
 	textToVolumeFormat = make(map[string]VolumeFormat, len(volumeFormatToText))
 	for format, text := range volumeFormatToText {
 		textToVolumeFormat[text] = format
+	}
+	textToVolumeInterface = make(map[string]VolumeInterface,
+		len(volumeInterfaceToText))
+	for format, text := range volumeInterfaceToText {
+		textToVolumeInterface[text] = format
 	}
 	textToVolumeType = make(map[string]VolumeType, len(volumeTypeToText))
 	for vtype, text := range volumeTypeToText {
@@ -454,6 +466,41 @@ func (volumeFormat *VolumeFormat) UnmarshalText(text []byte) error {
 		return nil
 	} else {
 		return errors.New("unknown VolumeFormat: " + txt)
+	}
+}
+
+func (volumeInterface VolumeInterface) MarshalText() ([]byte, error) {
+	if text := volumeInterface.String(); text == volumeInterfaceUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (volumeInterface *VolumeInterface) Set(value string) error {
+	if val, ok := textToVolumeInterface[value]; !ok {
+		return errors.New(volumeInterfaceUnknown)
+	} else {
+		*volumeInterface = val
+		return nil
+	}
+}
+
+func (volumeInterface VolumeInterface) String() string {
+	if text, ok := volumeInterfaceToText[volumeInterface]; ok {
+		return text
+	} else {
+		return volumeInterfaceUnknown
+	}
+}
+
+func (volumeInterface *VolumeInterface) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToVolumeInterface[txt]; ok {
+		*volumeInterface = val
+		return nil
+	} else {
+		return errors.New("unknown VolumeInterface: " + txt)
 	}
 }
 
