@@ -1229,6 +1229,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
+	if len(request.Volumes) > 0 {
+		vm.Volumes[0].Interface = request.Volumes[0].Interface
+	}
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
@@ -4203,13 +4206,22 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	}
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
+		var volumeInterface proto.VolumeInterface
+		if vm.DisableVirtIO {
+			volumeInterface = proto.VolumeInterfaceIDE
+		}
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
+			volumeInterface = vm.Volumes[index].Interface
 		}
-		options := interfaceDriver + ",discard=off"
+		var driveInterface string
+		if volumeInterface == proto.VolumeInterfaceVirtIO {
+			driveInterface = ",if=virtio"
+		}
 		cmd.Args = append(cmd.Args,
-			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
-				options)
+			"-drive", fmt.Sprintf(
+				"file=%s,format=%s,discard=off%s",
+				volume.Filename, volumeFormat, driveInterface))
 	}
 	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
 		return err
