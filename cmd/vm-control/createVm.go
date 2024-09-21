@@ -167,14 +167,23 @@ func createVm(logger log.DebugLogger) error {
 
 func createVmInfoFromFlags() hyper_proto.VmInfo {
 	var volumes []hyper_proto.Volume
+	var volumeInterface hyper_proto.VolumeInterface
+	if len(volumeInterfaces) > 0 {
+		volumeInterface = volumeInterfaces[0]
+	}
+	var volumeType hyper_proto.VolumeType
 	if len(volumeTypes) > 0 {
-		// If provided, set for root volume. Secondaries are done later.
+		volumeType = volumeTypes[0]
+	}
+	if volumeFormat != hyper_proto.VolumeFormatRaw ||
+		volumeInterface != hyper_proto.VolumeInterfaceVirtIO ||
+		volumeType != hyper_proto.VolumeTypePersistent {
+		// If any provided, set for root volume. Secondaries are done later.
 		volumes = append(volumes, hyper_proto.Volume{
-			Format: volumeFormat,
-			Type:   volumeTypes[0],
+			Format:    volumeFormat,
+			Interface: volumeInterface,
+			Type:      volumeType,
 		})
-	} else if volumeFormat != hyper_proto.VolumeFormatRaw {
-		volumes = append(volumes, hyper_proto.Volume{Format: volumeFormat})
 	}
 	return hyper_proto.VmInfo{
 		ConsoleType:        consoleType,
@@ -212,6 +221,9 @@ func createVmOnHypervisor(hypervisor string,
 	}
 	for index, size := range secondaryVolumeSizes {
 		volume := hyper_proto.Volume{Size: uint64(size)}
+		if index+1 < len(volumeInterfaces) {
+			volume.Interface = volumeInterfaces[index+1]
+		}
 		if index+1 < len(volumeTypes) {
 			volume.Type = volumeTypes[index+1]
 		}

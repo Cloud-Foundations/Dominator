@@ -127,11 +127,12 @@ var (
 	volumeFormat hyper_proto.VolumeFormat
 	volumeIndex  = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
-	volumeIndices  flagutil.UintList
-	volumeSize     flagutil.Size
-	volumeTypes    volumeTypeList
-	watchdogAction hyper_proto.WatchdogAction
-	watchdogModel  hyper_proto.WatchdogModel
+	volumeIndices    flagutil.UintList
+	volumeInterfaces volumeInterfaceList
+	volumeSize       flagutil.Size
+	volumeTypes      volumeTypeList
+	watchdogAction   hyper_proto.WatchdogAction
+	watchdogModel    hyper_proto.WatchdogModel
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -158,6 +159,8 @@ func init() {
 	flag.Var(&volumeFormat, "volumeFormat",
 		"Format of image provided by file or URL (default raw)")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
+	flag.Var(&volumeInterfaces, "volumeInterfaces",
+		"Interfaces (device type presented to VM) for volumes (default virtio)")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
 		"Types for volumes (default persistent)")

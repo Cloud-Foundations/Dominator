@@ -37,3 +37,34 @@ func (vtl *volumeTypeList) Set(value string) error {
 	*vtl = newList
 	return nil
 }
+
+type volumeInterfaceList []hyper_proto.VolumeInterface
+
+func (vil *volumeInterfaceList) String() string {
+	buffer := &bytes.Buffer{}
+	buffer.WriteString(`"`)
+	for index, itype := range *vil {
+		buffer.WriteString(itype.String())
+		if index < len(*vil)-1 {
+			buffer.WriteString(",")
+		}
+	}
+	buffer.WriteString(`"`)
+	return buffer.String()
+}
+
+func (vil *volumeInterfaceList) Set(value string) error {
+	newList := make(volumeInterfaceList, 0)
+	if value != "" {
+		itypeStrings := strings.Split(value, ",")
+		for _, itypeString := range itypeStrings {
+			var itype hyper_proto.VolumeInterface
+			if err := itype.Set(itypeString); err != nil {
+				return err
+			}
+			newList = append(newList, itype)
+		}
+	}
+	*vil = newList
+	return nil
+}
