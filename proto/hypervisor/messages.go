@@ -160,6 +160,15 @@ type ChangeVmTagsResponse struct {
 	Error string
 }
 
+type ChangeVmVolumeInterfacesRequest struct {
+	Interfaces []VolumeInterface
+	IpAddress  net.IP
+}
+
+type ChangeVmVolumeInterfacesResponse struct {
+	Error string
+}
+
 type ChangeVmVolumeSizeRequest struct {
 	IpAddress   net.IP
 	VolumeIndex uint

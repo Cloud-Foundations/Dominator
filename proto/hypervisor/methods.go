@@ -469,6 +469,14 @@ func (volumeFormat *VolumeFormat) UnmarshalText(text []byte) error {
 	}
 }
 
+func (volumeInterface *VolumeInterface) CheckValid() error {
+	if _, ok := volumeInterfaceToText[*volumeInterface]; !ok {
+		return errors.New(volumeInterfaceUnknown)
+	} else {
+		return nil
+	}
+}
+
 func (volumeInterface VolumeInterface) MarshalText() ([]byte, error) {
 	if text := volumeInterface.String(); text == volumeInterfaceUnknown {
 		return nil, errors.New(text)
