@@ -188,6 +188,12 @@ func (m *Manager) ChangeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return m.changeVmTags(ipAddr, authInfo, tgs)
 }
 
+func (m *Manager) ChangeVmVolumeInterfaces(ipAddr net.IP,
+	authInfo *srpc.AuthInformation,
+	volumeInterfaces []proto.VolumeInterface) error {
+	return m.changeVmVolumeInterfaces(ipAddr, authInfo, volumeInterfaces)
+}
+
 func (m *Manager) ChangeVmVolumeSize(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, index uint, size uint64) error {
 	return m.changeVmVolumeSize(ipAddr, authInfo, index, size)

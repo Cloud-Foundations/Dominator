@@ -375,6 +375,11 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	authInfo *srpc.AuthInformation) (*vmInfoType, error) {
+	for _, volume := range req.Volumes {
+		if err := volume.Interface.CheckValid(); err != nil {
+			return nil, err
+		}
+	}
 	dirname := filepath.Join(m.StateDir, "VMs")
 	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 		return nil, err
@@ -716,6 +721,32 @@ func (m *Manager) changeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	}
 	defer vm.mutex.Unlock()
 	vm.Tags = tgs
+	vm.writeAndSendInfo()
+	return nil
+}
+
+func (m *Manager) changeVmVolumeInterfaces(ipAddr net.IP,
+	authInfo *srpc.AuthInformation,
+	volumeInterfaces []proto.VolumeInterface) error {
+	for _, volumeInterface := range volumeInterfaces {
+		if err := volumeInterface.CheckValid(); err != nil {
+			return err
+		}
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if len(volumeInterfaces) > len(vm.Volumes) {
+		return errors.New("more volume interfaces specified than VM volumes")
+	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	for index, volumeInterface := range volumeInterfaces {
+		vm.Volumes[index].Interface = volumeInterface
+	}
 	vm.writeAndSendInfo()
 	return nil
 }
