@@ -192,6 +192,8 @@ var subcommands = []commands.Command{
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
 	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
+	{"change-vm-volume-interfaces", "IPaddr", 1, 1,
+		changeVmVolumeInterfacesSubcommand},
 	{"change-vm-volume-size", "IPaddr", 1, 1, changeVmVolumeSizeSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,
