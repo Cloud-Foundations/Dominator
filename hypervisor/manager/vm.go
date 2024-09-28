@@ -4245,14 +4245,27 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			volumeFormat = vm.Volumes[index].Format
 			volumeInterface = vm.Volumes[index].Interface
 		}
-		var driveInterface string
-		if volumeInterface == proto.VolumeInterfaceVirtIO {
-			driveInterface = ",if=virtio"
-		}
 		cmd.Args = append(cmd.Args,
-			"-drive", fmt.Sprintf(
-				"file=%s,format=%s,discard=off%s",
-				volume.Filename, volumeFormat, driveInterface))
+			"-blockdev", fmt.Sprintf(
+				"driver=%s,node-name=blk%d,file.driver=file,file.filename=%s",
+				volumeFormat, index, volume.Filename))
+		switch volumeInterface {
+		case proto.VolumeInterfaceVirtIO:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"virtio-blk,drive=blk%d", index))
+		case proto.VolumeInterfaceIDE:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"ide-hd,drive=blk%d", index))
+		case proto.VolumeInterfaceNVMe:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"nvme,serial=virtual-%s.%d,drive=blk%d",
+					vm.Address.IpAddress, index, index))
+		default:
+			return fmt.Errorf("invalid volume interface: %v", volumeInterface)
+		}
 	}
 	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
 		return err
