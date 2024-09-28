@@ -30,6 +30,7 @@ const (
 
 	VolumeInterfaceVirtIO = 0
 	VolumeInterfaceIDE    = 1
+	VolumeInterfaceNVMe   = 2
 
 	VolumeTypePersistent = 0
 	VolumeTypeMemory     = 1

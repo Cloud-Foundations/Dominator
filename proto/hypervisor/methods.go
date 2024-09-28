@@ -48,6 +48,7 @@ var (
 	volumeInterfaceToText = map[VolumeInterface]string{
 		VolumeInterfaceVirtIO: "virtio",
 		VolumeInterfaceIDE:    "ide",
+		VolumeInterfaceNVMe:   "nvme",
 	}
 	textToVolumeInterface map[string]VolumeInterface
 
