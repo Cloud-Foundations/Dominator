@@ -256,6 +256,7 @@ type CreateVmRequest struct {
 	SecondaryVolumesInit []VolumeInitialisationInfo
 	SkipBootloader       bool
 	SkipMemoryCheck      bool
+	StorageIndices       []uint
 	UserDataSize         uint64
 	VmInfo
 } // The following data are streamed afterwards in the following order:
