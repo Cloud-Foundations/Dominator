@@ -2,6 +2,8 @@ package builder
 
 import (
 	"testing"
+
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 )
 
 var (
@@ -27,29 +29,18 @@ func TestVariablesGetterAdder(t *testing.T) {
 }
 
 func TestSimpleExpressionExpansion(t *testing.T) {
-	result := expandExpression("${IMAGE_STREAM}", testMappingFunc)
+	result := expand.Expression("${IMAGE_STREAM}", testMappingFunc)
 	if result != testStream.name {
 		t.Errorf("expected: %s got: %s", testStream.name, result)
 	}
-	result = expandExpression("${IMAGE_STREAM_DIRECTORY_NAME}", testMappingFunc)
+	result = expand.Expression("${IMAGE_STREAM_DIRECTORY_NAME}",
+		testMappingFunc)
 	expected := "users/fred/generic/base/Debian-10"
 	if result != expected {
 		t.Errorf("expected: %s got: %s", expected, result)
 	}
-	result = expandExpression("${IMAGE_STREAM_LEAF_NAME}", testMappingFunc)
+	result = expand.Expression("${IMAGE_STREAM_LEAF_NAME}", testMappingFunc)
 	expected = "amd64"
-	if result != expected {
-		t.Errorf("expected: %s got: %s", expected, result)
-	}
-}
-
-func TestSubExpressionExpansion(t *testing.T) {
-	result := expandExpression("${IMAGE_STREAM[/:]}", testMappingFunc)
-	if result != testStream.name {
-		t.Errorf("expected: %s got: %s", testStream.name, result)
-	}
-	result = expandExpression("${IMAGE_STREAM[/2:-1]}", testMappingFunc)
-	expected := "generic/base/Debian-10"
 	if result != expected {
 		t.Errorf("expected: %s got: %s", expected, result)
 	}

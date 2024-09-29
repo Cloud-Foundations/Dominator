@@ -75,9 +75,12 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 		"",
 		"",
 		"",
-		fmt.Sprintf("%d%%", milliCPUsAllocated/uint64(cpusTotal)/10),
-		fmt.Sprintf("%d%%", memoryInMiBAllocated*100/memoryInMiBTotal),
-		fmt.Sprintf("%d%%", volumeBytesAllocated*100/volumeBytesTotal),
+		fmt.Sprintf("%d%%",
+			safeDivide(milliCPUsAllocated, uint64(cpusTotal))/10),
+		fmt.Sprintf("%d%%",
+			safeDivide(memoryInMiBAllocated*100, memoryInMiBTotal)),
+		fmt.Sprintf("%d%%",
+			safeDivide(volumeBytesAllocated*100, volumeBytesTotal)),
 		"")
 }
 

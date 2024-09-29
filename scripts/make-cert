@@ -43,12 +43,12 @@ else
     readonly methods="$5"
 fi
 
-if [ ! -r "$signing_key.pem" ]; then
-    echo "Unable to read: $signing_key.pem"
+if [ ! -r "$signing_key.cert" ]; then
+    echo "Unable to read: $signing_key.cert"
     exit 1
 fi
-if [ ! -r "$signing_key.key.pem" ]; then
-    echo "Unable to read: $signing_key.key.pem"
+if [ ! -r "$signing_key.key" ]; then
+    echo "Unable to read: $signing_key.key"
     exit 1
 fi
 
@@ -77,17 +77,17 @@ fi
 
 # Now generate the signed certificate.
 if [ ! -r "$newkey.csr" ]; then
-    if [ ! -r "$newkey.key.pem" ]; then
-	openssl genpkey -algorithm RSA -out "$newkey.key.pem" \
+    if [ ! -r "$newkey.key" ]; then
+	openssl genpkey -algorithm RSA -out "$newkey.key" \
 			-pkeyopt rsa_keygen_bits:2048
     fi
-    openssl req -new -key "$newkey.key.pem" -extensions v3_ca \
+    openssl req -new -key "$newkey.key" -extensions v3_ca \
 		-batch -out "$newkey.csr" -utf8 -subj "/CN=$username"
 fi
 openssl x509 -req -sha256 -days "$KEY_LIFETIME" -in "$newkey.csr" \
 	     -extfile "$tmpfile" $methods_args \
-	     -CAkey "$signing_key.key.pem" -CA "$signing_key.pem" \
+	     -CAkey "$signing_key.key" -CA "$signing_key.cert" \
 	     -set_serial "$serial" \
-	     -out "$newkey.pem"
+	     -out "$newkey.cert"
 rm -f "$tmpfile"
-chmod a+r "$newkey.pem"
+chmod a+r "$newkey.cert"

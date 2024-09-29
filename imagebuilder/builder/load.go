@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -158,7 +159,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		stream.builder = b
 		stream.name = name
 	}
-	b.imageStreamsUrl = expandExpression(masterConfiguration.ImageStreamsUrl,
+	b.imageStreamsUrl = expand.Expression(masterConfiguration.ImageStreamsUrl,
 		b.getVariableFunc(nil, nil))
 	imageStreamsConfigChannel, err := configwatch.WatchWithCache(
 		b.imageStreamsUrl,

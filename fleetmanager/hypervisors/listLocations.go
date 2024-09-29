@@ -9,7 +9,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
 
-func (m *Manager) listLocations(dirname string) ([]string, error) {
+func (m *Manager) listLocations(dirname string,
+	selectCode uint) ([]string, error) {
 	topo, err := m.getTopology()
 	if err != nil {
 		return nil, err
@@ -20,6 +21,19 @@ func (m *Manager) listLocations(dirname string) ([]string, error) {
 	}
 	var locations []string
 	directory.Walk(func(directory *topology.Directory) error {
+		switch selectCode {
+		case selectAll:
+			if directory.GetPath() == "" && len(directory.Machines) < 1 {
+				return nil
+			}
+			locations = append(locations, directory.GetPath())
+			return nil
+		case selectAny:
+			if len(directory.Machines) > 0 {
+				locations = append(locations, directory.GetPath())
+			}
+			return nil
+		}
 		for _, machine := range directory.Machines {
 			hypervisor, err := m.getLockedHypervisor(machine.Hostname, false)
 			if err != nil {
@@ -44,7 +58,14 @@ func (m *Manager) listLocationsHandler(w http.ResponseWriter,
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	parsedQuery := url.ParseQuery(req.URL)
-	locations, err := m.listLocations("")
+	var selectCode uint
+	switch parsedQuery.Table["status"] {
+	case "any":
+		selectCode = selectAny
+	case "all":
+		selectCode = selectAll
+	}
+	locations, err := m.listLocations("", selectCode)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return

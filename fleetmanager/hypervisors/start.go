@@ -2,6 +2,7 @@ package hypervisors
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 )
@@ -18,8 +19,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		file.Close()
 	}
 	manager := &Manager{
-		ipmiUsername:     startOptions.IpmiUsername,
+		ipmiLimiter:      make(chan struct{}, runtime.NumCPU()),
 		ipmiPasswordFile: startOptions.IpmiPasswordFile,
+		ipmiUsername:     startOptions.IpmiUsername,
 		logger:           startOptions.Logger,
 		storer:           startOptions.Storer,
 		allocatingIPs:    make(map[string]struct{}),

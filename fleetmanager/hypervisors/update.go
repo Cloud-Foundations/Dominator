@@ -386,6 +386,7 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
 		return
 	}
 	h.serialNumber = h.cachedSerialNumber
+	m.probeSerialNumber(h)
 	h.localTags, err = m.storer.ReadMachineTags(h.machine.HostIpAddress)
 	if err != nil {
 		h.logger.Printf("error reading tags, not managing hypervisor: %s", err)

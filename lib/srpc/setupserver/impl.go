@@ -3,34 +3,61 @@ package setupserver
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
 var (
 	caFile = flag.String("CAfile", "/etc/ssl/CA.pem",
 		"Name of file containing the root of trust for identity and methods")
 	certFile = flag.String("certFile",
-		path.Join("/etc/ssl", getDirname(), "cert.pem"),
+		filepath.Join("/etc/ssl", getDirname(), "cert.pem"),
 		"Name of file containing the SSL certificate")
 	identityCaFile = flag.String("identityCAfile", "/etc/ssl/IdentityCA.pem",
 		"Name of file containing the root of trust for identity only")
 	keyFile = flag.String("keyFile",
-		path.Join("/etc/ssl", getDirname(), "key.pem"),
+		filepath.Join("/etc/ssl", getDirname(), "key.pem"),
 		"Name of file containing the SSL key")
 )
 
 func getDirname() string {
-	return path.Base(os.Args[0])
+	return filepath.Base(os.Args[0])
+}
+
+func loadCerts(filename string) ([]*x509.Certificate, error) {
+	pemData, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	var certs []*x509.Certificate
+	for len(pemData) > 0 {
+		var block *pem.Block
+		block, pemData = pem.Decode(pemData)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
+		}
+		certBytes := block.Bytes
+		cert, err := x509.ParseCertificate(certBytes)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, cert)
+	}
+	return certs, nil
 }
 
 func getSleepInterval(cert *x509.Certificate) time.Duration {
@@ -81,11 +108,13 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 		}
 		return nil, fmt.Errorf("unable to load keypair: %s", err)
 	}
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		return nil, err
+	if cert.Leaf == nil {
+		x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return nil, err
+		}
+		cert.Leaf = x509Cert
 	}
-	cert.Leaf = x509Cert
 	params.Logger.Debugf(0, "Loaded certifcate and key from: %s and %s\n",
 		*certFile, *keyFile)
 	return &cert, nil
@@ -151,17 +180,24 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		if *caFile == "" {
 			return nil, srpc.ErrorMissingCA
 		}
-		caData, err := ioutil.ReadFile(*caFile)
-		if err != nil {
+		caCertPool := x509.NewCertPool()
+		identityCertPool := x509.NewCertPool()
+		var earliestCertExpiration time.Time
+		if certs, err := loadCerts(*caFile); err != nil {
 			if os.IsNotExist(err) {
 				return nil, srpc.ErrorMissingCA
 			}
 			return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
 				*caFile, err)
-		}
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caData) {
-			return nil, fmt.Errorf("unable to parse CA file")
+		} else {
+			for _, cert := range certs {
+				caCertPool.AddCert(cert)
+				identityCertPool.AddCert(cert)
+				if earliestCertExpiration.IsZero() ||
+					cert.NotAfter.Before(earliestCertExpiration) {
+					earliestCertExpiration = cert.NotAfter
+				}
+			}
 		}
 		serverConfig := new(tls.Config)
 		serverConfig.ClientAuth = tls.RequireAndVerifyClientCert
@@ -169,7 +205,7 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		serverConfig.ClientCAs = caCertPool
 		serverConfig.Certificates = append(serverConfig.Certificates, *tlsCert)
 		if *identityCaFile != "" {
-			identityCaData, err := ioutil.ReadFile(*identityCaFile)
+			certs, err := loadCerts(*identityCaFile)
 			if err != nil {
 				if !os.IsNotExist(err) {
 					return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
@@ -177,17 +213,20 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 				}
 			} else {
 				srpc.RegisterFullAuthCA(caCertPool)
-				caCertPool := x509.NewCertPool()
-				if !caCertPool.AppendCertsFromPEM(caData) {
-					return nil, fmt.Errorf("unable to parse CA file")
+				for _, cert := range certs {
+					identityCertPool.AddCert(cert)
+					if earliestCertExpiration.IsZero() ||
+						cert.NotAfter.Before(earliestCertExpiration) {
+						earliestCertExpiration = cert.NotAfter
+					}
 				}
-				if !caCertPool.AppendCertsFromPEM(identityCaData) {
-					return nil, fmt.Errorf("unable to parse identity CA file")
-				}
-				serverConfig.ClientCAs = caCertPool
+				serverConfig.ClientCAs = identityCertPool
 			}
 		}
 		srpc.RegisterServerTlsConfig(serverConfig, true)
+		tricorder.RegisterMetric("/srpc/server/earliest-ca-expiration",
+			&earliestCertExpiration, units.None,
+			"expiration time of the CA which will expire the soonest")
 	}
 	return tlsCert.Leaf, nil
 }

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -56,7 +57,7 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 func (stream *imageStreamType) getenv() map[string]string {
 	envTable := make(map[string]string, len(stream.Variables)+3)
 	for key, value := range stream.Variables {
-		envTable[key] = expandExpression(value, func(name string) string {
+		envTable[key] = expand.Expression(value, func(name string) string {
 			if name == "IMAGE_STREAM" {
 				return stream.name
 			}
@@ -84,8 +85,8 @@ func (stream *imageStreamType) getManifestLocation(b *Builder,
 		variableFunc = b.getVariableFunc(stream.getenv(), variables)
 	}
 	return manifestLocationType{
-		directory: expandExpression(stream.ManifestDirectory, variableFunc),
-		url:       expandExpression(stream.ManifestUrl, variableFunc),
+		directory: expand.Expression(stream.ManifestDirectory, variableFunc),
+		url:       expand.Expression(stream.ManifestUrl, variableFunc),
 	}
 }
 
@@ -210,7 +211,7 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return "", "", nil, nil, nil, err
 	}
-	sourceImageName := expandExpression(manifest.SourceImage,
+	sourceImageName := expand.Expression(manifest.SourceImage,
 		func(name string) string {
 			return stream.getenv()[name]
 		})

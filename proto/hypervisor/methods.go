@@ -334,6 +334,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if !left.CreatedOn.Equal(right.CreatedOn) {
 		return false
 	}
+	if left.CpuPriority != right.CpuPriority {
+		return false
+	}
 	if left.DestroyOnPowerdown != right.DestroyOnPowerdown {
 		return false
 	}

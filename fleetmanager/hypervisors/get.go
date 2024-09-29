@@ -32,6 +32,12 @@ func (h *hypervisorType) makeProtoHypervisor(
 	return protoHypervisor
 }
 
+func (h *hypervisorType) getSerialNumber() string {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.serialNumber
+}
+
 func (m *Manager) getLockedHypervisor(name string,
 	writeLock bool) (*hypervisorType, error) {
 	m.mutex.RLock()

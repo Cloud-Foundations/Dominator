@@ -28,6 +28,7 @@ var (
 	clientMetricsDir            *tricorder.DirectorySpec
 	clientMetricsMutex          sync.Mutex
 	numInUseClientConnections   uint64
+	numOpenCallConnections      uint64
 	numOpenClientConnections    uint64
 	setupClientExpirationMetric sync.Once
 )
@@ -44,12 +45,18 @@ func registerClientMetrics() {
 	}
 	err = clientMetricsDir.RegisterMetric("num-in-use-connections",
 		&numInUseClientConnections, units.None,
-		"number of connections in use")
+		"number of client connections in use")
+	if err != nil {
+		panic(err)
+	}
+	err = clientMetricsDir.RegisterMetric("num-open-calls",
+		&numOpenCallConnections, units.None, "number of open call connections")
 	if err != nil {
 		panic(err)
 	}
 	err = clientMetricsDir.RegisterMetric("num-open-connections",
-		&numOpenClientConnections, units.None, "number of open connections")
+		&numOpenClientConnections, units.None,
+		"number of open client connections")
 	if err != nil {
 		panic(err)
 	}
@@ -272,10 +279,16 @@ func (client *Client) call(serviceMethod string) (*Conn, error) {
 	if client.resource != nil && !client.resource.inUse {
 		panic("cannot call Client after Close() or Put()")
 	}
+	clientMetricsMutex.Lock()
+	numOpenCallConnections++
+	clientMetricsMutex.Unlock()
 	client.callLock.Lock()
 	conn, err := client.callWithLock(serviceMethod)
 	if err != nil {
 		client.callLock.Unlock()
+		clientMetricsMutex.Lock()
+		numOpenCallConnections--
+		clientMetricsMutex.Unlock()
 	}
 	return conn, err
 }
@@ -319,6 +332,7 @@ func (client *Client) close() error {
 	client.bufrw.Flush()
 	if client.resource == nil {
 		clientMetricsMutex.Lock()
+		numOpenCallConnections--
 		numOpenClientConnections--
 		clientMetricsMutex.Unlock()
 		conn := client.conn
@@ -332,6 +346,7 @@ func (client *Client) close() error {
 		numInUseClientConnections--
 		client.resource.inUse = false
 	}
+	numOpenCallConnections--
 	numOpenClientConnections--
 	clientMetricsMutex.Unlock()
 	return client.resource.closeError

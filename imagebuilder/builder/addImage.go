@@ -12,6 +12,7 @@ import (
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
@@ -216,7 +217,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	}
 	tgs := rawTags.Copy()
 	for key, value := range tgs {
-		newValue := expandExpression(value, func(name string) string {
+		newValue := expand.Expression(value, func(name string) string {
 			return request.Variables[name]
 		})
 		tgs[key] = newValue

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
@@ -80,6 +81,7 @@ var (
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
 	numRejectedServerConnections uint64
+	numRunningMethods            uint64
 	registerBuiltin              sync.Once
 	registerBuiltinError         error
 	setupServerExpirationMetric  sync.Once
@@ -136,6 +138,11 @@ func registerServerMetrics() {
 	err = serverMetricsDir.RegisterMetric("num-rejected-connections",
 		&numRejectedServerConnections, units.None,
 		"number of rejected connections")
+	if err != nil {
+		panic(err)
+	}
+	err = serverMetricsDir.RegisterMetric("num-running-methods",
+		&numRunningMethods, units.None, "number of running methods")
 	if err != nil {
 		panic(err)
 	}
@@ -346,6 +353,7 @@ func jsonUnsecuredHttpHandler(w http.ResponseWriter, req *http.Request) {
 
 func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	makeCoder coderMaker) {
+	logger := prefixlogger.New("SRPC/s("+req.RemoteAddr+"): ", logger)
 	serverMetricsMutex.Lock()
 	numServerConnections++
 	serverMetricsMutex.Unlock()
@@ -382,14 +390,14 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	if !ok {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		logger.Println("not a hijacker ", req.RemoteAddr)
+		logger.Println("not a hijacker")
 		return
 	}
 	unsecuredConn, bufrw, err := hijacker.Hijack()
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		logger.Println("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
+		logger.Printf("rpc hijacking: %s\n", err)
 		return
 	}
 	myConn := &Conn{
@@ -404,11 +412,11 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	if tcpConn, ok := unsecuredConn.(net.TCPConn); ok {
 		connType = "TCP"
 		if err := tcpConn.SetKeepAlive(true); err != nil {
-			logger.Println("error setting keepalive: ", err.Error())
+			logger.Printf("error setting keepalive: %s\n", err)
 			return
 		}
 		if err := tcpConn.SetKeepAlivePeriod(time.Minute * 5); err != nil {
-			logger.Println("error setting keepalive period: ", err.Error())
+			logger.Printf("error setting keepalive period: %s\n", err)
 			return
 		}
 	} else {
@@ -419,7 +427,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	}
 	_, err = io.WriteString(unsecuredConn, "HTTP/1.0 "+connectString+"\n\n")
 	if err != nil {
-		logger.Println("error writing connect message: ", err.Error())
+		logger.Printf("error writing connect message: %s\n", err)
 		return
 	}
 	allowMethodPowers := true
@@ -461,8 +469,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		}
 		myConn.ReadWriter = bufrw
 	}
-	logger.Debugf(0, "accepted %s connection from: %s\n",
-		connType, myConn.remoteAddr)
+	logger.Debugf(0, "accepted %s connection\n", connType)
 	serverMetricsMutex.Lock()
 	numOpenServerConnections++
 	serverMetricsMutex.Unlock()
@@ -703,12 +710,20 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 }
 
 func (m *methodWrapper) _call(conn *Conn, makeCoder coderMaker) error {
+	serverMetricsMutex.Lock()
+	numRunningMethods++
+	serverMetricsMutex.Unlock()
 	defer func() {
 		if err := recover(); err != nil {
 			serverMetricsMutex.Lock()
 			numPanicedCalls++
+			numRunningMethods--
 			serverMetricsMutex.Unlock()
 			panic(err)
+		} else {
+			serverMetricsMutex.Lock()
+			numRunningMethods--
+			serverMetricsMutex.Unlock()
 		}
 	}()
 	connValue := reflect.ValueOf(conn)

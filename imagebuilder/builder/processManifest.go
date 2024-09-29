@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -104,24 +105,24 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	if envGetter == nil {
 		return manifestConfig, nil
 	}
-	manifestConfig.SourceImage = expandExpression(manifestConfig.SourceImage,
+	manifestConfig.SourceImage = expand.Expression(manifestConfig.SourceImage,
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
 	for key, value := range manifestConfig.SourceImageBuildVariables {
-		newValue := expandExpression(value, func(name string) string {
+		newValue := expand.Expression(value, func(name string) string {
 			return envGetter.getenv()[name]
 		})
 		manifestConfig.SourceImageBuildVariables[key] = newValue
 	}
-	manifestConfig.SourceImageGitCommitId = expandExpression(
+	manifestConfig.SourceImageGitCommitId = expand.Expression(
 		manifestConfig.SourceImageGitCommitId,
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
 	for _, values := range manifestConfig.SourceImageTagsToMatch {
 		for index, value := range values {
-			newValue := expandExpression(value, func(name string) string {
+			newValue := expand.Expression(value, func(name string) string {
 				return envGetter.getenv()[name]
 			})
 			values[index] = newValue

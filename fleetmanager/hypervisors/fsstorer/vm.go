@@ -68,11 +68,12 @@ func (s *Storer) writeVm(hypervisor net.IP, ipAddr string,
 	if dirname, err := s.getVmDirname(hypervisor, ipAddr); err != nil {
 		return err
 	} else {
-		if err := os.MkdirAll(dirname, dirPerms); err != nil {
+		if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		filename := filepath.Join(dirname, "info.gob")
-		writer, err := fsutil.CreateRenamingWriter(filename, filePerms)
+		writer, err := fsutil.CreateRenamingWriter(filename,
+			fsutil.PublicFilePerms)
 		if err != nil {
 			return err
 		} else {

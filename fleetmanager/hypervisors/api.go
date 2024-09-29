@@ -23,6 +23,10 @@ const (
 	probeStatusConnectionRefused
 	probeStatusUnreachable
 	probeStatusOff
+
+	selectHealthy = iota
+	selectAny
+	selectAll
 )
 
 type hypervisorType struct {
@@ -66,6 +70,7 @@ type locationType struct {
 }
 
 type Manager struct {
+	ipmiLimiter      chan struct{}
 	ipmiPasswordFile string
 	ipmiUsername     string
 	logger           log.DebugLogger
@@ -167,7 +172,7 @@ func (m *Manager) ListHypervisorsInLocation(
 }
 
 func (m *Manager) ListLocations(dirname string) ([]string, error) {
-	return m.listLocations(dirname)
+	return m.listLocations(dirname, selectHealthy)
 }
 
 func (m *Manager) ListVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
