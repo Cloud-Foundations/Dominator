@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	terminalclient "github.com/Cloud-Foundations/Dominator/lib/net/terminal/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -21,10 +22,13 @@ func installerShellSubcommand(args []string, logger log.DebugLogger) error {
 func installerShell(hostname string, logger log.DebugLogger) error {
 	var client *srpc.Client
 	fmt.Fprintf(os.Stderr, "trying to connect")
-	for ; ; time.Sleep(time.Second * 5) {
+	sleeper := backoffdelay.NewExponential(50*time.Millisecond, 5*time.Second,
+		4)
+	for ; ; sleeper.SleepUntilEnd() {
+		sleeper.StartInterval()
 		var err error
 		client, err = srpc.DialHTTP("tcp", fmt.Sprintf("%s:%d",
-			hostname, *installerPortNum), time.Second*15)
+			hostname, *installerPortNum), sleeper.RemainingInterval())
 		if err == nil {
 			break
 		}

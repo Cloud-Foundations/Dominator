@@ -6,11 +6,13 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -25,72 +27,119 @@ import (
 	"github.com/pin/tftp"
 )
 
+type dhcpResponse struct {
+	error  error
+	name   string
+	packet dhcp4.Packet
+}
+
 var (
-	tftpFiles = []string{
-		"config.json",
-		"imagename",
-		"imageserver",
-		"storage-layout.json",
+	tftpFiles = map[string]bool{ // If true, file is required.
+		"config.json":         true,
+		"imagename":           true,
+		"imageserver":         true,
+		"storage-layout.json": true,
+		"tools-imagename":     false,
 	}
 	zeroIP = net.IP(make([]byte, 4))
 )
 
 func configureLocalNetwork(logger log.DebugLogger) (
-	*fm_proto.GetMachineInfoResponse, map[string]net.Interface, error) {
+	*fm_proto.GetMachineInfoResponse, map[string]net.Interface, string, error) {
 	if err := run("ifconfig", "", logger, "lo", "up"); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	_, interfaces, err := libnet.ListBroadcastInterfaces(
 		libnet.InterfaceTypeEtherNet, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	// Raise interfaces so that by the time the OS is installed link status
 	// should be stable. This is how we discover connected interfaces.
 	if err := raiseInterfaces(interfaces, logger); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	machineInfo, err := getConfiguration(interfaces, logger)
+	machineInfo, activeInterface, err := getConfiguration(interfaces, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	return machineInfo, interfaces, nil
+	return machineInfo, interfaces, activeInterface, nil
 }
 
 func dhcpRequest(interfaces map[string]net.Interface,
 	logger log.DebugLogger) (string, dhcp4.Packet, error) {
-	clients := make(map[string]*dhcp4client.Client, len(interfaces))
-	for name, iface := range interfaces {
-		packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
-		if err != nil {
-			return "", nil, err
-		}
-		defer packetSocket.Close()
-		client, err := dhcp4client.New(
-			dhcp4client.HardwareAddr(iface.HardwareAddr),
-			dhcp4client.Connection(packetSocket),
-			dhcp4client.Timeout(time.Second*5))
-		if err != nil {
-			return "", nil, err
-		}
-		defer client.Close()
-		clients[name] = client
+	responseChannel := make(chan dhcpResponse, len(interfaces))
+	logger.Println("waiting for carrier and DHCP response for each interface")
+	cancelChannel := make(chan struct{})
+	for _, iface := range interfaces {
+		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel, logger)
 	}
-	logger.Println("waiting for carrier on interfaces")
-	stopTime := time.Now().Add(time.Minute * 5)
-	for ; time.Until(stopTime) > 0; time.Sleep(100 * time.Millisecond) {
-		for name, client := range clients {
-			if libnet.TestCarrier(name) {
-				logger.Debugf(1, "%s: DHCP attempt\n", name)
-				if ok, packet, err := client.Request(); err != nil {
-					logger.Debugf(1, "%s: DHCP failed: %s\n", name, err)
-				} else if ok {
-					return name, packet, nil
-				}
+	timer := time.NewTimer(time.Minute * 5)
+	for range interfaces {
+		select {
+		case response := <-responseChannel:
+			if response.error != nil {
+				logger.Println(response.error)
+				continue
 			}
+			close(cancelChannel)
+			timer.Stop()
+			return response.name, response.packet, nil
+		case <-timer.C:
+			return "", nil, errors.New("timed out waiting for DHCP")
 		}
 	}
-	return "", nil, errors.New("timed out waiting for DHCP")
+	return "", nil, errors.New("unable to issue DHCP request on any interface")
+}
+
+func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
+	responseChannel chan<- dhcpResponse, logger log.DebugLogger) {
+	packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
+	if err != nil {
+		responseChannel <- dhcpResponse{
+			error: fmt.Errorf("%s: failed to create DHCP socket: %s",
+				iface.Name, err)}
+		return
+	}
+	defer packetSocket.Close()
+	client, err := dhcp4client.New(
+		dhcp4client.HardwareAddr(iface.HardwareAddr),
+		dhcp4client.Connection(packetSocket),
+		dhcp4client.Timeout(time.Second*5))
+	if err != nil {
+		responseChannel <- dhcpResponse{
+			error: fmt.Errorf("%s: failed to create DHCP client: %s\n",
+				iface.Name, err)}
+		return
+	}
+	defer client.Close()
+	for ; ; time.Sleep(100 * time.Millisecond) {
+		select {
+		case <-cancelChannel:
+			logger.Debugf(1, "%s: cancelling carrier tests\n", iface.Name)
+			return
+		default:
+		}
+		if libnet.TestCarrier(iface.Name) {
+			break
+		}
+	}
+	logger.Debugf(1, "%s: carrier detected\n", iface.Name)
+	for ; ; time.Sleep(100 * time.Millisecond) {
+		select {
+		case <-cancelChannel:
+			logger.Debugf(1, "%s: cancelling DHCP attempts\n", iface.Name)
+			return
+		default:
+		}
+		logger.Debugf(1, "%s: DHCP attempt\n", iface.Name)
+		if ok, packet, err := client.Request(); err != nil {
+			logger.Debugf(1, "%s: DHCP failed: %s\n", iface.Name, err)
+		} else if ok {
+			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+			return
+		}
+	}
 }
 
 func findInterfaceToConfigure(interfaces map[string]net.Interface,
@@ -123,29 +172,54 @@ func findInterfaceToConfigure(interfaces map[string]net.Interface,
 }
 
 func getConfiguration(interfaces map[string]net.Interface,
-	logger log.DebugLogger) (*fm_proto.GetMachineInfoResponse, error) {
+	logger log.DebugLogger) (*fm_proto.GetMachineInfoResponse, string, error) {
 	var machineInfo fm_proto.GetMachineInfoResponse
 	err := json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
 		&machineInfo)
 	if err == nil { // Configuration was injected.
-		err := setupNetworkFromConfig(interfaces, machineInfo, logger)
+		activeInterface, err := setupNetworkFromConfig(interfaces, machineInfo,
+			logger)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &machineInfo, nil
+		return &machineInfo, activeInterface, nil
 	}
 	if !os.IsNotExist(err) {
-		return nil, err
+		return nil, "", err
 	}
-	if err := setupNetworkFromDhcp(interfaces, logger); err != nil {
-		return nil, err
+	tftpServer, activeInterface, err := setupNetworkFromDhcp(interfaces, logger)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.MkdirAll(*tftpDirectory, fsutil.DirPerms); err != nil {
+		return nil, "", err
+	}
+	if *configurationLoader != "" {
+		err := run(*configurationLoader, "", logger, *tftpDirectory,
+			activeInterface)
+		if err != nil {
+			return nil, "", err
+		}
+		err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
+			&machineInfo)
+		if err != nil {
+			return nil, "", err
+		}
+		logger.Printf("loaded configuration using: %s\n", *configurationLoader)
+		return &machineInfo, activeInterface, nil
+	}
+	if tftpServer.Equal(zeroIP) {
+		return nil, "", errors.New("no TFTP server given")
+	}
+	if err := loadTftpFiles(tftpServer, logger); err != nil {
+		return nil, "", err
 	}
 	err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
 		&machineInfo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &machineInfo, nil
+	return &machineInfo, activeInterface, nil
 }
 
 func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
@@ -176,12 +250,12 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(*tftpDirectory, fsutil.DirPerms); err != nil {
-		return err
-	}
-	for _, name := range tftpFiles {
+	for name, required := range tftpFiles {
 		logger.Debugf(1, "downloading: %s\n", name)
 		if wt, err := client.Receive(name, "octet"); err != nil {
+			if strings.Contains(err.Error(), "does not exist") && !required {
+				continue
+			}
 			return err
 		} else {
 			filename := filepath.Join(*tftpDirectory, name)
@@ -204,6 +278,36 @@ func raiseInterfaces(interfaces map[string]net.Interface,
 		if err := run("ifconfig", "", logger, name, "up"); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func setHostname(optionHostName []byte, logger log.DebugLogger) error {
+	if hostname := optionHostName; len(hostname) > 0 {
+		hostname = bytes.ToLower(hostname)
+		if isValidHostname(hostname) {
+			if err := syscall.Sethostname(hostname); err != nil {
+				return err
+			}
+			logger.Printf("set hostname=\"%s\" from DHCP HostName option",
+				string(hostname))
+			return nil
+		}
+		logger.Printf("ignoring invalid DHCP HostName option: %s\n",
+			string(hostname))
+	}
+	if hostname := readHostnameFromKernelCmdline(); len(hostname) > 0 {
+		hostname = bytes.ToLower(hostname)
+		if isValidHostname(hostname) {
+			if err := syscall.Sethostname(hostname); err != nil {
+				return err
+			}
+			logger.Printf("set hostname=\"%s\" from hostname= kernel cmdline",
+				string(hostname))
+			return nil
+		}
+		logger.Printf("ignoring invalid hostname= from kernel cmdline: %s\n",
+			string(hostname))
 	}
 	return nil
 }
@@ -238,23 +342,35 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 }
 
 func setupNetworkFromConfig(interfaces map[string]net.Interface,
-	machineInfo fm_proto.GetMachineInfoResponse, logger log.DebugLogger) error {
+	machineInfo fm_proto.GetMachineInfoResponse, logger log.DebugLogger) (
+	string, error) {
 	iface, ipAddr, subnet, err := findInterfaceToConfigure(interfaces,
 		machineInfo, logger)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return setupNetwork(iface.Name, ipAddr, subnet, logger)
+	if err := setupNetwork(iface.Name, ipAddr, subnet, logger); err != nil {
+		return "", err
+	}
+	return iface.Name, nil
 }
 
 func setupNetworkFromDhcp(interfaces map[string]net.Interface,
-	logger log.DebugLogger) error {
+	logger log.DebugLogger) (net.IP, string, error) {
 	ifName, packet, err := dhcpRequest(interfaces, logger)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
+	if logdir, err := logDhcpPacket(ifName, packet, options); err != nil {
+		logger.Printf("error logging DHCP packet: %w", err)
+	} else {
+		logger.Printf("logged DHCP response in: %s\n", logdir)
+	}
+	if err := setHostname(options[dhcp4.OptionHostName], logger); err != nil {
+		return nil, "", err
+	}
 	subnet := hyper_proto.Subnet{
 		IpGateway: net.IP(options[dhcp4.OptionRouter]),
 		IpMask:    net.IP(options[dhcp4.OptionSubnetMask]),
@@ -266,24 +382,24 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 				net.IP(dnsServersBuffer[:4]))
 			dnsServersBuffer = dnsServersBuffer[4:]
 		} else {
-			return errors.New("truncated DNS server address")
+			return nil, "", errors.New("truncated DNS server address")
 		}
 	}
 	if domainName := options[dhcp4.OptionDomainName]; len(domainName) > 0 {
 		subnet.DomainName = string(domainName)
 	}
 	if err := setupNetwork(ifName, ipAddr, &subnet, logger); err != nil {
-		return err
+		return nil, "", err
 	}
 	tftpServer := packet.SIAddr()
 	if tftpServer.Equal(zeroIP) {
 		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
 		if tftpServer.Equal(zeroIP) {
-			return errors.New("no TFTP server given")
+			return nil, "", nil
 		}
 		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
 	} else {
 		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
 	}
-	return loadTftpFiles(tftpServer, logger)
+	return tftpServer, ifName, nil
 }

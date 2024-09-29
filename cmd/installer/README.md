@@ -9,6 +9,10 @@ storage media such as a USB flash drive or a CD-ROM containg an ISO-format
 image. Some machines have a BMC (Baseboard Management Controller) which supports
 network mounting a remote ISO image and booting from that.
 
+The *installer image* is recommended to be small so that it may be loaded
+quickly. A common pattern is have only a kernel, modules, a *busybox*-based
+shell, some device discovery boot scripts and the *installer* binary.
+
 The *installer* will scan the storage devices for a previously installed OS. If
 present, it will copy files from the old OS into a temporary object cache,
 computing checksums of the files. It uses this cache to skip downloading objects
@@ -26,11 +30,35 @@ present, the configuration data are not fetched via TFTP. This mode supports
 iteratively writing the configuration data and testing the *installer* code
 itself.
 
+In addition, the *installer* supports some sub-commands which may be used for
+building custom workflows and debugging.
+The basic usage pattern is:
+
+```
+installer [flags...] command [args...]
+```
+
 Built-in help is available with the command:
 
 ```
 installer -h
 ```
+
+The sub-commands available are:
+
+- **decode-base64**: read base64-encoded data from the standard input and write
+                     the decoded data to the stdandard output
+- **dhcp-request**: issue a DHCP request for debugging. The response data will
+                    be logged but no other action will be taken
+- **generate-random**: generate pseudo-random data (NOT cryptographically
+                       secure) and write to standard output
+- **list-images**: list the images available on the imageserver
+- **load-image**: load the specified image and unpack it into the specified
+                  directory. The `/dev`, `/proc`, `/sys` and `/tmp` directories
+		  are bind-mounted in so that the image may be used in a chroot
+		  environment. This may be used to download a debugging image or
+		  it may be used by plugin programmes to download extra tools
+		  they require (in addition to the normal tools image)
 
 When network booting, the *[hyper-control](../hyper-control/README.md)* tool may
 be used to request that a nearby *[Hypervisor](../hypervisor/README.md)* serve
@@ -69,13 +97,19 @@ present):
 - `config.json`: the machine configuration. The schema is defined in the
   [GetMachineInfoResponse](https://github.com/Cloud-Foundations/Dominator/blob/master/proto/fleetmanager/messages.go) type
 
-- `imagename`: the name of the image to fetch from the *[imageserver](../imageserver/README.md)*
+- `imagename`: the name of the image to fetch from the *[imageserver](../imageserver/README.md)* and install on the machine (aka. the *target OS*)
 
 - `imageserver`: the address of the *[imageserver](../imageserver/README.md)*
 
 - `storage-layout.json`: the desired configuration of the storage devices. The
   schema is defined in the
   [StorageLayout](https://github.com/Cloud-Foundations/Dominator/blob/master/proto/installer/messages.go) type
+
+- `tools-imagename`: the name of an optional image containing tools that are
+  required for custom configuration scripts. The default is to use the same
+  image as used for the target OS, but a smaller, entirely different image can
+  be used instead, providing a consistent environment for your configuration
+  scripts regardless of the OS being installed
 
 ## Sequence
 The following sections describe the sequence of operations that the *installer*
@@ -93,11 +127,32 @@ The broadcast (EtherNet) interfaces are discovered and turned on. This gives
 some time for the links to become stable before active link detection is
 performed.
 
+### Load configuration
+
+If the `config.json` file is present, the configuration is read immediately. No
+DHCP requests are performed and the `-configurationLoader` option is ignored.
+This is meant for development.
+
 If the `config.json` file is not present, a DHCP request is issued to discover
 the IP address for the machine and the address of a TFTP server from where it
-will fetch configuration data. The primary network interface is configured based
-on the DHCP response. The configuration files are downloaded from the TFTP
-server.
+may fetch configuration data. The primary network interface is configured based
+on the DHCP response. By default, the configuration files are downloaded from
+the TFTP server.
+
+If the `-configurationLoader` option is given then the specified programme
+is run instead of fetching the configuration files from the TFTP server. This
+allows you to integrate into an existing system for publishing configuration
+data and converting to the format that the *installer* expects. The following
+command-line arguments will be provided:
+1. The name of the directory where to write the configuration files
+2. The name of the active (configured) network interface
+
+### Load tools
+
+The [BusyBox](https://www.busybox.net/)-based image probably does not have all
+the tools necessary to configure the storage. By default, the target OS image is
+unpacked to the directory specified by the `-tmpRoot` option. If the
+`tools-imagename` file is present, the specified image is used instead.
 
 ### Configure storage
 The storage devices are discovered and the image (without objects) is downloaded
@@ -116,6 +171,11 @@ cache. This ensures that all objects are available prior to modifying the
 storage devices. It also provides various utilities required for partitioning,
 encrypting and formatting storage devices.
 
+If the `-driveSelector` option is given then the specified programme is run to
+select the drives that should be configured. The list of discovered, usable
+drives is provided as command-line arguments. The list of selected drives must
+be written to the standard output, one per line.
+
 The storage devices are erased (either with `blkdiscard` or by writing 1 MiB of
 zeros at the beginning) and then partitioned. Except for the partition which
 will contain the new root file-system, they are by default encrypted.
@@ -132,13 +192,28 @@ The broadcast interfaces are checked to see which have an active link (i.e.
 connected to an active switch port). The machine configuration is consulted and
 a network configuration file is rendered and written to the new root
 file-system. The configuration file specifies interfaces, trunks, VLANs and
-bridges.
+bridges. Further, the DNS configuration is written.
+
+Alternatively, if the `-networkConfigurator` option is given then the specified
+programme is run instead to perform all network configuration. This allows you
+to provide an alternate implementation for configuring the target OS network.
+The following command-line arguments will be provided:
+1. The name of the directory containing the previously downloaded configuration files
+2. The root directory of the new OS file-system
+3. The name of the active (configured) network interface
 
 ### Copy installation logs
 The installation logs are written to `/var/log/installer/log`.
 
 ### Unmount storage
 The storage devices are unmounted.
+
+If the `-completionNotifier` option is given then the specified programme is run
+after the storage devices are unmounted. This allows you to signal to an
+external system that installation is complete and the new OS is about to be
+booted. The following command-line arguments will be provided:
+1. The name of the directory containing the previously downloaded configuration files
+2. The name of the active (configured) network interface
 
 ### Reboot
 If the `-useKexec=true` option was passed to

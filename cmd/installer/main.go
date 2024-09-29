@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -43,18 +45,25 @@ type Rebooter interface {
 }
 
 var (
+	completionNotifier = flag.String("completionNotifier", "",
+		"Pathname of programme to run when installation is complete and reboot is imminent")
+	configurationLoader = flag.String("configurationLoader", "",
+		"Pathname of programme to run to load configuration data")
+	driveSelector = flag.String("driveSelector", "",
+		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
-	mountPoint = flag.String("mountPoint", "/mnt",
-		"Mount point for new root file-system")
-	objectsDirectory = flag.String("objectsDirectory", "/objects",
-		"Directory where cached objects will be written")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
-	portNum       = flag.Uint("portNum", constants.InstallerPortNumber,
+	mountPoint    = flag.String("mountPoint", "/mnt",
+		"Mount point for new root file-system")
+	networkConfigurator = flag.String("networkConfigurator", "",
+		"Pathname of programme to run to configure the network")
+	portNum = flag.Uint("portNum", constants.InstallerPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
 	procDirectory = flag.String("procDirectory", "/proc",
 		"Directory where procfs is mounted")
-	skipNetwork = flag.Bool("skipNetwork", false,
+	shellCommand = flagutil.StringList{"/bin/busybox", "sh", "-i"}
+	skipNetwork  = flag.Bool("skipNetwork", false,
 		"If true, do not update target network configuration")
 	skipStorage = flag.Bool("skipStorage", false,
 		"If true, do not update storage")
@@ -68,6 +77,29 @@ var (
 	processStartTime = time.Now()
 )
 
+func init() {
+	flag.Var(&shellCommand, "shellCommand",
+		"Shell command with optional comma separated arguments")
+}
+
+func printUsage() {
+	w := flag.CommandLine.Output()
+	fmt.Fprintln(w,
+		"Usage: installer [flags...] [command [args...]]")
+	fmt.Fprintln(w, "Common flags:")
+	flag.PrintDefaults()
+	fmt.Fprintln(w, "Commands:")
+	commands.PrintCommands(w, subcommands)
+}
+
+var subcommands = []commands.Command{
+	{"decode-base64", "", 0, 0, decodeBase64Subcommand},
+	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
+	{"generate-random", "", 0, 0, generateRandomSubcommand},
+	{"list-images", "", 0, 0, listImagesSubcommand},
+	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
+}
+
 func copyLogs(logFlusher flusher) error {
 	logFlusher.Flush()
 	logdir := filepath.Join(*mountPoint, "var", "log", "installer")
@@ -75,15 +107,17 @@ func copyLogs(logFlusher flusher) error {
 		fsutil.PublicFilePerms)
 }
 
-func createLogger() (*logbuf.LogBuffer, log.DebugLogger) {
-	os.MkdirAll("/var/log/installer", fsutil.DirPerms)
+func createLogger() (*logbuf.LogBuffer, log.DebugLogger, error) {
+	if err := os.MkdirAll("/var/log/installer", fsutil.DirPerms); err != nil {
+		return nil, nil, err
+	}
 	options := logbuf.GetStandardOptions()
 	options.AlsoLogToStderr = true
 	logBuffer := logbuf.NewWithOptions(options)
 	logger := debuglogger.New(stdlog.New(&logWriter{logBuffer}, "", 0))
 	logger.SetLevel(int16(*logDebugLevel))
 	srpc.SetDefaultLogger(logger)
-	return logBuffer, logger
+	return logBuffer, logger, nil
 }
 
 func ifUnprivileged() bool {
@@ -96,7 +130,8 @@ func ifUnprivileged() bool {
 func install(updateHwClock bool, logFlusher flusher,
 	logger log.DebugLogger) (Rebooter, error) {
 	var rebooter Rebooter
-	machineInfo, interfaces, err := configureLocalNetwork(logger)
+	machineInfo, interfaces, activeInterface, err := configureLocalNetwork(
+		logger)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +149,8 @@ func install(updateHwClock bool, logFlusher flusher,
 		}
 	}
 	if !*skipNetwork {
-		err := configureNetwork(*machineInfo, interfaces, logger)
+		err := configureNetwork(*machineInfo, interfaces, activeInterface,
+			logger)
 		if err != nil {
 			return nil, err
 		}
@@ -124,6 +160,13 @@ func install(updateHwClock bool, logFlusher flusher,
 	}
 	if err := unmountStorage(logger); err != nil {
 		return nil, fmt.Errorf("error unmounting: %s", err)
+	}
+	if *completionNotifier != "" {
+		err := run(*completionNotifier, "", logger, *tftpDirectory,
+			activeInterface)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rebooter, nil
 }
@@ -160,13 +203,12 @@ func printAndWait(initialTimeoutString, waitTimeoutString string,
 	}
 }
 
-func doMain() error {
-	if err := loadflags.LoadForDaemon("installer"); err != nil {
+func runDaemon() error {
+	tricorder.RegisterFlags()
+	logBuffer, logger, err := createLogger()
+	if err != nil {
 		return err
 	}
-	flag.Parse()
-	tricorder.RegisterFlags()
-	logBuffer, logger := createLogger()
 	defer logBuffer.Flush()
 	var sysinfo syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
@@ -177,7 +219,9 @@ func doMain() error {
 	}
 	var updateHwClock bool
 	if fi, err := os.Stat("/build-timestamp"); err != nil {
-		return err
+		if !*dryRun {
+			return err
+		}
 	} else {
 		now := time.Now()
 		if fi.ModTime().After(now) {
@@ -197,12 +241,17 @@ func doMain() error {
 		logger.Println(err)
 	}
 	waitGroup := &sync.WaitGroup{}
-	if newLogger, err := startServer(*portNum, waitGroup, logger); err != nil {
-		logger.Printf("cannot start server: %s\n", err)
+	if l, e := startServer(*portNum, waitGroup, logBuffer, logger); e != nil {
+		logger.Printf("cannot start server: %s\n", e)
 	} else {
-		logger = newLogger
+		logger = l
 	}
 	rebooter, err := install(updateHwClock, logBuffer, logger)
+	if *dryRun {
+		logger.Println(err)
+		logger.Println("dry run: sleeping indefinitely instead of rebooting")
+		select {}
+	}
 	rebooterName := "default"
 	if rebooter != nil {
 		rebooterName = rebooter.String()
@@ -227,11 +276,34 @@ func doMain() error {
 	return nil
 }
 
+func processCommand(args []string) {
+	if len(args) < 1 {
+		if err := runSubcommand(nil, nil); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
+	}
+	logger := debuglogger.New(stdlog.New(os.Stderr, "", 0))
+	logger.SetLevel(int16(*logDebugLevel))
+	params := setupserver.Params{Logger: logger}
+	if err := setupserver.SetupTlsWithParams(params); err != nil {
+		logger.Println(err)
+	}
+	os.Exit(commands.RunCommands(subcommands, printUsage, logger))
+}
+
 func main() {
-	if err := doMain(); err != nil {
+	if err := loadflags.LoadForDaemon("installer"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	flag.Usage = printUsage
+	flag.Parse()
+	processCommand(flag.Args())
+}
+
+func runSubcommand(args []string, logger log.DebugLogger) error {
+	return runDaemon()
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {

@@ -21,14 +21,31 @@ func newExponential(minimumDelay, maximumDelay time.Duration,
 	}
 }
 
-func (e *Exponential) reset() {
-	e.interval = e.minimum
-}
-
-func (e *Exponential) sleep() {
-	e.sleepFunc(e.interval)
+func (e *Exponential) getAndUpdateInterval() time.Duration {
+	retval := e.interval
 	e.interval += e.interval >> e.growthRate
 	if e.interval > e.maximum {
 		e.interval = e.maximum
 	}
+	return retval
+}
+
+func (e *Exponential) reset() {
+	e.interval = e.minimum
+}
+
+func (e *Exponential) remainingInterval() time.Duration {
+	return time.Until(e.stopTime)
+}
+
+func (e *Exponential) sleep() {
+	e.sleepFunc(e.getAndUpdateInterval())
+}
+
+func (e *Exponential) sleepUntilEnd() {
+	e.sleepFunc(e.RemainingInterval())
+}
+
+func (e *Exponential) startInterval() {
+	e.stopTime = time.Now().Add(e.getAndUpdateInterval())
 }

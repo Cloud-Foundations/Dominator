@@ -48,3 +48,7 @@ func (fileSystemType FileSystemType) String() string {
 		return str
 	}
 }
+
+func (fileSystemType *FileSystemType) UnmarshalText(text []byte) error {
+	return fileSystemType.Set(string(text))
+}

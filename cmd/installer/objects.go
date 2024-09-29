@@ -1,29 +1,30 @@
+//go:build linux
 // +build linux
 
 package main
 
 import (
+	"bytes"
 	"crypto/sha512"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
-	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
-	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type objectsCache struct {
 	bytesScanned uint64
-	objects      map[hash.Hash]uint64
+	objects      map[hash.Hash][]byte
 }
 
 type objectsReader struct {
@@ -31,20 +32,24 @@ type objectsReader struct {
 	hashes []hash.Hash
 }
 
-func hashFile(filename string) (hash.Hash, uint64, error) {
-	file, err := os.Open(filename)
+type scanStateType struct {
+	device          uint64
+	mutex           sync.Mutex // Protect below and also objectsCache.
+	foundObjects    map[hash.Hash]uint64
+	requiredObjects map[hash.Hash]uint64
+	scannedInodes   map[uint64]struct{}
+}
+
+func hashFile(filename string) (hash.Hash, []byte, error) {
+	object, err := os.ReadFile(filename)
 	if err != nil {
-		return hash.Hash{}, 0, err
+		return hash.Hash{}, nil, err
 	}
-	defer file.Close()
 	hasher := sha512.New()
-	nCopied, err := io.Copy(hasher, file)
-	if err != nil {
-		return hash.Hash{}, 0, err
-	}
+	hasher.Write(object)
 	var hashVal hash.Hash
 	copy(hashVal[:], hasher.Sum(nil))
-	return hashVal, uint64(nCopied), nil
+	return hashVal, object, nil
 }
 
 func (cache *objectsCache) computeMissing(
@@ -54,8 +59,8 @@ func (cache *objectsCache) computeMissing(
 	missingObjects := make(map[hash.Hash]uint64, len(requiredObjects))
 	for hashVal, requiredSize := range requiredObjects {
 		requiredBytes += requiredSize
-		if size, ok := cache.objects[hashVal]; ok {
-			presentBytes += size
+		if object, ok := cache.objects[hashVal]; ok {
+			presentBytes += uint64(len(object))
 		} else {
 			missingObjects[hashVal] = requiredSize
 		}
@@ -66,29 +71,9 @@ func (cache *objectsCache) computeMissing(
 func createObjectsCache(requiredObjects map[hash.Hash]uint64,
 	objGetter objectserver.ObjectsGetter, rootDevice string,
 	logger log.DebugLogger) (*objectsCache, error) {
-	cache := &objectsCache{objects: make(map[hash.Hash]uint64)}
-	if fi, err := os.Stat(*objectsDirectory); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-		logger.Debugln(0, "scanning root")
-		cache.bytesScanned = 0
-		startTime := time.Now()
-		if err := cache.scanRoot(requiredObjects); err != nil {
-			return nil, err
-		}
-		duration := time.Since(startTime)
-		logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
-			format.FormatBytes(cache.bytesScanned), format.Duration(duration),
-			format.FormatBytes(
-				uint64(float64(cache.bytesScanned)/duration.Seconds())))
-	} else if !fi.IsDir() {
-		return nil,
-			fmt.Errorf("%s exists but is not a directory", *objectsDirectory)
-	} else {
-		if err := cache.scanCache(*objectsDirectory, ""); err != nil {
-			return nil, err
-		}
+	cache := &objectsCache{objects: make(map[hash.Hash][]byte)}
+	if err := cache.scanRoot(requiredObjects, logger); err != nil {
+		return nil, err
 	}
 	missingObjects, requiredBytes, presentBytes := cache.computeMissing(
 		requiredObjects)
@@ -152,7 +137,7 @@ func (cache *objectsCache) findAndScanUntrusted(
 	cache.bytesScanned = 0
 	startTime := time.Now()
 	foundObjects := make(map[hash.Hash]uint64)
-	err := cache.scanTree(*mountPoint, true, requiredObjects, foundObjects)
+	err := cache.scanTree(*mountPoint, requiredObjects, foundObjects)
 	if err != nil {
 		return err
 	}
@@ -182,131 +167,74 @@ func (cache *objectsCache) GetObjects(hashes []hash.Hash) (
 
 func (cache *objectsCache) getNextObject(hashVal hash.Hash,
 	objectsReader objectserver.ObjectsReader) error {
-	size, reader, err := objectsReader.NextObject()
+	_, reader, err := objectsReader.NextObject()
 	if err != nil {
 		return err
 	}
-	hashName := filepath.Join(*objectsDirectory,
-		objectcache.HashToFilename(hashVal))
-	if err := os.MkdirAll(filepath.Dir(hashName), fsutil.DirPerms); err != nil {
+	if object, err := io.ReadAll(reader); err != nil {
 		return err
+	} else {
+		cache.objects[hashVal] = object
 	}
-	defer reader.Close()
-	writer, err := os.Create(hashName)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	if _, err := io.Copy(writer, reader); err != nil {
-		return err
-	}
-	cache.objects[hashVal] = size
 	return nil
 }
 
-func (cache *objectsCache) handleFile(filename string, copy bool,
-	requiredObjects, foundObjects map[hash.Hash]uint64) error {
-	if hashVal, size, err := hashFile(filename); err != nil {
+func (cache *objectsCache) handleFile(scanState *scanStateType,
+	filename string) error {
+	if hashVal, object, err := hashFile(filename); err != nil {
 		return err
-	} else if size < 1 {
+	} else if size := uint64(len(object)); size < 1 {
 		return nil
 	} else {
+		scanState.mutex.Lock()
+		defer scanState.mutex.Unlock()
 		cache.bytesScanned += size
 		if _, ok := cache.objects[hashVal]; ok {
 			return nil
 		}
-		if _, ok := requiredObjects[hashVal]; !ok {
+		if _, ok := scanState.requiredObjects[hashVal]; !ok {
 			return nil
 		}
-		cache.objects[hashVal] = size
-		if foundObjects != nil {
-			foundObjects[hashVal] = size
-		}
-		hashName := filepath.Join(*objectsDirectory,
-			objectcache.HashToFilename(hashVal))
-		err := os.MkdirAll(filepath.Dir(hashName), fsutil.DirPerms)
-		if err != nil {
-			return err
-		}
-		if copy {
-			reader, err := os.Open(filename)
-			if err != nil {
-				return err
-			}
-			defer reader.Close()
-			writer, err := os.Create(hashName)
-			if err != nil {
-				return err
-			}
-			defer writer.Close()
-			if _, err := io.Copy(writer, reader); err != nil {
-				return err
-			}
-			return nil
-		}
-		return os.Symlink(filename, hashName)
-	}
-}
-
-func (cache *objectsCache) scanCache(topDir, subpath string) error {
-	myPathName := filepath.Join(topDir, subpath)
-	file, err := os.Open(myPathName)
-	if err != nil {
-		return err
-	}
-	names, err := file.Readdirnames(-1)
-	file.Close()
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		pathname := filepath.Join(myPathName, name)
-		fi, err := os.Stat(pathname)
-		if err != nil {
-			return err
-		}
-		filename := filepath.Join(subpath, name)
-		if fi.IsDir() {
-			if err := cache.scanCache(topDir, filename); err != nil {
-				return err
-			}
-		} else {
-			hashVal, err := objectcache.FilenameToHash(filename)
-			if err != nil {
-				return err
-			}
-			cache.objects[hashVal] = uint64(fi.Size())
+		cache.objects[hashVal] = object
+		if scanState.foundObjects != nil {
+			scanState.foundObjects[hashVal] = size
 		}
 	}
 	return nil
 }
 
-func (cache *objectsCache) scanRoot(
-	requiredObjects map[hash.Hash]uint64) error {
-	if err := os.Mkdir(*objectsDirectory, fsutil.DirPerms); err != nil {
+func (cache *objectsCache) scanRoot(requiredObjects map[hash.Hash]uint64,
+	logger log.DebugLogger) error {
+	logger.Debugln(0, "scanning root")
+	startTime := time.Now()
+	if err := cache.scanTree("/", requiredObjects, nil); err != nil {
 		return err
 	}
-	err := wsyscall.Mount("none", *objectsDirectory, "tmpfs", 0, "")
-	if err != nil {
-		return err
-	}
-	if err := cache.scanTree("/", false, requiredObjects, nil); err != nil {
-		return err
-	}
+	duration := time.Since(startTime)
+	logger.Debugf(0, "scanned root %s in %s (%s/s)\n",
+		format.FormatBytes(cache.bytesScanned), format.Duration(duration),
+		format.FormatBytes(
+			uint64(float64(cache.bytesScanned)/duration.Seconds())))
 	return nil
 }
 
-func (cache *objectsCache) scanTree(topDir string, copy bool,
+func (cache *objectsCache) scanTree(topDir string,
 	requiredObjects, foundObjects map[hash.Hash]uint64) error {
 	var rootStat syscall.Stat_t
 	if err := syscall.Lstat(topDir, &rootStat); err != nil {
 		return err
 	}
-	return cache.walk(topDir, rootStat.Dev, copy, requiredObjects, foundObjects)
+	scanState := &scanStateType{
+		device:          rootStat.Dev,
+		foundObjects:    foundObjects,
+		requiredObjects: requiredObjects,
+		scannedInodes:   make(map[uint64]struct{}),
+	}
+	return cache.walk(topDir, scanState)
 }
 
-func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
-	requiredObjects, foundObjects map[hash.Hash]uint64) error {
+func (cache *objectsCache) walk(dirname string,
+	scanState *scanStateType) error {
 	file, err := os.Open(dirname)
 	if err != nil {
 		return err
@@ -316,6 +244,7 @@ func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
 	if err != nil {
 		return err
 	}
+	var directoriesToScan, filesToScan []string
 	for _, name := range names {
 		pathname := filepath.Join(dirname, name)
 		var stat syscall.Stat_t
@@ -324,20 +253,34 @@ func (cache *objectsCache) walk(dirname string, device uint64, copy bool,
 			return err
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			if stat.Dev != device {
+			if stat.Dev != scanState.device {
 				continue
 			}
-			err := cache.walk(pathname, device, copy, requiredObjects,
-				foundObjects)
-			if err != nil {
-				return err
-			}
+			directoriesToScan = append(directoriesToScan, pathname)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
-			err := cache.handleFile(pathname, copy, requiredObjects,
-				foundObjects)
-			if err != nil {
-				return err
+			if _, ok := scanState.scannedInodes[stat.Ino]; ok {
+				continue
 			}
+			scanState.scannedInodes[stat.Ino] = struct{}{}
+			filesToScan = append(filesToScan, pathname)
+		}
+	}
+	concurrentState := concurrent.NewState(0)
+	for _, pathname := range filesToScan {
+		pathname := pathname
+		err := concurrentState.GoRun(func() error {
+			return cache.handleFile(scanState, pathname)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if err := concurrentState.Reap(); err != nil {
+		return err
+	}
+	for _, pathname := range directoriesToScan {
+		if err := cache.walk(pathname, scanState); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -353,11 +296,9 @@ func (or *objectsReader) NextObject() (uint64, io.ReadCloser, error) {
 	}
 	hashVal := or.hashes[0]
 	or.hashes = or.hashes[1:]
-	hashName := filepath.Join(*objectsDirectory,
-		objectcache.HashToFilename(hashVal))
-	if file, err := os.Open(hashName); err != nil {
-		return 0, nil, err
+	if object, ok := or.cache.objects[hashVal]; !ok {
+		return 0, nil, fmt.Errorf("no such object: %x", hashVal)
 	} else {
-		return or.cache.objects[hashVal], file, nil
+		return uint64(len(object)), io.NopCloser(bytes.NewReader(object)), nil
 	}
 }
