@@ -333,7 +333,7 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		volumes = append(volumes, proto.Volume{Size: size})
 	}
 	volumeDirectories, err := vm.manager.getVolumeDirectories(0, 0, volumes,
-		vm.SpreadVolumes)
+		vm.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -1001,7 +1001,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 	}
 	err = vm.setupVolumes(vmInfo.Volumes[0].Size, vmInfo.Volumes[0].Type,
-		secondaryVolumes, vmInfo.SpreadVolumes)
+		secondaryVolumes, vmInfo.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -1198,7 +1198,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		size := computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			fs.EstimateUsage(0))
 		err = vm.setupVolumes(size, rootVolumeType, request.SecondaryVolumes,
-			request.SpreadVolumes)
+			request.SpreadVolumes, request.StorageIndices)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -2228,7 +2228,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		return err
 	}
 	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
-		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
+		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -3693,7 +3693,7 @@ func (vm *vmInfoType) cleanup() {
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	reader io.Reader, dataSize uint64, volumeType proto.VolumeType) error {
 	err := vm.setupVolumes(dataSize, volumeType, request.SecondaryVolumes,
-		request.SpreadVolumes)
+		request.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}

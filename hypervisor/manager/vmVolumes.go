@@ -37,9 +37,9 @@ func (vm *vmInfoType) checkVolumes(grabLock bool) error {
 
 func (vm *vmInfoType) setupVolumes(rootSize uint64,
 	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
-	spreadVolumes bool) error {
+	spreadVolumes bool, storageIndices []uint) error {
 	volumeDirectories, err := vm.manager.getVolumeDirectories(rootSize,
-		rootVolumeType, secondaryVolumes, spreadVolumes)
+		rootVolumeType, secondaryVolumes, spreadVolumes, storageIndices)
 	if err != nil {
 		return err
 	}
