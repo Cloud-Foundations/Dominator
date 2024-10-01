@@ -121,6 +121,7 @@ func createVm(logger log.DebugLogger) error {
 		MinimumFreeBytes: uint64(minFreeBytes),
 		RoundupPower:     *roundupPower,
 		SkipMemoryCheck:  *skipMemoryCheck,
+		StorageIndices:   storageIndices,
 		VmInfo:           createVmInfoFromFlags(),
 	}
 	if request.VmInfo.MemoryInMiB < 1 {
@@ -199,6 +200,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		OwnerUsers:         ownerUsers,
 		Tags:               vmTags,
 		SecondarySubnetIDs: secondarySubnetIDs,
+		SpreadVolumes:      *spreadVolumes,
 		SubnetId:           *subnetId,
 		VirtualCPUs:        *virtualCPUs,
 		Volumes:            volumes,

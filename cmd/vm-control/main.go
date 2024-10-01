@@ -102,7 +102,10 @@ var (
 		"If true, directly boot into the kernel")
 	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,
 		"If true, skip memory availability check before creating VM")
-	subnetId = flag.String("subnetId", "",
+	spreadVolumes = flag.Bool("spreadVolumes", false,
+		"If true, spread the VM volumes across backing stores")
+	storageIndices flagutil.UintList
+	subnetId       = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
 	requestIPs   flagutil.StringList
 	roundupPower = flag.Uint64("roundupPower", 28,
@@ -154,6 +157,8 @@ func init() {
 	flag.Var(&secondarySubnetIDs, "secondarySubnetIDs", "Secondary Subnet IDs")
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
+	flag.Var(&storageIndices, "storageIndices",
+		"Indices for volume backing stores")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
 	flag.Var(&vmTagsToMatch, "vmTagsToMatch", "Tags to match when listing")
 	flag.Var(&volumeFormat, "volumeFormat",
