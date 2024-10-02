@@ -4245,6 +4245,16 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			volumeFormat = vm.Volumes[index].Format
 			volumeInterface = vm.Volumes[index].Interface
 		}
+		// For the simple cases (VirtIO and IDE), use old-style flags to
+		// maintain compatibility with old versions of QEMU (like 2.0.0).
+		switch volumeInterface {
+		case proto.VolumeInterfaceVirtIO, proto.VolumeInterfaceIDE:
+			cmd.Args = append(cmd.Args,
+				"-drive", fmt.Sprintf(
+					"file=%s,format=%s,discard=off,if=%s",
+					volume.Filename, volumeFormat, volumeInterface))
+			continue
+		}
 		cmd.Args = append(cmd.Args,
 			"-blockdev", fmt.Sprintf(
 				"driver=%s,node-name=blk%d,file.driver=file,file.filename=%s",
