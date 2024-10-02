@@ -14,6 +14,9 @@ const (
 	ConsoleDummy = 1
 	ConsoleVNC   = 2
 
+	MachineTypeGenericPC = 0
+	MachineTypeQ35       = 1
+
 	StateStarting      = 0
 	StateRunning       = 1
 	StateFailedToStart = 2
@@ -120,6 +123,15 @@ type ChangeVmDestroyProtectionRequest struct {
 }
 
 type ChangeVmDestroyProtectionResponse struct {
+	Error string
+}
+
+type ChangeVmMachineTypeRequest struct {
+	MachineType MachineType
+	IpAddress   net.IP
+}
+
+type ChangeVmMachineTypeResponse struct {
 	Error string
 }
 
@@ -534,6 +546,8 @@ type LocalVmInfo struct {
 	VolumeLocations []LocalVolume
 }
 
+type MachineType uint
+
 type MigrateVmRequest struct {
 	AccessToken      []byte
 	DhcpTimeout      time.Duration
@@ -802,6 +816,7 @@ type VmInfo struct {
 	IdentityName       string      `json:",omitempty"`
 	ImageName          string      `json:",omitempty"`
 	ImageURL           string      `json:",omitempty"`
+	MachineType        MachineType `json:",omitempty"`
 	MemoryInMiB        uint64
 	MilliCPUs          uint
 	OwnerGroups        []string `json:",omitempty"`
