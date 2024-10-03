@@ -28,6 +28,10 @@ const (
 	VolumeFormatRaw   = 0
 	VolumeFormatQCOW2 = 1
 
+	VolumeInterfaceVirtIO = 0
+	VolumeInterfaceIDE    = 1
+	VolumeInterfaceNVMe   = 2
+
 	VolumeTypePersistent = 0
 	VolumeTypeMemory     = 1
 
@@ -157,6 +161,15 @@ type ChangeVmTagsResponse struct {
 	Error string
 }
 
+type ChangeVmVolumeInterfacesRequest struct {
+	Interfaces []VolumeInterface
+	IpAddress  net.IP
+}
+
+type ChangeVmVolumeInterfacesResponse struct {
+	Error string
+}
+
 type ChangeVmVolumeSizeRequest struct {
 	IpAddress   net.IP
 	VolumeIndex uint
@@ -243,6 +256,7 @@ type CreateVmRequest struct {
 	SecondaryVolumesInit []VolumeInitialisationInfo
 	SkipBootloader       bool
 	SkipMemoryCheck      bool
+	StorageIndices       []uint
 	UserDataSize         uint64
 	VmInfo
 } // The following data are streamed afterwards in the following order:
@@ -806,12 +820,15 @@ type VmInfo struct {
 }
 
 type Volume struct {
-	Format VolumeFormat
-	Size   uint64
-	Type   VolumeType
+	Format    VolumeFormat    `json:",omitempty"`
+	Interface VolumeInterface `json:",omitempty"`
+	Size      uint64          `json:",omitempty"`
+	Type      VolumeType      `json:",omitempty"`
 }
 
 type VolumeFormat uint
+
+type VolumeInterface uint
 
 type VolumeInitialisationInfo struct {
 	BytesPerInode            uint64

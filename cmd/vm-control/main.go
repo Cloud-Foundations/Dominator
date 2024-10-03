@@ -102,7 +102,10 @@ var (
 		"If true, directly boot into the kernel")
 	skipMemoryCheck = flag.Bool("skipMemoryCheck", false,
 		"If true, skip memory availability check before creating VM")
-	subnetId = flag.String("subnetId", "",
+	spreadVolumes = flag.Bool("spreadVolumes", false,
+		"If true, spread the VM volumes across backing stores")
+	storageIndices flagutil.UintList
+	subnetId       = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
 	requestIPs   flagutil.StringList
 	roundupPower = flag.Uint64("roundupPower", 28,
@@ -127,11 +130,12 @@ var (
 	volumeFormat hyper_proto.VolumeFormat
 	volumeIndex  = flag.Uint("volumeIndex", 0,
 		"Index of volume to get or delete")
-	volumeIndices  flagutil.UintList
-	volumeSize     flagutil.Size
-	volumeTypes    volumeTypeList
-	watchdogAction hyper_proto.WatchdogAction
-	watchdogModel  hyper_proto.WatchdogModel
+	volumeIndices    flagutil.UintList
+	volumeInterfaces volumeInterfaceList
+	volumeSize       flagutil.Size
+	volumeTypes      volumeTypeList
+	watchdogAction   hyper_proto.WatchdogAction
+	watchdogModel    hyper_proto.WatchdogModel
 
 	logger   log.DebugLogger
 	rrDialer *rrdialer.Dialer
@@ -153,11 +157,15 @@ func init() {
 	flag.Var(&secondarySubnetIDs, "secondarySubnetIDs", "Secondary Subnet IDs")
 	flag.Var(&secondaryVolumeSizes, "secondaryVolumeSizes",
 		"Sizes for secondary volumes")
+	flag.Var(&storageIndices, "storageIndices",
+		"Indices for volume backing stores")
 	flag.Var(&vmTags, "vmTags", "Tags to apply to VM")
 	flag.Var(&vmTagsToMatch, "vmTagsToMatch", "Tags to match when listing")
 	flag.Var(&volumeFormat, "volumeFormat",
 		"Format of image provided by file or URL (default raw)")
 	flag.Var(&volumeIndices, "volumeIndices", "Index of volumes")
+	flag.Var(&volumeInterfaces, "volumeInterfaces",
+		"Interfaces (device type presented to VM) for volumes (default virtio)")
 	flag.Var(&volumeSize, "volumeSize", "New size of specified volume")
 	flag.Var(&volumeTypes, "volumeTypes",
 		"Types for volumes (default persistent)")
@@ -189,6 +197,8 @@ var subcommands = []commands.Command{
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-tags", "IPaddr", 1, 1, changeVmTagsSubcommand},
 	{"change-vm-vcpus", "IPaddr", 1, 1, changeVmVirtualCPUsSubcommand},
+	{"change-vm-volume-interfaces", "IPaddr", 1, 1,
+		changeVmVolumeInterfacesSubcommand},
 	{"change-vm-volume-size", "IPaddr", 1, 1, changeVmVolumeSizeSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,

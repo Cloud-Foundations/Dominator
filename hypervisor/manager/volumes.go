@@ -341,6 +341,42 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	return partitionTable.Write(volume)
 }
 
+// checkFreeSpace will check if the specified backing store has sufficient
+// space. It returns true if there is space.
+func (m *Manager) checkFreeSpace(size uint64, freeSpaceTable map[string]uint64,
+	storageIndex uint) (bool, error) {
+	freeSpace, err := getFreeSpace(m.volumeDirectories[storageIndex],
+		freeSpaceTable)
+	if err != nil {
+		return false, err
+	}
+	// Remove space reserved for the object cache but not yet used.
+	if m.objectCache != nil && int(storageIndex) == m.objectVolumeIndex {
+		stats := m.objectCache.GetStats()
+		if m.ObjectCacheBytes > stats.CachedBytes {
+			unused := m.ObjectCacheBytes - stats.CachedBytes
+			unused += unused >> 2 // In practice block usage is +30%.
+			if unused < freeSpace {
+				freeSpace -= unused
+			} else {
+				freeSpace = 0
+			}
+		}
+	}
+	// Keep an extra 1 GiB free space for the root file-system. Be nice.
+	if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
+		if freeSpace > 1<<30 {
+			freeSpace -= 1 << 30
+		} else {
+			freeSpace = 0
+		}
+	}
+	if size < freeSpace {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (m *Manager) checkTrim(filename string) bool {
 	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].CanTrim
 }
@@ -398,45 +434,23 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 }
 
 func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
-	position *int) (string, error) {
-	if *position >= len(m.volumeDirectories) {
+	position *uint) (string, error) {
+	if *position >= uint(len(m.volumeDirectories)) {
 		*position = 0
 	}
 	startingPosition := *position
 	for {
-		freeSpace, err := getFreeSpace(m.volumeDirectories[*position],
-			freeSpaceTable)
+		haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable, *position)
 		if err != nil {
 			return "", err
 		}
-		// Remove space reserved for the object cache but not yet used.
-		if m.objectCache != nil && *position == m.objectVolumeIndex {
-			stats := m.objectCache.GetStats()
-			if m.ObjectCacheBytes > stats.CachedBytes {
-				unused := m.ObjectCacheBytes - stats.CachedBytes
-				unused += unused >> 2 // In practice block usage is +30%.
-				if unused < freeSpace {
-					freeSpace -= unused
-				} else {
-					freeSpace = 0
-				}
-			}
-		}
-		// Keep an extra 1 GiB free space for the root file-system. Be nice.
-		if m.volumeInfos[m.volumeDirectories[*position]].MountPoint == "/" {
-			if freeSpace > 1<<30 {
-				freeSpace -= 1 << 30
-			} else {
-				freeSpace = 0
-			}
-		}
-		if size < freeSpace {
+		if haveFreeSpace {
 			dirname := m.volumeDirectories[*position]
 			freeSpaceTable[dirname] -= size
 			return dirname, nil
 		}
 		*position++
-		if *position >= len(m.volumeDirectories) {
+		if *position >= uint(len(m.volumeDirectories)) {
 			*position = 0
 		}
 		if *position == startingPosition {
@@ -448,7 +462,7 @@ func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 
 func (m *Manager) getVolumeDirectories(rootSize uint64,
 	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
-	spreadVolumes bool) ([]string, error) {
+	spreadVolumes bool, storageIndices []uint) ([]string, error) {
 	sizes := make([]uint64, 0, len(secondaryVolumes)+1)
 	if rootSize > 0 {
 		sizes = append(sizes, rootSize)
@@ -462,14 +476,27 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 	}
 	freeSpaceTable := make(map[string]uint64, len(m.volumeDirectories))
 	directoriesToUse := make([]string, 0, len(sizes))
-	position := 0
-	for len(sizes) > 0 {
-		dirname, err := m.findFreeSpace(sizes[0], freeSpaceTable, &position)
+	var position uint
+	for index, size := range sizes {
+		if index < len(storageIndices) {
+			haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable,
+				storageIndices[index])
+			if err != nil {
+				return nil, err
+			}
+			if !haveFreeSpace {
+				return nil, fmt.Errorf("storage[%d] does not have %s free",
+					storageIndices[index], format.FormatBytes(size))
+			}
+			directoriesToUse = append(directoriesToUse,
+				m.volumeDirectories[storageIndices[index]])
+			continue
+		}
+		dirname, err := m.findFreeSpace(size, freeSpaceTable, &position)
 		if err != nil {
 			return nil, err
 		}
 		directoriesToUse = append(directoriesToUse, dirname)
-		sizes = sizes[1:]
 		if spreadVolumes {
 			position++
 		}

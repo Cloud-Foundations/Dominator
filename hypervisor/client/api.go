@@ -29,6 +29,11 @@ func ChangeVmSize(client *srpc.Client,
 	return changeVmSize(client, request)
 }
 
+func ChangeVmVolumeInterfaces(client *srpc.Client, ipAddress net.IP,
+	volumeInterfaces []proto.VolumeInterface) error {
+	return changeVmVolumeInterfaces(client, ipAddress, volumeInterfaces)
+}
+
 func ChangeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
 	size uint64) error {
 	return changeVmVolumeSize(client, ipAddress, index, size)

@@ -333,7 +333,7 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		volumes = append(volumes, proto.Volume{Size: size})
 	}
 	volumeDirectories, err := vm.manager.getVolumeDirectories(0, 0, volumes,
-		vm.SpreadVolumes)
+		vm.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -375,6 +375,11 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	authInfo *srpc.AuthInformation) (*vmInfoType, error) {
+	for _, volume := range req.Volumes {
+		if err := volume.Interface.CheckValid(); err != nil {
+			return nil, err
+		}
+	}
 	dirname := filepath.Join(m.StateDir, "VMs")
 	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 		return nil, err
@@ -720,6 +725,32 @@ func (m *Manager) changeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+func (m *Manager) changeVmVolumeInterfaces(ipAddr net.IP,
+	authInfo *srpc.AuthInformation,
+	volumeInterfaces []proto.VolumeInterface) error {
+	for _, volumeInterface := range volumeInterfaces {
+		if err := volumeInterface.CheckValid(); err != nil {
+			return err
+		}
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if len(volumeInterfaces) > len(vm.Volumes) {
+		return errors.New("more volume interfaces specified than VM volumes")
+	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	for index, volumeInterface := range volumeInterfaces {
+		vm.Volumes[index].Interface = volumeInterface
+	}
+	vm.writeAndSendInfo()
+	return nil
+}
+
 func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, index uint, size uint64) error {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
@@ -970,7 +1001,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		}
 	}
 	err = vm.setupVolumes(vmInfo.Volumes[0].Size, vmInfo.Volumes[0].Type,
-		secondaryVolumes, vmInfo.SpreadVolumes)
+		secondaryVolumes, vmInfo.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -1167,7 +1198,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		size := computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			fs.EstimateUsage(0))
 		err = vm.setupVolumes(size, rootVolumeType, request.SecondaryVolumes,
-			request.SpreadVolumes)
+			request.SpreadVolumes, request.StorageIndices)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1228,6 +1259,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		}
 	} else {
 		return sendError(conn, errors.New("no image specified"))
+	}
+	if len(request.Volumes) > 0 {
+		vm.Volumes[0].Interface = request.Volumes[0].Interface
 	}
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
@@ -2194,7 +2228,7 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 		return err
 	}
 	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
-		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes)
+		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -3659,7 +3693,7 @@ func (vm *vmInfoType) cleanup() {
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	reader io.Reader, dataSize uint64, volumeType proto.VolumeType) error {
 	err := vm.setupVolumes(dataSize, volumeType, request.SecondaryVolumes,
-		request.SpreadVolumes)
+		request.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -4203,13 +4237,45 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	}
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
+		var volumeInterface proto.VolumeInterface
+		if vm.DisableVirtIO {
+			volumeInterface = proto.VolumeInterfaceIDE
+		}
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
+			volumeInterface = vm.Volumes[index].Interface
 		}
-		options := interfaceDriver + ",discard=off"
+		// For the simple cases (VirtIO and IDE), use old-style flags to
+		// maintain compatibility with old versions of QEMU (like 2.0.0).
+		switch volumeInterface {
+		case proto.VolumeInterfaceVirtIO, proto.VolumeInterfaceIDE:
+			cmd.Args = append(cmd.Args,
+				"-drive", fmt.Sprintf(
+					"file=%s,format=%s,discard=off,if=%s",
+					volume.Filename, volumeFormat, volumeInterface))
+			continue
+		}
 		cmd.Args = append(cmd.Args,
-			"-drive", "file="+volume.Filename+",format="+volumeFormat.String()+
-				options)
+			"-blockdev", fmt.Sprintf(
+				"driver=%s,node-name=blk%d,file.driver=file,file.filename=%s",
+				volumeFormat, index, volume.Filename))
+		switch volumeInterface {
+		case proto.VolumeInterfaceVirtIO:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"virtio-blk,drive=blk%d", index))
+		case proto.VolumeInterfaceIDE:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"ide-hd,drive=blk%d", index))
+		case proto.VolumeInterfaceNVMe:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"nvme,serial=virtual-%s.%d,drive=blk%d",
+					vm.Address.IpAddress, index, index))
+		default:
+			return fmt.Errorf("invalid volume interface: %v", volumeInterface)
+		}
 	}
 	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
 		return err
