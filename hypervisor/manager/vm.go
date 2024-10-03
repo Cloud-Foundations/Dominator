@@ -390,6 +390,9 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if err := checkCpuPriority(authInfo, req.CpuPriority); err != nil {
 		return nil, err
 	}
+	if err := req.MachineType.CheckValid(); err != nil {
+		return nil, err
+	}
 	if req.MemoryInMiB < 1 {
 		return nil, errors.New("no memory specified")
 	}
@@ -476,6 +479,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				Hostname:           req.Hostname,
 				ImageName:          req.ImageName,
 				ImageURL:           req.ImageURL,
+				MachineType:        req.MachineType,
 				MemoryInMiB:        req.MemoryInMiB,
 				MilliCPUs:          req.MilliCPUs,
 				OwnerGroups:        req.OwnerGroups,
@@ -625,6 +629,24 @@ func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
 	}
 	defer vm.mutex.Unlock()
 	vm.DestroyProtection = destroyProtection
+	vm.writeAndSendInfo()
+	return nil
+}
+
+func (m *Manager) changeVmMachineType(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, machineType proto.MachineType) error {
+	if err := machineType.CheckValid(); err != nil {
+		return err
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	vm.MachineType = machineType
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -4175,7 +4197,8 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		tapFiles = append(tapFiles, tapFile)
 	}
 	pidfile := filepath.Join(vm.dirname, "pidfile")
-	cmd := exec.Command("qemu-system-x86_64", "-machine", "pc,accel=kvm",
+	cmd := exec.Command("qemu-system-x86_64",
+		"-machine", fmt.Sprintf("%s,accel=kvm", vm.MachineType),
 		"-cpu", "host", // Allow the VM to take full advantage of host CPU.
 		"-nodefaults",
 		"-name", vm.ipAddress,
