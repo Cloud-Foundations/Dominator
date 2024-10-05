@@ -38,10 +38,40 @@ func addVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
 	return errors.New(reply.Error)
 }
 
+func changeVmConsoleType(client *srpc.Client, ipAddress net.IP,
+	consoleType proto.ConsoleType) error {
+	request := proto.ChangeVmConsoleTypeRequest{
+		ConsoleType: consoleType,
+		IpAddress:   ipAddress,
+	}
+	var reply proto.ChangeVmConsoleTypeResponse
+	err := client.RequestReply("Hypervisor.ChangeVmConsoleType", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func changeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
 	request proto.ChangeVmCpuPriorityRequest) error {
 	var reply proto.ChangeVmCpuPriorityResponse
 	err := client.RequestReply("Hypervisor.ChangeVmCpuPriority", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func changeVmMachineType(client *srpc.Client, ipAddress net.IP,
+	consoleType proto.MachineType) error {
+	request := proto.ChangeVmMachineTypeRequest{
+		MachineType: consoleType,
+		IpAddress:   ipAddress,
+	}
+	var reply proto.ChangeVmMachineTypeResponse
+	err := client.RequestReply("Hypervisor.ChangeVmMachineType", request,
 		&reply)
 	if err != nil {
 		return err
