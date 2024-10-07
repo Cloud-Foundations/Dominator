@@ -1,24 +1,24 @@
 all:
-	go install ./cmd/*
+	CGO_ENABLED=0 go install ./cmd/*
 	@cd c; make
 
 build-darwin:
-	(GOOS=darwin go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
 
 build-linux:
-	(GOOS=linux go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=linux go build ./cmd/*)
 
 build-windows:
-	(GOOS=windows go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=windows go build ./cmd/*)
 
 install-darwin:
-	(GOOS=darwin go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go install ./cmd/*)
 
 install-linux:
-	(GOOS=linux go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
 
 install-windows:
-	(GOOS=windows go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
 dominator.tarball:
 	@./scripts/make-tarball dominator -C $(ETCDIR) ssl

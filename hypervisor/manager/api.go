@@ -168,6 +168,11 @@ func (m *Manager) ChangeVmDestroyProtection(ipAddr net.IP,
 	return m.changeVmDestroyProtection(ipAddr, authInfo, destroyProtection)
 }
 
+func (m *Manager) ChangeVmMachineType(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, machineType proto.MachineType) error {
+	return m.changeVmMachineType(ipAddr, authInfo, machineType)
+}
+
 func (m *Manager) ChangeVmOwnerGroups(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, ownerGroups []string) error {
 	return m.changeVmOwnerGroups(ipAddr, authInfo, ownerGroups)

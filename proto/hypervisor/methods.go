@@ -9,6 +9,7 @@ import (
 
 const (
 	consoleTypeUnknown     = "UNKNOWN ConsoleType"
+	machineTypeUnknown     = "UNKNOWN MachineType"
 	stateUnknown           = "UNKNOWN State"
 	volumeFormatUnknown    = "UNKNOWN VolumeFormat"
 	volumeInterfaceUnknown = "UNKNOWN VolumeInterface"
@@ -24,6 +25,12 @@ var (
 		ConsoleVNC:   "vnc",
 	}
 	textToConsoleType map[string]ConsoleType
+
+	machineTypeToText = map[MachineType]string{
+		MachineTypeGenericPC: "pc",
+		MachineTypeQ35:       "q35",
+	}
+	textToMachineType map[string]MachineType
 
 	stateToText = map[State]string{
 		StateStarting:      "starting",
@@ -78,6 +85,10 @@ func init() {
 	textToConsoleType = make(map[string]ConsoleType, len(consoleTypeToText))
 	for consoleType, text := range consoleTypeToText {
 		textToConsoleType[text] = consoleType
+	}
+	textToMachineType = make(map[string]MachineType, len(machineTypeToText))
+	for format, text := range machineTypeToText {
+		textToMachineType[text] = format
 	}
 	textToState = make(map[string]State, len(stateToText))
 	for state, text := range stateToText {
@@ -248,6 +259,49 @@ func (consoleType *ConsoleType) UnmarshalText(text []byte) error {
 		return nil
 	} else {
 		return errors.New("unknown ConsoleType: " + txt)
+	}
+}
+
+func (machineType *MachineType) CheckValid() error {
+	if _, ok := machineTypeToText[*machineType]; !ok {
+		return errors.New(machineTypeUnknown)
+	} else {
+		return nil
+	}
+}
+
+func (machineType MachineType) MarshalText() ([]byte, error) {
+	if text := machineType.String(); text == machineTypeUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (machineType *MachineType) Set(value string) error {
+	if val, ok := textToMachineType[value]; !ok {
+		return errors.New(machineTypeUnknown)
+	} else {
+		*machineType = val
+		return nil
+	}
+}
+
+func (machineType MachineType) String() string {
+	if text, ok := machineTypeToText[machineType]; ok {
+		return text
+	} else {
+		return machineTypeUnknown
+	}
+}
+
+func (machineType *MachineType) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToMachineType[txt]; ok {
+		*machineType = val
+		return nil
+	} else {
+		return errors.New("unknown MachineType: " + txt)
 	}
 }
 

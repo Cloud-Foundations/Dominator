@@ -73,6 +73,7 @@ var (
 		"Command to destroy local VM when exporting. The VM name is given as the argument")
 	location = flag.String("location", "",
 		"Location to search for hypervisors")
+	machineType      hyper_proto.MachineType
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
 	placement        placementType
@@ -146,6 +147,8 @@ func init() {
 		"type of graphical console (default none)")
 	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
 		"Tags to match when getting/listing or creating/copying/moving VMs")
+	flag.Var(&machineType, "machineType",
+		"Type of machine to emulate (default generic PC)")
 	flag.Var(&memory, "memory", "memory (default 1GiB)")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in root volume")
@@ -192,6 +195,7 @@ var subcommands = []commands.Command{
 	{"change-vm-cpus", "IPaddr", 1, 1, changeVmCPUsSubcommand},
 	{"change-vm-destroy-protection", "IPaddr", 1, 1,
 		changeVmDestroyProtectionSubcommand},
+	{"change-vm-machine-type", "IPaddr", 1, 1, changeVmMachineTypeSubcommand},
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
 	{"change-vm-owner-groups", "IPaddr", 1, 1, changeVmOwnerGroupsSubcommand},
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
