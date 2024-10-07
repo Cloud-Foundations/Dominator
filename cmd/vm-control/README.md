@@ -28,6 +28,7 @@ Some of the sub-commands available are:
 - **change-vm-console-type**: change the console type for a VM
 - **change-vm-cpus**: change the number of CPUs for a VM
 - **change-vm-destroy-protection**: enable/disable destroy protect for a VM
+- **change-vm-machine-type**: change the machine type for a VM
 - **change-vm-memory**: change the memory for a VM
 - **change-vm-owner-users**: change the extra owners for a VM
 - **change-vm-tags**: change the tags for a VM
