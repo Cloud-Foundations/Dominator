@@ -19,7 +19,26 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	if wrote, _ := m.lockWatcher.WriteHtml(writer, ""); wrote {
 		fmt.Fprintln(writer, "<br>")
 	}
-	summary := m.getSummary()
+	m.getSummary().writeHtml(writer)
+	if m.serialNumber != "" {
+		fmt.Fprintf(writer, "Serial number: \"%s\"<br>\n", m.serialNumber)
+	}
+	fmt.Fprintf(writer,
+		"Volume directories: <a href=\"showVolumeDirectories\">%d</a>",
+		len(m.volumeInfos))
+	fmt.Fprintln(writer, " <a href=\"listVolumeDirectories\">(text)</a><br>")
+	if m.objectCache == nil {
+		fmt.Fprintln(writer, "No object cache<br>")
+	} else {
+		m.objectCache.WriteHtml(writer)
+	}
+}
+
+func (summary *summaryData) writeHtml(writer io.Writer) {
+	if summary == nil {
+		fmt.Fprintln(writer, `<font color="red"><b>Summary data not yet available</b></font><br>`)
+		return
+	}
 	if age := time.Since(summary.updatedAt); age > time.Second {
 		fmt.Fprintf(writer,
 			"<font color=\"salmon\">Dashboard data are %s old</font><p>\n",
@@ -57,21 +76,9 @@ func (m *Manager) writeHtml(writer io.Writer) {
 		fmt.Fprintf(writer, "Owner users: %s<br>\n",
 			strings.Join(summary.ownerUsers, " "))
 	}
-	if m.serialNumber != "" {
-		fmt.Fprintf(writer, "Serial number: \"%s\"<br>\n", m.serialNumber)
-	}
 	fmt.Fprintf(writer,
 		"Number of subnets: <a href=\"listSubnets\">%d</a><br>\n",
 		summary.numSubnets)
-	fmt.Fprintf(writer,
-		"Volume directories: <a href=\"showVolumeDirectories\">%d</a>",
-		len(m.volumeInfos))
-	fmt.Fprintln(writer, " <a href=\"listVolumeDirectories\">(text)</a><br>")
-	if m.objectCache == nil {
-		fmt.Fprintln(writer, "No object cache<br>")
-	} else {
-		m.objectCache.WriteHtml(writer)
-	}
 }
 
 func writeCountLinks(writer io.Writer, text, path string, count uint) {
