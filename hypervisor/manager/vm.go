@@ -4294,7 +4294,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		case proto.VolumeInterfaceNVMe:
 			cmd.Args = append(cmd.Args,
 				"-device", fmt.Sprintf(
-					"nvme,serial=virtual-%s.%d,drive=blk%d",
+					"nvme,serial=fu%s-%d,drive=blk%d",
 					vm.Address.IpAddress, index, index))
 		default:
 			return fmt.Errorf("invalid volume interface: %v", volumeInterface)
