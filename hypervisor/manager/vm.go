@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -110,6 +111,10 @@ func copyData(filename string, reader io.Reader, length uint64) error {
 }
 
 func createTapDevice(bridge string) (*os.File, error) {
+	bridgeIf, err := net.InterfaceByName(bridge)
+	if err != nil {
+		return nil, err
+	}
 	tapFile, tapName, err := libnet.CreateTapDevice()
 	if err != nil {
 		return nil, fmt.Errorf("error creating tap device: %s", err)
@@ -120,7 +125,9 @@ func createTapDevice(bridge string) (*os.File, error) {
 			tapFile.Close()
 		}
 	}()
-	cmd := exec.Command("ip", "link", "set", tapName, "up")
+	cmd := exec.Command("ip", "link", "set", tapName,
+		"mtu", strconv.Itoa(bridgeIf.MTU),
+		"up")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("error upping: %s: %s", err, output)
 	}
@@ -4125,12 +4132,23 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 		if err != nil {
 			return nil, nil, err
 		}
+		bridgeIf, err := net.InterfaceByName(bridge)
+		if err != nil {
+			return nil, nil, err
+		}
 		bridges = append(bridges, bridge)
+		// Shitty old systems have ancient versions of QEMU which don't support
+		// the host_mtu option. So, lower the pain by only using the option if
+		// MTU!=1500.
+		var hostMtuOption string
+		if bridgeIf.MTU != 1500 {
+			hostMtuOption = fmt.Sprintf(",host_mtu=%d", bridgeIf.MTU)
+		}
 		options = append(options,
 			"-netdev", fmt.Sprintf("tap,id=net%d,fd=%d%s",
 				index, index+3, vlanOption),
-			"-device", fmt.Sprintf("%s,netdev=net%d,mac=%s",
-				deviceDriver, index, address.MacAddress))
+			"-device", fmt.Sprintf("%s%s,netdev=net%d,mac=%s",
+				deviceDriver, hostMtuOption, index, address.MacAddress))
 	}
 	return bridges, options, nil
 }
