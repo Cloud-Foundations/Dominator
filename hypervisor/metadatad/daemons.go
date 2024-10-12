@@ -187,7 +187,9 @@ func createInterface(bridge net.Interface, threadId int,
 	if _, err := net.InterfaceByName(localName); err == nil {
 		exec.Command("ip", "link", "delete", localName).Run()
 	}
-	cmd := exec.Command("ip", "link", "add", localName, "type", "veth",
+	cmd := exec.Command("ip", "link", "add", localName,
+		"mtu", strconv.Itoa(bridge.MTU),
+		"type", "veth",
 		"peer", "name", remoteName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error creating veth for bridge: %s: %s: %s",
