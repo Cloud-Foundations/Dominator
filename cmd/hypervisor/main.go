@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -157,10 +156,9 @@ func run() {
 		if *dhcpServerOnBridgesOnly {
 			dhcpInterfaces = append(dhcpInterfaces, bridge.Name)
 		}
-		if !strings.HasPrefix(bridge.Name, "br@") {
-			vlanIdToBridge[uint(vlanId)] = bridge.Name
-			logger.Printf("Bridge: %s, VLAN Id: %d\n", bridge.Name, vlanId)
-		}
+		vlanIdToBridge[uint(vlanId)] = bridge.Name
+		logger.Printf("Bridge: %s, VLAN Id: %d, MTU: %d\n",
+			bridge.Name, vlanId, bridge.MTU)
 	}
 	dhcpServer, err := dhcpd.New(dhcpInterfaces,
 		filepath.Join(*stateDir, "dynamic-leases.json"), logger)
