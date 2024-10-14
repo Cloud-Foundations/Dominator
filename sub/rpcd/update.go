@@ -165,12 +165,40 @@ func (t *rpcType) runTriggers(triggers []*triggers.Trigger, action string,
 	return retval
 }
 
+func forceRebootAndWait(logger log.Logger) {
+	failureChannel := osutil.RunCommandBackground(logger, "reboot", "-f")
+	timer := time.NewTimer(15 * time.Second)
+	select {
+	case <-failureChannel:
+		logger.Printf("Force reboot failed, rebooting harder\n")
+	case <-timer.C:
+		logger.Printf("Still alive after 15 seconds, rebooting harder\n")
+	}
+	if logger, ok := logger.(flusher); ok {
+		logger.Flush()
+	}
+}
+
 func handleSignals(signals <-chan os.Signal, logger log.Logger) {
 	for sig := range signals {
 		logger.Printf("Caught %s: ignoring\n", sig)
 		if logger, ok := logger.(flusher); ok {
 			logger.Flush()
 		}
+	}
+}
+
+func normalRebootAndWait(logger log.Logger) {
+	failureChannel := osutil.RunCommandBackground(logger, "reboot")
+	timer := time.NewTimer(time.Minute)
+	select {
+	case <-failureChannel:
+		logger.Printf("Reboot failed, forcing reboot\n")
+	case <-timer.C:
+		logger.Printf("Still alive after 1 minute, forcing reboot\n")
+	}
+	if logger, ok := logger.(flusher); ok {
+		logger.Flush()
 	}
 }
 
@@ -231,6 +259,7 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		if *disableTriggers {
 			return hadFailures
 		}
+		// If we get here, we are going to reboot and try harder if it fails.
 		if logger, ok := logger.(flusher); ok {
 			logger.Flush()
 		}
@@ -242,18 +271,9 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 		go handleSignals(signals, logger)
 		signal.Notify(signals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 		time.Sleep(time.Second)
-		failureChannel := osutil.RunCommandBackground(logger, "reboot", "-f")
-		timer := time.NewTimer(30 * time.Second)
-		select {
-		case <-failureChannel:
-			logger.Printf("%sReboot failed, trying harder\n", logPrefix)
-		case <-timer.C:
-			logger.Printf("%sStill alive after 30 seconds, rebooting harder\n",
-				logPrefix)
-		}
-		if logger, ok := logger.(flusher); ok {
-			logger.Flush()
-		}
+		normalRebootAndWait(logger)
+		time.Sleep(time.Second)
+		forceRebootAndWait(logger)
 		time.Sleep(time.Second)
 		if err := osutil.HardReboot(logger); err != nil {
 			logger.Printf("%sHard reboot failed: %s\n", logPrefix, err)
