@@ -431,6 +431,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if left.ImageURL != right.ImageURL {
 		return false
 	}
+	if left.MachineType != right.MachineType {
+		return false
+	}
 	if left.MemoryInMiB != right.MemoryInMiB {
 		return false
 	}
