@@ -4,6 +4,12 @@ func (dest *Machine) updateFrom(source Machine) {
 	if dest.Hostname != source.Hostname {
 		return
 	}
+	if dest.DataSourceIdentifier != source.DataSourceIdentifier {
+		dest.DataSourceIdentifier = ""
+	}
+	if dest.DataSourceType != source.DataSourceType {
+		dest.DataSourceType = ""
+	}
 	if source.IpAddress != "" {
 		dest.IpAddress = source.IpAddress
 	}
