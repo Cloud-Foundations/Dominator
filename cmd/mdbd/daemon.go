@@ -158,6 +158,7 @@ func loadFromAll(generators *generatorList, datacentre string,
 					machine)
 				continue
 			}
+			machine.DataSourceType = genInfo.driverName
 			if oldMachine, ok := machineMap[machine.Hostname]; ok {
 				oldMachine.UpdateFrom(machine)
 				machineMap[machine.Hostname] = oldMachine
