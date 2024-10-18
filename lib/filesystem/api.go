@@ -77,8 +77,16 @@ func (fs *FileSystem) FilenameToInodeTable() FilenameToInodeTable {
 	return fs.buildFilenameToInodeTable()
 }
 
+// Filter will create a copy of a FileSystem, applying the filter to exclude
+// specified pathnames.
 func (fs *FileSystem) Filter(filter *filter.Filter) *FileSystem {
 	return fs.filter(filter)
+}
+
+// FilterUsingReference will create a copy of a FileSystem, copying only those
+// pathnames which are present in the reference FileSystem.
+func (fs *FileSystem) FilterUsingReference(reference *FileSystem) *FileSystem {
+	return fs.filterUsingReference(reference)
 }
 
 func (fs *FileSystem) ForEachFile(

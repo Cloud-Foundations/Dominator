@@ -27,10 +27,22 @@ func diffTypedImages(tool string, lName string, rName string) error {
 	}
 	if !*ignoreFilters {
 		var filt *filter.Filter
+		// If only one filter is available, use it (common case of comparing an
+		// image and a sub. When comparing images (with filters), take the easy
+		// way out and compare the full images. If there are no filters and one
+		// image is much smaller than another, assume we're comparing a sparse
+		// image with a sub and just compare the files in the smaller image with
+		// the larger image. This makes the diff reasonable.
 		if lFilter != nil && rFilter == nil {
 			filt = lFilter
 		} else if lFilter == nil && rFilter != nil {
 			filt = rFilter
+		} else if lFilter == nil && rFilter == nil {
+			if lfs.NumRegularInodes>>4 > rfs.NumRegularInodes {
+				lfs = lfs.FilterUsingReference(rfs)
+			} else if rfs.NumRegularInodes>>4 > lfs.NumRegularInodes {
+				rfs = rfs.FilterUsingReference(lfs)
+			}
 		} else if lFilter.Equal(rFilter) {
 			filt = lFilter
 		}
