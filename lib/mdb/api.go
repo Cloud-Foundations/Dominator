@@ -21,17 +21,19 @@ type AwsMetadata struct {
 // Machine describes a single machine with a unique Hostname and optional
 // metadata about the machine.
 type Machine struct {
-	Hostname       string
-	IpAddress      string       `json:",omitempty"`
-	Location       string       `json:",omitempty"`
-	RequiredImage  string       `json:",omitempty"`
-	PlannedImage   string       `json:",omitempty"`
-	DisableUpdates bool         `json:",omitempty"`
-	OwnerGroup     string       `json:",omitempty"`
-	OwnerGroups    []string     `json:",omitempty"`
-	OwnerUsers     []string     `json:",omitempty"`
-	Tags           tags.Tags    `json:",omitempty"`
-	AwsMetadata    *AwsMetadata `json:",omitempty"`
+	Hostname             string
+	DataSourceIdentifier string       `json:",omitempty"` // Empty: unknown.
+	DataSourceType       string       `json:",omitempty"` // Empty: unknown.
+	IpAddress            string       `json:",omitempty"`
+	Location             string       `json:",omitempty"`
+	RequiredImage        string       `json:",omitempty"`
+	PlannedImage         string       `json:",omitempty"`
+	DisableUpdates       bool         `json:",omitempty"`
+	OwnerGroup           string       `json:",omitempty"`
+	OwnerGroups          []string     `json:",omitempty"`
+	OwnerUsers           []string     `json:",omitempty"`
+	Tags                 tags.Tags    `json:",omitempty"`
+	AwsMetadata          *AwsMetadata `json:",omitempty"`
 }
 
 func (left Machine) Compare(right Machine) bool {

@@ -8,6 +8,12 @@ func (left Machine) compare(right Machine) bool {
 	if left.Hostname != right.Hostname {
 		return false
 	}
+	if left.DataSourceIdentifier != right.DataSourceIdentifier {
+		return false
+	}
+	if left.DataSourceType != right.DataSourceType {
+		return false
+	}
 	if left.IpAddress != right.IpAddress {
 		return false
 	}
