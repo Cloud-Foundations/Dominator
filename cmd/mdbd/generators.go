@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
@@ -50,7 +51,8 @@ type variablesGetter interface {
 }
 
 func setupGenerators(reader io.Reader, drivers []driver,
-	params makeGeneratorParams) (*generatorList, error) {
+	params makeGeneratorParams,
+	variables map[string]string) (*generatorList, error) {
 	genList := &generatorList{}
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -58,8 +60,15 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		if len(fields) < 1 || len(fields[0]) < 1 || fields[0][0] == '#' {
 			continue
 		}
+		var args []string
+		for _, arg := range fields[1:] {
+			args = append(args, expand.Expression(arg,
+				func(name string) string {
+					return variables[name]
+				}))
+		}
 		genInfo := &generatorInfo{
-			args:       fields[1:],
+			args:       args,
 			driverName: fields[0],
 		}
 		if uint(len(genInfo.args)) > genList.maxArgs {

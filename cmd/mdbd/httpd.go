@@ -21,6 +21,7 @@ type httpServer struct {
 	htmlWriters []HtmlWriter
 	mdb         *mdb.Mdb
 	generators  *generatorList
+	variables   map[string]string
 }
 
 func makeNumMachinesText(numFilteredMachines, numRawMachines uint) string {
@@ -31,14 +32,19 @@ func makeNumMachinesText(numFilteredMachines, numRawMachines uint) string {
 		numFilteredMachines, numRawMachines)
 }
 
-func startHttpServer(portNum uint,
+func startHttpServer(portNum uint, variables map[string]string,
 	generators *generatorList) (*httpServer, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
 	if err != nil {
 		return nil, err
 	}
-	s := &httpServer{mdb: &mdb.Mdb{}, generators: generators}
+	s := &httpServer{
+		mdb:        &mdb.Mdb{},
+		generators: generators,
+		variables:  variables}
 	html.HandleFunc("/", s.statusHandler)
+	html.HandleFunc("/getVariable", s.getVariableHandler)
+	html.HandleFunc("/getVariables", s.getVariablesHandler)
 	html.HandleFunc("/showMdb", s.showMdbHandler)
 	go http.Serve(listener, nil)
 	return s, nil
@@ -63,6 +69,9 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "</center>")
 	html.WriteHeaderWithRequestNoGC(writer, req)
 	fmt.Fprintln(writer, "<h3>")
+	if len(s.variables) > 0 {
+		fmt.Fprintln(writer, `<a href="getVariables">Variables</a><br>`)
+	}
 	fmt.Fprintln(writer, "Data Sources:<br>")
 	fieldArgs := []string{"Type"}
 	for index := uint(0); index < s.generators.maxArgs; index++ {
@@ -106,6 +115,23 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 
 func (s *httpServer) AddHtmlWriter(htmlWriter HtmlWriter) {
 	s.htmlWriters = append(s.htmlWriters, htmlWriter)
+}
+
+func (s *httpServer) getVariableHandler(w http.ResponseWriter,
+	req *http.Request) {
+	variableName := req.URL.RawQuery
+	if variable, ok := s.variables[variableName]; ok {
+		fmt.Fprintln(w, variable)
+	} else {
+		http.NotFound(w, req)
+	}
+}
+
+func (s *httpServer) getVariablesHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	json.WriteWithIndent(writer, "    ", s.variables)
 }
 
 func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {

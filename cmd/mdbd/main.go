@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
@@ -40,7 +41,10 @@ var (
 		"Name of file list of driver url pairs")
 	stateDir = flag.String("stateDir", "/var/lib/mdbd",
 		"Name of state directory")
-	pidfile = flag.String("pidfile", "", "Name of file to write my PID to")
+	pidfile = flag.String("pidfile", "",
+		"Name of file to write my PID to")
+	variablesFile = flag.String("variablesFile", "",
+		"A JSON encoded file containing configuration variables")
 )
 
 func printUsage() {
@@ -54,7 +58,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    Query Amazon AWS")
 	fmt.Fprintln(os.Stderr,
-		"    region: a datacentre like 'us-east-1'")
+		"    region:  a datacentre like 'us-east-1'")
 	fmt.Fprintln(os.Stderr,
 		"    account: the profile to use out of ~/.aws/credentials which")
 	fmt.Fprintln(os.Stderr,
@@ -68,7 +72,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    Query Amazon AWS")
 	fmt.Fprintln(os.Stderr,
-		"    targets: a list of targets, i.e. 'prod,us-east-1;dev,us-east-1'")
+		"    targets:          a list of targets, i.e. 'prod,us-east-1;dev,us-east-1'")
 	fmt.Fprintln(os.Stderr,
 		"    filter-tags-file: a JSON file of tags to filter for")
 	fmt.Fprintln(os.Stderr,
@@ -90,23 +94,25 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    manager-hostname: hostname of the Fleet Manager")
 	fmt.Fprintln(os.Stderr,
-		"    location: optional location to limit query to")
+		"    location:         optional location to limit query to")
 	fmt.Fprintln(os.Stderr,
 		"  hostlist: url [required-image [planned-image]]")
 	fmt.Fprintln(os.Stderr,
-		"    url: URL which yields a list of machine hostnames, one per line")
+		"    url:            URL which yields a list of machine hostnames, one per line")
 	fmt.Fprintln(os.Stderr,
 		"    required-image: optional required image for machines")
 	fmt.Fprintln(os.Stderr,
-		"    planned-image: optional planned image for machines")
+		"    planned-image:  optional planned image for machines")
 	fmt.Fprintln(os.Stderr,
 		"  hypervisor")
 	fmt.Fprintln(os.Stderr,
 		"    Query Hypervisor on this machine")
 	fmt.Fprintln(os.Stderr,
-		"  json: url")
+		"  json: url [prefix]")
 	fmt.Fprintln(os.Stderr,
-		"    url: URL which yields a JSON-formatted list of machines and tags")
+		"    url:      URL which yields a JSON-formatted list of machines and tags")
+	fmt.Fprintln(os.Stderr,
+		"    prefix:   optional prefix to add to Location fields")
 	fmt.Fprintln(os.Stderr,
 		"  text: url")
 	fmt.Fprintln(os.Stderr,
@@ -114,13 +120,15 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"         host [required-image [planned-image]]")
 	fmt.Fprintln(os.Stderr,
-		"  topology: url [location]")
+		"  topology: url [location [prefix]]")
 	fmt.Fprintln(os.Stderr,
 		"    Load Topology (only one permitted)")
 	fmt.Fprintln(os.Stderr,
-		"    url: directory or Git URL containing the Topology")
+		"    url:      directory or Git URL containing the Topology")
 	fmt.Fprintln(os.Stderr,
 		"    location: optional subdirectory containing the Topology")
+	fmt.Fprintln(os.Stderr,
+		"    prefix:   optional prefix to add to Location fields")
 }
 
 type driver struct {
@@ -139,9 +147,9 @@ var drivers = []driver{
 	{"fleet-manager", 1, 2, newFleetManagerGenerator},
 	{"hostlist", 1, 3, newHostlistGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
-	{"json", 1, 1, newJsonGenerator},
+	{"json", 1, 2, newJsonGenerator},
 	{"text", 1, 1, newTextGenerator},
-	{"topology", 1, 2, newTopologyGenerator},
+	{"topology", 1, 3, newTopologyGenerator},
 }
 
 func gracefulCleanup() {
@@ -197,6 +205,12 @@ func main() {
 		logger.SetLevel(0)
 	}
 	srpc.SetDefaultLogger(logger)
+	var variables map[string]string
+	if *variablesFile != "" {
+		if err := json.ReadFromFile(*variablesFile, &variables); err != nil {
+			showErrorAndDie(err)
+		}
+	}
 	// We have to have inputs.
 	if *sourcesFile == "" {
 		printUsage()
@@ -218,12 +232,13 @@ func main() {
 		logger:       logger,
 		waitGroup:    waitGroup,
 	}
-	generators, err := setupGenerators(file, drivers, generatorParams)
+	generators, err := setupGenerators(file, drivers, generatorParams,
+		variables)
 	file.Close()
 	if err != nil {
 		showErrorAndDie(err)
 	}
-	httpSrv, err := startHttpServer(*portNum, generators)
+	httpSrv, err := startHttpServer(*portNum, variables, generators)
 	if err != nil {
 		showErrorAndDie(err)
 	}
