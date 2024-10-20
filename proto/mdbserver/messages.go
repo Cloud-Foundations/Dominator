@@ -1,6 +1,8 @@
 package mdbserver
 
 import (
+	"time"
+
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
@@ -21,4 +23,22 @@ type MdbUpdate struct {
 	MachinesToAdd    []mdb.Machine
 	MachinesToUpdate []mdb.Machine
 	MachinesToDelete []string
+}
+
+type PauseUpdatesRequest struct {
+	Hostname string
+	Reason   string
+	Until    time.Time
+}
+
+type PauseUpdatesResponse struct {
+	Error string
+}
+
+type ResumeUpdatesRequest struct {
+	Hostname string
+}
+
+type ResumeUpdatesResponse struct {
+	Error string
 }
