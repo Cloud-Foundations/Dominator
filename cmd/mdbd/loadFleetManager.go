@@ -135,6 +135,8 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 				PlannedImage:   tags["PlannedImage"],
 				DisableUpdates: disableUpdates,
 				OwnerGroup:     ownerGroup,
+				OwnerGroups:    vm.OwnerGroups,
+				OwnerUsers:     vm.OwnerUsers,
 				Tags:           vm.Tags,
 			}
 			if h := g.machines[g.vmToHypervisor[ipAddr]]; h != nil {

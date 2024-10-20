@@ -96,6 +96,8 @@ func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 				PlannedImage:   tags["PlannedImage"],
 				DisableUpdates: disableUpdates,
 				OwnerGroup:     ownerGroup,
+				OwnerGroups:    vm.OwnerGroups,
+				OwnerUsers:     vm.OwnerUsers,
 				Tags:           vm.Tags,
 			})
 		}
