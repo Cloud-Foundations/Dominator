@@ -33,6 +33,10 @@ var (
 		"A file containing a list of hostnames to include")
 	hostnameRegex = flag.String("hostnameRegex", ".*",
 		"A regular expression to match the desired hostnames, leading ! inverts")
+	maximumPauseDuration = flag.Duration("maximumPauseDuration", 12*time.Hour,
+		"Maximum duration to pause updates for a machine")
+	maximumPausedMachinesPerUser = flag.Uint("maximumPausedMachinesPerUser", 10,
+		"Maximum number of machines a user can pause")
 	mdbFile = flag.String("mdbFile", constants.DefaultMdbFile,
 		"Name of file to write filtered MDB data to")
 	portNum = flag.Uint("portNum", constants.SimpleMdbServerPortNumber,
@@ -152,6 +156,22 @@ var drivers = []driver{
 	{"topology", 1, 3, newTopologyGenerator},
 }
 
+type mdbType struct {
+	Machines []*mdb.Machine
+	table    map[string]*mdb.Machine // Key: hostname.
+}
+
+type pauseDataType struct {
+	Reason   string
+	Until    time.Time
+	Username string
+}
+
+type pauseTableType struct {
+	mutex    sync.RWMutex             // Protect everything below.
+	Machines map[string]pauseDataType // Key: hostname.
+}
+
 func gracefulCleanup() {
 	os.Remove(*pidfile)
 	os.Exit(1)
@@ -216,7 +236,7 @@ func main() {
 		printUsage()
 		os.Exit(2)
 	}
-	params := setupserver.Params{ClientOnly: true, Logger: logger}
+	params := setupserver.Params{Logger: logger}
 	setupserver.SetupTlsWithParams(params)
 	handleSignals(logger)
 	readerChannel := fsutil.WatchFile(*sourcesFile, logger)
@@ -238,6 +258,11 @@ func main() {
 	if err != nil {
 		showErrorAndDie(err)
 	}
+	pauseTable, err := loadPauseTable()
+	if err != nil {
+		showErrorAndDie(err)
+	}
+	go pauseTable.garbageCollectLoop(eventChannel, logger)
 	httpSrv, err := startHttpServer(*portNum, variables, generators)
 	if err != nil {
 		showErrorAndDie(err)
@@ -260,9 +285,9 @@ func main() {
 	case <-waitTimer.C:
 		logger.Println("Timed out waiting for initial data")
 	}
-	rpcd := startRpcd(logger)
+	rpcd := startRpcd(eventChannel, pauseTable, logger)
 	go runDaemon(generators, eventChannel, *mdbFile, *hostnameRegex,
-		*datacentre, *fetchInterval, func(old, new *mdb.Mdb) {
+		*datacentre, *fetchInterval, pauseTable, func(old, new *mdbType) {
 			rpcd.pushUpdateToAll(old, new)
 			httpSrv.UpdateMdb(new)
 		},

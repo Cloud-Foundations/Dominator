@@ -9,7 +9,6 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
-	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
 
@@ -19,7 +18,7 @@ type HtmlWriter interface {
 
 type httpServer struct {
 	htmlWriters []HtmlWriter
-	mdb         *mdb.Mdb
+	mdb         *mdbType
 	generators  *generatorList
 	variables   map[string]string
 }
@@ -39,7 +38,7 @@ func startHttpServer(portNum uint, variables map[string]string,
 		return nil, err
 	}
 	s := &httpServer{
-		mdb:        &mdb.Mdb{},
+		mdb:        &mdbType{},
 		generators: generators,
 		variables:  variables}
 	html.HandleFunc("/", s.statusHandler)
@@ -148,9 +147,9 @@ func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (s *httpServer) UpdateMdb(new *mdb.Mdb) {
+func (s *httpServer) UpdateMdb(new *mdbType) {
 	if new == nil {
-		new = &mdb.Mdb{}
+		new = &mdbType{}
 	}
 	s.mdb = new
 }

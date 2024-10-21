@@ -23,13 +23,12 @@ func newJsonGenerator(params makeGeneratorParams) (generator, error) {
 
 func (l jsonLoaderType) loadJson(reader io.Reader, datacentre string,
 	logger log.Logger) (
-	*mdb.Mdb, error) {
-	var newMdb mdb.Mdb
+	*mdbType, error) {
+	var newMdb mdbType
 	if err := json.Read(reader, &newMdb.Machines); err != nil {
 		return nil, err
 	}
-	for index := range newMdb.Machines {
-		machine := &newMdb.Machines[index]
+	for _, machine := range newMdb.Machines {
 		if l.locationPrefix != "" {
 			machine.Location = path.Join(l.locationPrefix, machine.Location)
 		}

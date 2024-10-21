@@ -18,7 +18,7 @@ type awsGeneratorType struct {
 }
 
 type resultType struct {
-	mdb *mdb.Mdb
+	mdb *mdbType
 	err error
 }
 
@@ -77,7 +77,7 @@ func newAwsLocalGenerator(params makeGeneratorParams) (generator, error) {
 }
 
 func (g *awsGeneratorType) Generate(unused_datacentre string,
-	logger log.DebugLogger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdbType, error) {
 	resultsChannel := make(chan resultType, 1)
 	numTargets, err := credentialsStore.ForEachEC2Target(g.targets, nil,
 		func(awsService *ec2.EC2, account, region string, logger log.Logger) {
@@ -88,7 +88,7 @@ func (g *awsGeneratorType) Generate(unused_datacentre string,
 		},
 		false, logger)
 	// Collect results.
-	var newMdb mdb.Mdb
+	var newMdb mdbType
 	hostnames := make(map[string]struct{})
 	for i := 0; i < numTargets; i++ {
 		result := <-resultsChannel
@@ -116,7 +116,7 @@ func (g *awsGeneratorType) Generate(unused_datacentre string,
 
 func (g *awsGeneratorType) generateForTarget(svc *ec2.EC2, accountName string,
 	region string, logger log.Logger) (
-	*mdb.Mdb, error) {
+	*mdbType, error) {
 	filters, err := g.makeFilters()
 	if err != nil {
 		return nil, err
@@ -153,8 +153,8 @@ func (g *awsGeneratorType) makeFilters() ([]*ec2.Filter, error) {
 }
 
 func extractMdb(output *ec2.DescribeInstancesOutput, accountName string,
-	region string) *mdb.Mdb {
-	var result mdb.Mdb
+	region string) *mdbType {
+	var result mdbType
 	for _, reservation := range output.Reservations {
 		accountId := aws.StringValue(reservation.OwnerId)
 		for _, instance := range reservation.Instances {
@@ -173,7 +173,7 @@ func extractMdb(output *ec2.DescribeInstancesOutput, accountName string,
 					machine.IpAddress = *instance.PrivateIpAddress
 				}
 				extractTags(instance.Tags, &machine)
-				result.Machines = append(result.Machines, machine)
+				result.Machines = append(result.Machines, &machine)
 			}
 		}
 	}

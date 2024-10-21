@@ -75,8 +75,8 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 }
 
 func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
-	logger log.DebugLogger) (*mdb.Mdb, error) {
-	var newMdb mdb.Mdb
+	logger log.DebugLogger) (*mdbType, error) {
+	var newMdb mdbType
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	for ipAddr, vm := range g.vms {
@@ -90,7 +90,7 @@ func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 			if len(vm.OwnerGroups) > 0 {
 				ownerGroup = vm.OwnerGroups[0]
 			}
-			newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+			newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 				IpAddress:      ipAddr,
 				RequiredImage:  tags["RequiredImage"],
 				PlannedImage:   tags["PlannedImage"],

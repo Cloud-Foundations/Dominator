@@ -92,8 +92,8 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
 }
 
 func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
-	logger log.DebugLogger) (*mdb.Mdb, error) {
-	var newMdb mdb.Mdb
+	logger log.DebugLogger) (*mdbType, error) {
+	var newMdb mdbType
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	for _, machine := range g.machines {
@@ -106,7 +106,7 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 			tags = emptyTags
 		}
 		_, disableUpdates := tags["DisableUpdates"]
-		newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+		newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 			Hostname:       machine.Hostname,
 			IpAddress:      ipAddr,
 			Location:       machine.Location,
@@ -142,7 +142,7 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 			if h := g.machines[g.vmToHypervisor[ipAddr]]; h != nil {
 				machine.Location = filepath.Join(h.Location, h.Hostname)
 			}
-			newMdb.Machines = append(newMdb.Machines, machine)
+			newMdb.Machines = append(newMdb.Machines, &machine)
 		}
 	}
 	return &newMdb, nil

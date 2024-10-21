@@ -88,11 +88,11 @@ func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology,
 }
 
 func (g *topologyGeneratorType) Generate(unused_datacentre string,
-	logger log.DebugLogger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdbType, error) {
 	g.mutex.Lock()
 	topo := g.topology
 	g.mutex.Unlock()
-	var newMdb mdb.Mdb
+	var newMdb mdbType
 	if topo == nil {
 		return &newMdb, nil
 	}
@@ -116,7 +116,7 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 		} else {
 			location = path.Join(g.locationPrefix, machine.Location)
 		}
-		newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+		newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 			Hostname:       machine.Hostname,
 			Location:       location,
 			IpAddress:      ipAddr,

@@ -14,7 +14,7 @@ func newCisGenerator(params makeGeneratorParams) (generator, error) {
 }
 
 func loadCis(reader io.Reader, datacentre string, logger log.Logger) (
-	*mdb.Mdb, error) {
+	*mdbType, error) {
 
 	type instanceMetadataType struct {
 		RequiredImage  string `json:"required_image"`
@@ -42,7 +42,7 @@ func loadCis(reader io.Reader, datacentre string, logger log.Logger) (
 	}
 
 	var inMdb inMdbType
-	var outMdb mdb.Mdb
+	var outMdb mdbType
 	if err := json.Read(reader, &inMdb); err != nil {
 		return nil, errors.New("error decoding: " + err.Error())
 	}
@@ -57,7 +57,7 @@ func loadCis(reader io.Reader, datacentre string, logger log.Logger) (
 		outMachine.PlannedImage = hit.Source.InstanceMetadata.PlannedImage
 		outMachine.DisableUpdates = hit.Source.InstanceMetadata.DisableUpdates
 		outMachine.OwnerGroup = hit.Source.InstanceMetadata.OwnerGroup
-		outMdb.Machines = append(outMdb.Machines, outMachine)
+		outMdb.Machines = append(outMdb.Machines, &outMachine)
 	}
 	return &outMdb, nil
 }

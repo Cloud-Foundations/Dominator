@@ -14,7 +14,7 @@ func newDsHostFqdnGenerator(params makeGeneratorParams) (generator, error) {
 }
 
 func loadDsHostFqdn(reader io.Reader, datacentre string, logger log.Logger) (
-	*mdb.Mdb, error) {
+	*mdbType, error) {
 	type machineType struct {
 		Fqdn string
 	}
@@ -24,7 +24,7 @@ func loadDsHostFqdn(reader io.Reader, datacentre string, logger log.Logger) (
 	type inMdbType map[string]dataCentreType
 
 	var inMdb inMdbType
-	var outMdb mdb.Mdb
+	var outMdb mdbType
 	if err := json.Read(reader, &inMdb); err != nil {
 		return nil, errors.New("error decoding: " + err.Error())
 	}
@@ -36,7 +36,7 @@ func loadDsHostFqdn(reader io.Reader, datacentre string, logger log.Logger) (
 			var outMachine mdb.Machine
 			if inMachine.Fqdn != "" {
 				outMachine.Hostname = inMachine.Fqdn
-				outMdb.Machines = append(outMdb.Machines, outMachine)
+				outMdb.Machines = append(outMdb.Machines, &outMachine)
 			}
 		}
 	}
