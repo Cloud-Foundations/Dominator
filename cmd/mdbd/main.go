@@ -167,6 +167,11 @@ type pauseDataType struct {
 	Username string
 }
 
+type pauseEntryType struct {
+	Hostname string
+	pauseDataType
+}
+
 type pauseTableType struct {
 	mutex    sync.RWMutex             // Protect everything below.
 	Machines map[string]pauseDataType // Key: hostname.
@@ -263,7 +268,7 @@ func main() {
 		showErrorAndDie(err)
 	}
 	go pauseTable.garbageCollectLoop(eventChannel, logger)
-	httpSrv, err := startHttpServer(*portNum, variables, generators)
+	httpSrv, err := startHttpServer(*portNum, variables, generators, pauseTable)
 	if err != nil {
 		showErrorAndDie(err)
 	}

@@ -52,6 +52,25 @@ func (pauseTable *pauseTableType) garbageCollect() []string {
 	return removedHostnames
 }
 
+func (pauseTable *pauseTableType) getEntries() []pauseEntryType {
+	pauseTable.mutex.RLock()
+	defer pauseTable.mutex.RUnlock()
+	entries := make([]pauseEntryType, 0, len(pauseTable.Machines))
+	for hostname, pauseData := range pauseTable.Machines {
+		entries = append(entries, pauseEntryType{
+			Hostname:      hostname,
+			pauseDataType: pauseData,
+		})
+	}
+	return entries
+}
+
+func (pauseTable *pauseTableType) len() uint {
+	pauseTable.mutex.RLock()
+	defer pauseTable.mutex.RUnlock()
+	return uint(len(pauseTable.Machines))
+}
+
 func loadPauseTable() (*pauseTableType, error) {
 	filename := filepath.Join(*stateDir, pauseTableFilename)
 	pauseTable := pauseTableType{Machines: make(map[string]pauseDataType)}
