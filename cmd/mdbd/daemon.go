@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -38,6 +37,12 @@ var (
 	hostsIncludeMapMutex sync.RWMutex
 	hostsIncludeMap      map[string]struct{}
 )
+
+type differenceStatsType struct {
+	added   uint
+	changed uint
+	deleted uint
+}
 
 type genericEncoder interface {
 	Encode(v interface{}) error
@@ -100,24 +105,26 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 			return verstr.Less(newMdb.Machines[i].Hostname,
 				newMdb.Machines[j].Hostname)
 		})
-		if newMdbIsDifferent(prevMdb, newMdb) {
-			updateFunc(prevMdb, newMdb)
-			if err := writeMdb(newMdb, mdbFileName); err != nil {
-				logger.Println(err)
-			} else {
-				if prevMdb == nil {
-					logger.Printf("Wrote initial MDB data, %d machines\n",
-						len(newMdb.Machines))
-				} else {
-					logger.Debugf(0, "Wrote new MDB data, %d machines\n",
-						len(newMdb.Machines))
-				}
-				prevMdb = newMdb
-			}
-		} else {
+		stats := newMdbIsDifferent(prevMdb, newMdb)
+		if stats.added < 1 && stats.changed < 1 && stats.deleted < 1 {
 			logger.Debugf(1, "Refreshed MDB data, same %d machines\n",
 				len(newMdb.Machines))
+			continue
 		}
+		updateFunc(prevMdb, newMdb)
+		if err := writeMdb(newMdb, mdbFileName); err != nil {
+			logger.Println(err)
+		} else {
+			if prevMdb == nil {
+				logger.Printf("Wrote initial MDB data, %d machines\n",
+					len(newMdb.Machines))
+			} else {
+				logger.Debugf(0,
+					"Wrote new MDB data, %d new machines, %d removed, %d changed\n",
+					stats.added, stats.deleted, stats.changed)
+			}
+		}
+		prevMdb = newMdb
 	}
 }
 
@@ -265,11 +272,24 @@ func selectHosts(inMdb *mdbType, hostnameRE stringMatcher,
 	return &outMdb
 }
 
-func newMdbIsDifferent(prevMdb, newMdb *mdbType) bool {
+func newMdbIsDifferent(prevMdb, newMdb *mdbType) *differenceStatsType {
 	if prevMdb == nil {
-		return true
+		return &differenceStatsType{added: uint(len(newMdb.Machines))}
 	}
-	return !reflect.DeepEqual(prevMdb.Machines, newMdb.Machines)
+	var differenceStats differenceStatsType
+	var numUnchanged uint
+	for _, newMachine := range newMdb.Machines {
+		if prevMachine, ok := prevMdb.table[newMachine.Hostname]; !ok {
+			differenceStats.added++
+		} else if prevMachine.Compare(*newMachine) {
+			numUnchanged++
+		} else {
+			differenceStats.changed++
+		}
+	}
+	differenceStats.deleted = uint(len(prevMdb.Machines)) -
+		differenceStats.changed - numUnchanged
+	return &differenceStats
 }
 
 func writeMdb(mdb *mdbType, mdbFileName string) error {
