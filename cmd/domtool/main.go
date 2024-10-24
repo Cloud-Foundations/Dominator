@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
@@ -29,9 +30,16 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
-	locationsToMatch flagutil.StringList
-	statusesToMatch  flagutil.StringList
-	subsList         = flag.String("subsList", "",
+	locationsToMatch  flagutil.StringList
+	mdbServerHostname = flag.String("mdbServerHostname", "",
+		"Hostname of MDB server (default same as domHostname)")
+	mdbServerPortNum = flag.Uint("mdbServerPortNum",
+		constants.SimpleMdbServerPortNumber,
+		"Port number of MDB server")
+	pauseDuration = flag.Duration("pauseDuration", time.Hour,
+		"Duration to pause updates for sub")
+	statusesToMatch flagutil.StringList
+	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
 	tagsToMatch tags.MatchTags
 
@@ -67,6 +75,8 @@ var subcommands = []commands.Command{
 	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
 	{"list-subs", "", 0, 0, listSubsSubcommand},
+	{"pause-sub-updates", "sub reason", 2, 2, pauseSubUpdatesSubcommand},
+	{"resume-sub-updates", "sub", 1, 1, resumeSubUpdatesSubcommand},
 	{"set-default-image", "", 1, 1, setDefaultImageSubcommand},
 }
 
