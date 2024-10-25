@@ -25,6 +25,9 @@ domtool -h
 
 Some of the sub-commands available are:
 
+- **clear-safety-shutoff** *sub*: do a one-time clearing of the `unsafe update`
+                                  condition for the specified *sub*, allowing
+				  the update to continue
 - **configure-subs**: set the current configuration of all *subs* (such as rate
                       limits for scanning the file-system and **fetching**
                       objects)
@@ -34,8 +37,24 @@ Some of the sub-commands available are:
 - **enable-updates** *reason*: tell *dominator* to perform automatic updates of
                                *subs*. The given *reason* must be provided and
                                is logged
+- **force-disruptive-update** *sub*: do a one-time clearing of the `disruption
+                                     denied` condition for the specified *sub*,
+				     allowing the update to continue
+- **get-default-image**: get the default image that will be pushed to and *sub*
+                         which does not have a `RequiredImage` specified in the
+			 MDB
+- **get-info-for-subs**: get information for all/selected *subs* and write to
+                         stdout in JSON format
 - **get-subs-configuration**: get the current configuration that is pushed to
                               all *subs*
+- **list-subs**: list all/selected *subs* and write to stdout
+- **pause-sub-updates** *sub* *reason*: pause updates for the specified *sub*.
+                                        The given *reason* must be provided and
+					is logged
+- **resume-sub-updates** *sub*: resume updates for the specified *sub*
+- **set-default-image**: set the default image that will be pushed to and *sub*
+                         which does not have a `RequiredImage` specified in the
+			 MDB
 
 ## Security
 *[Dominator](../dominator/README.md)* restricts RPC access using TLS client
