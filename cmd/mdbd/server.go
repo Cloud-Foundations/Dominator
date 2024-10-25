@@ -14,17 +14,22 @@ import (
 )
 
 type rpcType struct {
-	currentMdb *mdb.Mdb
-	logger     log.Logger
+	currentMdb   *mdbType
+	eventChannel chan<- struct{}
+	logger       log.Logger
+	pauseTable   *pauseTableType
 	*serverutil.PerUserMethodLimiter
 	rwMutex sync.RWMutex
 	// Protected by lock.
 	updateChannels map[*srpc.Conn]chan<- mdbserver.MdbUpdate
 }
 
-func startRpcd(logger log.Logger) *rpcType {
+func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
+	logger log.Logger) *rpcType {
 	rpcObj := &rpcType{
-		logger: logger,
+		eventChannel: eventChannel,
+		logger:       logger,
+		pauseTable:   pauseTable,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"ListImages": 1,
@@ -35,6 +40,8 @@ func startRpcd(logger log.Logger) *rpcType {
 	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
 			"ListImages",
+			"PauseUpdates",
+			"ResumeUpdates",
 		}})
 	return rpcObj
 }
@@ -75,7 +82,12 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 	}()
 	currentMdb := t.currentMdb
 	if currentMdb != nil {
-		mdbUpdate := mdbserver.MdbUpdate{MachinesToAdd: currentMdb.Machines}
+		mdbUpdate := mdbserver.MdbUpdate{
+			MachinesToAdd: make([]mdb.Machine, 0, len(currentMdb.Machines)),
+		}
+		for _, machine := range currentMdb.Machines {
+			mdbUpdate.MachinesToAdd = append(mdbUpdate.MachinesToAdd, *machine)
+		}
 		if err := conn.Encode(mdbUpdate); err != nil {
 			return err
 		}
@@ -112,7 +124,14 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 	}
 }
 
-func (t *rpcType) pushUpdateToAll(old, new *mdb.Mdb) {
+func (t *rpcType) PauseUpdates(conn *srpc.Conn,
+	request mdbserver.PauseUpdatesRequest,
+	reply *mdbserver.PauseUpdatesResponse) error {
+	reply.Error = t.pauseUpdates(conn, request, reply)
+	return nil
+}
+
+func (t *rpcType) pushUpdateToAll(old, new *mdbType) {
 	t.currentMdb = new
 	updateChannels := t.getUpdateChannels()
 	if len(updateChannels) < 1 {
@@ -120,21 +139,21 @@ func (t *rpcType) pushUpdateToAll(old, new *mdb.Mdb) {
 	}
 	mdbUpdate := mdbserver.MdbUpdate{}
 	if old == nil {
-		old = &mdb.Mdb{}
+		old = &mdbType{}
 	}
-	oldMachines := make(map[string]mdb.Machine, len(old.Machines))
+	oldMachines := make(map[string]*mdb.Machine, len(old.Machines))
 	for _, machine := range old.Machines {
 		oldMachines[machine.Hostname] = machine
 	}
 	for _, newMachine := range new.Machines {
 		if oldMachine, ok := oldMachines[newMachine.Hostname]; ok {
-			if !newMachine.Compare(oldMachine) {
+			if !newMachine.Compare(*oldMachine) {
 				mdbUpdate.MachinesToUpdate = append(mdbUpdate.MachinesToUpdate,
-					newMachine)
+					*newMachine)
 			}
 		} else {
 			mdbUpdate.MachinesToAdd = append(mdbUpdate.MachinesToAdd,
-				newMachine)
+				*newMachine)
 		}
 	}
 	for _, machine := range new.Machines {
@@ -160,6 +179,13 @@ func (t *rpcType) getUpdateChannels() []chan<- mdbserver.MdbUpdate {
 		channels = append(channels, channel)
 	}
 	return channels
+}
+
+func (t *rpcType) ResumeUpdates(conn *srpc.Conn,
+	request mdbserver.ResumeUpdatesRequest,
+	reply *mdbserver.ResumeUpdatesResponse) error {
+	reply.Error = t.resumeUpdates(conn, request, reply)
+	return nil
 }
 
 func isEmptyUpdate(mdbUpdate mdbserver.MdbUpdate) bool {

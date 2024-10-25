@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -22,6 +21,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
@@ -37,6 +37,12 @@ var (
 	hostsIncludeMapMutex sync.RWMutex
 	hostsIncludeMap      map[string]struct{}
 )
+
+type differenceStatsType struct {
+	added   uint
+	changed uint
+	deleted uint
+}
 
 type genericEncoder interface {
 	Encode(v interface{}) error
@@ -65,9 +71,9 @@ func init() {
 
 func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	mdbFileName string, hostnameRegex string,
-	datacentre string, fetchInterval uint, updateFunc func(old, new *mdb.Mdb),
-	logger log.DebugLogger) {
-	var prevMdb *mdb.Mdb
+	datacentre string, fetchInterval uint, pauseTable *pauseTableType,
+	updateFunc func(old, new *mdbType), logger log.DebugLogger) {
+	var prevMdb *mdbType
 	var hostnameRE stringMatcher
 	if hostnameRegex != ".*" {
 		var err error
@@ -90,30 +96,35 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	for ; ; sleepUntil(eventChannel, intervalTimer, cycleStopTime) {
 		cycleStopTime = time.Now().Add(fetchIntervalDuration)
 		newMdb, err := loadFromAll(generators, datacentre, hostnameRE,
-			getHostsExcludes(), getHostsIncludes(), logger)
+			getHostsExcludes(), getHostsIncludes(), pauseTable, logger)
 		if err != nil {
 			logger.Println(err)
 			continue
 		}
-		sort.Sort(newMdb)
-		if newMdbIsDifferent(prevMdb, newMdb) {
-			updateFunc(prevMdb, newMdb)
-			if err := writeMdb(newMdb, mdbFileName); err != nil {
-				logger.Println(err)
-			} else {
-				if prevMdb == nil {
-					logger.Printf("Wrote initial MDB data, %d machines\n",
-						len(newMdb.Machines))
-				} else {
-					logger.Debugf(0, "Wrote new MDB data, %d machines\n",
-						len(newMdb.Machines))
-				}
-				prevMdb = newMdb
-			}
-		} else {
+		sort.SliceStable(newMdb.Machines, func(i, j int) bool {
+			return verstr.Less(newMdb.Machines[i].Hostname,
+				newMdb.Machines[j].Hostname)
+		})
+		stats := newMdbIsDifferent(prevMdb, newMdb)
+		if stats.added < 1 && stats.changed < 1 && stats.deleted < 1 {
 			logger.Debugf(1, "Refreshed MDB data, same %d machines\n",
 				len(newMdb.Machines))
+			continue
 		}
+		updateFunc(prevMdb, newMdb)
+		if err := writeMdb(newMdb, mdbFileName); err != nil {
+			logger.Println(err)
+		} else {
+			if prevMdb == nil {
+				logger.Printf("Wrote initial MDB data, %d machines\n",
+					len(newMdb.Machines))
+			} else {
+				logger.Debugf(0,
+					"Wrote new MDB data, %d new machines, %d removed, %d changed\n",
+					stats.added, stats.deleted, stats.changed)
+			}
+		}
+		prevMdb = newMdb
 	}
 }
 
@@ -134,8 +145,8 @@ func sleepUntil(eventChannel <-chan struct{}, intervalTimer *time.Timer,
 func loadFromAll(generators *generatorList, datacentre string,
 	hostnameRE stringMatcher,
 	hostsExcludeMap, hostsIncludeMap map[string]struct{},
-	logger log.DebugLogger) (*mdb.Mdb, error) {
-	machineMap := make(map[string]mdb.Machine)
+	pauseTable *pauseTableType, logger log.DebugLogger) (*mdbType, error) {
+	machineMap := make(map[string]*mdb.Machine)
 	var variables map[string]string
 	startTime := time.Now()
 	var rusageStart, rusageStop syscall.Rusage
@@ -160,7 +171,7 @@ func loadFromAll(generators *generatorList, datacentre string,
 			}
 			machine.DataSourceType = genInfo.driverName
 			if oldMachine, ok := machineMap[machine.Hostname]; ok {
-				oldMachine.UpdateFrom(machine)
+				oldMachine.UpdateFrom(*machine)
 				machineMap[machine.Hostname] = oldMachine
 			} else {
 				machineMap[machine.Hostname] = machine
@@ -178,11 +189,16 @@ func loadFromAll(generators *generatorList, datacentre string,
 		genInfo.numRawMachines = numRawMachines
 		genInfo.mutex.Unlock()
 	}
-	var newMdb mdb.Mdb
-	for _, machine := range machineMap {
-		processMachine(&machine, variables)
-		newMdb.Machines = append(newMdb.Machines, machine)
+	newMdb := mdbType{
+		table: make(map[string]*mdb.Machine),
 	}
+	pauseTable.mutex.RLock()
+	for _, machine := range machineMap {
+		processMachine(machine, pauseTable, variables)
+		newMdb.Machines = append(newMdb.Machines, machine)
+		newMdb.table[machine.Hostname] = machine
+	}
+	pauseTable.mutex.RUnlock()
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStop)
 	loadTimeDistribution.Add(time.Since(startTime))
 	loadCpuTimeDistribution.Add(time.Duration(
@@ -193,15 +209,22 @@ func loadFromAll(generators *generatorList, datacentre string,
 	return &newMdb, nil
 }
 
-func processMachine(machine *mdb.Machine, variables map[string]string) {
-	if len(variables) < 1 {
-		return
+func processMachine(machine *mdb.Machine, pauseTable *pauseTableType,
+	variables map[string]string) {
+	if !machine.DisableUpdates {
+		if pauseData, ok := pauseTable.Machines[machine.Hostname]; ok {
+			if time.Until(pauseData.Until) > 0 {
+				machine.DisableUpdates = true
+			}
+		}
 	}
-	machine.RequiredImage = processValue(machine.RequiredImage, variables)
-	machine.PlannedImage = processValue(machine.PlannedImage, variables)
-	machine.Tags = machine.Tags.Copy()
-	for key, value := range machine.Tags {
-		machine.Tags[key] = processValue(value, variables)
+	if len(variables) > 0 {
+		machine.RequiredImage = processValue(machine.RequiredImage, variables)
+		machine.PlannedImage = processValue(machine.PlannedImage, variables)
+		machine.Tags = machine.Tags.Copy()
+		for key, value := range machine.Tags {
+			machine.Tags[key] = processValue(value, variables)
+		}
 	}
 }
 
@@ -217,14 +240,16 @@ func processValue(value string, variables map[string]string) string {
 	return value
 }
 
-func selectHosts(inMdb *mdb.Mdb, hostnameRE stringMatcher,
-	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdb.Mdb {
+func selectHosts(inMdb *mdbType, hostnameRE stringMatcher,
+	hostsExcludeMap, hostsIncludeMap map[string]struct{}) *mdbType {
 	if hostnameRE == nil &&
 		len(hostsExcludeMap) < 1 &&
 		len(hostsIncludeMap) < 1 {
 		return inMdb
 	}
-	var outMdb mdb.Mdb
+	outMdb := mdbType{
+		table: make(map[string]*mdb.Machine),
+	}
 	for _, machine := range inMdb.Machines {
 		if _, exclude := hostsExcludeMap[machine.Hostname]; exclude {
 			continue
@@ -236,20 +261,38 @@ func selectHosts(inMdb *mdb.Mdb, hostnameRE stringMatcher,
 		}
 		if hostnameRE == nil {
 			outMdb.Machines = append(outMdb.Machines, machine)
+			outMdb.table[machine.Hostname] = machine
 		} else {
 			if hostnameRE.MatchString(machine.Hostname) {
 				outMdb.Machines = append(outMdb.Machines, machine)
+				outMdb.table[machine.Hostname] = machine
 			}
 		}
 	}
 	return &outMdb
 }
 
-func newMdbIsDifferent(prevMdb, newMdb *mdb.Mdb) bool {
-	return !reflect.DeepEqual(prevMdb, newMdb)
+func newMdbIsDifferent(prevMdb, newMdb *mdbType) *differenceStatsType {
+	if prevMdb == nil {
+		return &differenceStatsType{added: uint(len(newMdb.Machines))}
+	}
+	var differenceStats differenceStatsType
+	var numUnchanged uint
+	for _, newMachine := range newMdb.Machines {
+		if prevMachine, ok := prevMdb.table[newMachine.Hostname]; !ok {
+			differenceStats.added++
+		} else if prevMachine.Compare(*newMachine) {
+			numUnchanged++
+		} else {
+			differenceStats.changed++
+		}
+	}
+	differenceStats.deleted = uint(len(prevMdb.Machines)) -
+		differenceStats.changed - numUnchanged
+	return &differenceStats
 }
 
-func writeMdb(mdb *mdb.Mdb, mdbFileName string) error {
+func writeMdb(mdb *mdbType, mdbFileName string) error {
 	tmpFileName := mdbFileName + "~"
 	file, err := os.Create(tmpFileName)
 	if err != nil {
@@ -264,8 +307,7 @@ func writeMdb(mdb *mdb.Mdb, mdbFileName string) error {
 			return err
 		}
 	default:
-		if err := json.WriteWithIndent(writer, "    ",
-			mdb.Machines); err != nil {
+		if err := json.WriteWithIndent(writer, "    ", mdb.Machines); err != nil {
 			return err
 		}
 	}

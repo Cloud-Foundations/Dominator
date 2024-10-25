@@ -18,23 +18,23 @@ func newHostlistGenerator(params makeGeneratorParams) (generator, error) {
 		plannedImage = params.args[2]
 	}
 	return sourceGenerator{func(reader io.Reader, _datacentre string,
-		logger log.Logger) (*mdb.Mdb, error) {
+		logger log.Logger) (*mdbType, error) {
 		return loadHostlist(reader, requiredImage, plannedImage, logger)
 	},
 		params.args[0]}, nil
 }
 
 func loadHostlist(reader io.Reader, requiredImage, plannedImage string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.Logger) (*mdbType, error) {
 	scanner := bufio.NewScanner(reader)
-	var newMdb mdb.Mdb
+	var newMdb mdbType
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) > 0 {
 			if fields[0][0] == '#' {
 				continue
 			}
-			newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+			newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 				Hostname:      fields[0],
 				RequiredImage: requiredImage,
 				PlannedImage:  plannedImage,

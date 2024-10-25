@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
 type generatorInfo struct {
@@ -37,11 +37,11 @@ type makeGeneratorParams struct {
 type makeGeneratorFunc func(makeGeneratorParams) (generator, error)
 
 type sourceDriverFunc func(reader io.Reader, datacentre string,
-	logger log.Logger) (*mdb.Mdb, error)
+	logger log.Logger) (*mdbType, error)
 
 // The generator interface generates an mdb from some source.
 type generator interface {
-	Generate(datacentre string, logger log.DebugLogger) (*mdb.Mdb, error)
+	Generate(datacentre string, logger log.DebugLogger) (*mdbType, error)
 }
 
 // The variablesGetter interface gets variables from some source.
@@ -50,7 +50,8 @@ type variablesGetter interface {
 }
 
 func setupGenerators(reader io.Reader, drivers []driver,
-	params makeGeneratorParams) (*generatorList, error) {
+	params makeGeneratorParams,
+	variables map[string]string) (*generatorList, error) {
 	genList := &generatorList{}
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -58,8 +59,15 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		if len(fields) < 1 || len(fields[0]) < 1 || fields[0][0] == '#' {
 			continue
 		}
+		var args []string
+		for _, arg := range fields[1:] {
+			args = append(args, expand.Expression(arg,
+				func(name string) string {
+					return variables[name]
+				}))
+		}
 		genInfo := &generatorInfo{
-			args:       fields[1:],
+			args:       args,
 			driverName: fields[0],
 		}
 		if uint(len(genInfo.args)) > genList.maxArgs {
@@ -103,7 +111,7 @@ func setupGenerators(reader io.Reader, drivers []driver,
 	return genList, nil
 }
 
-// sourceGenerator implements the generator interface and generates an *mdb.Mdb
+// sourceGenerator implements the generator interface and generates an *mdbType
 // from either a flat file or a URL.
 type sourceGenerator struct {
 	driverFunc sourceDriverFunc // Parses the data from URL or flat file.
@@ -111,12 +119,12 @@ type sourceGenerator struct {
 }
 
 func (s sourceGenerator) Generate(datacentre string, logger log.DebugLogger) (
-	*mdb.Mdb, error) {
+	*mdbType, error) {
 	return loadMdb(s.driverFunc, s.url, datacentre, logger)
 }
 
 func loadMdb(driverFunc sourceDriverFunc, url string, datacentre string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.Logger) (*mdbType, error) {
 	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
 		return loadHttpMdb(driverFunc, url, datacentre, logger)
 	}
@@ -129,7 +137,7 @@ func loadMdb(driverFunc sourceDriverFunc, url string, datacentre string,
 }
 
 func loadHttpMdb(driverFunc sourceDriverFunc, url string, datacentre string,
-	logger log.Logger) (*mdb.Mdb, error) {
+	logger log.Logger) (*mdbType, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err

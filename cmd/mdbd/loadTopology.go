@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,10 +17,11 @@ import (
 var setupTopology bool
 
 type topologyGeneratorType struct {
-	eventChannel chan<- struct{}
-	logger       log.DebugLogger
-	mutex        sync.Mutex
-	topology     *topology.Topology
+	eventChannel   chan<- struct{}
+	locationPrefix string
+	logger         log.DebugLogger
+	mutex          sync.Mutex
+	topology       *topology.Topology
 }
 
 func newTopologyGenerator(params makeGeneratorParams) (generator, error) {
@@ -42,14 +44,19 @@ func newTopologyGenerator(params makeGeneratorParams) (generator, error) {
 	if len(params.args) > 1 {
 		topologyDir = params.args[1]
 	}
+	var locationPrefix string
+	if len(params.args) > 2 {
+		locationPrefix = params.args[2]
+	}
 	topoChannel, err := topology.Watch(topologyUrl, localRepositoryDir,
 		topologyDir, interval, params.logger)
 	if err != nil {
 		return nil, err
 	}
 	g := &topologyGeneratorType{
-		eventChannel: params.eventChannel,
-		logger:       params.logger,
+		eventChannel:   params.eventChannel,
+		locationPrefix: locationPrefix,
+		logger:         params.logger,
 	}
 	params.waitGroup.Add(1)
 	go g.daemon(topoChannel, params.waitGroup)
@@ -81,11 +88,11 @@ func (g *topologyGeneratorType) daemon(topoChannel <-chan *topology.Topology,
 }
 
 func (g *topologyGeneratorType) Generate(unused_datacentre string,
-	logger log.DebugLogger) (*mdb.Mdb, error) {
+	logger log.DebugLogger) (*mdbType, error) {
 	g.mutex.Lock()
 	topo := g.topology
 	g.mutex.Unlock()
-	var newMdb mdb.Mdb
+	var newMdb mdbType
 	if topo == nil {
 		return &newMdb, nil
 	}
@@ -103,9 +110,15 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 			tags = emptyTags
 		}
 		_, disableUpdates := tags["DisableUpdates"]
-		newMdb.Machines = append(newMdb.Machines, mdb.Machine{
+		var location string
+		if g.locationPrefix == "" {
+			location = machine.Location
+		} else {
+			location = path.Join(g.locationPrefix, machine.Location)
+		}
+		newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 			Hostname:       machine.Hostname,
-			Location:       machine.Location,
+			Location:       location,
 			IpAddress:      ipAddr,
 			OwnerGroups:    machine.OwnerGroups,
 			OwnerUsers:     machine.OwnerUsers,

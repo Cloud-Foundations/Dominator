@@ -14,9 +14,9 @@ func newTextGenerator(params makeGeneratorParams) (generator, error) {
 }
 
 func loadText(reader io.Reader, datacentre string, logger log.Logger) (
-	*mdb.Mdb, error) {
+	*mdbType, error) {
 	scanner := bufio.NewScanner(reader)
-	var newMdb mdb.Mdb
+	var newMdb mdbType
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) > 0 {
@@ -34,7 +34,7 @@ func loadText(reader io.Reader, datacentre string, logger log.Logger) (
 					}
 				}
 			}
-			newMdb.Machines = append(newMdb.Machines, machine)
+			newMdb.Machines = append(newMdb.Machines, &machine)
 		}
 	}
 	if err := scanner.Err(); err != nil {
