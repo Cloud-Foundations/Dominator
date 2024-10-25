@@ -7,6 +7,19 @@ import (
 )
 
 func (t *srpcType) GetImageUpdates(conn *srpc.Conn) error {
+	return t.getImageUpdates(conn, imageserver.GetFilteredImageUpdatesRequest{})
+}
+
+func (t *srpcType) GetFilteredImageUpdates(conn *srpc.Conn) error {
+	var request imageserver.GetFilteredImageUpdatesRequest
+	if err := conn.Decode(&request); err != nil {
+		return err
+	}
+	return t.getImageUpdates(conn, request)
+}
+
+func (t *srpcType) getImageUpdates(conn *srpc.Conn,
+	request imageserver.GetFilteredImageUpdatesRequest) error {
 	defer conn.Flush()
 	t.logger.Printf("New image replication client connected from: %s\n",
 		conn.RemoteAddr())
@@ -41,6 +54,9 @@ func (t *srpcType) GetImageUpdates(conn *srpc.Conn) error {
 		}
 	}
 	for _, imageName := range t.imageDataBase.ListImages() {
+		if t.checkIgnoreImage(request.IgnoreExpiring, imageName) {
+			continue
+		}
 		imageUpdate := imageserver.ImageUpdate{Name: imageName}
 		if err := conn.Encode(imageUpdate); err != nil {
 			t.logger.Println(err)
@@ -62,6 +78,9 @@ func (t *srpcType) GetImageUpdates(conn *srpc.Conn) error {
 	for {
 		select {
 		case imageName := <-addChannel:
+			if t.checkIgnoreImage(request.IgnoreExpiring, imageName) {
+				break
+			}
 			if err := sendUpdate(conn, imageName,
 				imageserver.OperationAddImage); err != nil {
 				t.logger.Println(err)
@@ -92,6 +111,20 @@ func (t *srpcType) GetImageUpdates(conn *srpc.Conn) error {
 			return err
 		}
 	}
+}
+
+// checkIgnoreImage returns true if the image should be ignored.
+func (t *srpcType) checkIgnoreImage(ignoreExpiring bool,
+	imageName string) bool {
+	if !ignoreExpiring {
+		return false
+	}
+	if img := t.imageDataBase.GetImage(imageName); img == nil {
+		return true
+	} else if img.ExpiresAt.IsZero() {
+		return false
+	}
+	return true
 }
 
 func (t *srpcType) incrementNumReplicationClients(increment bool) {
