@@ -93,14 +93,22 @@ type GetImageResponse struct {
 }
 
 const (
-	OperationAddImage = iota
-	OperationDeleteImage
-	OperationMakeDirectory
+	OperationAddImage      = 0
+	OperationDeleteImage   = 1
+	OperationMakeDirectory = 2
 )
 
 // The GetImageUpdates() RPC is fully streamed.
 // The client sends no information to the server.
 // The server sends a stream of ImageUpdate messages.
+
+// The GetFilteredImageUpdates() RPC is fully streamed.
+// The client sends a GetFilteredImageUpdatesRequest message to the server.
+// The server sends a stream of ImageUpdate messages.
+
+type GetFilteredImageUpdatesRequest struct {
+	IgnoreExpiring bool
+}
 
 type ImageUpdate struct {
 	Name      string // "" signifies initial list is sent, changes to follow.
