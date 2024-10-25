@@ -1,4 +1,5 @@
 ImageServer.GetImageUpdates
+ImageServer.GetFilteredImageUpdates
 ImageServer.GetImage
 ObjectServer.CheckObjects
 ObjectServer.GetObjects
