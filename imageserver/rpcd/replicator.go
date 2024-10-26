@@ -27,7 +27,7 @@ func (t *srpcType) replicator(finishedReplication chan<- struct{}) {
 			t.logger.Printf("Error dialing: %s %s\n", t.replicationMaster, err)
 		} else {
 			if conn, err := client.Call(
-				"ImageServer.GetImageUpdates"); err != nil {
+				"ImageServer.GetFilteredImageUpdates"); err != nil {
 				t.logger.Println(err)
 			} else {
 				if err := t.getUpdates(conn, &finishedReplication); err != nil {
@@ -57,8 +57,16 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 	t.logger.Printf("Image replicator: connected to: %s\n", t.replicationMaster)
 	replicationStartTime := time.Now()
 	initialImages := make(map[string]struct{})
+	var request imageserver.GetFilteredImageUpdatesRequest
 	if t.archiveMode {
 		initialImages = nil
+		request.IgnoreExpiring = !*archiveExpiringImages
+	}
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
 	}
 	someImagesFailed := false
 	for {

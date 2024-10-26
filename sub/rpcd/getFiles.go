@@ -33,7 +33,8 @@ func (t *rpcType) GetFiles(conn *srpc.Conn) error {
 	if numFiles == 1 {
 		plural = ""
 	}
-	t.params.Logger.Printf("GetFiles(): %d file%s provided\n", numFiles, plural)
+	t.params.Logger.Printf("GetFiles(%s@%s): %d file%s provided\n",
+		conn.Username(), conn.RemoteAddr(), numFiles, plural)
 	return nil
 }
 
