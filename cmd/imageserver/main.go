@@ -133,6 +133,7 @@ func main() {
 	httpd.AddHtmlWriter(objSrvRpcHtmlWriter)
 	httpd.AddHtmlWriter(logger)
 	healthserver.SetReady()
+	logger.Printf("Service ready, opening listener on port: %d\n", *portNum)
 	if err = httpd.StartServer(*portNum, imdb, objSrv, false); err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
