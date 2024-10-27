@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -14,7 +16,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
-	"github.com/Cloud-Foundations/Dominator/lib/url"
+	liburl "github.com/Cloud-Foundations/Dominator/lib/url"
 	_ "github.com/Cloud-Foundations/tricorder/go/healthserver"
 )
 
@@ -22,6 +24,54 @@ type countingWriter struct {
 	count      uint64
 	writer     io.Writer
 	prefixLine string
+}
+
+// parseRegexp will parse "exclude=" and "include=" queries which must contain
+// regular expressions. It will return a list of exclude and include compiled
+// regular expressions or nil if there are none, and true on success. On failure
+// (such as for a parse error), it writes an error message and returns
+// nil, false.
+func parseRegexp(w http.ResponseWriter, req *http.Request) (
+	*regexpListType, bool) {
+	regexpList := &regexpListType{}
+	for _, value := range req.URL.Query()["exclude"] {
+		expression, err := url.QueryUnescape(value)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, err.Error())
+			return nil, false
+		}
+		re, err := regexp.Compile(expression)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, err.Error())
+			return nil, false
+		}
+		regexpList.excludeList = append(regexpList.excludeList, re)
+	}
+	for _, value := range req.URL.Query()["include"] {
+		expression, err := url.QueryUnescape(value)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, err.Error())
+			return nil, false
+		}
+		re, err := regexp.Compile(expression)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, err.Error())
+			return nil, false
+		}
+		regexpList.includeList = append(regexpList.includeList, re)
+	}
+	if len(regexpList.excludeList) < 1 && len(regexpList.includeList) < 1 {
+		return nil, true
+	}
+	return regexpList, true
 }
 
 func showRecentLinks(w io.Writer, recentFirstString string) {
@@ -79,18 +129,25 @@ func (lb *LogBuffer) addHttpHandlers() {
 }
 
 func (lb *LogBuffer) dumpFile(writer io.Writer, filename string,
-	recentFirst bool) error {
+	recentFirst bool, regexpList *regexpListType) error {
 	file, err := os.Open(path.Join(lb.options.Directory, filename))
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if recentFirst {
+	if recentFirst || regexpList != nil {
 		scanner := bufio.NewScanner(file)
 		lines := make([]string, 0)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if len(line) < 1 {
+				continue
+			}
+			if !regexpList.includeString(line) {
+				continue
+			}
+			if !recentFirst {
+				fmt.Fprintln(writer, line)
 				continue
 			}
 			lines = append(lines, line)
@@ -108,7 +165,11 @@ func (lb *LogBuffer) dumpFile(writer io.Writer, filename string,
 }
 
 func (lb *LogBuffer) httpDumpHandler(w http.ResponseWriter, req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
+	regexpList, ok := parseRegexp(w, req)
+	if !ok {
+		return
+	}
+	parsedQuery := liburl.ParseQuery(req.URL)
 	name, ok := parsedQuery.Table["name"]
 	if !ok {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -126,14 +187,15 @@ func (lb *LogBuffer) httpDumpHandler(w http.ResponseWriter, req *http.Request) {
 		if lbFilename == "" {
 			writer := bufio.NewWriter(w)
 			defer writer.Flush()
-			lb.Dump(writer, "", "", recentFirst)
+			lb.dump(writer, "", "", recentFirst, false, regexpList)
 			return
 		}
 		name = path.Base(lbFilename)
 	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	err := lb.dumpFile(writer, path.Base(path.Clean(name)), recentFirst)
+	err := lb.dumpFile(writer, path.Base(path.Clean(name)), recentFirst,
+		regexpList)
 	if err != nil && os.IsNotExist(err) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
@@ -150,7 +212,7 @@ func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	parsedQuery := url.ParseQuery(req.URL)
+	parsedQuery := liburl.ParseQuery(req.URL)
 	_, recentFirst := parsedQuery.Flags["recentFirst"]
 	names, panicMap, err := lb.list(recentFirst)
 	if err != nil {
@@ -161,7 +223,7 @@ func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
 	if recentFirst {
 		recentFirstString = "&recentFirst"
 	}
-	if parsedQuery.OutputType() == url.OutputTypeText {
+	if parsedQuery.OutputType() == liburl.OutputTypeText {
 		for _, name := range names {
 			fmt.Fprintln(writer, name)
 		}
@@ -225,8 +287,12 @@ func (lb *LogBuffer) httpListHandler(w http.ResponseWriter, req *http.Request) {
 
 func (lb *LogBuffer) httpShowLastHandler(w http.ResponseWriter,
 	req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
+	parsedQuery := liburl.ParseQuery(req.URL)
 	_, recentFirst := parsedQuery.Flags["recentFirst"]
+	regexpList, ok := parseRegexp(w, req)
+	if !ok {
+		return
+	}
 	for flag := range parsedQuery.Flags {
 		length := len(flag)
 		if length < 2 {
@@ -258,7 +324,7 @@ func (lb *LogBuffer) httpShowLastHandler(w http.ResponseWriter,
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		} else {
-			lb.showRecent(w, time.Duration(val)*unit, recentFirst)
+			lb.showRecent(w, time.Duration(val)*unit, recentFirst, regexpList)
 			return
 		}
 	}
@@ -268,6 +334,12 @@ func (lb *LogBuffer) httpShowLastHandler(w http.ResponseWriter,
 
 func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 	req *http.Request) {
+	regexpList, ok := parseRegexp(w, req)
+	if !ok {
+		return
+	}
+	parsedQuery := liburl.ParseQuery(req.URL)
+	_, recentFirst := parsedQuery.Flags["recentFirst"]
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	panicLogfile := lb.panicLogfile
@@ -279,22 +351,26 @@ func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "Logfile for previous invocation has expired")
 		return
 	}
-	file, err := os.Open(path.Join(lb.options.Directory, *panicLogfile))
-	if err != nil {
+	err := lb.dumpFile(writer, path.Join(lb.options.Directory, *panicLogfile),
+		recentFirst, regexpList)
+	if err == nil {
+		return
+	}
+	if os.IsNotExist(err) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	defer file.Close()
-	_, err = io.Copy(writer, bufio.NewReader(file))
-	if err != nil {
-		fmt.Fprintln(writer, err)
-	}
+	fmt.Fprintln(writer, err)
 }
 
 func (lb *LogBuffer) httpShowSinceStartupHandler(w http.ResponseWriter,
 	req *http.Request) {
-	parsedQuery := url.ParseQuery(req.URL)
+	regexpList, ok := parseRegexp(w, req)
+	if !ok {
+		return
+	}
+	parsedQuery := liburl.ParseQuery(req.URL)
 	_, recentFirst := parsedQuery.Flags["recentFirst"]
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
@@ -310,7 +386,7 @@ func (lb *LogBuffer) httpShowSinceStartupHandler(w http.ResponseWriter,
 			dumpFiles = true
 		}
 		if dumpFiles {
-			lb.dumpFile(writer, name, recentFirst)
+			lb.dumpFile(writer, name, recentFirst, regexpList)
 		}
 		if recentFirst && name == lb.firstFile {
 			dumpFiles = false
@@ -364,7 +440,7 @@ func (lb *LogBuffer) list(recentFirst bool) (
 }
 
 func (lb *LogBuffer) showRecent(w io.Writer, duration time.Duration,
-	recentFirst bool) {
+	recentFirst bool, excludeList *regexpListType) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	names, _, err := lb.list(true)
@@ -395,7 +471,7 @@ func (lb *LogBuffer) showRecent(w io.Writer, duration time.Duration,
 	for _, name := range names {
 		cWriter.count = 0
 		foundReopenMessage, _ := lb.dumpSince(cWriter, name, earliestTime, "",
-			"\n", recentFirst)
+			"\n", recentFirst, excludeList)
 		if cWriter.count > 0 && !foundReopenMessage {
 			cWriter.prefixLine = "</pre>\n<hr>\n<pre>\n"
 		}
@@ -422,6 +498,6 @@ func (lb *LogBuffer) writeHtml(writer io.Writer) {
 		fmt.Fprintln(writer, "Logs:<br>")
 	}
 	fmt.Fprintln(writer, "<pre>")
-	lb.dump(writer, "", "", false, true)
+	lb.dump(writer, "", "", false, true, nil)
 	fmt.Fprintln(writer, "</pre>")
 }

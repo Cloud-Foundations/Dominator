@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +26,11 @@ const (
 	reopenMessage = "Closing and will open new logfile"
 	timeLayout    = "2006-01-02:15:04:05.999"
 )
+
+type regexpListType struct {
+	excludeList []*regexp.Regexp
+	includeList []*regexp.Regexp
+}
 
 func newLogBuffer(options Options) *LogBuffer {
 	if options.MaxBufferLines < 100 {
@@ -134,12 +140,15 @@ func (lb *LogBuffer) scanPreviousForPanic() {
 }
 
 func (lb *LogBuffer) dump(writer io.Writer, prefix, postfix string,
-	recentFirst bool, escapeHtml bool) error {
+	recentFirst bool, escapeHtml bool, regexpList *regexpListType) error {
 	entries := lb.getEntries()
 	if recentFirst {
 		reverseEntries(entries)
 	}
 	for _, entry := range entries {
+		if !regexpList.include(entry) {
+			continue
+		}
 		writer.Write([]byte(prefix))
 		if escapeHtml {
 			writer.Write([]byte(html.EscapeString(string(entry))))
@@ -339,7 +348,8 @@ func (lb *LogBuffer) getEntries() [][]byte {
 }
 
 func (lb *LogBuffer) dumpSince(writer io.Writer, name string,
-	earliestTime time.Time, prefix, postfix string, recentFirst bool) (
+	earliestTime time.Time, prefix, postfix string, recentFirst bool,
+	regexpList *regexpListType) (
 	bool, error) {
 	file, err := os.Open(path.Join(lb.options.Directory,
 		path.Base(path.Clean(name))))
@@ -365,6 +375,9 @@ func (lb *LogBuffer) dumpSince(writer io.Writer, name string,
 			if err == nil && timeStamp.Before(earliestTime) {
 				continue
 			}
+		}
+		if !regexpList.includeString(line) {
+			continue
 		}
 		if recentFirst {
 			lines = append(lines, line)
@@ -397,6 +410,46 @@ func (lb *LogBuffer) writeMark() {
 	lb.rwMutex.Lock()
 	defer lb.rwMutex.Unlock()
 	lb.writeToLogFile([]byte(str))
+}
+
+func (rl *regexpListType) include(b []byte) bool {
+	if rl == nil {
+		return true
+	}
+	for _, re := range rl.excludeList {
+		if re.Match(b) {
+			return false
+		}
+	}
+	if len(rl.includeList) < 1 {
+		return true
+	}
+	for _, re := range rl.includeList {
+		if re.Match(b) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rl *regexpListType) includeString(str string) bool {
+	if rl == nil {
+		return true
+	}
+	for _, re := range rl.excludeList {
+		if re.MatchString(str) {
+			return false
+		}
+	}
+	if len(rl.includeList) < 1 {
+		return true
+	}
+	for _, re := range rl.includeList {
+		if re.MatchString(str) {
+			return true
+		}
+	}
+	return false
 }
 
 func reverseEntries(entries [][]byte) {
