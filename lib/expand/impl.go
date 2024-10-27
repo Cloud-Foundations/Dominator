@@ -12,6 +12,24 @@ func expandExpression(expr string, mappingFunc func(string) string) string {
 	})
 }
 
+func expandOpportunisticExpression(expr string,
+	mappingFunc func(string) string) string {
+	var missingVariable bool
+	retval := os.Expand(expr, func(parameter string) string {
+		return expandVariable(parameter, func(variable string) string {
+			value := mappingFunc(variable)
+			if value == "" {
+				missingVariable = true
+			}
+			return value
+		})
+	})
+	if missingVariable {
+		return expr
+	}
+	return retval
+}
+
 func expandVariable(variable string, mappingFunc func(string) string) string {
 	if len(variable) < 5 {
 		return mappingFunc(variable) // Not enough for a sub-expression.
