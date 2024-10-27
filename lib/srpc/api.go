@@ -89,6 +89,8 @@ var (
 
 	srpcClientDoNotUseMethodPowers = flag.Bool("srpcClientDoNotUseMethodPowers",
 		false, "If true, do not use method powers when connecting to servers")
+	srpcDefaultKeepAlivePeriod = flag.Duration("srpcDefaultKeepAlivePeriod",
+		5*time.Minute, "Default TCP keep-alive period")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
 	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,

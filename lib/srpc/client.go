@@ -80,7 +80,8 @@ func dial(network, address string, dialer Dialer) (net.Conn, error) {
 			conn.Close()
 			return nil, err
 		}
-		if err := tcpConn.SetKeepAlivePeriod(time.Minute * 5); err != nil {
+		err := tcpConn.SetKeepAlivePeriod(*srpcDefaultKeepAlivePeriod)
+		if err != nil {
 			conn.Close()
 			return nil, err
 		}
