@@ -415,7 +415,8 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 			logger.Printf("error setting keepalive: %s\n", err)
 			return
 		}
-		if err := tcpConn.SetKeepAlivePeriod(time.Minute * 5); err != nil {
+		err := tcpConn.SetKeepAlivePeriod(*srpcDefaultKeepAlivePeriod)
+		if err != nil {
 			logger.Printf("error setting keepalive period: %s\n", err)
 			return
 		}

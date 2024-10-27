@@ -229,6 +229,9 @@ func processMachine(machine *mdb.Machine, pauseTable *pauseTableType,
 }
 
 func processValue(value string, variables map[string]string) string {
+	// Custom variable expansion: if a string starts with '$', the remainder of
+	// the string is taken as a variable name to look up in the variables map.
+	// If the variable is not found, return the input string.
 	if len(value) < 2 {
 		return value
 	}

@@ -61,7 +61,7 @@ func setupGenerators(reader io.Reader, drivers []driver,
 		}
 		var args []string
 		for _, arg := range fields[1:] {
-			args = append(args, expand.Expression(arg,
+			args = append(args, expand.Opportunistic(arg,
 				func(name string) string {
 					return variables[name]
 				}))

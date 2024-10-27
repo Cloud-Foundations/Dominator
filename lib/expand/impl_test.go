@@ -14,9 +14,33 @@ func testMappingFunc(variable string) string {
 	return variableMap[variable]
 }
 
+func TestMissingVariableExpression(t *testing.T) {
+	result := Expression("prefix${MiSsInG}suffix", testMappingFunc)
+	expected := "prefixsuffix"
+	if result != expected {
+		t.Errorf("expected: %s got: %s", expected, result)
+	}
+}
+
+func TestMissingVariableOpportunistic(t *testing.T) {
+	result := Opportunistic("prefix${MiSsInG}suffix", testMappingFunc)
+	expected := "prefix${MiSsInG}suffix"
+	if result != expected {
+		t.Errorf("expected: %s got: %s", expected, result)
+	}
+}
+
 func TestSimpleExpressionExpansion(t *testing.T) {
-	result := Expression("${IMAGE_STREAM}", testMappingFunc)
-	expected := variableMap["IMAGE_STREAM"]
+	result := Expression("prefix${IMAGE_STREAM}suffix", testMappingFunc)
+	expected := "prefix" + variableMap["IMAGE_STREAM"] + "suffix"
+	if result != expected {
+		t.Errorf("expected: %s got: %s", expected, result)
+	}
+}
+
+func TestSimpleOpportunisticExpansion(t *testing.T) {
+	result := Opportunistic("prefix${IMAGE_STREAM}suffix", testMappingFunc)
+	expected := "prefix" + variableMap["IMAGE_STREAM"] + "suffix"
 	if result != expected {
 		t.Errorf("expected: %s got: %s", expected, result)
 	}
