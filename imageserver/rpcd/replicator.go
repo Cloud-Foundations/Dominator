@@ -20,17 +20,25 @@ func (t *srpcType) replicator(finishedReplication chan<- struct{}) {
 	initialTimeout := time.Second * 15
 	timeout := initialTimeout
 	var nextSleepStopTime time.Time
+	method := "ImageServer.GetImageUpdates"
+	var request *imageserver.GetFilteredImageUpdatesRequest
+	if t.archiveMode && !*archiveExpiringImages {
+		method = "ImageServer.GetFilteredImageUpdates"
+		request = &imageserver.GetFilteredImageUpdatesRequest{
+			IgnoreExpiring: true,
+		}
+	}
 	for {
 		nextSleepStopTime = time.Now().Add(timeout)
 		if client, err := srpc.DialHTTP("tcp", t.replicationMaster,
 			timeout); err != nil {
 			t.logger.Printf("Error dialing: %s %s\n", t.replicationMaster, err)
 		} else {
-			if conn, err := client.Call(
-				"ImageServer.GetFilteredImageUpdates"); err != nil {
+			if conn, err := client.Call(method); err != nil {
 				t.logger.Println(err)
 			} else {
-				if err := t.getUpdates(conn, &finishedReplication); err != nil {
+				err := t.getUpdates(conn, &finishedReplication, request)
+				if err != nil {
 					if err == io.EOF {
 						t.logger.Println(
 							"Connection to image replicator closed")
@@ -53,20 +61,21 @@ func (t *srpcType) replicator(finishedReplication chan<- struct{}) {
 }
 
 func (t *srpcType) getUpdates(conn *srpc.Conn,
-	finishedReplication *chan<- struct{}) error {
+	finishedReplication *chan<- struct{},
+	request *imageserver.GetFilteredImageUpdatesRequest) error {
 	t.logger.Printf("Image replicator: connected to: %s\n", t.replicationMaster)
 	replicationStartTime := time.Now()
 	initialImages := make(map[string]struct{})
-	var request imageserver.GetFilteredImageUpdatesRequest
 	if t.archiveMode {
 		initialImages = nil
-		request.IgnoreExpiring = !*archiveExpiringImages
 	}
-	if err := conn.Encode(request); err != nil {
-		return err
-	}
-	if err := conn.Flush(); err != nil {
-		return err
+	if request != nil {
+		if err := conn.Encode(*request); err != nil {
+			return err
+		}
+		if err := conn.Flush(); err != nil {
+			return err
+		}
 	}
 	someImagesFailed := false
 	for {
