@@ -6,11 +6,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
-type ListImagesRequest struct{}
+type GetMdbRequest struct{}
 
-type ListImagesResponse struct {
-	PlannedImages  []string
-	RequiredImages []string
+type GetMdbResponse struct {
+	Error    string
+	Machines []mdb.Machine
 }
 
 // The GetMdbUpdates() RPC is fully streamed.
@@ -23,6 +23,13 @@ type MdbUpdate struct {
 	MachinesToAdd    []mdb.Machine
 	MachinesToUpdate []mdb.Machine
 	MachinesToDelete []string
+}
+
+type ListImagesRequest struct{}
+
+type ListImagesResponse struct {
+	PlannedImages  []string
+	RequiredImages []string
 }
 
 type PauseUpdatesRequest struct {
