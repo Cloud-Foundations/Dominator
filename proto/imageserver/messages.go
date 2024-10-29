@@ -3,6 +3,7 @@ package imageserver
 import (
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -70,6 +71,15 @@ type FindLatestImageRequest struct {
 type FindLatestImageResponse struct {
 	ImageName string
 	Error     string
+}
+
+type GetImageComputedFilesRequest struct {
+	ImageName string
+}
+
+type GetImageComputedFilesResponse struct {
+	ComputedFiles []filesystem.ComputedFile
+	ImageExists   bool
 }
 
 type GetImageExpirationRequest struct {
