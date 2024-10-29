@@ -45,6 +45,8 @@ Some of the sub-commands available are:
 			 MDB
 - **get-info-for-subs**: get information for all/selected *subs* and write to
                          stdout in JSON format
+- **get-mdb**: get machine data from the MDB server and write to stdout in JSON
+               format
 - **get-subs-configuration**: get the current configuration that is pushed to
                               all *subs*
 - **list-subs**: list all/selected *subs* and write to stdout

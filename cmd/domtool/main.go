@@ -73,6 +73,7 @@ var subcommands = []commands.Command{
 	{"force-disruptive-update", "sub", 1, 1, forceDisruptiveUpdateSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
 	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
+	{"get-mdb", "", 0, 0, getMdbSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
 	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"pause-sub-updates", "sub reason", 2, 2, pauseSubUpdatesSubcommand},
