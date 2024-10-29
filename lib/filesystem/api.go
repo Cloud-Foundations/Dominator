@@ -26,6 +26,11 @@ const (
 	ListSelectAll = 0
 )
 
+type ComputedFile struct {
+	Filename string
+	Source   string
+}
+
 type GenericInode interface {
 	GetGid() uint32
 	GetUid() uint32
@@ -92,6 +97,10 @@ func (fs *FileSystem) FilterUsingReference(reference *FileSystem) *FileSystem {
 func (fs *FileSystem) ForEachFile(
 	fn func(name string, inodeNumber uint64, inode GenericInode) error) error {
 	return fs.forEachFile(fn)
+}
+
+func (fs *FileSystem) GetComputedFiles() []ComputedFile {
+	return fs.getComputedFiles()
 }
 
 func (fs *FileSystem) GetObjects() map[hash.Hash]uint64 {
