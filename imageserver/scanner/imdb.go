@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
@@ -95,7 +96,10 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	}
 	imdb.scheduleExpiration(img, name)
 	imdb.Lock()
-	imdb.imageMap[name] = img
+	imdb.imageMap[name] = &imageType{
+		computedFiles: img.FileSystem.GetComputedFiles(),
+		image:         img,
+	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 	imdb.Unlock()
 	doCleanup = false
@@ -109,7 +113,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 	}
 	imdb.Lock()
 	defer imdb.Unlock()
-	if img := imdb.imageMap[name]; img == nil {
+	if img, _ := imdb.getImageWithLock(name); img == nil {
 		return false, errors.New("image not found")
 	} else if err := imdb.checkPermissions(name, img, authInfo); err != nil {
 		return false, err
@@ -329,7 +333,7 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	authInfo *srpc.AuthInformation) error {
 	imdb.Lock()
 	defer imdb.Unlock()
-	if img, ok := imdb.imageMap[name]; !ok {
+	if img, ok := imdb.getImageWithLock(name); !ok {
 		return errors.New("image: " + name + " does not exist")
 	} else if img == nil {
 		return errors.New("image: " + name + " is being written")
@@ -350,7 +354,7 @@ func (imdb *ImageDataBase) deleteImage(name string,
 // This must be called with the main lock held.
 func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 	name string) {
-	img := imdb.imageMap[name]
+	img, _ := imdb.getImageWithLock(name)
 	if img == nil { // May be nil if expiring an already deleted image.
 		return
 	}
@@ -379,7 +383,7 @@ func (imdb *ImageDataBase) findLatestImage(
 		if img == nil {
 			continue
 		}
-		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
+		if request.IgnoreExpiringImages && !img.image.ExpiresAt.IsZero() {
 			continue
 		}
 		// First filter out images we don't want.
@@ -387,16 +391,16 @@ func (imdb *ImageDataBase) findLatestImage(
 			continue
 		}
 		if request.BuildCommitId != "" &&
-			request.BuildCommitId != img.BuildCommitId {
+			request.BuildCommitId != img.image.BuildCommitId {
 			continue
 		}
-		if !tagMatcher.MatchEach(img.Tags) {
+		if !tagMatcher.MatchEach(img.image.Tags) {
 			continue
 		}
 		// Select newer image after filtering.
-		if img.CreatedOn.After(previousCreateTime) {
+		if img.image.CreatedOn.After(previousCreateTime) {
 			imageName = name
-			previousCreateTime = img.CreatedOn
+			previousCreateTime = img.image.CreatedOn
 		}
 	}
 	return imageName, nil
@@ -405,7 +409,27 @@ func (imdb *ImageDataBase) findLatestImage(
 func (imdb *ImageDataBase) getImage(name string) *image.Image {
 	imdb.RLock()
 	defer imdb.RUnlock()
-	return imdb.imageMap[name]
+	img, _ := imdb.getImageWithLock(name)
+	return img
+}
+
+func (imdb *ImageDataBase) getImageWithLock(name string) (*image.Image, bool) {
+	img, ok := imdb.imageMap[name]
+	if img != nil {
+		return img.image, ok
+	}
+	return nil, ok
+}
+
+func (imdb *ImageDataBase) getImageComputedFiles(name string) (
+	[]filesystem.ComputedFile, bool) {
+	imdb.RLock()
+	defer imdb.RUnlock()
+	img, _ := imdb.imageMap[name]
+	if img == nil {
+		return nil, false
+	}
+	return img.computedFiles, true
 }
 
 func (imdb *ImageDataBase) listDirectories() []image.Directory {
@@ -429,10 +453,10 @@ func (imdb *ImageDataBase) listImages(
 		if img == nil {
 			continue
 		}
-		if request.IgnoreExpiringImages && !img.ExpiresAt.IsZero() {
+		if request.IgnoreExpiringImages && !img.image.ExpiresAt.IsZero() {
 			continue
 		}
-		if !tagMatcher.MatchEach(img.Tags) {
+		if !tagMatcher.MatchEach(img.image.Tags) {
 			continue
 		}
 		names = append(names, name)
