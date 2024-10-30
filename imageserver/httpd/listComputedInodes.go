@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	"path"
 	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -31,30 +30,23 @@ func (s state) listComputedInodesHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "</h3>")
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ := html.NewTableWriter(writer, true, "Filename", "Data Source")
-		// Walk the file-system to leverage stable and friendly sort order.
-		listComputedInodes(tw, &image.FileSystem.DirectoryInode, "/")
+		computedFiles, _ := s.imageDataBase.GetImageComputedFiles(imageName)
+		listComputedInodes(tw, computedFiles)
 		tw.Close()
 	}
 	fmt.Fprintln(writer, "</body>")
 }
 
 func listComputedInodes(tw *html.TableWriter,
-	directoryInode *filesystem.DirectoryInode, name string) {
-	for _, dirent := range directoryInode.EntryList {
-		if inode, ok := dirent.Inode().(*filesystem.ComputedRegularInode); ok {
-			var source string
-			if strings.HasPrefix(inode.Source, "localhost:") {
-				source = inode.Source
-			} else {
-				source = fmt.Sprintf("<a href=\"http://%s\">%s</a>",
-					inode.Source, inode.Source)
-			}
-			tw.WriteRow("", "",
-				path.Join(name, dirent.Name),
-				source,
-			)
-		} else if inode, ok := dirent.Inode().(*filesystem.DirectoryInode); ok {
-			listComputedInodes(tw, inode, path.Join(name, dirent.Name))
+	computedFiles []filesystem.ComputedFile) {
+	for _, computedFile := range computedFiles {
+		var source string
+		if strings.HasPrefix(computedFile.Source, "localhost:") {
+			source = computedFile.Source
+		} else {
+			source = fmt.Sprintf("<a href=\"http://%s\">%s</a>",
+				computedFile.Source, computedFile.Source)
 		}
+		tw.WriteRow("", "", computedFile.Filename, source)
 	}
 }
