@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
@@ -38,13 +39,18 @@ type ImageDataBase struct {
 	sync.RWMutex
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
-	imageMap        map[string]*image.Image // nil: write in progress.
+	imageMap        map[string]*imageType // nil: write in progress.
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
 	// Unprotected by main lock.
 	pendingImageLock sync.Mutex
 	objectFetchLock  sync.Mutex
+}
+
+type imageType struct {
+	computedFiles []filesystem.ComputedFile
+	image         *image.Image
 }
 
 type Params struct {
@@ -128,6 +134,13 @@ func (imdb *ImageDataBase) FindLatestImage(
 
 func (imdb *ImageDataBase) GetImage(name string) *image.Image {
 	return imdb.getImage(name)
+}
+
+// GetImageComputedFiles will return the list of computed files for the
+// specified image and true if found, else it will return nil, false.
+func (imdb *ImageDataBase) GetImageComputedFiles(name string) (
+	[]filesystem.ComputedFile, bool) {
+	return imdb.getImageComputedFiles(name)
 }
 
 func (imdb *ImageDataBase) GetUnreferencedObjectsStatistics() (uint64, uint64) {

@@ -45,7 +45,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 		Config:          config,
 		Params:          params,
 		directoryMap:    make(map[string]image.DirectoryMetadata),
-		imageMap:        make(map[string]*image.Image),
+		imageMap:        make(map[string]*imageType),
 		addNotifiers:    make(notifiers),
 		deleteNotifiers: make(notifiers),
 		mkdirNotifiers:  make(makeDirectoryNotifiers),
@@ -193,7 +193,10 @@ func (imdb *ImageDataBase) loadFile(filename string) error {
 	imdb.scheduleExpiration(img, filename)
 	imdb.Lock()
 	defer imdb.Unlock()
-	imdb.imageMap[filename] = img
+	imdb.imageMap[filename] = &imageType{
+		computedFiles: img.FileSystem.GetComputedFiles(),
+		image:         img,
+	}
 	return nil
 }
 

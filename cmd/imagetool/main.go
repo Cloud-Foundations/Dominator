@@ -198,6 +198,8 @@ var subcommands = []commands.Command{
 		scanFilteredFilesSubcommand},
 	{"show", "                   name", 1, 1, showImageSubcommand},
 	{"show-filter", "            name", 1, 1, showImageFilterSubcommand},
+	{"show-computed-file-subs", "filename source", 2, 2,
+		showComputedFileSubsSubcommand},
 	{"show-inode", "             name inodePath", 2, 2,
 		showImageInodeSubcommand},
 	{"show-metadata", "          name", 1, 1, showImageMetadataSubcommand},

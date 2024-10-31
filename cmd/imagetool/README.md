@@ -70,6 +70,8 @@ Some of the sub-commands available are:
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
 - **show-filter**: show the filter for an image
+- **show-computed-file-subs**: show the subs (and their images) which should
+                               receive the specified computed file
 - **show-inode**: show metadata for an inode in an image
 - **show-metadata**: show metadata for an image
 - **show-triggers**: show triggers for an image

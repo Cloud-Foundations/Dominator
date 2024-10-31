@@ -32,6 +32,7 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 		pauseTable:   pauseTable,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
+				"GetMdb":     1,
 				"ListImages": 1,
 			}),
 
@@ -39,6 +40,7 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 	}
 	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
+			"GetMdb",
 			"ListImages",
 			"PauseUpdates",
 			"ResumeUpdates",
@@ -46,26 +48,17 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 	return rpcObj
 }
 
-func (t *rpcType) ListImages(conn *srpc.Conn,
-	request mdbserver.ListImagesRequest,
-	reply *mdbserver.ListImagesResponse) error {
+func (t *rpcType) GetMdb(conn *srpc.Conn, request mdbserver.GetMdbRequest,
+	reply *mdbserver.GetMdbResponse) error {
 	currentMdb := t.currentMdb
 	if currentMdb == nil {
 		return nil
 	}
-	plannedImages := make(map[string]struct{})
-	requiredImages := make(map[string]struct{})
+	machines := make([]mdb.Machine, 0, len(currentMdb.Machines))
 	for _, machine := range currentMdb.Machines {
-		plannedImages[machine.PlannedImage] = struct{}{}
-		requiredImages[machine.RequiredImage] = struct{}{}
+		machines = append(machines, *machine)
 	}
-	delete(plannedImages, "")
-	delete(requiredImages, "")
-	response := mdbserver.ListImagesResponse{
-		PlannedImages:  stringutil.ConvertMapKeysToList(plannedImages, false),
-		RequiredImages: stringutil.ConvertMapKeysToList(requiredImages, false),
-	}
-	*reply = response
+	reply.Machines = machines
 	return nil
 }
 
@@ -122,6 +115,29 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 			}
 		}
 	}
+}
+
+func (t *rpcType) ListImages(conn *srpc.Conn,
+	request mdbserver.ListImagesRequest,
+	reply *mdbserver.ListImagesResponse) error {
+	currentMdb := t.currentMdb
+	if currentMdb == nil {
+		return nil
+	}
+	plannedImages := make(map[string]struct{})
+	requiredImages := make(map[string]struct{})
+	for _, machine := range currentMdb.Machines {
+		plannedImages[machine.PlannedImage] = struct{}{}
+		requiredImages[machine.RequiredImage] = struct{}{}
+	}
+	delete(plannedImages, "")
+	delete(requiredImages, "")
+	response := mdbserver.ListImagesResponse{
+		PlannedImages:  stringutil.ConvertMapKeysToList(plannedImages, false),
+		RequiredImages: stringutil.ConvertMapKeysToList(requiredImages, false),
+	}
+	*reply = response
+	return nil
 }
 
 func (t *rpcType) PauseUpdates(conn *srpc.Conn,

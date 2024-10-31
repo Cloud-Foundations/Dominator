@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -58,6 +59,11 @@ func FindLatestImageReq(client srpc.ClientI,
 
 func GetImage(client srpc.ClientI, name string) (*image.Image, error) {
 	return getImage(client, name, 0)
+}
+
+func GetImageComputedFiles(client srpc.ClientI, name string) (
+	[]filesystem.ComputedFile, bool, error) {
+	return getImageComputedFiles(client, name)
 }
 
 func GetImageExpiration(client srpc.ClientI, name string) (time.Time, error) {
