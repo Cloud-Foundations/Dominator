@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"fmt"
 	"syscall"
 	"time"
 
@@ -17,7 +18,7 @@ func sanitisePercentage(percent int) uint64 {
 	return uint64(percent)
 }
 
-func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
+func (objSrv *ObjectServer) garbageCollector(lastLog *string) (uint64, error) {
 	objSrv.rwLock.Lock()
 	if time.Since(objSrv.lastGarbageCollection) < time.Second {
 		objSrv.rwLock.Unlock()
@@ -61,10 +62,18 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 		bytesDeleted, err = objSrv.gc(bytesToDelete)
 	}
 	if err != nil {
-		objSrv.Logger.Printf(
-			"Error collecting garbage, only deleted: %s of %s: %s\n",
+		msg := fmt.Sprintf(
+			"Error collecting garbage, only deleted: %s of %s: %s",
 			format.FormatBytes(bytesDeleted), format.FormatBytes(bytesToDelete),
 			err)
+		if lastLog == nil {
+			objSrv.Logger.Println(msg)
+		} else {
+			if msg != *lastLog {
+				objSrv.Logger.Println(msg)
+				*lastLog = msg
+			}
+		}
 		return 0, err
 	}
 	return bytesDeleted, nil
@@ -74,8 +83,9 @@ func (objSrv *ObjectServer) garbageCollector() (uint64, error) {
 // is running low. It returns if an external (deprecated) garbage collector is
 // set.
 func (objSrv *ObjectServer) garbageCollectorLoop() {
+	var lastLog string
 	for time.Sleep(5 * time.Second); objSrv.gc == nil; time.Sleep(time.Second) {
-		objSrv.garbageCollector()
+		objSrv.garbageCollector(&lastLog)
 	}
 }
 

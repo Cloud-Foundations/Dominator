@@ -58,11 +58,15 @@ func addImage(imageSClient *srpc.Client, name string, img *image.Image,
 
 func (h *hasher) Hash(reader io.Reader, length uint64) (
 	hash.Hash, error) {
-	hash, err := h.objQ.Add(reader, length)
+	startTime := time.Now()
+	hashVal, err := h.objQ.Add(reader, length)
 	if err != nil {
-		return hash, errors.New("error sending image data: " + err.Error())
+		return hashVal, errors.New("error sending image data: " + err.Error())
 	}
-	return hash, nil
+	if *objectAddInterval > 0 {
+		time.Sleep(time.Until(startTime.Add(*objectAddInterval)))
+	}
+	return hashVal, nil
 }
 
 func buildImage(imageSClient *srpc.Client, filter *filter.Filter,
