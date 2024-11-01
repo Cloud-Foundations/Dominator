@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/text"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -106,11 +107,15 @@ func sendEmailToHypervisorVmOwners(logger log.DebugLogger) error {
 	sort.SliceStable(vmInfos, func(i, j int) bool {
 		return vmInfos[i].OwnerUsers[0] < vmInfos[j].OwnerUsers[0]
 	})
+	columnCollector := &text.ColumnCollector{}
 	for _, vmInfo := range vmInfos {
-		fmt.Fprintf(message, "%-16s %-36s %s\n",
-			vmInfo.Address.IpAddress,
-			vmInfo.Hostname,
-			vmInfo.OwnerUsers[0])
+		columnCollector.AddField(vmInfo.Address.IpAddress.String())
+		columnCollector.AddField(vmInfo.Hostname)
+		columnCollector.AddField(vmInfo.OwnerUsers[0])
+		columnCollector.CompleteLine()
+	}
+	if err := columnCollector.WriteLeftAligned(message); err != nil {
+		return err
 	}
 	return smtp.SendMailPlain(*smtpServer, *emailDomain,
 		from,
