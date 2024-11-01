@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -9,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/text"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
@@ -25,7 +27,7 @@ func showComputedFileSubsSubcommand(args []string,
 		Source:   args[1],
 	}
 	if err := showComputedFileSubs(imageSClient, mdbdSClient, cf); err != nil {
-		return fmt.Errorf("error listing images not in MDB: %s", err)
+		return fmt.Errorf("error showing subs with computed file: %s", err)
 	}
 	return nil
 }
@@ -75,8 +77,11 @@ func showComputedFileSubs(imageSClient, mdbdSClient srpc.ClientI,
 		hostnameToImageMap[machine.Hostname] = machine.RequiredImage
 	}
 	verstr.Sort(hostnames)
+	columnCollector := &text.ColumnCollector{}
 	for _, hostname := range hostnames {
-		fmt.Printf("%-30s %s\n", hostname, hostnameToImageMap[hostname])
+		columnCollector.AddField(hostname)
+		columnCollector.AddField(hostnameToImageMap[hostname])
+		columnCollector.CompleteLine()
 	}
-	return nil
+	return columnCollector.WriteLeftAligned(os.Stdout)
 }

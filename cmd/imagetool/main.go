@@ -199,6 +199,7 @@ var subcommands = []commands.Command{
 	{"scan-filtered-files", "    name directory", 2, 2,
 		scanFilteredFilesSubcommand},
 	{"show", "                   name", 1, 1, showImageSubcommand},
+	{"show-bad-image-subs", "", 0, 0, showBadImageSubsSubcommand},
 	{"show-filter", "            name", 1, 1, showImageFilterSubcommand},
 	{"show-computed-file-subs", "filename source", 2, 2,
 		showComputedFileSubsSubcommand},
