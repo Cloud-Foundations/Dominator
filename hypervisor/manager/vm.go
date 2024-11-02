@@ -786,7 +786,15 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	var haveLock bool
+	defer func() {
+		if !haveLock {
+			vm.mutex.Lock()
+		}
+		vm.allowMutationsAndUnlock()
+	}()
 	if index >= uint(len(vm.Volumes)) {
 		return errors.New("invalid volume index")
 	}
@@ -808,6 +816,8 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 		if err := setVolumeSize(localVolume.Filename, size); err != nil {
 			return err
 		}
+		vm.mutex.Lock()
+		haveLock = true
 		vm.Volumes[index].Size = size
 		vm.writeAndSendInfo()
 		return nil
@@ -822,8 +832,10 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	if err := setVolumeSize(localVolume.Filename, size); err != nil {
 		return err
 	}
+	vm.mutex.Lock()
 	vm.Volumes[index].Size = size
 	vm.writeAndSendInfo()
+	vm.mutex.Unlock()
 	// Try and grow an ext{2,3,4} file-system. If this fails, return the error
 	// to the caller, but the volume will have been expanded. Someone else can
 	// deal with adjusting partitions and growing file-systems.
