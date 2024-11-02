@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/client"
+	"github.com/Cloud-Foundations/Dominator/lib/decoders"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
@@ -25,11 +26,19 @@ func buildImageSubcommand(args []string, logger log.DebugLogger) error {
 
 func buildImage(args []string, logger log.Logger) error {
 	srpcClient := getImaginatorClient()
+	var variables map[string]string
+	if *variablesFilename != "" {
+		err := decoders.DecodeFile(*variablesFilename, &variables)
+		if err != nil {
+			return err
+		}
+	}
 	request := proto.BuildImageRequest{
 		StreamName:     args[0],
 		ExpiresIn:      *expiresIn,
 		MaxSourceAge:   *maxSourceAge,
 		StreamBuildLog: true,
+		Variables:      variables,
 	}
 	if len(args) > 1 {
 		request.GitBranch = args[1]
