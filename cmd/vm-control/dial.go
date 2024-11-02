@@ -11,3 +11,7 @@ func dialFleetManager(address string) (*srpc.Client, error) {
 func dialHypervisor(address string) (*srpc.Client, error) {
 	return srpc.DialHTTP("tcp", address, 0)
 }
+
+func dialImageServer(address string) (srpc.ClientI, error) {
+	return srpc.DialHTTPWithDialer("tcp", address, rrDialer)
+}

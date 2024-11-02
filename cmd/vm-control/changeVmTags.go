@@ -19,6 +19,7 @@ func changeVmTagsSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func changeVmTags(vmHostname string, logger log.DebugLogger) error {
+	checkTags(logger)
 	if vmIP, hypervisor, err := lookupVmAndHypervisor(vmHostname); err != nil {
 		return err
 	} else {
