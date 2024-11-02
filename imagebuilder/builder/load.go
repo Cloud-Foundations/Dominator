@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -113,14 +112,6 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 			return nil, err
 		}
 	}
-	imageStreamsToAutoRebuild := make([]string, 0)
-	for name := range masterConfiguration.BootstrapStreams {
-		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
-	}
-	sort.Strings(imageStreamsToAutoRebuild)
-	for _, name := range masterConfiguration.ImageStreamsToAutoRebuild {
-		imageStreamsToAutoRebuild = append(imageStreamsToAutoRebuild, name)
-	}
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
@@ -141,7 +132,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		minimumExpiration:           options.MinimumExpirationDuration,
 		streamsLoadedChannel:        streamsLoadedChannel,
 		bootstrapStreams:            masterConfiguration.BootstrapStreams,
-		imageStreamsToAutoRebuild:   imageStreamsToAutoRebuild,
+		imageStreamsToAutoRebuild:   masterConfiguration.ImageStreamsToAutoRebuild,
 		slaveDriver:                 params.SlaveDriver,
 		currentBuildInfos:           make(map[string]*currentBuildInfo),
 		lastBuildResults:            make(map[string]buildResultType),

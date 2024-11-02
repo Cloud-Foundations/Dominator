@@ -367,11 +367,6 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 		}
 	}
 	// Mark streams which are auto rebuilt in bold.
-	for _, streamName := range bootstrapStreams {
-		if _, ok := excludedStreams[streamName]; !ok {
-			fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
-		}
-	}
 	for _, streamName := range b.imageStreamsToAutoRebuild {
 		if _, ok := excludedStreams[streamName]; !ok {
 			fmt.Fprintf(buffer, "  \"%s\" [style=bold]\n", streamName)
