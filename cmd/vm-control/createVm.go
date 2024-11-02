@@ -14,6 +14,7 @@ import (
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
+	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -99,6 +100,36 @@ func callCreateVm(client *srpc.Client, request hyper_proto.CreateVmRequest,
 	return err
 }
 
+func checkTags(logger log.DebugLogger) {
+	if *imageServerHostname == "" {
+		return
+	}
+	imageName := vmTags["RequiredImage"]
+	if imageName == "" {
+		return
+	}
+	imageServer := fmt.Sprintf("%s:%d",
+		*imageServerHostname, *imageServerPortNum)
+	client, err := dialImageServer(imageServer)
+	if err != nil {
+		logger.Println(err)
+		return
+	}
+	defer client.Close()
+	expiresAt, err := imgclient.GetImageExpiration(client, imageName)
+	if err != nil {
+		logger.Println(err)
+		return
+	}
+	if expiresAt.IsZero() {
+		return
+	}
+	logger.Printf("WARNING: image: %s expires at: %s (in %s)\n",
+		imageName,
+		expiresAt.Format(format.TimeFormatSeconds),
+		format.Duration(time.Until(expiresAt)))
+}
+
 func createVm(logger log.DebugLogger) error {
 	if *vmHostname == "" {
 		if name := vmTags["Name"]; name == "" {
@@ -114,6 +145,7 @@ func createVm(logger log.DebugLogger) error {
 			vmTags["Name"] = *vmHostname
 		}
 	}
+	checkTags(logger)
 	request := hyper_proto.CreateVmRequest{
 		DhcpTimeout:      *dhcpTimeout,
 		DoNotStart:       *doNotStart,

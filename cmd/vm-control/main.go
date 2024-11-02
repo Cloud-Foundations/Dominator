@@ -60,7 +60,13 @@ var (
 		"If true, list connected but unhealthy hypervisors")
 	imageFile = flag.String("imageFile", "",
 		"Name of RAW image file to boot with")
-	imageName    = flag.String("imageName", "", "Name of image to boot with")
+	imageName = flag.String("imageName", "",
+		"Name of image to boot with")
+	imageServerHostname = flag.String("imageServerHostname", "",
+		"Hostname of image server")
+	imageServerPortNum = flag.Uint("imageServerPortNum",
+		constants.ImageServerPortNumber,
+		"Port number of image server")
 	imageTimeout = flag.Duration("imageTimeout", time.Minute,
 		"Time to wait before timing out on image fetch")
 	imageURL = flag.String("imageURL", "",

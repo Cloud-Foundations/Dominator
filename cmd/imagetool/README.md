@@ -69,6 +69,7 @@ Some of the sub-commands available are:
 - **patch-directory**: patch (update) a local directory with an image
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
+- **show-bad-image-subs**: show the subs which have missing or expired images
 - **show-filter**: show the filter for an image
 - **show-computed-file-subs**: show the subs (and their images) which should
                                receive the specified computed file
