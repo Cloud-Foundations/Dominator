@@ -31,8 +31,47 @@ var (
 		"Name of file containing the SSL key")
 )
 
+// CheckFile returns true if the file exists and has size greater than zero,
+// else it returns false.
+func checkFile(filename string, params Params) bool {
+	if filename == "" {
+		return false
+	}
+	if fi, err := os.Stat(filename); err != nil {
+		if !os.IsNotExist(err) {
+			params.Logger.Println(err)
+		}
+		return false
+	} else if fi.Size() == 0 {
+		return false
+	}
+	return true
+}
+
 func getDirname() string {
 	return filepath.Base(os.Args[0])
+}
+
+func getSleepInterval(cert *x509.Certificate) time.Duration {
+	day := 24 * time.Hour
+	week := 7 * day
+	lifetime := cert.NotAfter.Sub(cert.NotBefore)
+	refreshIn := time.Until(cert.NotBefore.Add(7 * lifetime >> 3))
+	if refreshIn > 0 {
+		return refreshIn
+	}
+	expiresIn := time.Until(cert.NotAfter)
+	if expiresIn > 2*week {
+		return week
+	} else if expiresIn > 2*day {
+		return day
+	} else if expiresIn > 2*time.Hour {
+		return time.Hour
+	} else if expiresIn > 2*time.Minute {
+		return time.Minute
+	} else {
+		return 5 * time.Second
+	}
 }
 
 func loadCerts(filename string) ([]*x509.Certificate, error) {
@@ -60,31 +99,9 @@ func loadCerts(filename string) ([]*x509.Certificate, error) {
 	return certs, nil
 }
 
-func getSleepInterval(cert *x509.Certificate) time.Duration {
-	day := 24 * time.Hour
-	week := 7 * day
-	lifetime := cert.NotAfter.Sub(cert.NotBefore)
-	refreshIn := time.Until(cert.NotBefore.Add(7 * lifetime >> 3))
-	if refreshIn > 0 {
-		return refreshIn
-	}
-	expiresIn := time.Until(cert.NotAfter)
-	if expiresIn > 2*week {
-		return week
-	} else if expiresIn > 2*day {
-		return day
-	} else if expiresIn > 2*time.Hour {
-		return time.Hour
-	} else if expiresIn > 2*time.Minute {
-		return time.Minute
-	} else {
-		return 5 * time.Second
-	}
-}
-
 func loadClientCert(params Params) (*tls.Certificate, error) {
 	// Load certificate and key.
-	if *certFile == "" || *keyFile == "" {
+	if !checkFile(*certFile, params) || !checkFile(*keyFile, params) {
 		cert, err := srpc.LoadCertificatesFromMetadata(100*time.Millisecond,
 			true, false)
 		if err != nil {
