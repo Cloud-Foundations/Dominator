@@ -30,6 +30,12 @@ type FileInfo struct {
 	Length   uint64
 }
 
+type ListGeneratorsRequest struct{}
+
+type ListGeneratorsResponse struct {
+	Pathnames []string
+}
+
 type YieldResponse struct {
 	Hostname string
 	Files    []FileInfo
