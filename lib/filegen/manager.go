@@ -21,6 +21,17 @@ func newManager(logger log.Logger) *Manager {
 	m.objectServer = memory.NewObjectServer()
 	m.logger = logger
 	m.registerMdbGeneratorForPath("/etc/mdb.json")
-	srpc.RegisterName("FileGenerator", &rpcType{m})
+	srpc.RegisterNameWithOptions("FileGenerator", &rpcType{m},
+		srpc.ReceiverOptions{
+			PublicMethods: []string{
+				"ListGenerators",
+			}})
 	return m
+}
+
+func (t *rpcType) ListGenerators(conn *srpc.Conn,
+	request proto.ListGeneratorsRequest,
+	reply *proto.ListGeneratorsResponse) error {
+	reply.Pathnames = t.manager.GetRegisteredPaths()
+	return nil
 }
