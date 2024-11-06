@@ -69,10 +69,14 @@ Some of the sub-commands available are:
 - **patch-directory**: patch (update) a local directory with an image
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
+- **show-bad-computed-files**: show the subs (and their images) which want
+                               computed files which are not available
 - **show-bad-image-subs**: show the subs which have missing or expired images
 - **show-filter**: show the filter for an image
 - **show-computed-file-subs**: show the subs (and their images) which should
-                               receive the specified computed file
+                               receive the specified computed file. This is
+			       useful if you want to deprecate a computed file
+			       and need to see where it is being used
 - **show-inode**: show metadata for an inode in an image
 - **show-metadata**: show metadata for an image
 - **show-triggers**: show triggers for an image

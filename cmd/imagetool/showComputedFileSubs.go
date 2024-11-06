@@ -44,16 +44,7 @@ func showComputedFileSubs(imageSClient, mdbdSClient srpc.ClientI,
 	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
-	// Compute mapping from image to machine.
-	imageToMachinesMap := make(map[string][]*mdb.Machine)
-	for index := range reply.Machines {
-		machine := &reply.Machines[index]
-		if machine.RequiredImage == "" {
-			continue
-		}
-		imageToMachinesMap[machine.RequiredImage] = append(
-			imageToMachinesMap[machine.RequiredImage], machine)
-	}
+	imageToMachinesMap := computeImageToMachinesMap(reply.Machines, false)
 	machinesMap := make(map[*mdb.Machine]struct{})
 	for imageName, imageMachines := range imageToMachinesMap {
 		computedFiles, _, err := client.GetImageComputedFiles(imageSClient,
