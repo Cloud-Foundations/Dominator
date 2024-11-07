@@ -9,12 +9,14 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filegen/client"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb/mdbd"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
@@ -23,11 +25,17 @@ var (
 		"If true, perform benchmark timing")
 	debug = flag.Bool("debug", false,
 		"If true, show debugging output")
-	mdbFile = flag.String("mdbFile", "/var/lib/mdbd/mdb.json",
+	hostnames flagutil.StringList
+	mdbFile   = flag.String("mdbFile", "/var/lib/mdbd/mdb.json",
 		"File to read MDB data from (default format is JSON)")
 
 	numMachines int
 )
+
+func init() {
+	flag.Var(&hostnames, "hostnames",
+		"Comma separated list of hostnames in the MDB to check (default all)")
+}
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr,
@@ -76,6 +84,19 @@ func displayMessageHandler(messageChannel <-chan messageType,
 	}
 }
 
+func filterMdb(input *mdb.Mdb, hostnameSet map[string]struct{}) *mdb.Mdb {
+	if len(hostnameSet) < 1 {
+		return input
+	}
+	var output mdb.Mdb
+	for _, machine := range input.Machines {
+		if _, ok := hostnameSet[machine.Hostname]; ok {
+			output.Machines = append(output.Machines, machine)
+		}
+	}
+	return &output
+}
+
 func handleUpdates(hostname string, updateChannel <-chan []proto.FileInfo,
 	messageChannel chan<- messageType) {
 	for fileInfos := range updateChannel {
@@ -101,6 +122,7 @@ func main() {
 	objectServer := memory.NewObjectServer()
 	logger := cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
+	hostnameSet := stringutil.ConvertListToMap(hostnames, false)
 	manager := client.New(objectServer, logger)
 	mdbChannel := mdbd.StartMdbDaemon(*mdbFile, logger)
 	machines := make(map[string]struct{})
@@ -119,6 +141,7 @@ func main() {
 			if *debug {
 				showMdb(mdb)
 			}
+			mdb = filterMdb(mdb, hostnameSet)
 			numMachines = len(mdb.Machines)
 			machinesToDelete := make(map[string]struct{}, len(machines))
 			for hostname := range machines {
