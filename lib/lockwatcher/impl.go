@@ -251,7 +251,7 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 		if stats.WaitingForLock {
 			fmt.Fprintf(writer, " still waiting for lock")
 		}
-		_, err := fmt.Fprintln(writer, "</font><br>\n")
+		_, err := fmt.Fprint(writer, "</font><br>\n\n")
 		return true, err
 	}
 	if stats.NumRLockTimeouts < 1 && stats.NumWLockTimeouts < 1 {
