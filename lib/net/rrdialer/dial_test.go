@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,9 +14,26 @@ import (
 
 var nextPortNumber = 12340
 
+type counterType struct {
+	mutex   sync.Mutex // Protect everything below.
+	counter uint
+}
+
+func (c *counterType) get() uint {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.counter
+}
+
+func (c *counterType) increment() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.counter++
+}
+
 func (e *endpointType) makeListener(delay time.Duration,
-	logger log.Logger) *uint {
-	var acceptCounter uint
+	logger log.Logger) *counterType {
+	var acceptCounter counterType
 	e.address = "localhost:" + strconv.Itoa(nextPortNumber)
 	nextPortNumber++
 	go func() {
@@ -27,7 +45,7 @@ func (e *endpointType) makeListener(delay time.Duration,
 				if conn, err := listener.Accept(); err != nil {
 					logger.Println(err)
 				} else {
-					acceptCounter++
+					acceptCounter.increment()
 					conn.Close()
 				}
 			}
@@ -80,10 +98,10 @@ func TestDialOneIsFastEnough(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(time.Millisecond * 20)
-	if *counter50 != 1 {
+	if counter50.get() != 1 {
 		t.Fatal("endpoint50 did not connect")
 	}
-	if *counter100 != 0 {
+	if counter100.get() != 0 {
 		t.Fatal("endpoint100 connected")
 	}
 }
@@ -114,10 +132,10 @@ func TestDialTwoAreFastEnough(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(time.Millisecond * 20)
-	if *counter50 != 1 && *counter150 != 1 {
+	if counter50.get() != 1 && counter150.get() != 1 {
 		t.Fatal("endpoint50 and endpoint150 did not connect")
 	}
-	if *counter100 != 0 {
+	if counter100.get() != 0 {
 		t.Fatal("endpoint100 connected")
 	}
 }
