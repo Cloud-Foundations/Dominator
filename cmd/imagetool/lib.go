@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -18,10 +19,15 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
+	filegen_proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	img_proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
@@ -479,6 +485,25 @@ func (ti *typedImage) getTriggers() (*triggers.Triggers, error) {
 	}
 }
 
+func computeImageToMachinesMap(machines []mdb.Machine,
+	includePlannedImage bool) map[string][]*mdb.Machine {
+	imageToMachinesMap := make(map[string][]*mdb.Machine)
+	for index := range machines {
+		machine := &machines[index]
+		if machine.RequiredImage != "" {
+			imageToMachinesMap[machine.RequiredImage] = append(
+				imageToMachinesMap[machine.RequiredImage], machine)
+		}
+		if includePlannedImage &&
+			machine.PlannedImage != "" &&
+			machine.PlannedImage != machine.RequiredImage {
+			imageToMachinesMap[machine.PlannedImage] = append(
+				imageToMachinesMap[machine.PlannedImage], machine)
+		}
+	}
+	return imageToMachinesMap
+}
+
 func findHypervisor(vmIpAddr net.IP) (string, error) {
 	if *hypervisorHostname != "" {
 		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
@@ -584,6 +609,32 @@ func getVmIpAndHypervisor(vmHostname string) (net.IP, *srpc.Client, error) {
 		return nil, nil, err
 	}
 	return vmIpAddr, client, nil
+}
+
+func listFileGenerators(address string, logger log.Logger) ([]string, error) {
+	// Point "localhost:*" address to MDB server.
+	if strings.HasPrefix(address, "localhost:") {
+		address = *mdbServerHostname + address[9:]
+	}
+	request := filegen_proto.ListGeneratorsRequest{}
+	var reply filegen_proto.ListGeneratorsResponse
+	client, err := srpc.DialHTTP("tcp", address, 0)
+	if err != nil {
+		return nil, fmt.Errorf("error dialing: %s: %s\n", address, err)
+	}
+	defer client.Close()
+	err = client.RequestReply("FileGenerator.ListGenerators", request, &reply)
+	if err == nil {
+		return reply.Pathnames, nil
+	} else {
+		logger.Printf("%s: error listing generators: %s\n", address, err)
+	}
+	readCloser, err := urlutil.Open("http://" + address + "/listGenerators")
+	if err != nil {
+		return nil, err
+	}
+	defer readCloser.Close()
+	return fsutil.ReadLines(readCloser)
 }
 
 func lookupIP(vmHostname string) (net.IP, error) {

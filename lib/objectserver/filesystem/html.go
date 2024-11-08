@@ -69,4 +69,31 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 			format.FormatBytes(referencedBytes+unreferencedBytes),
 			format.FormatBytes(totalBytes))
 	}
+	writeHtmlBarAvailable(writer, referencedBytes, unreferencedBytes, capacity)
+}
+
+func writeHtmlBarAvailable(writer io.Writer,
+	referenced, unreferenced, total uint64) {
+	free := total - referenced - unreferenced
+	barColour := "grey"
+	leftBarWidth := float64(referenced) / float64(total)
+	middleBarWidth := float64(unreferenced) / float64(total)
+	rightBarWidth := float64(free) / float64(total)
+	if free < total/100 {
+		barColour = "orange"
+	}
+	fmt.Fprintln(writer,
+		`<table border="1" style="border-collapse: collapse"><tr><td>`)
+	fmt.Fprintln(writer, `  <table border="0" style="width:1000px"><tr>`)
+	fmt.Fprintf(writer,
+		"    <td style=\"width:%.1f%%;background-color:%s\">&nbsp;</td>\n",
+		leftBarWidth*100, "blue")
+	fmt.Fprintf(writer,
+		"    <td style=\"width:%.1f%%;background-color:%s\">&nbsp;</td>\n",
+		middleBarWidth*100, barColour)
+	fmt.Fprintf(writer,
+		"    <td style=\"width:%.1f%%;background-color:%s\">&nbsp;</td>\n",
+		rightBarWidth*100, "white")
+	fmt.Fprintln(writer, "  </tr></table>")
+	fmt.Fprintln(writer, "</td></tr></table>")
 }
