@@ -80,7 +80,7 @@ func listenWithReuse(network, address string) (net.Listener, error) {
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return nil, fmt.Errorf("error creating %s listener for %s : %s",
-			network, address, err.Error)
+			network, address, err)
 	}
 	doClose := true
 	defer func() {
