@@ -18,6 +18,8 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+const dateTime = time.DateTime + " MST"
+
 var (
 	caFile = flag.String("CAfile", "/etc/ssl/CA.pem",
 		"Name of file containing the root of trust for identity and methods")
@@ -140,7 +142,11 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 func loadLoop(params Params, cert *x509.Certificate) {
 	params.FailIfExpired = true
 	for {
-		time.Sleep(getSleepInterval(cert))
+		sleepInterval := getSleepInterval(cert)
+		params.Logger.Printf("Certificate refetch at: %s (%s)\n",
+			time.Now().Add(sleepInterval).Format(dateTime),
+			format.Duration(sleepInterval))
+		time.Sleep(sleepInterval)
 		if c, err := setupTlsOnce(params); err != nil {
 			params.Logger.Println(err)
 		} else {
@@ -184,8 +190,8 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		}
 		params.Logger.Println(msg)
 	} else {
-		params.Logger.Debugf(0, "Certificate expires at: %s (%s)\n",
-			x509Cert.NotAfter.Local(),
+		params.Logger.Printf("Certificate expires at: %s (%s)\n",
+			x509Cert.NotAfter.Local().Format(dateTime),
 			format.Duration(time.Until(x509Cert.NotAfter)))
 	}
 	clientConfig := new(tls.Config)
