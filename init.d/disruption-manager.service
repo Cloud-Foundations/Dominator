@@ -1,0 +1,14 @@
+[Unit]
+Description=Disruption Manager
+After=network.target
+
+[Service]
+ExecStart=/usr/local/sbin/disruption-manager
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=1
+User=disruption-manager
+Group=disruption-manager
+
+[Install]
+WantedBy=multi-user.target
