@@ -50,7 +50,9 @@ type hostInfoType struct {
 }
 
 type groupListType struct {
-	groups []groupStatsType
+	groups         []groupStatsType
+	totalPermitted uint
+	totalRequested uint
 }
 
 func newDisruptionManager(stateFilename string,
@@ -77,11 +79,13 @@ func newDisruptionManager(stateFilename string,
 			for _, host := range groupStats.Permitted {
 				if _, ok := group.permitted[host.Hostname]; !ok {
 					group.permitted[host.Hostname] = host.LastRequest
+					groupList.totalPermitted++
 				}
 			}
 			for _, host := range groupStats.Requested {
 				if _, ok := group.permitted[host.Hostname]; !ok {
 					group.requested[host.Hostname] = host.LastRequest
+					groupList.totalRequested++
 				}
 			}
 		}
@@ -202,7 +206,7 @@ func (dm *disruptionManager) expireOnce() []string {
 					logHostname = groupIdentifier + "/" + hostname
 				}
 				logLines = append(logLines,
-					fmt.Sprintf("%s: permitted->denied\n", logHostname))
+					fmt.Sprintf("%s: permitted->denied", logHostname))
 			}
 		}
 		for hostname, lastRequestTime := range group.requested {
@@ -261,6 +265,7 @@ func (dm *disruptionManager) getGroupList() *groupListType {
 			})
 		}
 		sortHostInfos(groupStats.Permitted)
+		groupList.totalPermitted += uint(len(groupStats.Permitted))
 		for hostname, lastRequest := range group.requested {
 			groupStats.Requested = append(groupStats.Requested, hostInfoType{
 				Hostname:    hostname,
@@ -268,8 +273,10 @@ func (dm *disruptionManager) getGroupList() *groupListType {
 			})
 		}
 		sortHostInfos(groupStats.Requested)
+		groupList.totalRequested += uint(len(groupStats.Requested))
 		groupList.groups = append(groupList.groups, groupStats)
 	}
+	groupList.sort()
 	dm.exportable = &groupList
 	return &groupList
 }
@@ -371,4 +378,11 @@ func (group *groupInfoType) canPermit(tgs tags.Tags) bool {
 	}
 	group.maxPermitted = maximum
 	return uint64(len(group.permitted)) < maximum
+}
+
+func (groupList *groupListType) sort() {
+	sort.SliceStable(groupList.groups, func(left, right int) bool {
+		return groupList.groups[left].Identifier <
+			groupList.groups[right].Identifier
+	})
 }

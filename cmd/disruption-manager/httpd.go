@@ -7,7 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -32,6 +34,7 @@ func startHttpServer(dm *disruptionManager,
 	}
 	html.HandleFunc("/", s.statusHandler)
 	html.HandleFunc("/api/v1/request", s.requestHandler)
+	html.HandleFunc("/showState", s.showStateHandler)
 	return s, nil
 }
 
@@ -71,6 +74,43 @@ func (s *httpServer) serve(portNum uint) error {
 	return http.Serve(listener, nil)
 }
 
+func (s *httpServer) showStateHandler(w http.ResponseWriter,
+	req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	fmt.Fprintln(writer, "<title>Disruption Manager disruptions page</title>")
+	fmt.Fprintln(writer, `<style>
+	                          table, th, td {
+	                          border-collapse: collapse;
+	                          }
+	                          </style>`)
+	fmt.Fprintln(writer, "<body>")
+	fmt.Fprintln(writer, "<center>")
+	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+	tw, _ := html.NewTableWriter(writer, true,
+		"Hostname", "State", "Group", "Request Age")
+	groupList := s.disruptionManager.getGroupList()
+	now := time.Now()
+	for _, groupInfo := range groupList.groups {
+		if len(groupInfo.Permitted) < 1 && len(groupInfo.Requested) < 1 {
+			continue
+		}
+		for _, hostInfo := range groupInfo.Permitted {
+			tw.WriteRow("", "",
+				hostInfo.Hostname, "permitted", groupInfo.Identifier,
+				format.Duration(now.Sub(hostInfo.LastRequest)))
+		}
+		for _, hostInfo := range groupInfo.Requested {
+			tw.WriteRow("", "",
+				hostInfo.Hostname, "requested", groupInfo.Identifier,
+				format.Duration(now.Sub(hostInfo.LastRequest)))
+		}
+	}
+	tw.Close()
+	fmt.Fprintln(writer, "</center>")
+	fmt.Fprintln(writer, "</body>")
+}
+
 func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	if req.URL.Path != "/" {
 		http.NotFound(w, req)
@@ -89,33 +129,15 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "<h1><b>Disruption Manager</b> status page</h1>")
 	fmt.Fprintln(writer, "</center>")
 	html.WriteHeaderWithRequestNoGC(writer, req)
-	groupList := s.disruptionManager.getGroupList()
-	fmt.Fprintln(writer, "<pre>")
-	for _, groupInfo := range groupList.groups {
-		if len(groupInfo.Permitted) < 1 && len(groupInfo.Requested) < 1 {
-			continue
-		}
-		if groupInfo.Identifier == "" {
-			fmt.Fprintln(writer, "Global disruption group:")
-		} else {
-			fmt.Fprintf(writer, "Disruption group \"%s\":\n",
-				groupInfo.Identifier)
-		}
-		if len(groupInfo.Permitted) > 0 {
-			fmt.Fprintln(writer, "  Hosts permitted to disrupt:")
-			for _, hostname := range groupInfo.Permitted {
-				fmt.Fprintf(writer, "    %s\n", hostname)
-			}
-		}
-		if len(groupInfo.Requested) > 0 {
-			fmt.Fprintln(writer, "  Hosts requesting to disrupt:")
-			for _, hostname := range groupInfo.Requested {
-				fmt.Fprintf(writer, "    %s\n", hostname)
-			}
-		}
-	}
-	fmt.Fprintln(writer, "</pre>")
 	fmt.Fprintln(writer, "<h3>")
+	groupList := s.disruptionManager.getGroupList()
+	if len(groupList.groups) < 1 {
+		fmt.Fprintln(writer, "No disruptions permitted or requested<br>")
+	} else {
+		fmt.Fprintf(writer, "%d disruptions permitted and %d requested: ",
+			groupList.totalPermitted, groupList.totalRequested)
+		fmt.Fprintln(writer, `<a href="showState">dashboard</a><br>`)
+	}
 	for _, htmlWriter := range s.htmlWriters {
 		htmlWriter.WriteHtml(writer)
 	}
