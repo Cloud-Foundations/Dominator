@@ -20,6 +20,9 @@ install-linux:
 install-windows:
 	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
+disruption-manager.tarball:
+	@./scripts/make-tarball disruption-manager -C $(ETCDIR) ssl
+
 dominator.tarball:
 	@./scripts/make-tarball dominator -C $(ETCDIR) ssl
 
