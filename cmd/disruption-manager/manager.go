@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"sync"
@@ -111,16 +112,12 @@ func sortHostInfos(list []hostInfoType) {
 
 func (dm *disruptionManager) cancel(machine mdb.Machine) (
 	sub_proto.DisruptionState, string, error) {
-	logHostname := machine.Hostname
-	if machine.Tags[tagGroupIdentifier] != "" {
-		logHostname = machine.Tags[tagGroupIdentifier] + "/" + machine.Hostname
-	}
 	var invalidate bool
 	dm.mutex.Lock()
 	defer func() {
 		dm.unlockAndInvalidate(invalidate)
 	}()
-	group := dm.getGroup(machine.Tags[tagGroupIdentifier])
+	group, groupText := dm.getGroup(machine)
 	var logMessage string
 	if _, ok := group.permitted[machine.Hostname]; ok {
 		invalidate = true
@@ -129,19 +126,21 @@ func (dm *disruptionManager) cancel(machine mdb.Machine) (
 			group.permitted[hostname] = lastRequest
 			delete(group.requested, hostname)
 			logMessage = fmt.Sprintf(
-				"%s: permitted->denied and %s: requested->permitted",
-				logHostname, hostname)
+				"%s: permitted->denied and %s: requested->permitted (%s)",
+				machine.Hostname, hostname, groupText)
 			break
 		}
 		if logMessage == "" {
-			logMessage = fmt.Sprintf("%s: permitted->denied", logHostname)
+			logMessage = fmt.Sprintf("%s: permitted->denied (%s)",
+				machine.Hostname, groupText)
 		}
 		delete(group.permitted, machine.Hostname)
 	}
 	if _, ok := group.requested[machine.Hostname]; ok {
 		invalidate = true
 		if logMessage == "" {
-			logMessage = fmt.Sprintf("%s: requested->denied", logHostname)
+			logMessage = fmt.Sprintf("%s: requested->denied (%s)",
+				machine.Hostname, groupText)
 		}
 		delete(group.requested, machine.Hostname)
 	}
@@ -150,16 +149,12 @@ func (dm *disruptionManager) cancel(machine mdb.Machine) (
 
 func (dm *disruptionManager) check(machine mdb.Machine) (
 	sub_proto.DisruptionState, string, error) {
-	logHostname := machine.Hostname
-	if machine.Tags[tagGroupIdentifier] != "" {
-		logHostname = machine.Tags[tagGroupIdentifier] + "/" + machine.Hostname
-	}
 	var invalidate bool
 	dm.mutex.Lock()
 	defer func() {
 		dm.unlockAndInvalidate(invalidate)
 	}()
-	group := dm.getGroup(machine.Tags[tagGroupIdentifier])
+	group, groupText := dm.getGroup(machine)
 	if _, ok := group.permitted[machine.Hostname]; ok {
 		return sub_proto.DisruptionStatePermitted, "", nil
 	}
@@ -175,7 +170,8 @@ func (dm *disruptionManager) check(machine mdb.Machine) (
 	group.permitted[machine.Hostname] = lastRequestTime
 	delete(group.requested, machine.Hostname)
 	return sub_proto.DisruptionStatePermitted,
-		fmt.Sprintf("%s: requested->permitted", logHostname),
+		fmt.Sprintf("%s: requested->permitted (%s)",
+			machine.Hostname, groupText),
 		nil
 }
 
@@ -196,52 +192,50 @@ func (dm *disruptionManager) expireOnce() []string {
 	}()
 	expireBefore := time.Now().Add(-dm.maxDuration)
 	var logLines []string
-	for groupIdentifier, group := range dm.groups {
+	for _, group := range dm.groups {
 		for hostname, lastRequestTime := range group.permitted {
 			if lastRequestTime.Before(expireBefore) {
 				invalidate = true
 				delete(group.permitted, hostname)
-				logHostname := hostname
-				if groupIdentifier != "" {
-					logHostname = groupIdentifier + "/" + hostname
-				}
 				logLines = append(logLines,
-					fmt.Sprintf("%s: permitted->denied", logHostname))
+					fmt.Sprintf("%s: permitted->denied", hostname))
 			}
 		}
 		for hostname, lastRequestTime := range group.requested {
 			if lastRequestTime.Before(expireBefore) {
 				invalidate = true
 				delete(group.requested, hostname)
-				logHostname := hostname
-				if groupIdentifier != "" {
-					logHostname = groupIdentifier + "/" + hostname
-				}
-				dm.logger.Printf("%s: requested->denied\n", logHostname)
+				dm.logger.Printf("%s: requested->denied\n", hostname)
 			} else if uint64(len(group.permitted)) < group.maxPermitted {
 				invalidate = true
 				group.permitted[hostname] = lastRequestTime
 				delete(group.requested, hostname)
-				logHostname := hostname
-				if groupIdentifier != "" {
-					logHostname = groupIdentifier + "/" + hostname
-				}
 				logLines = append(logLines,
-					fmt.Sprintf("%s: requested->permitted", logHostname))
+					fmt.Sprintf("%s: requested->permitted", hostname))
 			}
 		}
 	}
 	return logLines
 }
 
-func (dm *disruptionManager) getGroup(groupIdentifier string) *groupInfoType {
-	group := dm.groups[groupIdentifier]
-	if group != nil {
-		return group
+func (dm *disruptionManager) getGroup(machine mdb.Machine) (
+	*groupInfoType, string) {
+	var groupIdentifier string
+	if id, ok := machine.Tags[tagGroupIdentifier]; ok {
+		groupIdentifier = id
+	} else {
+		groupIdentifier = path.Dir(machine.RequiredImage)
 	}
-	group = newGroup()
-	dm.groups[groupIdentifier] = group
-	return group
+	group := dm.groups[groupIdentifier]
+	if group == nil {
+		group = newGroup()
+		dm.groups[groupIdentifier] = group
+	}
+	if groupIdentifier == "" {
+		return group, "global group"
+	} else {
+		return group, `group="` + groupIdentifier + `"`
+	}
 }
 
 func (dm *disruptionManager) getGroupList() *groupListType {
@@ -307,13 +301,9 @@ func (dm *disruptionManager) processRequest(
 
 func (dm *disruptionManager) request(machine mdb.Machine) (
 	sub_proto.DisruptionState, string, error) {
-	logHostname := machine.Hostname
-	if machine.Tags[tagGroupIdentifier] != "" {
-		logHostname = machine.Tags[tagGroupIdentifier] + "/" + machine.Hostname
-	}
 	dm.mutex.Lock()
 	defer dm.unlockAndInvalidate(true)
-	group := dm.getGroup(machine.Tags[tagGroupIdentifier])
+	group, groupText := dm.getGroup(machine)
 	if _, ok := group.permitted[machine.Hostname]; ok {
 		group.permitted[machine.Hostname] = time.Now()
 		return sub_proto.DisruptionStatePermitted, "", nil
@@ -322,16 +312,18 @@ func (dm *disruptionManager) request(machine mdb.Machine) (
 	if group.canPermit(machine.Tags) {
 		group.permitted[machine.Hostname] = time.Now()
 		if _, ok := group.requested[machine.Hostname]; ok {
-			logMessage = fmt.Sprintf("%s: requested->permitted",
-				logHostname)
+			logMessage = fmt.Sprintf("%s: requested->permitted (%s)",
+				machine.Hostname, groupText)
 			delete(group.requested, machine.Hostname)
 		} else {
-			logMessage = fmt.Sprintf("%s: denied->permitted", logHostname)
+			logMessage = fmt.Sprintf("%s: denied->permitted (%s)",
+				machine.Hostname, groupText)
 		}
 		return sub_proto.DisruptionStatePermitted, logMessage, nil
 	}
 	if _, ok := group.requested[machine.Hostname]; !ok {
-		logMessage = fmt.Sprintf("%s: denied->requested", logHostname)
+		logMessage = fmt.Sprintf("%s: denied->requested (%s)",
+			machine.Hostname, groupText)
 	}
 	group.requested[machine.Hostname] = time.Now()
 	return sub_proto.DisruptionStateRequested, logMessage, nil
