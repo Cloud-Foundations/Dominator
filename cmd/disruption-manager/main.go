@@ -10,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -44,6 +45,10 @@ func main() {
 		*maximimPermittedDuration, logger)
 	if err != nil {
 		logger.Fatalf("Unable to create Disruption Manager\n", err)
+	}
+	setupserver.SetupTlsWithParams(setupserver.Params{Logger: logger})
+	if err := startRpcServer(dm, logger); err != nil {
+		logger.Fatalf("Unable to create SRPC server: %s\n", err)
 	}
 	webServer, err := startHttpServer(dm, logger)
 	if err != nil {
