@@ -13,7 +13,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/disruptionmanager"
+	dm_proto "github.com/Cloud-Foundations/Dominator/proto/disruptionmanager"
+	sub_proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
 type HtmlWriter interface {
@@ -47,19 +48,46 @@ func (s *httpServer) requestHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
 		return
 	}
-	var request proto.DisruptionRequest
+	var request dm_proto.DisruptionRequest
 	decoder := json.NewDecoder(req.Body)
 	if err := decoder.Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if reply, err := s.disruptionManager.processRequest(request); err != nil {
+	var err error
+	var state sub_proto.DisruptionState
+	var logMessage string
+	switch request.Request {
+	case sub_proto.DisruptionRequestCancel:
+		err = hostAccessCheck(req.RemoteAddr, request.MDB.Hostname)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		state, logMessage, err = s.disruptionManager.cancel(request.MDB)
+	case sub_proto.DisruptionRequestCheck:
+		state, logMessage, err = s.disruptionManager.check(request.MDB)
+	case sub_proto.DisruptionRequestRequest:
+		err = hostAccessCheck(req.RemoteAddr, request.MDB.Hostname)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		state, logMessage, err = s.disruptionManager.request(request.MDB)
+	default:
+		err = fmt.Errorf("invalid request: %d", request.Request)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	} else {
+		if logMessage != "" {
+			s.logger.Println(logMessage)
+		}
 		writer := bufio.NewWriter(w)
 		defer writer.Flush()
-		if err := libjson.WriteWithIndent(writer, "    ", *reply); err != nil {
+		reply := dm_proto.DisruptionResponse{Response: state}
+		if err := libjson.WriteWithIndent(writer, "    ", reply); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"sort"
@@ -14,7 +15,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
-	dm_proto "github.com/Cloud-Foundations/Dominator/proto/disruptionmanager"
 	sub_proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -54,6 +54,27 @@ type groupListType struct {
 	groups         []groupStatsType
 	totalPermitted uint
 	totalRequested uint
+}
+
+// Returns nil if the remote hostname matches the MDB hostname, else an error.
+func hostAccessCheck(remoteAddr, mdbHostname string) error {
+	remoteIP, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return err
+	}
+	if remoteIP == mdbHostname {
+		return nil
+	}
+	mdbIPs, err := net.LookupHost(mdbHostname)
+	if err != nil {
+		return err
+	}
+	for _, mdbIP := range mdbIPs {
+		if remoteIP == mdbIP {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s not permitted", mdbHostname)
 }
 
 func newDisruptionManager(stateFilename string,
@@ -273,30 +294,6 @@ func (dm *disruptionManager) getGroupList() *groupListType {
 	groupList.sort()
 	dm.exportable = &groupList
 	return &groupList
-}
-
-func (dm *disruptionManager) processRequest(
-	request dm_proto.DisruptionRequest) (*dm_proto.DisruptionResponse, error) {
-	var err error
-	var state sub_proto.DisruptionState
-	var logMessage string
-	switch request.Request {
-	case sub_proto.DisruptionRequestCheck:
-		state, logMessage, err = dm.check(request.MDB)
-	case sub_proto.DisruptionRequestRequest:
-		state, logMessage, err = dm.request(request.MDB)
-	case sub_proto.DisruptionRequestCancel:
-		state, logMessage, err = dm.cancel(request.MDB)
-	default:
-		err = fmt.Errorf("invalid request: %d", request.Request)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if logMessage != "" {
-		dm.logger.Println(logMessage)
-	}
-	return &dm_proto.DisruptionResponse{Response: state}, nil
 }
 
 func (dm *disruptionManager) request(machine mdb.Machine) (
