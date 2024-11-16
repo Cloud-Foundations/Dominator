@@ -6,6 +6,15 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+type GetMachineRequest struct {
+	Hostname string
+}
+
+type GetMachineResponse struct {
+	Error   string
+	Machine mdb.Machine
+}
+
 type GetMdbRequest struct{}
 
 type GetMdbResponse struct {
