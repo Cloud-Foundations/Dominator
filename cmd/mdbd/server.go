@@ -40,12 +40,27 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 	}
 	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
+			"GetMachine",
 			"GetMdb",
 			"ListImages",
 			"PauseUpdates",
 			"ResumeUpdates",
 		}})
 	return rpcObj
+}
+
+func (t *rpcType) GetMachine(conn *srpc.Conn,
+	request mdbserver.GetMachineRequest,
+	reply *mdbserver.GetMachineResponse) error {
+	currentMdb := t.currentMdb
+	if currentMdb == nil {
+		reply.Error = "no MDB data"
+	} else if machine, ok := currentMdb.table[request.Hostname]; !ok {
+		reply.Error = request.Hostname + " not in MDB"
+	} else {
+		reply.Machine = *machine
+	}
+	return nil
 }
 
 func (t *rpcType) GetMdb(conn *srpc.Conn, request mdbserver.GetMdbRequest,
