@@ -46,7 +46,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Unable to create Disruption Manager\n", err)
 	}
-	setupserver.SetupTlsWithParams(setupserver.Params{Logger: logger})
+	err = setupserver.SetupTlsWithParams(setupserver.Params{Logger: logger})
+	if err != nil {
+		logger.Fatalln(err)
+	}
 	if err := startRpcServer(dm, logger); err != nil {
 		logger.Fatalf("Unable to create SRPC server: %s\n", err)
 	}
