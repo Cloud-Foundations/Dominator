@@ -19,13 +19,8 @@ import (
 var (
 	cpuPercent = flag.Uint("cpuPercent", 0,
 		"CPU speed as percentage of capacity (default 50)")
-	networkSpeedPercent = flag.Uint("networkSpeedPercent",
-		constants.DefaultNetworkSpeedPercent,
-		"Network speed as percentage of capacity")
-	scanExcludeList  flagutil.StringList = constants.ScanExcludeList
-	scanSpeedPercent                     = flag.Uint("scanSpeedPercent",
-		constants.DefaultScanSpeedPercent,
-		"Scan speed as percentage of capacity")
+	disruptionManagerUrl = flag.String("disruptionManagerUrl", "",
+		"URL of Disruption Manager endpoint")
 	domHostname = flag.String("domHostname", "localhost",
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
@@ -36,8 +31,15 @@ var (
 	mdbServerPortNum = flag.Uint("mdbServerPortNum",
 		constants.SimpleMdbServerPortNumber,
 		"Port number of MDB server")
+	networkSpeedPercent = flag.Uint("networkSpeedPercent",
+		constants.DefaultNetworkSpeedPercent,
+		"Network speed as percentage of capacity")
 	pauseDuration = flag.Duration("pauseDuration", time.Hour,
 		"Duration to pause updates for sub")
+	scanExcludeList  flagutil.StringList = constants.ScanExcludeList
+	scanSpeedPercent                     = flag.Uint("scanSpeedPercent",
+		constants.DefaultScanSpeedPercent,
+		"Scan speed as percentage of capacity")
 	statusesToMatch flagutil.StringList
 	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
@@ -69,6 +71,9 @@ var subcommands = []commands.Command{
 	{"clear-safety-shutoff", "sub", 1, 1, clearSafetyShutoffSubcommand},
 	{"configure-subs", "", 0, 0, configureSubsSubcommand},
 	{"disable-updates", "reason", 1, 1, disableUpdatesSubcommand},
+	{"disruption-cancel", "sub", 1, 1, disruptionCancelSubcommand},
+	{"disruption-check", "sub", 1, 1, disruptionCheckSubcommand},
+	{"disruption-request", "sub", 1, 1, disruptionRequestSubcommand},
 	{"enable-updates", "reason", 1, 1, enableUpdatesSubcommand},
 	{"force-disruptive-update", "sub", 1, 1, forceDisruptiveUpdateSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
