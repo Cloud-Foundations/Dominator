@@ -32,8 +32,12 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 		pauseTable:   pauseTable,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
-				"GetMdb":     1,
-				"ListImages": 1,
+				"GetMachine":    1,
+				"GetMdb":        1,
+				"GetMdbUpdates": 1,
+				"ListImages":    1,
+				"PauseUpdates":  1,
+				"ResumeUpdates": 1,
 			}),
 
 		updateChannels: make(map[*srpc.Conn]chan<- mdbserver.MdbUpdate),
@@ -42,6 +46,7 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 		PublicMethods: []string{
 			"GetMachine",
 			"GetMdb",
+			"GetMdbUpdates",
 			"ListImages",
 			"PauseUpdates",
 			"ResumeUpdates",
