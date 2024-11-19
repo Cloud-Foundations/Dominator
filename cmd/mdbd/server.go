@@ -118,13 +118,13 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 				return errors.New("update queue too full")
 			}
 			if err = conn.Encode(mdbUpdate); err != nil {
-				break
+				return err
 			}
 			if err = conn.Flush(); err != nil {
-				break
+				return err
 			}
 		case <-closeChannel:
-			break
+			return nil
 		}
 		if err != nil {
 			if err != io.EOF {
