@@ -80,6 +80,7 @@ var subcommands = []commands.Command{
 	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
 	{"get-machine-from-mdb", "sub", 1, 1, getMachineMdbSubcommand},
 	{"get-mdb", "", 0, 0, getMdbSubcommand},
+	{"get-mdb-updates", "", 0, 0, getMdbUpdatesSubcommand},
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
 	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"pause-sub-updates", "sub reason", 2, 2, pauseSubUpdatesSubcommand},
@@ -88,6 +89,16 @@ var subcommands = []commands.Command{
 }
 
 func getClient() *srpc.Client {
+	if dominatorSrpcClient != nil {
+		return dominatorSrpcClient
+	}
+	clientName := fmt.Sprintf("%s:%d", *domHostname, *domPortNum)
+	client, err := srpc.DialHTTP("tcp", clientName, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error dialing: %s: %s\n", clientName, err)
+		os.Exit(1)
+	}
+	dominatorSrpcClient = client
 	return dominatorSrpcClient
 }
 
@@ -108,13 +119,6 @@ func doMain() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	clientName := fmt.Sprintf("%s:%d", *domHostname, *domPortNum)
-	client, err := srpc.DialHTTP("tcp", clientName, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error dialing: %s\n", err)
-		os.Exit(1)
-	}
-	dominatorSrpcClient = client
 	return commands.RunCommands(subcommands, printUsage, logger)
 }
 
