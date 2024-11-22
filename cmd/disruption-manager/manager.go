@@ -78,7 +78,7 @@ func hostAccessCheck(remoteAddr, mdbHostname string) error {
 }
 
 func newDisruptionManager(stateFilename string,
-	maximimPermittedDuration time.Duration,
+	maximumPermittedDuration time.Duration,
 	logger log.DebugLogger) (*disruptionManager, error) {
 	writeNotifier := make(chan struct{}, 1)
 	var groupList groupListType
@@ -86,7 +86,7 @@ func newDisruptionManager(stateFilename string,
 		exportable:    &groupList,
 		groups:        make(map[string]*groupInfoType),
 		logger:        logger,
-		maxDuration:   maximimPermittedDuration,
+		maxDuration:   maximumPermittedDuration,
 		stateFilename: stateFilename,
 		writeNotifier: writeNotifier,
 	}

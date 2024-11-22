@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	maximimPermittedDuration = flag.Duration("maximimPermittedDuration",
+	maximumPermittedDuration = flag.Duration("maximumPermittedDuration",
 		time.Hour,
 		"Maximum time disruption will be permitted after last request")
 	portNum = flag.Uint("portNum", constants.DisruptionManagerPortNumber,
@@ -42,7 +42,7 @@ func main() {
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	dm, err := newDisruptionManager(filepath.Join(*stateDir, "state.json"),
-		*maximimPermittedDuration, logger)
+		*maximumPermittedDuration, logger)
 	if err != nil {
 		logger.Fatalf("Unable to create Disruption Manager\n", err)
 	}
