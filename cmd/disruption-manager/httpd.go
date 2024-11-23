@@ -116,22 +116,37 @@ func (s *httpServer) showStateHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<center>")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true,
-		"Hostname", "State", "Group", "Request Age")
+		"Hostname", "State", "Group", "Request Age/Timeout", "Ready Timeout",
+		"Ready URL")
 	groupList := s.disruptionManager.getGroupList()
 	now := time.Now()
 	for _, groupInfo := range groupList.groups {
-		if len(groupInfo.Permitted) < 1 && len(groupInfo.Requested) < 1 {
+		if len(groupInfo.Permitted) < 1 &&
+			len(groupInfo.Requested) < 1 &&
+			len(groupInfo.Waiting) < 1 {
 			continue
 		}
 		for _, hostInfo := range groupInfo.Permitted {
 			tw.WriteRow("", "",
 				hostInfo.Hostname, "permitted", groupInfo.Identifier,
-				format.Duration(now.Sub(hostInfo.LastRequest)))
+				format.Duration(now.Sub(hostInfo.LastRequest))+"/"+
+					format.Duration(hostInfo.LastRequest.Add(
+						s.disruptionManager.maxDuration).Sub(now)),
+				"", "")
 		}
 		for _, hostInfo := range groupInfo.Requested {
 			tw.WriteRow("", "",
 				hostInfo.Hostname, "requested", groupInfo.Identifier,
-				format.Duration(now.Sub(hostInfo.LastRequest)))
+				format.Duration(now.Sub(hostInfo.LastRequest))+"/"+
+					format.Duration(hostInfo.LastRequest.Add(
+						s.disruptionManager.maxDuration).Sub(now)),
+				"", "")
+		}
+		for _, waitInfo := range groupInfo.Waiting {
+			tw.WriteRow("", "",
+				waitInfo.Hostname, "waiting", groupInfo.Identifier,
+				"", format.Duration(waitInfo.ReadyTimeout.Sub(now)),
+				waitInfo.ReadyUrl)
 		}
 	}
 	tw.Close()
@@ -160,10 +175,13 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "<h3>")
 	groupList := s.disruptionManager.getGroupList()
 	if len(groupList.groups) < 1 {
-		fmt.Fprintln(writer, "No disruptions permitted or requested<br>")
+		fmt.Fprintln(writer,
+			"No disruptions permitted, requested or waiting<br>")
 	} else {
-		fmt.Fprintf(writer, "%d disruptions permitted and %d requested: ",
-			groupList.totalPermitted, groupList.totalRequested)
+		fmt.Fprintf(writer,
+			"%d disruptions permitted, %d requested and %d waiting: ",
+			groupList.totalPermitted, groupList.totalRequested,
+			groupList.totalWaiting)
 		fmt.Fprintln(writer, `<a href="showState">dashboard</a><br>`)
 	}
 	for _, htmlWriter := range s.htmlWriters {

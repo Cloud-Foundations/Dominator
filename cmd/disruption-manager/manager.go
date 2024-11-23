@@ -3,13 +3,17 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
+	"text/template"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -19,41 +23,59 @@ import (
 )
 
 const (
-	tagGroupIdentifier        = "DisruptionManagerGroupIdentifier"
-	tagGroupMaximumDisrupting = "DisruptionManagerGroupMaximumDisrupting"
+	tagGroupIdentifier               = "DisruptionManagerGroupIdentifier"
+	tagGroupMaximumDisrupting        = "DisruptionManagerGroupMaximumDisrupting"
+	tagDisruptionManagerReadyTimeout = "DisruptionManagerReadyTimeout"
+	tagDisruptionManagerReadyUrl     = "DisruptionManagerReadyUrl"
 )
 
 type disruptionManager struct {
-	logger        log.DebugLogger
-	maxDuration   time.Duration
-	stateFilename string
-	writeNotifier chan<- struct{}
-	mutex         sync.Mutex                // Protect everything below.
-	exportable    *groupListType            // nil if invalid.
-	groups        map[string]*groupInfoType // Key: group identifier.
+	logger              log.DebugLogger
+	maxDuration         time.Duration
+	stateFilename       string
+	recalculateNotifier chan<- struct{}
+	writeNotifier       chan<- struct{}
+	mutex               sync.Mutex                // Protect everything below.
+	exportable          *groupListType            // nil if invalid.
+	groups              map[string]*groupInfoType // Key: group identifier.
 }
 
 type groupInfoType struct {
 	maxPermitted uint64
-	permitted    map[string]time.Time // K: hostname, V: last request time.
-	requested    map[string]time.Time // K: hostname, V: last request time.
+	permitted    map[string]time.Time     // K: hostname, V: last request time.
+	requested    map[string]time.Time     // K: hostname, V: last request time.
+	waiting      map[string]*waitDataType // K: hostname.
 }
 
 type groupStatsType struct {
 	Identifier string
 	Permitted  []hostInfoType `json:",omitempty"`
 	Requested  []hostInfoType `json:",omitempty"`
+	Waiting    []waitInfoType `json:",omitempty"`
 }
 
 type hostInfoType struct {
 	Hostname    string
-	LastRequest time.Time
+	LastRequest time.Time `json:",omitempty"`
+	waitInfoType
 }
 
 type groupListType struct {
 	groups         []groupStatsType
 	totalPermitted uint
 	totalRequested uint
+	totalWaiting   uint
+}
+
+type waitDataType struct {
+	finished     bool
+	ReadyTimeout time.Time `json:",omitempty"`
+	ReadyUrl     string    `json:",omitempty"`
+}
+
+type waitInfoType struct {
+	Hostname string
+	waitDataType
 }
 
 // Returns nil if the remote hostname matches the MDB hostname, else an error.
@@ -77,18 +99,47 @@ func hostAccessCheck(remoteAddr, mdbHostname string) error {
 	return fmt.Errorf("%s not permitted", mdbHostname)
 }
 
+func makeGroupText(groupIdentifier string) string {
+	if groupIdentifier == "" {
+		return "global group"
+	} else {
+		return `group="` + groupIdentifier + `"`
+	}
+}
+
+func sendNotification(notifier chan<- struct{}) {
+	select {
+	case notifier <- struct{}{}:
+	default:
+	}
+}
+
+func sortHostInfos(list []hostInfoType) {
+	sort.SliceStable(list, func(left, right int) bool {
+		return list[left].Hostname < list[right].Hostname
+	})
+}
+
+func sortWaitInfos(list []waitInfoType) {
+	sort.SliceStable(list, func(left, right int) bool {
+		return list[left].Hostname < list[right].Hostname
+	})
+}
+
 func newDisruptionManager(stateFilename string,
 	maximumPermittedDuration time.Duration,
 	logger log.DebugLogger) (*disruptionManager, error) {
+	recalculateNotifier := make(chan struct{}, 1)
 	writeNotifier := make(chan struct{}, 1)
 	var groupList groupListType
 	dm := &disruptionManager{
-		exportable:    &groupList,
-		groups:        make(map[string]*groupInfoType),
-		logger:        logger,
-		maxDuration:   maximumPermittedDuration,
-		stateFilename: stateFilename,
-		writeNotifier: writeNotifier,
+		exportable:          &groupList,
+		groups:              make(map[string]*groupInfoType),
+		logger:              logger,
+		maxDuration:         maximumPermittedDuration,
+		stateFilename:       stateFilename,
+		recalculateNotifier: recalculateNotifier,
+		writeNotifier:       writeNotifier,
 	}
 	if err := json.ReadFromFile(stateFilename, &groupList.groups); err != nil {
 		if !os.IsNotExist(err) {
@@ -110,29 +161,28 @@ func newDisruptionManager(stateFilename string,
 					groupList.totalRequested++
 				}
 			}
+			for _, host := range groupStats.Waiting {
+				if _, ok := group.waiting[host.Hostname]; !ok {
+					if !host.ReadyTimeout.IsZero() &&
+						time.Until(host.ReadyTimeout) > 0 {
+						group.waiting[host.Hostname] = &host.waitDataType
+						go host.waitDataType.wait(recalculateNotifier,
+							host.Hostname, makeGroupText(groupStats.Identifier),
+							logger)
+						groupList.totalWaiting++
+					}
+				}
+			}
 		}
 	}
-	go dm.expireLoop()
+	go dm.recalculateLoop(recalculateNotifier)
 	go dm.writeLoop(writeNotifier)
 	return dm, nil
 }
 
-func newGroup() *groupInfoType {
-	return &groupInfoType{
-		maxPermitted: 1,
-		permitted:    make(map[string]time.Time),
-		requested:    make(map[string]time.Time),
-	}
-}
-
-func sortHostInfos(list []hostInfoType) {
-	sort.SliceStable(list, func(left, right int) bool {
-		return list[left].Hostname < list[right].Hostname
-	})
-}
-
 func (dm *disruptionManager) cancel(machine mdb.Machine) (
 	sub_proto.DisruptionState, string, error) {
+	waitData := makeWaitData(machine, dm.logger)
 	var invalidate bool
 	dm.mutex.Lock()
 	defer func() {
@@ -142,18 +192,26 @@ func (dm *disruptionManager) cancel(machine mdb.Machine) (
 	var logMessage string
 	if _, ok := group.permitted[machine.Hostname]; ok {
 		invalidate = true
-		// Move one host from Requested -> Permitted if possible.
-		for hostname, lastRequest := range group.requested {
-			group.permitted[hostname] = lastRequest
-			delete(group.requested, hostname)
-			logMessage = fmt.Sprintf(
-				"%s: permitted->denied and %s: requested->permitted (%s)",
-				machine.Hostname, hostname, groupText)
-			break
-		}
-		if logMessage == "" {
-			logMessage = fmt.Sprintf("%s: permitted->denied (%s)",
+		if waitData != nil {
+			group.waiting[machine.Hostname] = waitData
+			go waitData.wait(dm.recalculateNotifier, machine.Hostname,
+				groupText, dm.logger)
+			logMessage = fmt.Sprintf("%s: permitted->denied/waiting (%s)",
 				machine.Hostname, groupText)
+		} else {
+			// Move one host from Requested -> Permitted if possible.
+			for hostname, lastRequest := range group.requested {
+				group.permitted[hostname] = lastRequest
+				delete(group.requested, hostname)
+				logMessage = fmt.Sprintf(
+					"%s: permitted->denied and %s: requested->permitted (%s)",
+					machine.Hostname, hostname, groupText)
+				break
+			}
+			if logMessage == "" {
+				logMessage = fmt.Sprintf("%s: permitted->denied (%s)",
+					machine.Hostname, groupText)
+			}
 		}
 		delete(group.permitted, machine.Hostname)
 	}
@@ -196,49 +254,6 @@ func (dm *disruptionManager) check(machine mdb.Machine) (
 		nil
 }
 
-func (dm *disruptionManager) expireLoop() {
-	for {
-		for _, logLine := range dm.expireOnce() {
-			dm.logger.Println(logLine)
-		}
-		time.Sleep(dm.maxDuration >> 6)
-	}
-}
-
-func (dm *disruptionManager) expireOnce() []string {
-	var invalidate bool
-	dm.mutex.Lock()
-	defer func() {
-		dm.unlockAndInvalidate(invalidate)
-	}()
-	expireBefore := time.Now().Add(-dm.maxDuration)
-	var logLines []string
-	for _, group := range dm.groups {
-		for hostname, lastRequestTime := range group.permitted {
-			if lastRequestTime.Before(expireBefore) {
-				invalidate = true
-				delete(group.permitted, hostname)
-				logLines = append(logLines,
-					fmt.Sprintf("%s: permitted->denied", hostname))
-			}
-		}
-		for hostname, lastRequestTime := range group.requested {
-			if lastRequestTime.Before(expireBefore) {
-				invalidate = true
-				delete(group.requested, hostname)
-				dm.logger.Printf("%s: requested->denied\n", hostname)
-			} else if uint64(len(group.permitted)) < group.maxPermitted {
-				invalidate = true
-				group.permitted[hostname] = lastRequestTime
-				delete(group.requested, hostname)
-				logLines = append(logLines,
-					fmt.Sprintf("%s: requested->permitted", hostname))
-			}
-		}
-	}
-	return logLines
-}
-
 func (dm *disruptionManager) getGroup(machine mdb.Machine) (
 	*groupInfoType, string) {
 	var groupIdentifier string
@@ -252,11 +267,7 @@ func (dm *disruptionManager) getGroup(machine mdb.Machine) (
 		group = newGroup()
 		dm.groups[groupIdentifier] = group
 	}
-	if groupIdentifier == "" {
-		return group, "global group"
-	} else {
-		return group, `group="` + groupIdentifier + `"`
-	}
+	return group, makeGroupText(groupIdentifier)
 }
 
 func (dm *disruptionManager) getGroupList() *groupListType {
@@ -267,7 +278,9 @@ func (dm *disruptionManager) getGroupList() *groupListType {
 	}
 	var groupList groupListType
 	for groupIdentifier, group := range dm.groups {
-		if len(group.permitted) < 1 && len(group.requested) < 1 {
+		if len(group.permitted) < 1 &&
+			len(group.requested) < 1 &&
+			len(group.waiting) < 1 {
 			continue
 		}
 		groupStats := groupStatsType{
@@ -289,11 +302,82 @@ func (dm *disruptionManager) getGroupList() *groupListType {
 		}
 		sortHostInfos(groupStats.Requested)
 		groupList.totalRequested += uint(len(groupStats.Requested))
+		for hostname, waitData := range group.waiting {
+			groupStats.Waiting = append(groupStats.Waiting, waitInfoType{
+				Hostname:     hostname,
+				waitDataType: *waitData,
+			})
+		}
+		sortWaitInfos(groupStats.Waiting)
+		groupList.totalWaiting += uint(len(groupStats.Waiting))
 		groupList.groups = append(groupList.groups, groupStats)
 	}
 	groupList.sort()
 	dm.exportable = &groupList
 	return &groupList
+}
+
+func (dm *disruptionManager) recalculateLoop(notifier <-chan struct{}) {
+	for {
+		for _, logLine := range dm.recalculateOnce() {
+			dm.logger.Println(logLine)
+		}
+		timer := time.NewTimer(dm.maxDuration >> 6)
+		select {
+		case <-notifier:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		case <-timer.C:
+		}
+	}
+}
+
+func (dm *disruptionManager) recalculateOnce() []string {
+	var invalidate bool
+	dm.mutex.Lock()
+	defer func() {
+		dm.unlockAndInvalidate(invalidate)
+	}()
+	expireBefore := time.Now().Add(-dm.maxDuration)
+	var logLines []string
+	for groupIdentifier, group := range dm.groups {
+		groupText := makeGroupText(groupIdentifier)
+		for hostname, waitData := range group.waiting {
+			if waitData.finished {
+				invalidate = true
+				delete(group.waiting, hostname)
+			}
+		}
+		for hostname, lastRequestTime := range group.permitted {
+			if lastRequestTime.Before(expireBefore) {
+				invalidate = true
+				delete(group.permitted, hostname)
+				logLines = append(logLines,
+					fmt.Sprintf("%s: permitted/expired->denied (%s)",
+						hostname, groupText))
+			}
+		}
+		for hostname, lastRequestTime := range group.requested {
+			if lastRequestTime.Before(expireBefore) {
+				invalidate = true
+				delete(group.requested, hostname)
+				dm.logger.Printf("%s: requested/expired->denied (%s)\n",
+					hostname, groupText)
+			} else if group.canPermit(nil) {
+				invalidate = true
+				group.permitted[hostname] = lastRequestTime
+				delete(group.requested, hostname)
+				logLines = append(logLines,
+					fmt.Sprintf("%s: requested->permitted (%s)",
+						hostname, groupText))
+			}
+		}
+	}
+	return logLines
 }
 
 func (dm *disruptionManager) request(machine mdb.Machine) (
@@ -334,10 +418,7 @@ func (dm *disruptionManager) unlockAndInvalidate(invalidate bool) {
 	if !invalidate {
 		return
 	}
-	select {
-	case dm.writeNotifier <- struct{}{}:
-	default:
-	}
+	sendNotification(dm.writeNotifier)
 }
 
 func (dm *disruptionManager) writeLoop(notifier <-chan struct{}) {
@@ -366,7 +447,16 @@ func (group *groupInfoType) canPermit(tgs tags.Tags) bool {
 		maximum = 1
 	}
 	group.maxPermitted = maximum
-	return uint64(len(group.permitted)) < maximum
+	return uint64(len(group.permitted)+len(group.waiting)) < maximum
+}
+
+func newGroup() *groupInfoType {
+	return &groupInfoType{
+		maxPermitted: 1,
+		permitted:    make(map[string]time.Time),
+		requested:    make(map[string]time.Time),
+		waiting:      make(map[string]*waitDataType),
+	}
 }
 
 func (groupList *groupListType) sort() {
@@ -374,4 +464,73 @@ func (groupList *groupListType) sort() {
 		return groupList.groups[left].Identifier <
 			groupList.groups[right].Identifier
 	})
+}
+
+func makeWaitData(machine mdb.Machine, logger log.Logger) *waitDataType {
+	var retval *waitDataType
+	waitData := waitDataType{}
+	if value, ok := machine.Tags[tagDisruptionManagerReadyTimeout]; ok {
+		if readyTimeout, err := time.ParseDuration(value); err != nil {
+			logger.Printf("%s: error parsing [%s]=%s\n",
+				machine.Hostname, tagDisruptionManagerReadyTimeout, value)
+			return nil
+		} else {
+			waitData.ReadyTimeout = time.Now().Add(readyTimeout)
+			retval = &waitData
+		}
+	}
+	if value, ok := machine.Tags[tagDisruptionManagerReadyUrl]; ok {
+		tmpl, err := template.New("").Parse(value)
+		if err != nil {
+			logger.Printf("%s: error parsing [%s]=%s\n",
+				machine.Hostname, tagDisruptionManagerReadyUrl, value)
+			return nil
+		}
+		builder := &strings.Builder{}
+		if err := tmpl.Execute(builder, machine); err != nil {
+			logger.Printf("%s: error executing [%s]=%s\n",
+				machine.Hostname, tagDisruptionManagerReadyUrl, value)
+			return nil
+		}
+		if waitData.ReadyTimeout.IsZero() {
+			waitData.ReadyTimeout = time.Now().Add(15 * time.Minute)
+		}
+		waitData.ReadyUrl = builder.String()
+		retval = &waitData
+	}
+	return retval
+}
+
+func (wd *waitDataType) wait(recalculateNotifier chan<- struct{},
+	hostname, groupText string, logger log.DebugLogger) {
+	maxDelay := time.Until(wd.ReadyTimeout)
+	if wd.ReadyUrl == "" { // Simple delay.
+		time.Sleep(maxDelay)
+		wd.finished = true
+		logger.Printf("%s: ready delay completed (%s)\n", hostname, groupText)
+		sendNotification(recalculateNotifier)
+		return
+	}
+	maxInterval := maxDelay >> 6
+	if maxInterval < 15*time.Second {
+		maxInterval = 15 * time.Second
+	}
+	sleeper := backoffdelay.NewExponential(0, maxInterval, 2)
+	for ; time.Until(wd.ReadyTimeout) > 0; sleeper.Sleep() {
+		resp, err := http.Get(wd.ReadyUrl)
+		if err != nil {
+			logger.Debugln(1, err)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			wd.finished = true
+			logger.Printf("%s: ready (%s)\n", hostname, groupText)
+			sendNotification(recalculateNotifier)
+			return
+		}
+	}
+	wd.finished = true
+	logger.Printf("%s: ready check timed out (%s)\n", hostname, groupText)
+	sendNotification(recalculateNotifier)
 }
