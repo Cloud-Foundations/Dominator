@@ -141,42 +141,45 @@ func newDisruptionManager(stateFilename string,
 		recalculateNotifier: recalculateNotifier,
 		writeNotifier:       writeNotifier,
 	}
-	if err := json.ReadFromFile(stateFilename, &groupList.groups); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-	} else {
-		for _, groupStats := range groupList.groups {
-			group := newGroup()
-			dm.groups[groupStats.Identifier] = group
-			for _, host := range groupStats.Permitted {
-				if _, ok := group.permitted[host.Hostname]; !ok {
-					group.permitted[host.Hostname] = host.LastRequest
-					groupList.totalPermitted++
-				}
+	if stateFilename != "" {
+		err := json.ReadFromFile(stateFilename, &groupList.groups)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, err
 			}
-			for _, host := range groupStats.Requested {
-				if _, ok := group.permitted[host.Hostname]; !ok {
-					group.requested[host.Hostname] = host.LastRequest
-					groupList.totalRequested++
+		} else {
+			for _, groupStats := range groupList.groups {
+				group := newGroup()
+				dm.groups[groupStats.Identifier] = group
+				for _, host := range groupStats.Permitted {
+					if _, ok := group.permitted[host.Hostname]; !ok {
+						group.permitted[host.Hostname] = host.LastRequest
+						groupList.totalPermitted++
+					}
 				}
-			}
-			for _, host := range groupStats.Waiting {
-				if _, ok := group.waiting[host.Hostname]; !ok {
-					if !host.ReadyTimeout.IsZero() &&
-						time.Until(host.ReadyTimeout) > 0 {
-						group.waiting[host.Hostname] = &host.waitDataType
-						go host.waitDataType.wait(recalculateNotifier,
-							host.Hostname, makeGroupText(groupStats.Identifier),
-							logger)
-						groupList.totalWaiting++
+				for _, host := range groupStats.Requested {
+					if _, ok := group.permitted[host.Hostname]; !ok {
+						group.requested[host.Hostname] = host.LastRequest
+						groupList.totalRequested++
+					}
+				}
+				for _, host := range groupStats.Waiting {
+					if _, ok := group.waiting[host.Hostname]; !ok {
+						if !host.ReadyTimeout.IsZero() &&
+							time.Until(host.ReadyTimeout) > 0 {
+							group.waiting[host.Hostname] = &host.waitDataType
+							go host.waitDataType.wait(recalculateNotifier,
+								host.Hostname,
+								makeGroupText(groupStats.Identifier), logger)
+							groupList.totalWaiting++
+						}
 					}
 				}
 			}
+			go dm.writeLoop(writeNotifier)
 		}
 	}
 	go dm.recalculateLoop(recalculateNotifier)
-	go dm.writeLoop(writeNotifier)
 	return dm, nil
 }
 
@@ -512,23 +515,25 @@ func (wd *waitDataType) wait(recalculateNotifier chan<- struct{},
 		return
 	}
 	maxInterval := maxDelay >> 6
-	if maxInterval < 15*time.Second {
-		maxInterval = 15 * time.Second
+	if maxInterval > 5*time.Minute {
+		maxInterval = 5 * time.Minute
 	}
-	sleeper := backoffdelay.NewExponential(0, maxInterval, 2)
+	sleeper := backoffdelay.NewExponential(maxInterval>>4, maxInterval, 2)
 	for ; time.Until(wd.ReadyTimeout) > 0; sleeper.Sleep() {
 		resp, err := http.Get(wd.ReadyUrl)
 		if err != nil {
-			logger.Debugln(1, err)
+			logger.Debugf(1, "%s: %s\n", wd.ReadyUrl, err)
 			continue
 		}
 		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			wd.finished = true
-			logger.Printf("%s: ready (%s)\n", hostname, groupText)
-			sendNotification(recalculateNotifier)
-			return
+		if resp.StatusCode != http.StatusOK {
+			logger.Debugf(1, "%s: %s\n", wd.ReadyUrl, resp.Status)
+			continue
 		}
+		wd.finished = true
+		logger.Printf("%s: ready (%s)\n", hostname, groupText)
+		sendNotification(recalculateNotifier)
+		return
 	}
 	wd.finished = true
 	logger.Printf("%s: ready check timed out (%s)\n", hostname, groupText)

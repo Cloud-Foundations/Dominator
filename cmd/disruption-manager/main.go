@@ -44,7 +44,7 @@ func main() {
 	dm, err := newDisruptionManager(filepath.Join(*stateDir, "state.json"),
 		*maximumPermittedDuration, logger)
 	if err != nil {
-		logger.Fatalf("Unable to create Disruption Manager\n", err)
+		logger.Fatalf("Unable to create Disruption Manager: %s\n", err)
 	}
 	err = setupserver.SetupTlsWithParams(setupserver.Params{Logger: logger})
 	if err != nil {
