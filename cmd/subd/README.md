@@ -25,7 +25,7 @@ service subd stop
 ```
 
 which also kills the baby-sitting init script. It may be started with the
-comand:
+command:
 
 ```
 service subd start

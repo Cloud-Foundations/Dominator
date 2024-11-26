@@ -26,7 +26,7 @@ service fleet-manager stop
 ```
 
 which also kills the baby-sitting init script. It may be started with the
-comand:
+command:
 
 ```
 service fleet-manager start
