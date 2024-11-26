@@ -9,6 +9,16 @@ import (
 // library but is more readable and shows only 3 digits of precision when
 // duration is less than 1 minute.
 func Duration(duration time.Duration) string {
+	if duration == 0 {
+		return "0s"
+	}
+	if duration < 0 {
+		return "-" + formatDuration(-duration)
+	}
+	return formatDuration(duration)
+}
+
+func formatDuration(duration time.Duration) string {
 	if ns := duration.Nanoseconds(); ns < 1000 {
 		return fmt.Sprintf("%dns", ns)
 	} else if us := float64(duration) / float64(time.Microsecond); us < 1000 {
