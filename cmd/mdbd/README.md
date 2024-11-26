@@ -18,7 +18,7 @@ service mdbd stop
 ```
 
 which also kills the baby-sitting init script. It may be started with the
-comand:
+command:
 
 ```
 service mdbd start

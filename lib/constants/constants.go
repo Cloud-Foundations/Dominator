@@ -11,6 +11,7 @@ const (
 	HypervisorPortNumber         = 6976
 	FleetManagerPortNumber       = 6977
 	InstallerPortNumber          = 6978
+	DisruptionManagerPortNumber  = 6979
 
 	DefaultCpuPercent          = 50
 	DefaultNetworkSpeedPercent = 10

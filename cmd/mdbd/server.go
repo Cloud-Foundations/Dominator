@@ -32,20 +32,40 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 		pauseTable:   pauseTable,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
-				"GetMdb":     1,
-				"ListImages": 1,
+				"GetMachine":    1,
+				"GetMdb":        1,
+				"GetMdbUpdates": 1,
+				"ListImages":    1,
+				"PauseUpdates":  1,
+				"ResumeUpdates": 1,
 			}),
 
 		updateChannels: make(map[*srpc.Conn]chan<- mdbserver.MdbUpdate),
 	}
 	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
+			"GetMachine",
 			"GetMdb",
+			"GetMdbUpdates",
 			"ListImages",
 			"PauseUpdates",
 			"ResumeUpdates",
 		}})
 	return rpcObj
+}
+
+func (t *rpcType) GetMachine(conn *srpc.Conn,
+	request mdbserver.GetMachineRequest,
+	reply *mdbserver.GetMachineResponse) error {
+	currentMdb := t.currentMdb
+	if currentMdb == nil {
+		reply.Error = "no MDB data"
+	} else if machine, ok := currentMdb.table[request.Hostname]; !ok {
+		reply.Error = request.Hostname + " not in MDB"
+	} else {
+		reply.Machine = *machine
+	}
+	return nil
 }
 
 func (t *rpcType) GetMdb(conn *srpc.Conn, request mdbserver.GetMdbRequest,
@@ -98,13 +118,13 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 				return errors.New("update queue too full")
 			}
 			if err = conn.Encode(mdbUpdate); err != nil {
-				break
+				return err
 			}
 			if err = conn.Flush(); err != nil {
-				break
+				return err
 			}
 		case <-closeChannel:
-			break
+			return nil
 		}
 		if err != nil {
 			if err != io.EOF {

@@ -18,7 +18,7 @@ func getMdbdClient() (srpc.ClientI, error) {
 	clientName := fmt.Sprintf("%s:%d", hostname, *mdbServerPortNum)
 	client, err := srpc.DialHTTP("tcp", clientName, 0)
 	if err != nil {
-		return nil, fmt.Errorf("error dialing: %s", err)
+		return nil, fmt.Errorf("error dialing: %s: %s", clientName, err)
 	}
 	return client, nil
 }

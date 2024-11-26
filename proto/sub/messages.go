@@ -10,6 +10,10 @@ import (
 )
 
 const (
+	DisruptionRequestCheck   = 0
+	DisruptionRequestRequest = 1
+	DisruptionRequestCancel  = 2
+
 	DisruptionStateAnytime   = 0 // Not implemented or configured.
 	DisruptionStatePermitted = 1
 	DisruptionStateRequested = 2
@@ -28,6 +32,8 @@ type CleanupRequest struct {
 }
 
 type CleanupResponse struct{}
+
+type DisruptionRequest uint
 
 type DisruptionState uint
 
