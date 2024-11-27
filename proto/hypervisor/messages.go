@@ -350,6 +350,7 @@ type DiscardVmOldUserDataResponse struct {
 
 type DiscardVmSnapshotRequest struct {
 	IpAddress net.IP
+	Name      string
 }
 
 type DiscardVmSnapshotResponse struct {
@@ -686,6 +687,7 @@ type ReplaceVmUserDataResponse struct {
 type RestoreVmFromSnapshotRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
+	Name              string
 }
 
 type RestoreVmFromSnapshotResponse struct {
@@ -739,6 +741,7 @@ type SetDisabledStateResponse struct {
 type SnapshotVmRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
+	Name              string
 	RootOnly          bool
 }
 
