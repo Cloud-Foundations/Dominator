@@ -1,0 +1,36 @@
+[package]
+name = "srpc_client"
+version = "0.1.1"
+edition = "2021"
+
+[lib]
+name = "srpc_client"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+openssl = "0.10"
+serde_json = "1.0"
+tokio-openssl = "0.6"
+
+[dependencies.pyo3]
+version = "0.18"
+features = ["extension-module"]
+optional = true
+
+[dependencies.pyo3-asyncio]
+version = "0.18"
+features = ["tokio-runtime"]
+optional = true
+
+[features]
+default = []
+python = ["pyo3", "pyo3-asyncio"]
+
+[[example]]
+name = "rust_client_example"
+path = "examples/rust_client_example.rs"
+required-features = []
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full", "macros"] }
