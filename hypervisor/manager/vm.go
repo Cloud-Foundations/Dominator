@@ -790,10 +790,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	vm.mutex.Unlock()
 	var haveLock bool
 	defer func() {
-		if !haveLock {
-			vm.mutex.Lock()
-		}
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	if index >= uint(len(vm.Volumes)) {
 		return errors.New("invalid volume index")
@@ -1432,7 +1429,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		err = errors.New("VM is not running or stopped")
 	}
 	if err != nil {
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(true)
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
@@ -1443,13 +1440,10 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 	haveLock := false
 	doCleanup := true
 	defer func() {
-		if !haveLock {
-			vm.mutex.Lock()
-		}
 		if doCleanup {
 			os.Remove(rootFilename)
 		}
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
@@ -1637,10 +1631,7 @@ func (m *Manager) discardVmOldImage(ipAddr net.IP,
 	}
 	vm.blockMutations = true
 	vm.mutex.Unlock()
-	defer func() {
-		vm.mutex.Lock()
-		vm.allowMutationsAndUnlock()
-	}()
+	defer vm.allowMutationsAndUnlock(false)
 	if err := removeFile(vm.getInitrdPath() + extension); err != nil {
 		return err
 	}
@@ -1668,10 +1659,7 @@ func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	}
 	vm.blockMutations = true
 	vm.mutex.Unlock()
-	defer func() {
-		vm.mutex.Lock()
-		vm.allowMutationsAndUnlock()
-	}()
+	defer vm.allowMutationsAndUnlock(false)
 	return vm.discardSnapshot()
 }
 
@@ -1935,10 +1923,7 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	}
 	vm.blockMutations = true
 	vm.mutex.Unlock()
-	defer func() {
-		vm.mutex.Lock()
-		vm.allowMutationsAndUnlock()
-	}()
+	defer vm.allowMutationsAndUnlock(false)
 	var initrd, kernel []byte
 	if request.VolumeIndex == 0 {
 		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
@@ -2649,10 +2634,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	vm.blockMutations = true
 	haveLock := true
 	defer func() {
-		if !haveLock {
-			vm.mutex.Lock()
-		}
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	restart := vm.State == proto.StateRunning
 	switch vm.State {
@@ -3048,7 +3030,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		err = errors.New("VM is not running or stopped")
 	}
 	if err != nil {
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(true)
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
 			return err
 		}
@@ -3058,10 +3040,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	vm.mutex.Unlock()
 	haveLock := false
 	defer func() {
-		if !haveLock {
-			vm.mutex.Lock()
-		}
-		vm.allowMutationsAndUnlock()
+		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
@@ -3246,7 +3225,9 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer vm.allowMutationsAndUnlock(false)
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
 			return errors.New("VM is not stopped")
@@ -3269,7 +3250,9 @@ func (m *Manager) restoreVmImage(ipAddr net.IP,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	defer vm.allowMutationsAndUnlock(false)
 	if vm.State != proto.StateStopped {
 		return errors.New("VM is not stopped")
 	}
@@ -3441,10 +3424,13 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	}
 	vm.blockMutations = true
 	vm.mutex.Unlock()
-	defer func() {
-		vm.mutex.Lock()
-		vm.allowMutationsAndUnlock()
-	}()
+	defer vm.allowMutationsAndUnlock(false)
+	if vm.getActiveInitrdPath() != "" {
+		return errors.New("cannot snapshot root volume with separate initrd")
+	}
+	if vm.getActiveKernelPath() != "" {
+		return errors.New("cannot snapshot root volume with separate kernel")
+	}
 	// TODO(rgooch): First check for sufficient free space.
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
@@ -4106,7 +4092,10 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	return false, nil
 }
 
-func (vm *vmInfoType) allowMutationsAndUnlock() {
+func (vm *vmInfoType) allowMutationsAndUnlock(haveLock bool) {
+	if !haveLock {
+		vm.mutex.Lock()
+	}
 	if !vm.blockMutations {
 		panic(vm.Address.IpAddress.String() +
 			": blockMutations flag already unset")
