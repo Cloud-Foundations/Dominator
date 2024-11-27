@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	DisruptionRequestCheck   = 0
-	DisruptionRequestRequest = 1
-	DisruptionRequestCancel  = 2
+	DisruptionRequestCheck   = DisruptionRequest(0)
+	DisruptionRequestRequest = DisruptionRequest(1)
+	DisruptionRequestCancel  = DisruptionRequest(2)
 
-	DisruptionStateAnytime   = 0 // Not implemented or configured.
-	DisruptionStatePermitted = 1
-	DisruptionStateRequested = 2
-	DisruptionStateDenied    = 3
+	DisruptionStateAnytime   = DisruptionState(0) // Not implemented/configured.
+	DisruptionStatePermitted = DisruptionState(1)
+	DisruptionStateRequested = DisruptionState(2)
+	DisruptionStateDenied    = DisruptionState(3)
 
 	ErrorDisruptionPending = "disruption pending"
 	ErrorDisruptionDenied  = "disruption denied"
