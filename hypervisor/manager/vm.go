@@ -307,6 +307,17 @@ func removeFile(filename string) error {
 	return nil
 }
 
+func sanitiseSnapshotName(name string) (string, error) {
+	if name == "" {
+		return "snapshot", nil
+	}
+	if strings.ContainsAny(name, ".:/") {
+		return "",
+			fmt.Errorf("prohibited characters in snapshot name: \"%s\"", name)
+	}
+	return "snapshot:" + name, nil
+}
+
 func setVolumeSize(filename string, size uint64) error {
 	if err := os.Truncate(filename, int64(size)); err != nil {
 		return err
@@ -1652,7 +1663,11 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation) error {
+	authInfo *srpc.AuthInformation, snapshotName string) error {
+	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -1660,7 +1675,7 @@ func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	vm.blockMutations = true
 	vm.mutex.Unlock()
 	defer vm.allowMutationsAndUnlock(false)
-	return vm.discardSnapshot()
+	return vm.discardSnapshot(snapshotName)
 }
 
 func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
@@ -3220,7 +3235,12 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 }
 
 func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool) error {
+	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
+	snapshotName string) error {
+	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -3234,7 +3254,7 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 		}
 	}
 	for _, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + ".snapshot"
+		snapshotFilename := volume.Filename + "." + snapshotName
 		if err := os.Rename(snapshotFilename, volume.Filename); err != nil {
 			if !os.IsNotExist(err) {
 				return err
@@ -3417,7 +3437,11 @@ func (m *Manager) sendVmInfo(ipAddress string, vm *proto.VmInfo) {
 }
 
 func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	forceIfNotStopped, snapshotRootOnly bool) error {
+	forceIfNotStopped, snapshotRootOnly bool, snapshotName string) error {
+	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -3437,17 +3461,17 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			return errors.New("VM is not stopped")
 		}
 	}
-	if err := vm.discardSnapshot(); err != nil {
+	if err := vm.discardSnapshot(snapshotName); err != nil {
 		return err
 	}
 	doCleanup := true
 	defer func() {
 		if doCleanup {
-			vm.discardSnapshot()
+			vm.discardSnapshot(snapshotName)
 		}
 	}()
 	for index, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + ".snapshot"
+		snapshotFilename := volume.Filename + "." + snapshotName
 		if index == 0 || !snapshotRootOnly {
 			err := fsutil.CopyFile(snapshotFilename, volume.Filename,
 				fsutil.PrivateFilePerms)
@@ -3803,9 +3827,9 @@ func (vm *vmInfoType) destroy() {
 	vm.delete()
 }
 
-func (vm *vmInfoType) discardSnapshot() error {
+func (vm *vmInfoType) discardSnapshot(snapshotName string) error {
 	for _, volume := range vm.VolumeLocations {
-		if err := removeFile(volume.Filename + ".snapshot"); err != nil {
+		if err := removeFile(volume.Filename + "." + snapshotName); err != nil {
 			return err
 		}
 	}

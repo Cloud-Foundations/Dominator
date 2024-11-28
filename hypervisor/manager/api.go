@@ -280,8 +280,8 @@ func (m *Manager) DiscardVmOldUserData(ipAddr net.IP,
 }
 
 func (m *Manager) DiscardVmSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation) error {
-	return m.discardVmSnapshot(ipAddr, authInfo)
+	authInfo *srpc.AuthInformation, snapshotName string) error {
+	return m.discardVmSnapshot(ipAddr, authInfo, snapshotName)
 }
 
 func (m *Manager) ExportLocalVm(authInfo *srpc.AuthInformation,
@@ -477,8 +477,10 @@ func (m *Manager) ReplaceVmUserData(ipAddr net.IP, reader io.Reader,
 }
 
 func (m *Manager) RestoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool) error {
-	return m.restoreVmFromSnapshot(ipAddr, authInfo, forceIfNotStopped)
+	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
+	snapshotName string) error {
+	return m.restoreVmFromSnapshot(ipAddr, authInfo, forceIfNotStopped,
+		snapshotName)
 }
 
 func (m *Manager) RestoreVmImage(ipAddr net.IP,
@@ -511,8 +513,9 @@ func (m *Manager) ShutdownVMsAndExit() {
 }
 
 func (m *Manager) SnapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	forceIfNotStopped, snapshotRootOnly bool) error {
-	return m.snapshotVm(ipAddr, authInfo, forceIfNotStopped, snapshotRootOnly)
+	forceIfNotStopped, snapshotRootOnly bool, snapshotName string) error {
+	return m.snapshotVm(ipAddr, authInfo, forceIfNotStopped, snapshotRootOnly,
+		snapshotName)
 }
 
 func (m *Manager) StartVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
