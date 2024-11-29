@@ -49,5 +49,7 @@ func StartServer(portNum uint, imdb *scanner.ImageDataBase,
 }
 
 func AddHtmlWriter(htmlWriter HtmlWriter) {
-	htmlWriters = append(htmlWriters, htmlWriter)
+	if htmlWriter != nil {
+		htmlWriters = append(htmlWriters, htmlWriter)
+	}
 }

@@ -34,6 +34,8 @@ func statusHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "</h3>")
 	fmt.Fprintln(writer, "<hr>")
 	html.WriteFooter(writer)
-	bd.Write(writer)
+	if bd != nil {
+		bd.Write(writer)
+	}
 	fmt.Fprintln(writer, "</body>")
 }
