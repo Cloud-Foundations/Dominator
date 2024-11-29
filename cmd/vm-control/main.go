@@ -119,6 +119,7 @@ var (
 		"power of 2 to round up root volume size")
 	scanFilename = flag.String("scanFilename", "",
 		"Name of file to write scanned VM root to")
+	snapshotName     = flag.String("snapshotName", "", "Optional snapshot name")
 	snapshotRootOnly = flag.Bool("snapshotRootOnly", false,
 		"If true, snapshot only the root volume")
 	traceMetadata = flag.Bool("traceMetadata", false,
