@@ -18,6 +18,15 @@ import (
 
 var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
 
+func (s state) formatImage(imageName string) string {
+	imageServer := s.manager.GetImageServerAddress()
+	if imageServer == "" {
+		return imageName
+	}
+	return fmt.Sprintf(`<a href="http://%s/showImage?%s">%s</a>`,
+		imageServer, imageName, imageName)
+}
+
 func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 	parsedQuery := url.ParseQuery(req.URL)
 	if len(parsedQuery.Flags) != 1 {
@@ -122,7 +131,12 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, `<table border="1">`)
 		tw, _ := html.NewTableWriter(writer, true, "Name", "Value")
 		for _, name := range tagNames {
-			tw.WriteRow("", "", name, vm.Tags[name])
+			value := vm.Tags[name]
+			switch name {
+			case "RequiredImage", "PlannedImage":
+				value = s.formatImage(value)
+			}
+			tw.WriteRow("", "", name, value)
 		}
 		tw.Close()
 		fmt.Fprintln(writer, "<br>")
