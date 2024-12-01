@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -17,8 +18,12 @@ func fallocate(filename string, size uint64) error {
 		return err
 	}
 	defer syscall.Close(fd)
-	return wsyscall.Fallocate(int(fd), wsyscall.FALLOC_FL_KEEP_SIZE,
-		0, int64(size))
+	err = wsyscall.Fallocate(int(fd), wsyscall.FALLOC_FL_KEEP_SIZE, 0,
+		int64(size))
+	if err != nil {
+		return fmt.Errorf("error fallocating: %s: %w", filename, err)
+	}
+	return nil
 }
 
 func fallocateOrFill(filename string, size uint64,
