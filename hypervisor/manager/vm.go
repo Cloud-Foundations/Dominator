@@ -93,18 +93,21 @@ func computeSize(minimumFreeBytes, roundupPower, size uint64) uint64 {
 	return imageUnits << roundupPower
 }
 
-func copyData(filename string, reader io.Reader, length uint64) error {
+// copyData will create and truncate the specified file and will copy data to
+// the file. If reader is nil, the file is fallocated or zero-filled.
+func copyData(filename string, reader io.Reader, length uint64,
+	logger log.DebugLogger) error {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY,
 		fsutil.PrivateFilePerms)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if err := setVolumeSize(filename, length); err != nil {
+	if err := os.Truncate(filename, int64(length)); err != nil {
 		return err
 	}
 	if reader == nil {
-		return nil
+		return fsutil.FallocateOrFill(filename, length, logger)
 	}
 	_, err = io.CopyN(file, reader, int64(length))
 	return err
@@ -1315,7 +1318,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
-		if err := copyData(filename, conn, request.UserDataSize); err != nil {
+		err := copyData(filename, conn, request.UserDataSize, vm.logger)
+		if err != nil {
 			return sendError(conn, err)
 		}
 	}
@@ -1330,12 +1334,14 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			if err := copyData(fname, dataReader, volume.Size); err != nil {
+			err := copyData(fname, dataReader, volume.Size, vm.logger)
+			if err != nil {
 				return sendError(conn, err)
 			}
 			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
 				vinit := request.SecondaryVolumesInit[index]
 				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
+					NoDiscard:                true,
 					BytesPerInode:            vinit.BytesPerInode,
 					Label:                    vinit.Label,
 					ReservedBlocksPercentage: vinit.ReservedBlocksPercentage,
@@ -1344,10 +1350,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 					vm.logger)
 				if err != nil {
 					return sendError(conn, err)
-				}
-				if err := setVolumeSize(fname, volume.Size); err != nil {
-					return fmt.Errorf("error setting size on volume: %s: %s",
-						fname, err)
 				}
 			}
 			vm.Volumes = append(vm.Volumes, volume)
@@ -1486,7 +1488,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(rootFilename, conn, request.ImageDataSize)
+		err := copyData(rootFilename, conn, request.ImageDataSize, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1507,7 +1509,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(rootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3103,7 +3105,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			newSize = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(tmpRootFilename, conn, request.ImageDataSize)
+		err := copyData(tmpRootFilename, conn, request.ImageDataSize, vm.logger)
 		if err != nil {
 			return err
 		}
@@ -3129,7 +3131,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(tmpRootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3748,7 +3750,7 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize)
+	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize, vm.logger)
 	if err != nil {
 		return err
 	}
