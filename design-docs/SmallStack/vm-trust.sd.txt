@@ -1,0 +1,30 @@
+title Smallstack vm cert Boostrap
+
+participant VmControl
+note right of HV: Generate RCC keypair
+VmControl->HV: create new VM( dont start)
+HV->VmControl: vm-info
+VmControl->HV: rcc public key?
+HV->VmControl: rcc pubkey
+VmControl->Keymasterd: Generate New RRC + pubkey(HV) + ipnetblocks+role
+Keymasterd->VmControl: rcc
+VmControl->HV: rcc for VM
+note right of HV: Generate RoleCertKeypair
+loop async every 12h
+HV->Keymasterd: rcc + rolepubkey
+Keymasterd->HV:rolecert
+end
+VmControl->HV: start vm
+HV->VM: start
+loop (every 12h)
+VM->HV: (rolecert+ privatekey?)
+HV->VM: cert+key
+end
+==Weeks later==
+loop every X weeks
+note right of HV: Generate RCC keypair
+HV->Keymasterd: updatercc:  pubkey
+Keymasterd->HV: new rcc
+end
+
+
