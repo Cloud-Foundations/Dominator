@@ -264,6 +264,19 @@ func getCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
 	return reply, nil
 }
 
+func getPublicKey(client srpc.ClientI) ([]byte, error) {
+	request := proto.GetPublicKeyRequest{}
+	var reply proto.GetPublicKeyResponse
+	err := client.RequestReply("Hypervisor.GetPublicKey", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	return reply.KeyPEM, nil
+}
+
 func getRootCookiePath(client *srpc.Client) (string, error) {
 	request := proto.GetRootCookiePathRequest{}
 	var reply proto.GetRootCookiePathResponse

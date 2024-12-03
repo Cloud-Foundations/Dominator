@@ -77,6 +77,11 @@ func GetCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
 	return getCapacity(client)
 }
 
+// GetPublicKey will get the PEM-encoded public key for the Hypervisor.
+func GetPublicKey(client srpc.ClientI) ([]byte, error) {
+	return getPublicKey(client)
+}
+
 func GetRootCookiePath(client *srpc.Client) (string, error) {
 	return getRootCookiePath(client)
 }
