@@ -380,6 +380,13 @@ type GetCapacityResponse struct {
 	TotalVolumeBytes uint64 `json:",omitempty"`
 }
 
+type GetPublicKeyRequest struct{}
+
+type GetPublicKeyResponse struct {
+	Error  string
+	KeyPEM []byte
+}
+
 type GetRootCookiePathRequest struct{}
 
 type GetRootCookiePathResponse struct {
