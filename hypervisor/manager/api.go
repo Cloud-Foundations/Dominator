@@ -48,6 +48,8 @@ type Manager struct {
 	numCPUs           uint
 	objectCache       *cachingreader.ObjectServer
 	objectVolumeIndex int // -1: not on a volume mount, else index of mount.
+	privateKeyPEM     []byte
+	publicKeyPEM      []byte
 	rootCookie        []byte
 	serialNumber      string
 	shuttingDown      bool
@@ -307,6 +309,11 @@ func (m *Manager) GetImageServerAddress() string {
 
 func (m *Manager) GetNumVMs() (uint, uint) {
 	return m.getNumVMs()
+}
+
+// GetPublicKey returns the PEM-encoded public key.
+func (m *Manager) GetPublicKey() ([]byte, error) {
+	return m.publicKeyPEM, nil
 }
 
 func (m *Manager) GetRootCookiePath() string {

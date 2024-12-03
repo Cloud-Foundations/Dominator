@@ -97,6 +97,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if err := manager.checkVsockets(); err != nil {
 		return nil, err
 	}
+	if err := manager.loadKeys(); err != nil {
+		return nil, err
+	}
 	if err := manager.loadSubnets(); err != nil {
 		return nil, err
 	}
