@@ -47,6 +47,7 @@ Some of the sub-commands available are:
                     *Hypervisor*
 - **get-machine-info**: get information for a specific *Hypervisor* from the
                         *Fleet Manager*
+- **get-public-key**: get the PEM-encoded public key for a specific *Hypervisor*
 - **get-updates**: get and show a continuous stream of updates from a
                    *Hypervisor* or *Fleet Manager*. This is primarily for
                    debugging
