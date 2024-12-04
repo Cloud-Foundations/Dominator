@@ -661,6 +661,15 @@ type ReplaceVmCredentialsResponse struct {
 	Error string
 }
 
+type ReplaceVmIdentityRequest struct {
+	IdentityRequestorCertificate []byte // PEM encoded.
+	IpAddress                    net.IP
+}
+
+type ReplaceVmIdentityResponse struct {
+	Error string
+}
+
 type ReplaceVmImageRequest struct {
 	DhcpTimeout      time.Duration
 	ImageDataSize    uint64
