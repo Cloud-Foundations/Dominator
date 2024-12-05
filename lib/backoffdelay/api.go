@@ -13,6 +13,12 @@ type Exponential struct {
 	stopTime   time.Time
 }
 
+type Refresher struct {
+	deadline time.Time
+	maximum  time.Duration
+	minimum  time.Duration
+}
+
 type Resetter interface {
 	Reset()
 }
@@ -62,4 +68,39 @@ func (e *Exponential) SleepUntilEnd() {
 // duration when iterating over a set of operations with individual timeouts.
 func (e *Exponential) StartInterval() {
 	e.startInterval()
+}
+
+// NewRefresher creates a Sleeper with a specified deadline to perform a refresh
+// prior to the deadline, with more frequent retries as the deadline approaches.
+// This is useful for scheduling certificate refreshes.
+// The deadline is time by which a refresh is required.
+// The minimumDelay is the minimum delay between refresh attempts. If less than
+// or equal to 0, the default is 1 second.
+// The maximumDelay is the maximum delay between refresh attempts. If less than
+// or equal to 0, there is no maximum.
+func NewRefresher(deadline time.Time,
+	minimumDelay, maximumDelay time.Duration) *Refresher {
+	return newRefresher(deadline, minimumDelay, maximumDelay)
+}
+
+// ResetTimer will reset a time.Timer with the time to wait until the next
+// refresh should be attempted. Any previous events are cleared.
+func (r *Refresher) ResetTimer(timer *time.Timer) {
+	r.resetTimer(timer)
+}
+
+// SetDeadline will update the refresh deadline.
+func (r *Refresher) SetDeadline(deadline time.Time) {
+	r.setDeadline(deadline)
+}
+
+// Sleep will sleep until the next refresh should be attempted.
+func (r *Refresher) Sleep() {
+	r.sleep()
+}
+
+// WaitInterval returns the time to wait until the next refresh should be
+// attempted.
+func (r *Refresher) WaitInterval() time.Duration {
+	return r.waitInterval()
 }
