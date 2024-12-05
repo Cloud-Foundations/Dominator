@@ -380,6 +380,13 @@ type GetCapacityResponse struct {
 	TotalVolumeBytes uint64 `json:",omitempty"`
 }
 
+type GetIdentityProviderRequest struct{}
+
+type GetIdentityProviderResponse struct {
+	Error   string
+	BaseUrl string
+}
+
 type GetPublicKeyRequest struct{}
 
 type GetPublicKeyResponse struct {
