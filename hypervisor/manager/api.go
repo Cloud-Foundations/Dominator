@@ -316,6 +316,11 @@ func (m *Manager) GetNumVMs() (uint, uint) {
 	return m.getNumVMs()
 }
 
+// GetIdentityProvider returns the base URL of the Identity Provider.
+func (m *Manager) GetIdentityProvider() (string, error) {
+	return m.StartOptions.IdentityProvider, nil
+}
+
 // GetPublicKey returns the PEM-encoded public key.
 func (m *Manager) GetPublicKey() ([]byte, error) {
 	return m.publicKeyPEM, nil
