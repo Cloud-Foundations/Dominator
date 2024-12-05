@@ -147,6 +147,11 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
 		vmInfo.setupLockWatcher()
+		if err := vmInfo.loadIdentityRequestorCert(); err != nil {
+			vmInfo.logger.Println(
+				"failed to load identity requestor certificate")
+			continue
+		}
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {
 			manager.Logger.Println(err)
 			if ipAddr == "0.0.0.0" {

@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -1187,7 +1188,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	var identityName string
 	if len(request.IdentityCertificate) > 0 && len(request.IdentityKey) > 0 {
 		var err error
-		identityName, identityExpires, err = validateIdentityKeyPair(
+		var tlsCert *tls.Certificate
+		tlsCert, identityName, err = validateIdentityKeyPair(
 			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
 		if err != nil {
 			if err := maybeDrainAll(conn, request); err != nil {
@@ -1195,6 +1197,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			}
 			return sendError(conn, err)
 		}
+		identityExpires = tlsCert.Leaf.NotAfter
 	}
 	vm, err := m.allocateVm(request, conn.GetAuthInformation())
 	if err != nil {

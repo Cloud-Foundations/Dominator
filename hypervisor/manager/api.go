@@ -3,6 +3,7 @@ package manager
 import (
 	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ type Manager struct {
 	objectCache       *cachingreader.ObjectServer
 	objectVolumeIndex int // -1: not on a volume mount, else index of mount.
 	privateKeyPEM     []byte
+	publicKeyDER      []byte
 	publicKeyPEM      []byte
 	rootCookie        []byte
 	serialNumber      string
@@ -73,6 +75,7 @@ type Manager struct {
 type StartOptions struct {
 	BridgeMap            map[string]net.Interface // Key: interface name.
 	DhcpServer           DhcpServer
+	IdentityProvider     string
 	ImageServerAddress   string
 	LockCheckInterval    time.Duration
 	LockLogTimeout       time.Duration
@@ -110,6 +113,8 @@ type vmInfoType struct {
 	dirname                    string
 	doNotWriteOrSend           bool
 	hasHealthAgent             bool
+	identityProviderNotifier   chan<- time.Time
+	identityProviderTransport  *http.Transport
 	ipAddress                  string
 	logger                     log.DebugLogger
 	manager                    *Manager
@@ -471,6 +476,12 @@ func (m *Manager) ReplaceVmCredentials(
 	request proto.ReplaceVmCredentialsRequest,
 	authInfo *srpc.AuthInformation) error {
 	return m.replaceVmCredentials(request, authInfo)
+}
+
+func (m *Manager) ReplaceVmIdentity(
+	request proto.ReplaceVmIdentityRequest,
+	authInfo *srpc.AuthInformation) error {
+	return m.replaceVmIdentity(request, authInfo)
 }
 
 func (m *Manager) ReplaceVmImage(conn *srpc.Conn,
