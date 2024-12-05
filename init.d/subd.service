@@ -1,14 +1,14 @@
 [Unit]
 Description=Dominator subject daemon
 After=network.target
+StartLimitIntervalSec=0
+StartLimitBurst=0
 
 [Service]
 ExecStart=/usr/local/sbin/subd
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
-StartLimitBurst=0
 
 [Install]
 WantedBy=multi-user.target
