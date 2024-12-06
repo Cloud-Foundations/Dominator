@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -27,6 +28,11 @@ const (
 	identityRequestorCertFile    = "identityRequestor.cert"
 	refreshRoleRequestPath       = "/v1/refreshRoleRequestingCert"
 )
+
+type pubkeysType struct {
+	ssh     []byte
+	x509PEM []byte
+}
 
 func loadCertAndSetDeadline(refresher *backoffdelay.Refresher,
 	timer *time.Timer, filename string, certType string, logger log.Logger) {
@@ -54,6 +60,53 @@ func removeFileOrLog(filename string, logger log.Logger) {
 			logger.Println(err)
 		}
 	}
+}
+
+func requestCertificate(httpClient *http.Client, pubkey []byte,
+	identityProvider, username, certType string,
+	logger log.DebugLogger) ([]byte, error) {
+	baseUrl, err := url.Parse(identityProvider)
+	certificateRequestPath := fmt.Sprintf(certificateRequestPathFormat,
+		username)
+	requestUrl := url.URL{
+		Scheme: baseUrl.Scheme,
+		Host:   baseUrl.Host,
+		Path:   certificateRequestPath,
+	}
+	switch certType {
+	case "SSH":
+		requestUrl.RawQuery = "type=ssh"
+	case "X.509":
+		requestUrl.RawQuery = "type=x509"
+	}
+	buffer := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(buffer)
+	fileWriter, err := bodyWriter.CreateFormFile("pubkeyfile",
+		"somefilename.pub")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := fileWriter.Write(pubkey); err != nil {
+		return nil, err
+	}
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+	logger.Debugf(0, "requesting %s identity certificate from: %s\n",
+		certType, requestUrl.String())
+	req, err := http.NewRequest("POST", requestUrl.String(), buffer)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf(resp.Status)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 func stopTimer(timer *time.Timer) {
@@ -111,6 +164,8 @@ func (m *Manager) replaceVmIdentity(
 		vm.IdentityName = ""
 		removeFileOrLog(filepath.Join(vm.dirname, IdentityCertFile), vm.logger)
 		removeFileOrLog(filepath.Join(vm.dirname, IdentityKeyFile), vm.logger)
+		removeFileOrLog(filepath.Join(vm.dirname, IdentitySshCertFile),
+			vm.logger)
 		removeFileOrLog(filepath.Join(vm.dirname, identityRequestorCertFile),
 			vm.logger)
 		vm.writeAndSendInfo()
@@ -193,7 +248,8 @@ func (vm *vmInfoType) loadIdentityRequestorCert() error {
 	return nil
 }
 
-func (vm *vmInfoType) refreshCredentials(pubkeyPEM []byte) (time.Time, error) {
+func (vm *vmInfoType) refreshCredentials(pubkeys pubkeysType) (
+	time.Time, error) {
 	vm.mutex.RLock()
 	transport := vm.identityProviderTransport
 	vm.mutex.RUnlock()
@@ -202,61 +258,34 @@ func (vm *vmInfoType) refreshCredentials(pubkeyPEM []byte) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	httpClient := http.Client{Transport: transport}
-	buffer := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(buffer)
-	fileWriter, err := bodyWriter.CreateFormFile("pubkeyfile",
-		"somefilename.pub")
+	httpClient := &http.Client{Transport: transport}
+	// Request, parse and write X.509 certificate.
+	x509CertPEM, err := requestCertificate(httpClient, pubkeys.x509PEM,
+		vm.manager.StartOptions.IdentityProvider, username, "X.509",
+		vm.logger)
+	cert, err := decodeCert(x509CertPEM)
 	if err != nil {
 		return time.Time{}, err
 	}
-	if _, err := fileWriter.Write(pubkeyPEM); err != nil {
-		return time.Time{}, err
-	}
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-	baseUrl, err := url.Parse(vm.manager.StartOptions.IdentityProvider)
-	if err != nil {
-		return time.Time{}, err
-	}
-	certificateRequestPath := fmt.Sprintf(certificateRequestPathFormat,
-		username)
-	requestUrl := url.URL{
-		Scheme:   baseUrl.Scheme,
-		Host:     baseUrl.Host,
-		Path:     certificateRequestPath,
-		RawQuery: "type=x509",
-	}
-	vm.logger.Debugf(0, "requesting identity certificate from: %s\n",
-		requestUrl.String())
-	req, err := http.NewRequest("POST", requestUrl.String(), buffer)
-	if err != nil {
-		return time.Time{}, err
-	}
-	req.Header.Set("Content-Type", contentType)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return time.Time{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return time.Time{}, fmt.Errorf(resp.Status)
-	}
-	certPEM, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return time.Time{}, err
-	}
-	cert, err := decodeCert(certPEM)
-	if err != nil {
-		return time.Time{}, err
-	}
-	reader := bytes.NewReader(certPEM)
+	reader := bytes.NewReader(x509CertPEM)
 	err = fsutil.CopyToFile(
 		filepath.Join(vm.dirname, IdentityCertFile),
 		fsutil.PublicFilePerms, reader, 0)
 	if err != nil {
 		return time.Time{}, err
 	}
+	// Request and write SSH certificate.
+	sshCertEnc, err := requestCertificate(httpClient, pubkeys.ssh,
+		vm.manager.StartOptions.IdentityProvider, username, "SSH",
+		vm.logger)
+	reader = bytes.NewReader(sshCertEnc)
+	err = fsutil.CopyToFile(
+		filepath.Join(vm.dirname, IdentitySshCertFile),
+		fsutil.PublicFilePerms, reader, 0)
+	if err != nil {
+		return time.Time{}, err
+	}
+	// Log and record.
 	expiresIn := time.Until(cert.NotAfter)
 	vm.logger.Printf(
 		"new identity certificate for: \"%s\", expires at: %s (in %s)\n",
@@ -280,8 +309,17 @@ func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
 	}
 	_, pubkeyPEM, err := makeDerPemFromPubkey(&key.PublicKey)
 	if err != nil {
-		vm.logger.Println(err)
+		vm.logger.Printf("error making X.509 public key: %s\n", err)
 		return
+	}
+	sshPub, err := ssh.NewPublicKey(&key.PublicKey)
+	if err != nil {
+		vm.logger.Printf("error making SSH public key: %s\n", err)
+		return
+	}
+	pubkeys := pubkeysType{
+		ssh:     ssh.MarshalAuthorizedKey(sshPub),
+		x509PEM: pubkeyPEM,
 	}
 	requestorRefresher := backoffdelay.NewRefresher(<-notifier, 0, 0)
 	requestorTimer := time.NewTimer(0)
@@ -309,7 +347,7 @@ func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
 			}
 			requestorRefresher.ResetTimer(requestorTimer)
 		case <-roleTimer.C:
-			if expiresAt, err := vm.refreshCredentials(pubkeyPEM); err != nil {
+			if expiresAt, err := vm.refreshCredentials(pubkeys); err != nil {
 				vm.logger.Println(err)
 			} else {
 				roleRefresher.SetDeadline(expiresAt)
