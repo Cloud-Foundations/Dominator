@@ -77,6 +77,11 @@ func GetCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
 	return getCapacity(client)
 }
 
+// GetIdentityProvider will get the base URL of the Identity Provider.
+func GetIdentityProvider(client srpc.ClientI) (string, error) {
+	return getIdentityProvider(client)
+}
+
 // GetPublicKey will get the PEM-encoded public key for the Hypervisor.
 func GetPublicKey(client srpc.ClientI) ([]byte, error) {
 	return getPublicKey(client)
@@ -140,6 +145,11 @@ func RegisterExternalLeases(client *srpc.Client, addressList proto.AddressList,
 func ReorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
 	volumeIndices []uint) error {
 	return reorderVmVolumes(client, ipAddr, accessToken, volumeIndices)
+}
+
+func ReplaceVmIdentity(client srpc.ClientI,
+	request proto.ReplaceVmIdentityRequest) error {
+	return replaceVmIdentity(client, request)
 }
 
 func ScanVmRoot(client *srpc.Client, ipAddr net.IP,
