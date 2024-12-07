@@ -33,14 +33,25 @@ const (
 	// Common endpoints.
 	MetadataUserData = "/latest/user-data"
 
-	// SmallStack endpoints.
-	SmallStackDataSource = "/datasource/SmallStack"
-	MetadataEpochTime    = "/latest/dynamic/epoch-time"
-	MetadataIdentityCert = "/latest/dynamic/instance-identity/X.509-certificate"
-	MetadataIdentityDoc  = "/latest/dynamic/instance-identity/document"
-	MetadataIdentityKey  = "/latest/dynamic/instance-identity/X.509-key"
-
+	// SmallStack Metadata Service endpoints.
+	SmallStackDataSource        = "/datasource/SmallStack"
+	MetadataEpochTime           = "/latest/dynamic/epoch-time"
+	MetadataIdentityDoc         = "/latest/dynamic/instance-identity/document"
 	MetadataExternallyPatchable = "/latest/is-externally-patchable"
+	// SmallStack identity credential endpoints.
+	// Default: RSA X.509.
+	MetadataIdentityCert = "/latest/dynamic/instance-identity/X.509-certificate"
+	MetadataIdentityKey  = "/latest/dynamic/instance-identity/X.509-key"
+	// Ed25519 SSH & RSA.
+	MetadataIdentityEd25519SshCert  = "/latest/dynamic/instance-identity/Ed25519-SSH-certificate"
+	MetadataIdentityEd25519SshKey   = "/latest/dynamic/instance-identity/Ed25519-SSH-key"
+	MetadataIdentityEd25519X509Cert = "/latest/dynamic/instance-identity/Ed25519-X.509-certificate"
+	MetadataIdentityEd25519X509Key  = "/latest/dynamic/instance-identity/Ed25519-X.509-key"
+	// RSA SSH & X.509.
+	MetadataIdentityRsaSshCert  = "/latest/dynamic/instance-identity/RSA-SSH-certificate"
+	MetadataIdentityRsaSshKey   = "/latest/dynamic/instance-identity/RSA-SSH-key"
+	MetadataIdentityRsaX509Cert = "/latest/dynamic/instance-identity/RSA-X.509-certificate"
+	MetadataIdentityRsaX509Key  = "/latest/dynamic/instance-identity/RSA-X.509-key"
 
 	// AWS endpoints.
 	MetadataAwsInstanceType = "/latest/meta-data/instance-type"
