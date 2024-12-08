@@ -106,6 +106,11 @@ func CheckTlsRequired() bool {
 	return tlsRequired
 }
 
+// GetClientTlsConfig returns a clone of the client TLS config.
+func GetClientTlsConfig() *tls.Config {
+	return clientTlsConfig.Clone()
+}
+
 // GetEarliestClientCertExpiration returns the earliest expiration time of any
 // certificate registered with RegisterClientTlsConfig. The zero value is
 // returned if there are no certificates with an expiration time.
