@@ -19,10 +19,15 @@ import (
 )
 
 const (
-	IdentityCertFile    = "identity.cert"
-	IdentityKeyFile     = "identity.key"
-	IdentitySshCertFile = "identity.ssh-cert"
-	UserDataFile        = "user-data.raw"
+	IdentityEd25519SshCertFile  = "identity-Ed25519.SSH-cert"
+	IdentityEd25519SshKeyFile   = "identity-Ed25519.SSH-key"
+	IdentityEd25519X509CertFile = "identity-Ed25519.X509-cert"
+	IdentityEd25519X509KeyFile  = "identity-Ed25519.X509-key"
+	IdentityRsaSshCertFile      = "identity-RSA.SSH-cert"
+	IdentityRsaSshKeyFile       = IdentityRsaX509KeyFile
+	IdentityRsaX509CertFile     = "identity.cert"
+	IdentityRsaX509KeyFile      = "identity.key"
+	UserDataFile                = "user-data.raw"
 )
 
 type addressPoolType struct {

@@ -30,6 +30,11 @@ const (
 )
 
 type pubkeysType struct {
+	ed25519 pubkeysSignerType
+	rsa     pubkeysSignerType
+}
+
+type pubkeysSignerType struct {
 	ssh     []byte
 	x509PEM []byte
 }
@@ -51,7 +56,9 @@ func loadCertAndSetDeadline(refresher *backoffdelay.Refresher,
 		"loaded %s certificate for: \"%s\", expires at: %s (in %s)\n",
 		certType, username, cert.NotAfter.Format(format.TimeFormatSeconds),
 		format.Duration(time.Until(cert.NotAfter)))
-	refresher.ResetTimer(timer)
+	halftime := cert.NotBefore.Add(cert.NotAfter.Sub(cert.NotBefore) >> 1)
+	stopTimer(timer)
+	timer.Reset(time.Until(halftime))
 }
 
 func removeFileOrLog(filename string, logger log.Logger) {
@@ -63,7 +70,7 @@ func removeFileOrLog(filename string, logger log.Logger) {
 }
 
 func requestCertificate(httpClient *http.Client, pubkey []byte,
-	identityProvider, username, certType string,
+	algorithm algorithmType, identityProvider, username, certType string,
 	logger log.DebugLogger) ([]byte, error) {
 	baseUrl, err := url.Parse(identityProvider)
 	certificateRequestPath := fmt.Sprintf(certificateRequestPathFormat,
@@ -91,8 +98,8 @@ func requestCertificate(httpClient *http.Client, pubkey []byte,
 	}
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
-	logger.Debugf(0, "requesting %s identity certificate from: %s\n",
-		certType, requestUrl.String())
+	logger.Debugf(0, "requesting %s %s identity certificate from: %s\n",
+		algorithm, certType, requestUrl.String())
 	req, err := http.NewRequest("POST", requestUrl.String(), buffer)
 	if err != nil {
 		return nil, err
@@ -110,10 +117,11 @@ func requestCertificate(httpClient *http.Client, pubkey []byte,
 }
 
 func stopTimer(timer *time.Timer) {
-	timer.Stop()
-	select {
-	case <-timer.C:
-	default:
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
 	}
 }
 
@@ -130,9 +138,13 @@ func (m *Manager) replaceVmCredentials(
 		return err
 	}
 	defer vm.mutex.Unlock()
+	if vm.identityProviderNotifier != nil {
+		return fmt.Errorf(
+			"cannot replace credentials while generator is running")
+	}
 	err = writeKeyPair(request.IdentityCertificate, request.IdentityKey,
-		filepath.Join(vm.dirname, IdentityCertFile),
-		filepath.Join(vm.dirname, IdentityKeyFile))
+		filepath.Join(vm.dirname, IdentityRsaX509CertFile),
+		filepath.Join(vm.dirname, IdentityRsaX509KeyFile))
 	if err != nil {
 		return err
 	}
@@ -162,12 +174,7 @@ func (m *Manager) replaceVmIdentity(
 		vm.identityProviderTransport = nil
 		vm.IdentityExpires = time.Time{}
 		vm.IdentityName = ""
-		removeFileOrLog(filepath.Join(vm.dirname, IdentityCertFile), vm.logger)
-		removeFileOrLog(filepath.Join(vm.dirname, IdentityKeyFile), vm.logger)
-		removeFileOrLog(filepath.Join(vm.dirname, IdentitySshCertFile),
-			vm.logger)
-		removeFileOrLog(filepath.Join(vm.dirname, identityRequestorCertFile),
-			vm.logger)
+		vm.removeIdentityFiles()
 		vm.writeAndSendInfo()
 		return nil
 	}
@@ -248,7 +255,59 @@ func (vm *vmInfoType) loadIdentityRequestorCert() error {
 	return nil
 }
 
-func (vm *vmInfoType) refreshCredentials(pubkeys pubkeysType) (
+func (vm *vmInfoType) loadOrMakeKeys(algorithm algorithmType) (
+	*pubkeysSignerType, error) {
+	var keyFile, sshKeyFile string
+	switch algorithm {
+	case algorithmEd25519:
+		keyFile = IdentityEd25519X509KeyFile
+		sshKeyFile = IdentityEd25519SshKeyFile
+	case algorithmRsa:
+		keyFile = IdentityRsaX509KeyFile
+	default:
+		return nil, fmt.Errorf("unsupported algorithm: %d", algorithm)
+	}
+	key, _, err := loadOrMakePrivateKey(algorithm,
+		filepath.Join(vm.dirname, keyFile),
+		filepath.Join(vm.dirname, sshKeyFile),
+		vm.logger)
+	if err != nil {
+		return nil, err
+	}
+	_, pubkeyPEM, err := makeDerPemFromPubkey(key.Public())
+	if err != nil {
+		return nil, fmt.Errorf("error making X.509 public key: %s", err)
+	}
+	sshPub, err := ssh.NewPublicKey(key.Public())
+	if err != nil {
+		return nil, fmt.Errorf("error making SSH public key: %s", err)
+	}
+	return &pubkeysSignerType{
+		ssh:     ssh.MarshalAuthorizedKey(sshPub),
+		x509PEM: pubkeyPEM,
+	}, nil
+}
+
+func (vm *vmInfoType) removeIdentityFiles() {
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityEd25519SshCertFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityEd25519SshKeyFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityEd25519X509CertFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityEd25519X509KeyFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityRsaSshCertFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, identityRequestorCertFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityRsaX509CertFile),
+		vm.logger)
+	removeFileOrLog(filepath.Join(vm.dirname, IdentityRsaX509KeyFile),
+		vm.logger)
+}
+
+func (vm *vmInfoType) refreshAllCredentials(pubkeys pubkeysType) (
 	time.Time, error) {
 	vm.mutex.RLock()
 	transport := vm.identityProviderTransport
@@ -259,9 +318,47 @@ func (vm *vmInfoType) refreshCredentials(pubkeys pubkeysType) (
 		return time.Time{}, err
 	}
 	httpClient := &http.Client{Transport: transport}
+	expiresAt, err := vm.refreshCredentials(httpClient, username, algorithmRsa,
+		pubkeys.rsa)
+	if err != nil {
+		return time.Time{}, err
+	}
+	_, err = vm.refreshCredentials(httpClient, username, algorithmEd25519,
+		pubkeys.ed25519)
+	if err != nil {
+		return time.Time{}, err
+	}
+	// Log and record.
+	expiresIn := time.Until(expiresAt)
+	vm.logger.Printf(
+		"new identity certificates for: \"%s\", expire at: %s (in %s)\n",
+		username, expiresAt.Format(format.TimeFormatSeconds),
+		format.Duration(expiresIn))
+	vm.mutex.Lock()
+	defer vm.mutex.Unlock()
+	vm.IdentityExpires = expiresAt
+	vm.IdentityName = username
+	vm.writeAndSendInfo()
+	return expiresAt, nil
+}
+
+func (vm *vmInfoType) refreshCredentials(httpClient *http.Client,
+	username string, algorithm algorithmType, pubkeys pubkeysSignerType) (
+	time.Time, error) {
+	var sshCertFile, x509CertFile string
+	switch algorithm {
+	case algorithmEd25519:
+		sshCertFile = IdentityEd25519SshCertFile
+		x509CertFile = IdentityEd25519X509CertFile
+	case algorithmRsa:
+		sshCertFile = IdentityRsaSshCertFile
+		x509CertFile = IdentityRsaX509CertFile
+	default:
+		return time.Time{}, fmt.Errorf("unsupported algorithm: %d", algorithm)
+	}
 	// Request, parse and write X.509 certificate.
 	x509CertPEM, err := requestCertificate(httpClient, pubkeys.x509PEM,
-		vm.manager.StartOptions.IdentityProvider, username, "X.509",
+		algorithm, vm.manager.StartOptions.IdentityProvider, username, "X.509",
 		vm.logger)
 	cert, err := decodeCert(x509CertPEM)
 	if err != nil {
@@ -269,57 +366,39 @@ func (vm *vmInfoType) refreshCredentials(pubkeys pubkeysType) (
 	}
 	reader := bytes.NewReader(x509CertPEM)
 	err = fsutil.CopyToFile(
-		filepath.Join(vm.dirname, IdentityCertFile),
+		filepath.Join(vm.dirname, x509CertFile),
 		fsutil.PublicFilePerms, reader, 0)
 	if err != nil {
 		return time.Time{}, err
 	}
 	// Request and write SSH certificate.
-	sshCertEnc, err := requestCertificate(httpClient, pubkeys.ssh,
+	sshCertEnc, err := requestCertificate(httpClient, pubkeys.ssh, algorithm,
 		vm.manager.StartOptions.IdentityProvider, username, "SSH",
 		vm.logger)
 	reader = bytes.NewReader(sshCertEnc)
 	err = fsutil.CopyToFile(
-		filepath.Join(vm.dirname, IdentitySshCertFile),
+		filepath.Join(vm.dirname, sshCertFile),
 		fsutil.PublicFilePerms, reader, 0)
 	if err != nil {
 		return time.Time{}, err
 	}
-	// Log and record.
-	expiresIn := time.Until(cert.NotAfter)
-	vm.logger.Printf(
-		"new identity certificate for: \"%s\", expires at: %s (in %s)\n",
-		username, cert.NotAfter.Format(format.TimeFormatSeconds),
-		format.Duration(expiresIn))
-	vm.mutex.Lock()
-	defer vm.mutex.Unlock()
-	vm.IdentityExpires = cert.NotAfter
-	vm.IdentityName = username
-	vm.writeAndSendInfo()
 	return cert.NotAfter, nil
 }
 
 func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
-	key, _, err := loadOrMakePrivateKey(
-		filepath.Join(vm.dirname, IdentityKeyFile),
-		vm.logger)
+	ed25519Keys, err := vm.loadOrMakeKeys(algorithmEd25519)
 	if err != nil {
 		vm.logger.Println(err)
 		return
 	}
-	_, pubkeyPEM, err := makeDerPemFromPubkey(&key.PublicKey)
+	rsaKeys, err := vm.loadOrMakeKeys(algorithmRsa)
 	if err != nil {
-		vm.logger.Printf("error making X.509 public key: %s\n", err)
-		return
-	}
-	sshPub, err := ssh.NewPublicKey(&key.PublicKey)
-	if err != nil {
-		vm.logger.Printf("error making SSH public key: %s\n", err)
+		vm.logger.Println(err)
 		return
 	}
 	pubkeys := pubkeysType{
-		ssh:     ssh.MarshalAuthorizedKey(sshPub),
-		x509PEM: pubkeyPEM,
+		ed25519: *ed25519Keys,
+		rsa:     *rsaKeys,
 	}
 	requestorRefresher := backoffdelay.NewRefresher(<-notifier, 0, 0)
 	requestorTimer := time.NewTimer(0)
@@ -327,18 +406,19 @@ func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
 	roleRefresher := backoffdelay.NewRefresher(time.Time{}, 0, 0)
 	roleTimer := time.NewTimer(0)
 	loadCertAndSetDeadline(roleRefresher, roleTimer,
-		filepath.Join(vm.dirname, IdentityCertFile),
+		filepath.Join(vm.dirname, IdentityRsaX509CertFile),
 		"identity", vm.logger)
 	for {
 		select {
 		case requestorExpiresAt, ok := <-notifier:
 			stopTimer(requestorTimer)
+			stopTimer(roleTimer)
 			if !ok {
-				stopTimer(roleTimer)
 				return
 			}
 			requestorRefresher.SetDeadline(requestorExpiresAt)
 			requestorRefresher.ResetTimer(requestorTimer)
+			roleTimer.Reset(0)
 		case <-requestorTimer.C:
 			if expiresAt, err := vm.refreshRequestor(); err != nil {
 				vm.logger.Println(err)
@@ -347,7 +427,7 @@ func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
 			}
 			requestorRefresher.ResetTimer(requestorTimer)
 		case <-roleTimer.C:
-			if expiresAt, err := vm.refreshCredentials(pubkeys); err != nil {
+			if expiresAt, err := vm.refreshAllCredentials(pubkeys); err != nil {
 				vm.logger.Println(err)
 			} else {
 				roleRefresher.SetDeadline(expiresAt)

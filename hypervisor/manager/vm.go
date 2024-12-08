@@ -1223,8 +1223,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		return sendError(conn, err)
 	}
 	err = writeKeyPair(request.IdentityCertificate, request.IdentityKey,
-		filepath.Join(vm.dirname, IdentityCertFile),
-		filepath.Join(vm.dirname, IdentityKeyFile))
+		filepath.Join(vm.dirname, IdentityRsaX509CertFile),
+		filepath.Join(vm.dirname, IdentityRsaX509KeyFile))
 	if err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
