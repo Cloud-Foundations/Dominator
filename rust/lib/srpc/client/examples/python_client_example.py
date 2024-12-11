@@ -9,12 +9,12 @@ To run this example:
 
 import asyncio
 import json
-from srpc_client import SrpcClient
+from srpc_client import SrpcClientConfig
 
 async def main():
-    client = SrpcClient("<Hostname or IP of hypervisor>", 6976, "/_SRPC_/TLS/JSON", "<Path to Keymaster Certificate file>", "<Path to Keymaster Key file>")
-    
-    await client.connect()
+    client = SrpcClientConfig("<Hostname or IP of hypervisor>", 6976, "/_SRPC_/TLS/JSON", "<Path to Keymaster Certificate file>", "<Path to Keymaster Key file>")
+
+    client = await client.connect()
     print("Connected to server")
 
     message = "Hypervisor.StartVm\n"

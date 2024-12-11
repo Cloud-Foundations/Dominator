@@ -1,4 +1,4 @@
-use crate::Client;
+use crate::{ClientConfig, ConnectedClient};
 use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3_asyncio;
@@ -7,22 +7,30 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[pyclass]
-pub struct SrpcClient(Arc<Mutex<Client>>);
+pub struct SrpcClientConfig(ClientConfig);
+
+#[pyclass]
+pub struct ConnectedSrpcClient(Arc<Mutex<ConnectedClient>>);
 
 #[pymethods]
-impl SrpcClient {
+impl SrpcClientConfig {
     #[new]
     pub fn new(host: &str, port: u16, path: &str, cert: &str, key: &str) -> Self {
-        SrpcClient(Arc::new(Mutex::new(Client::new(host, port, path, cert, key))))
+        SrpcClientConfig(ClientConfig::new(host, port, path, cert, key))
     }
 
     pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            client.lock().await.connect().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        pyo3_asyncio::tokio::future_into_py(py, async {
+            client.connect().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))
+                .map(|c| ConnectedSrpcClient(Arc::new(Mutex::new(c))))
         })
     }
 
+}
+
+#[pymethods]
+impl ConnectedSrpcClient {
     pub fn send_message<'p>(&self, py: Python<'p>, message: String) -> PyResult<&'p PyAny> {
         let client = self.0.clone();
         pyo3_asyncio::tokio::future_into_py(py, async move {

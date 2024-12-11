@@ -1,11 +1,11 @@
-use srpc_client::Client;
+use srpc_client::ClientConfig;
 use tokio;
 use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a new Client instance
-    let client = Client::new(
+    let client = ClientConfig::new(
         "<Hostname or IP of hypervisor>",
         6976,
         "/_SRPC_/TLS/JSON",
@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Connect to the server
-    client.connect().await?;
+    let client = client.connect().await?;
     println!("Connected to server");
 
     // Send a message

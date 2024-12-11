@@ -22,28 +22,33 @@ impl fmt::Display for CustomError {
 
 impl Error for CustomError {}
 
-pub struct Client {
+#[derive(Clone)]
+pub struct ClientConfig {
     host: String,
     port: u16,
     path: String,
     cert: String,
     key: String,
-    stream: Arc<Mutex<Option<SslStream<TcpStream>>>>,
 }
 
-impl Client {
+pub struct ConnectedClient {
+    pub connection_params: ClientConfig,
+    stream: Connected,
+}
+
+type Connected = Arc<Mutex<SslStream<TcpStream>>>;
+impl ClientConfig {
     pub fn new(host: &str, port: u16, path: &str, cert: &str, key: &str) -> Self {
-        Client {
+        ClientConfig {
             host: host.to_string(),
             port,
             path: path.to_string(),
             cert: cert.to_string(),
             key: key.to_string(),
-            stream: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn connect(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn connect(self) -> Result<ConnectedClient, Box<dyn Error>> {
         // println!("Attempting to connect to {}:{}...", self.host, self.port);
         
         let connect_timeout = Duration::from_secs(10);
@@ -76,11 +81,14 @@ impl Client {
         Pin::new(&mut stream).connect().await?;
         // println!("TLS handshake completed");
     
-        let mut lock = self.stream.lock().await;
-        *lock = Some(stream);
+        //  let mut lock = self.stream.lock().await;
+        //  *lock = Some(stream);
         // println!("Connection fully established");
     
-        Ok(())
+        Ok(ConnectedClient {
+            connection_params: self,
+            stream: Arc::new(Mutex::new(stream)),
+        })
     }
 
     async fn do_http_connect(&self, stream: &TcpStream) -> Result<(), Box<dyn Error>> {
@@ -127,16 +135,15 @@ impl Client {
         }
     }
 
+}
+
+impl ConnectedClient {
     pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
-        let mut lock = self.stream.lock().await;
-        if let Some(stream) = lock.as_mut() {
-            let mut pinned = Pin::new(stream);
-            pinned.as_mut().write_all(message.as_bytes()).await?;
-            pinned.as_mut().flush().await?;
-            Ok(())
-        } else {
-            Err("Not connected".into())
-        }
+        let stream = self.stream.lock().await;
+        let mut pinned = Pin::new(stream);
+        pinned.as_mut().write_all(message.as_bytes()).await?;
+        pinned.as_mut().flush().await?;
+        Ok(())
     }
 
     pub async fn receive_message<F>(&self, expect_empty: bool, mut should_continue: F) -> Result<mpsc::Receiver<Result<String, Box<dyn Error + Send>>>, Box<dyn Error>>
@@ -148,43 +155,38 @@ impl Client {
 
         tokio::spawn(async move {
             loop {
-                let mut lock = stream_clone.lock().await;
-                if let Some(stream) = lock.as_mut() {
-                    let mut response = String::new();
-                    loop {
-                        let mut buf = [0; 1024];
-                        match stream.read(&mut buf).await {
-                            Ok(0) => {
-                                let _ = tx.send(Ok(String::new())).await;
-                                return;
-                            }
-                            Ok(n) => {
-                                response.push_str(&String::from_utf8_lossy(&buf[..n]));
-                                if response.ends_with('\n') {
-                                    break;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
-                                return;
+                let mut stream = stream_clone.lock().await;
+                let mut response = String::new();
+                loop {
+                    let mut buf = [0; 1024];
+                    match stream.read(&mut buf).await {
+                        Ok(0) => {
+                            let _ = tx.send(Ok(String::new())).await;
+                            return;
+                        }
+                        Ok(n) => {
+                            response.push_str(&String::from_utf8_lossy(&buf[..n]));
+                            if response.ends_with('\n') {
+                                break;
                             }
                         }
+                        Err(e) => {
+                            let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
+                            return;
+                        }
                     }
-                    let response = response.trim().to_string();
-                    
-                    if expect_empty && !response.is_empty() {
-                        let _ = tx.send(Err(Box::new(CustomError(format!("Expected empty string, got: {:?}", response))) as Box<dyn Error + Send>)).await;
-                        return;
-                    }
-                    
-                    let _ = tx.send(Ok(response.clone())).await;
-                    
-                    if !should_continue(&response) {
-                        break;
-                    }
-                } else {
-                    let _ = tx.send(Err(Box::new(CustomError("Not connected".to_string())) as Box<dyn Error + Send>)).await;
+                }
+                let response = response.trim().to_string();
+                
+                if expect_empty && !response.is_empty() {
+                    let _ = tx.send(Err(Box::new(CustomError(format!("Expected empty string, got: {:?}", response))) as Box<dyn Error + Send>)).await;
                     return;
+                }
+                
+                let _ = tx.send(Ok(response.clone())).await;
+                
+                if !should_continue(&response) {
+                    break;
                 }
             }
         });
@@ -240,6 +242,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 #[pymodule]
 fn srpc_client(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<python_bindings::SrpcClient>()?;
+    m.add_class::<python_bindings::SrpcClientConfig>()?;
+    m.add_class::<python_bindings::ConnectedSrpcClient>()?;
     Ok(())
 }
