@@ -1,5 +1,5 @@
-use srpc_client::ClientConfig;
 use serde_json::json;
+use srpc_client::ClientConfig;
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         6976,
         "/_SRPC_/TLS/JSON",
         "<Path to Keymaster Certificate file>",
-        "<Path to Keymaster Key file>"
+        "<Path to Keymaster Key file>",
     );
 
     // Connect to the server
