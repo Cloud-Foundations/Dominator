@@ -9,6 +9,7 @@ use tokio::time::{timeout, Duration};
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 use std::pin::Pin;
+use tracing::debug;
 
 // Custom error type
 #[derive(Debug)]
@@ -49,7 +50,7 @@ impl ClientConfig {
     }
 
     pub async fn connect(self) -> Result<ConnectedClient, Box<dyn Error>> {
-        // println!("Attempting to connect to {}:{}...", self.host, self.port);
+        debug!("Attempting to connect to {}:{}...", self.host, self.port);
         
         let connect_timeout = Duration::from_secs(10);
         let tcp_stream = match timeout(connect_timeout, 
@@ -59,13 +60,13 @@ impl ClientConfig {
             Ok(Err(e)) => return Err(format!("Failed to connect: {}", e).into()),
             Err(_) => return Err("Connection attempt timed out".into()),
         };
-        // println!("TCP connection established");
+        debug!("TCP connection established");
     
-        // println!("Performing HTTP CONNECT...");
+        debug!("Performing HTTP CONNECT...");
         self.do_http_connect(&tcp_stream).await?;
-        // println!("HTTP CONNECT successful");
+        debug!("HTTP CONNECT successful");
     
-        // println!("Starting TLS handshake...");
+        debug!("Starting TLS handshake...");
         let mut connector = SslConnector::builder(SslMethod::tls())?;
         connector.set_verify(SslVerifyMode::NONE);
 
@@ -77,13 +78,13 @@ impl ClientConfig {
         let ssl = Ssl::new(connector.build().context())?;
         let mut stream = SslStream::new(ssl, tcp_stream)?;
     
-        // println!("Performing TLS handshake...");
+        debug!("Performing TLS handshake...");
         Pin::new(&mut stream).connect().await?;
-        // println!("TLS handshake completed");
+        debug!("TLS handshake completed");
     
         //  let mut lock = self.stream.lock().await;
         //  *lock = Some(stream);
-        // println!("Connection fully established");
+        debug!("Connection fully established");
     
         Ok(ConnectedClient {
             connection_params: self,
@@ -93,9 +94,9 @@ impl ClientConfig {
 
     async fn do_http_connect(&self, stream: &TcpStream) -> Result<(), Box<dyn Error>> {
         let connect_request = format!("CONNECT {} HTTP/1.0\r\n\r\n", self.path);
-        // println!("Sending HTTP CONNECT request: {:?}", connect_request);
+        debug!("Sending HTTP CONNECT request: {:?}", connect_request);
         stream.try_write(connect_request.as_bytes())?;
-        // println!("HTTP CONNECT request sent");
+        debug!("HTTP CONNECT request sent");
     
         let read_timeout = Duration::from_secs(10);
         let start_time = std::time::Instant::now();
@@ -126,9 +127,9 @@ impl ClientConfig {
         }
     
         let response = String::from_utf8_lossy(&buffer);
-        // println!("Received HTTP CONNECT response: {:?}", response);
+        debug!("Received HTTP CONNECT response: {:?}", response);
         if response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200") {
-            // println!("HTTP CONNECT completed successfully");
+            debug!("HTTP CONNECT completed successfully");
             Ok(())
         } else {
             Err(format!("Unexpected HTTP response: {}", response).into())
