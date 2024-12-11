@@ -243,6 +243,14 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 #[pymodule]
 fn srpc_client(_py: Python, m: &PyModule) -> PyResult<()> {
+    use tracing::level_filters::LevelFilter;
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::builder().with_default_directive(LevelFilter::INFO.into()).from_env_lossy())
+        .with(tracing_subscriber::fmt::Layer::default().compact())
+        .init();
+
     m.add_class::<python_bindings::SrpcClientConfig>()?;
     m.add_class::<python_bindings::ConnectedSrpcClient>()?;
     Ok(())
