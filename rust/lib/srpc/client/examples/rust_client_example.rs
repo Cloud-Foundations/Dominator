@@ -1,5 +1,4 @@
 use srpc_client::ClientConfig;
-use tokio;
 use serde_json::json;
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

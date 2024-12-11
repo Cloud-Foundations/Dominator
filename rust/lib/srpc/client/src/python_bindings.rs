@@ -1,7 +1,6 @@
 use crate::{ClientConfig, ConnectedClient};
 use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
-use pyo3_asyncio;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
