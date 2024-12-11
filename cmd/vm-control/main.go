@@ -53,9 +53,11 @@ var (
 		constants.HypervisorPortNumber, "Port number of hypervisor")
 	hypervisorTagsToMatch tags.MatchTags
 	identityCertFile      = flag.String("identityCertFile", "",
-		"Filename of PEM-encoded cetificate availabe from metadata service ")
+		"Filename of PEM-encoded cetificate availabe from metadata service (deprecated: use identityName instead)")
 	identityKeyFile = flag.String("identityKeyFile", "",
-		"Filename of PEM-encoded key available from metadata service ")
+		"Filename of PEM-encoded key available from metadata service (deprecated: use identityName instead)")
+	identityName = flag.String("identityName", "",
+		"Identity name for requesting role certificates from IdentityProvider")
 	includeUnhealthy = flag.Bool("includeUnhealthy", false,
 		"If true, list connected but unhealthy hypervisors")
 	imageFile = flag.String("imageFile", "",
@@ -241,7 +243,9 @@ var subcommands = []commands.Command{
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
 	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
-	{"replace-vm-credentials", "IPaddr", 1, 1, replaceVmCredentialsSubcommand},
+	{"replace-vm-credentials", "IPaddr (deprecated)", 1, 1,
+		replaceVmCredentialsSubcommand},
+	{"replace-vm-identity", "IPaddr", 1, 1, replaceVmIdentitySubcommand},
 	{"replace-vm-image", "IPaddr", 1, 1, replaceVmImageSubcommand},
 	{"replace-vm-user-data", "IPaddr", 1, 1, replaceVmUserDataSubcommand},
 	{"restore-vm", "source", 1, 1, restoreVmSubcommand},

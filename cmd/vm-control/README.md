@@ -74,7 +74,10 @@ Some of the sub-commands available are:
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
 - **reboot-vm**: reboot a VM
 - **replace-vm-credentials**: replace the credentials made available to a VM via
-                              the Metadata service
+                              the Metadata service. This is primarily for
+                              debugging
+- **replace-vm-identity**: replace the identity used for generating credentials
+                           made available to a VM via the Metadata service
 - **replace-vm-image**: replace the root image for a VM. The old root image is
                         saved. The VM must not be running
 - **replace-vm-user-data**: replace the user data for a VM. The old user data is
