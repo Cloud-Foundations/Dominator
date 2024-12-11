@@ -81,11 +81,9 @@ impl ClientConfig {
         debug!("Performing TLS handshake...");
         Pin::new(&mut stream).connect().await?;
         debug!("TLS handshake completed");
-    
-        //  let mut lock = self.stream.lock().await;
-        //  *lock = Some(stream);
+
         debug!("Connection fully established");
-    
+
         Ok(ConnectedClient {
             connection_params: self,
             stream: Arc::new(Mutex::new(stream)),
