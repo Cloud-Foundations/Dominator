@@ -221,17 +221,15 @@ impl ConnectedClient {
 
         tokio::spawn(async move {
             while let Some(result) = rx.recv().await {
-                match result {
-                    Ok(json_str) => match serde_json::from_str(&json_str) {
-                        Ok(json_value) => {
-                            if let Err(_) = tx.send(Ok(json_value)).await {
-                                break;
-                            }
+                match result.and_then(|json_str| {
+                    serde_json::from_str(&json_str)
+                        .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+                }) {
+                    Ok(json_value) => {
+                        if let Err(_) = tx.send(Ok(json_value)).await {
+                            break;
                         }
-                        Err(e) => {
-                            let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
-                        }
-                    },
+                    }
                     Err(e) => {
                         let _ = tx.send(Err(e)).await;
                     }
