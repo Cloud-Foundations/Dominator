@@ -35,6 +35,8 @@ const (
 var (
 	dhcpServerOnBridgesOnly = flag.Bool("dhcpServerOnBridgesOnly", false,
 		"If true, run the DHCP server on bridge interfaces only")
+	identityProvider = flag.String("identityProvider", "",
+		"Base URL of identity provider which can issue role certificates")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -184,6 +186,7 @@ func run() {
 	managerObj, err := manager.New(manager.StartOptions{
 		BridgeMap:            bridgeMap,
 		DhcpServer:           dhcpServer,
+		IdentityProvider:     *identityProvider,
 		ImageServerAddress:   imageServerAddress,
 		LockCheckInterval:    *lockCheckInterval,
 		LockLogTimeout:       *lockLogTimeout,
