@@ -165,10 +165,6 @@ impl ConnectedClient {
                 loop {
                     let mut buf = [0; 1024];
                     match stream.read(&mut buf).await {
-                        Ok(0) => {
-                            let _ = tx.send(Ok(String::new())).await;
-                            return;
-                        }
                         Ok(n) => {
                             let res = String::from_utf8_lossy(&buf[..n]);
                             response.push_str(&res);
