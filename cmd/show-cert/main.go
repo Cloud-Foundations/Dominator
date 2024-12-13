@@ -58,11 +58,11 @@ func showCertFile(filename string) {
 
 func showCertMetadata() {
 	for _, mCert := range metadataCertificates {
-		fmt.Println("Certificate:", "MetadataIdentity:", mCert.certType+":")
 		data, err := getFromMetadata(mCert.path)
 		if err != nil {
 			return
 		}
+		fmt.Println("Certificate:", "MetadataIdentity:", mCert.certType+":")
 		if mCert.isSsh {
 			showSshCert(data)
 		} else {
