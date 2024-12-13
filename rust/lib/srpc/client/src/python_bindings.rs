@@ -172,6 +172,34 @@ impl ConnectedSrpcClient {
         })
     }
 
+    pub fn receive_message_cb<'p>(
+        &self,
+        py: Python<'p>,
+        expect_empty: bool,
+        should_continue: &PyAny,
+    ) -> PyResult<&'p PyAny> {
+        let client = self.0.clone();
+        let should_continue = should_continue.to_object(py);
+
+        pyo3_asyncio::tokio::future_into_py(py, async move {
+            let should_continue = move |response: &str| -> bool {
+                Python::with_gil(|py| {
+                    let func = should_continue.as_ref(py);
+
+                    func.call1((response,)).and_then(|v| v.extract::<bool>()).unwrap_or(false)
+                })
+            };
+            let rx = client
+                .lock()
+                .await
+                .receive_message(expect_empty, should_continue)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            Ok(Python::with_gil(|_py| PyStream::new(Streamer::new(rx))))
+        })
+    }
+
     pub fn send_json<'p>(&self, py: Python<'p>, payload: String) -> PyResult<&'p PyAny> {
         let client = self.0.clone();
         pyo3_asyncio::tokio::future_into_py(py, async move {
@@ -193,6 +221,31 @@ impl ConnectedSrpcClient {
                 .lock()
                 .await
                 .receive_json(move |_| should_continue)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            Ok(Python::with_gil(|_py| {
+                PyValueStream::new(ValueStreamer::new(rx))
+            }))
+        })
+    }
+
+    pub fn receive_json_cb<'p>(&self, py: Python<'p>, should_continue: &PyAny) -> PyResult<&'p PyAny> {
+        let client = self.0.clone();
+        let should_continue = should_continue.to_object(py);
+
+        pyo3_asyncio::tokio::future_into_py(py, async move {
+            let should_continue = move |response: &str| -> bool {
+                Python::with_gil(|py| {
+                    let func = should_continue.as_ref(py);
+
+                    func.call1((response,)).and_then(|v| v.extract::<bool>()).unwrap_or(false)
+                })
+            };
+            let rx = client
+                .lock()
+                .await
+                .receive_json(should_continue)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 

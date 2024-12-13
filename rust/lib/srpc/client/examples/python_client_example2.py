@@ -36,12 +36,12 @@ async def main():
 
     # Receive an empty response
     print("Waiting for empty string response...")
-    responses = await client.receive_message(expect_empty=True)
+    responses = await client.receive_message(expect_empty=True, should_continue=False)
     async for response in responses:
         print(f"Received response: {response}")
 
     # Receive responses
-    responses = await client.receive_json()
+    responses = await client.receive_json_cb(should_continue=lambda _: True)
     async for response in responses:
         print(f"Received response: {json.loads(response)}")
 
