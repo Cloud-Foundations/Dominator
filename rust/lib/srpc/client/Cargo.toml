@@ -35,5 +35,10 @@ name = "rust_client_example"
 path = "examples/rust_client_example.rs"
 required-features = []
 
+[[example]]
+name = "rust_client_example2"
+path = "examples/rust_client_example2.rs"
+required-features = []
+
 [dev-dependencies]
 tokio = { version = "1.0", features = ["full", "macros"] }
