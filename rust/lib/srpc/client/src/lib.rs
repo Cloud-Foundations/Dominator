@@ -252,7 +252,11 @@ fn srpc_client(_py: Python, m: &PyModule) -> PyResult<()> {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::builder().with_default_directive(LevelFilter::INFO.into()).from_env_lossy())
+        .with(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
         .with(tracing_subscriber::fmt::Layer::default().compact())
         .init();
 
