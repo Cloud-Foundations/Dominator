@@ -170,7 +170,9 @@ impl ConnectedClient {
                             return;
                         }
                         Ok(n) => {
-                            response.push_str(&String::from_utf8_lossy(&buf[..n]));
+                            let res = String::from_utf8_lossy(&buf[..n]);
+                            response.push_str(&res);
+                            debug!("ResponseT: {:?}", res);
                             if response.ends_with('\n') {
                                 break;
                             }
