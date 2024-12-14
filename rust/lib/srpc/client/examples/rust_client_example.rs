@@ -18,11 +18,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a new Client instance
     let client = ClientConfig::new(
-        "<Hostname or IP of hypervisor>",
-        6976,
-        "/_SRPC_/TLS/JSON",
-        "<Path to Keymaster Certificate file>",
-        "<Path to Keymaster Key file>",
+        &std::env::var("EXAMPLE_1_SRPC_SERVER_HOST")?,
+        std::env::var("EXAMPLE_1_SRPC_SERVER_PORT")?.parse()?,
+        &std::env::var("EXAMPLE_1_SRPC_SERVER_ENPOINT")?,
+        &std::env::var("EXAMPLE_1_SRPC_SERVER_CERT")?,
+        &std::env::var("EXAMPLE_1_SRPC_SERVER_KEY")?,
     );
 
     // Connect to the server

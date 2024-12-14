@@ -9,6 +9,7 @@ To run this example:
 
 import asyncio
 import json
+import os
 from srpc_client import SrpcClientConfig
 
 
@@ -17,11 +18,11 @@ async def main():
 
     # Create a new ClientConfig instance
     client = SrpcClientConfig(
-        "<Hostname or IP of hypervisor>",
-        6976,
-        "/_SRPC_/TLS/JSON",
-        "<Path to Keymaster Certificate file>",
-        "<Path to Keymaster Key file>",
+        os.environ["EXAMPLE_2_SRPC_SERVER_HOST"],
+        int(os.environ["EXAMPLE_2_SRPC_SERVER_PORT"]),
+        os.environ["EXAMPLE_2_SRPC_SERVER_ENPOINT"],
+        os.environ["EXAMPLE_2_SRPC_SERVER_CERT"],
+        os.environ["EXAMPLE_2_SRPC_SERVER_KEY"],
     )
 
     # Connect to the server
