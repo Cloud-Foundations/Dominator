@@ -193,61 +193,6 @@ where
         Ok(())
     }
 
-    pub async fn receive_message_old<F>(
-        &self,
-        expect_empty: bool,
-        mut should_continue: F,
-    ) -> Result<mpsc::Receiver<Result<String, Box<dyn Error + Send>>>, Box<dyn Error>>
-    where
-        F: FnMut(&str) -> bool + Send + 'static,
-    {
-        let stream_clone = self.stream.clone();
-        let (tx, rx) = mpsc::channel(100);
-
-        tokio::spawn(async move {
-            loop {
-                let mut stream = stream_clone.lock().await;
-                let mut response = String::new();
-                loop {
-                    let mut buf = [0; 1024];
-                    match stream.read(&mut buf).await {
-                        Ok(n) => {
-                            let res = String::from_utf8_lossy(&buf[..n]);
-                            response.push_str(&res);
-                            debug!("ResponseT: {:?}", res);
-                            if response.ends_with('\n') {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
-                            return;
-                        }
-                    }
-                }
-                let response = response.trim().to_string();
-
-                if expect_empty && !response.is_empty() {
-                    let _ = tx
-                        .send(Err(Box::new(CustomError(format!(
-                            "Expected empty string, got: {:?}",
-                            response
-                        ))) as Box<dyn Error + Send>))
-                        .await;
-                    return;
-                }
-
-                let _ = tx.send(Ok(response.clone())).await;
-
-                if !should_continue(&response) {
-                    break;
-                }
-            }
-        });
-
-        Ok(rx)
-    }
-
     pub async fn receive_message<F>(
         &self,
         expect_empty: bool,
