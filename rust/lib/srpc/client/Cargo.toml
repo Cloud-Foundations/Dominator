@@ -1,6 +1,6 @@
 [package]
 name = "srpc_client"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -8,13 +8,13 @@ name = "srpc_client"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bytes = "1.0"
-futures = "0.3.28"
-tokio = { version = "1.0", features = ["full"] }
+bytes = "1"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
 openssl = "0.10"
-serde_json = "1.0"
+serde_json = "1"
 tokio-openssl = "0.6"
-tokio-util = { version = "0.7.13", features = ["codec"] }
+tokio-util = { version = "0.7", features = ["codec"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
@@ -43,4 +43,4 @@ path = "examples/rust_client_example2.rs"
 required-features = []
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["full", "macros"] }
+tokio = { version = "1", features = ["full", "macros"] }
