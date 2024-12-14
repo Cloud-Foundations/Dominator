@@ -19,18 +19,18 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dependencies.pyo3]
-version = "0.18"
+version = "0.23"
 features = ["extension-module"]
 optional = true
 
-[dependencies.pyo3-asyncio]
-version = "0.18"
-features = ["tokio-runtime"]
+[dependencies.pyo3-async-runtimes]
+version = "0.23"
+features = ["attributes", "tokio-runtime"]
 optional = true
 
 [features]
 default = []
-python = ["pyo3", "pyo3-asyncio"]
+python = ["pyo3", "pyo3-async-runtimes"]
 
 [[example]]
 name = "rust_client_example"

@@ -2,6 +2,7 @@ use crate::{ClientConfig, ConnectedClient, ReceiveOptions};
 use futures::{Stream, StreamExt};
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
+use pyo3::types::PyFunction;
 use serde_json::Value;
 use std::{
     pin::Pin,
@@ -25,9 +26,9 @@ impl SrpcClientConfig {
         SrpcClientConfig(ClientConfig::new(host, port, path, cert, key))
     }
 
-    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             client
                 .connect()
                 .await
@@ -76,7 +77,7 @@ impl PyStream {
 
     fn __anext__(&self, py: Python) -> PyResult<Option<PyObject>> {
         let streamer = self.streamer.clone();
-        let future = pyo3_asyncio::tokio::future_into_py(py, async move {
+        let future = pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let val = streamer.lock().await.next().await;
             match val {
                 Some(Ok(val)) => Ok(val),
@@ -129,7 +130,7 @@ impl PyValueStream {
 
     fn __anext__(&self, py: Python) -> PyResult<Option<PyObject>> {
         let streamer = self.streamer.clone();
-        let future = pyo3_asyncio::tokio::future_into_py(py, async move {
+        let future = pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let val = streamer.lock().await.next().await;
             match val {
                 Some(Ok(val)) => Ok(val.to_string()),
@@ -143,9 +144,13 @@ impl PyValueStream {
 
 #[pymethods]
 impl ConnectedSrpcClient {
-    pub fn send_message<'p>(&self, py: Python<'p>, message: String) -> PyResult<&'p PyAny> {
+    pub fn send_message<'p>(
+        &'p self,
+        py: Python<'p>,
+        message: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             client
                 .lock()
                 .await
@@ -160,9 +165,9 @@ impl ConnectedSrpcClient {
         py: Python<'p>,
         expect_empty: bool,
         should_continue: bool,
-    ) -> PyResult<&'p PyAny> {
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let rx = client
                 .lock()
                 .await
@@ -182,18 +187,17 @@ impl ConnectedSrpcClient {
         &self,
         py: Python<'p>,
         expect_empty: bool,
-        should_continue: &PyAny,
-    ) -> PyResult<&'p PyAny> {
+        should_continue: Py<PyFunction>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        let should_continue = should_continue.to_object(py);
+        let should_continue = should_continue.clone_ref(py);
 
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let should_continue = move |response: &str| -> bool {
                 Python::with_gil(|py| {
-                    let func = should_continue.as_ref(py);
-
-                    func.call1((response,))
-                        .and_then(|v| v.extract::<bool>())
+                    should_continue
+                        .call1(py, (response,))
+                        .and_then(|v| v.extract::<bool>(py))
                         .unwrap_or(false)
                 })
             };
@@ -208,9 +212,9 @@ impl ConnectedSrpcClient {
         })
     }
 
-    pub fn send_json<'p>(&self, py: Python<'p>, payload: String) -> PyResult<&'p PyAny> {
+    pub fn send_json<'p>(&self, py: Python<'p>, payload: String) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let value: Value = serde_json::from_str(&payload)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             client
@@ -222,9 +226,13 @@ impl ConnectedSrpcClient {
         })
     }
 
-    pub fn receive_json<'p>(&self, py: Python<'p>, should_continue: bool) -> PyResult<&'p PyAny> {
+    pub fn receive_json<'p>(
+        &self,
+        py: Python<'p>,
+        should_continue: bool,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let rx = client
                 .lock()
                 .await
@@ -241,18 +249,17 @@ impl ConnectedSrpcClient {
     pub fn receive_json_cb<'p>(
         &self,
         py: Python<'p>,
-        should_continue: &PyAny,
-    ) -> PyResult<&'p PyAny> {
+        should_continue: Py<PyFunction>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
-        let should_continue = should_continue.to_object(py);
+        let should_continue = should_continue.clone_ref(py);
 
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let should_continue = move |response: &str| -> bool {
                 Python::with_gil(|py| {
-                    let func = should_continue.as_ref(py);
-
-                    func.call1((response,))
-                        .and_then(|v| v.extract::<bool>())
+                    should_continue
+                        .call1(py, (response,))
+                        .and_then(|v| v.extract::<bool>(py))
                         .unwrap_or(false)
                 })
             };
