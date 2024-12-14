@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
@@ -15,6 +15,8 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::debug;
 
 mod chunk_limiter;
+#[cfg(test)]
+mod tests;
 
 // Custom error type
 #[derive(Debug)]
@@ -40,13 +42,19 @@ pub struct ClientConfig {
 pub struct ReceiveOptions {
     channel_buffer_size: usize,
     max_chunk_size: usize,
+    read_next_line_duration: Duration,
 }
 
 impl ReceiveOptions {
-    pub fn new(channel_buffer_size: usize, max_chunk_size: usize) -> Self {
+    pub fn new(
+        channel_buffer_size: usize,
+        max_chunk_size: usize,
+        read_next_line_duration: Duration,
+    ) -> Self {
         ReceiveOptions {
             channel_buffer_size,
             max_chunk_size,
+            read_next_line_duration,
         }
     }
 }
@@ -56,6 +64,7 @@ impl Default for ReceiveOptions {
         ReceiveOptions {
             channel_buffer_size: 100,
             max_chunk_size: 16384,
+            read_next_line_duration: Duration::from_secs(10),
         }
     }
 }
@@ -251,6 +260,7 @@ where
         let stream = Arc::clone(&self.stream);
         let (tx, rx) = mpsc::channel(opts.channel_buffer_size);
         let max_chunk_size = opts.max_chunk_size;
+        let read_next_line_duration = opts.read_next_line_duration;
 
         tokio::spawn(async move {
             let mut guard = stream.lock().await;
@@ -258,7 +268,7 @@ where
             let buf_reader = BufReader::new(limited_reader);
             let mut framed = FramedRead::new(buf_reader, LinesCodec::new());
 
-            while let Some(line_res) = framed.next().await {
+            while let Ok(Some(line_res)) = timeout(read_next_line_duration, framed.next()).await {
                 let line_res = line_res.map_err(|e| Box::new(e) as Box<dyn Error + Send>);
 
                 match line_res {

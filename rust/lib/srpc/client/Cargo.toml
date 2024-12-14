@@ -43,4 +43,6 @@ path = "examples/rust_client_example2.rs"
 required-features = []
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full", "macros"] }
+rstest = "0.23.0"
+test-log = { version = "0.2.16", features = ["trace", "color"] }
+tokio = { version = "1", features = ["full", "macros", "test-util"] }
