@@ -1,4 +1,4 @@
-use crate::{ClientConfig, ConnectedClient};
+use crate::{ClientConfig, ConnectedClient, ReceiveOptions};
 use futures::{Stream, StreamExt};
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
@@ -164,7 +164,11 @@ impl ConnectedSrpcClient {
             let rx = client
                 .lock()
                 .await
-                .receive_message(expect_empty, move |_| should_continue)
+                .receive_message(
+                    expect_empty,
+                    move |_| should_continue,
+                    &ReceiveOptions::default(),
+                )
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
@@ -186,13 +190,15 @@ impl ConnectedSrpcClient {
                 Python::with_gil(|py| {
                     let func = should_continue.as_ref(py);
 
-                    func.call1((response,)).and_then(|v| v.extract::<bool>()).unwrap_or(false)
+                    func.call1((response,))
+                        .and_then(|v| v.extract::<bool>())
+                        .unwrap_or(false)
                 })
             };
             let rx = client
                 .lock()
                 .await
-                .receive_message(expect_empty, should_continue)
+                .receive_message(expect_empty, should_continue, &ReceiveOptions::default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
@@ -220,7 +226,7 @@ impl ConnectedSrpcClient {
             let rx = client
                 .lock()
                 .await
-                .receive_json(move |_| should_continue)
+                .receive_json(move |_| should_continue, &ReceiveOptions::default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
@@ -230,7 +236,11 @@ impl ConnectedSrpcClient {
         })
     }
 
-    pub fn receive_json_cb<'p>(&self, py: Python<'p>, should_continue: &PyAny) -> PyResult<&'p PyAny> {
+    pub fn receive_json_cb<'p>(
+        &self,
+        py: Python<'p>,
+        should_continue: &PyAny,
+    ) -> PyResult<&'p PyAny> {
         let client = self.0.clone();
         let should_continue = should_continue.to_object(py);
 
@@ -239,13 +249,15 @@ impl ConnectedSrpcClient {
                 Python::with_gil(|py| {
                     let func = should_continue.as_ref(py);
 
-                    func.call1((response,)).and_then(|v| v.extract::<bool>()).unwrap_or(false)
+                    func.call1((response,))
+                        .and_then(|v| v.extract::<bool>())
+                        .unwrap_or(false)
                 })
             };
             let rx = client
                 .lock()
                 .await
-                .receive_json(should_continue)
+                .receive_json(should_continue, &ReceiveOptions::default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 

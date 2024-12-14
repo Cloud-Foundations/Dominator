@@ -1,15 +1,20 @@
+use chunk_limiter::ChunkLimiter;
+use futures::StreamExt;
 use openssl::ssl::{Ssl, SslConnector, SslMethod, SslVerifyMode};
 use serde_json::Value;
 use std::error::Error;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
 use tokio_openssl::SslStream;
+use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::debug;
+
+mod chunk_limiter;
 
 // Custom error type
 #[derive(Debug)]
@@ -30,6 +35,29 @@ pub struct ClientConfig {
     path: String,
     cert: String,
     key: String,
+}
+
+pub struct ReceiveOptions {
+    channel_buffer_size: usize,
+    max_chunk_size: usize,
+}
+
+impl ReceiveOptions {
+    pub fn new(channel_buffer_size: usize, max_chunk_size: usize) -> Self {
+        ReceiveOptions {
+            channel_buffer_size,
+            max_chunk_size,
+        }
+    }
+}
+
+impl Default for ReceiveOptions {
+    fn default() -> Self {
+        ReceiveOptions {
+            channel_buffer_size: 100,
+            max_chunk_size: 16384,
+        }
+    }
 }
 
 pub struct ConnectedClient {
@@ -147,7 +175,7 @@ impl ConnectedClient {
         Ok(())
     }
 
-    pub async fn receive_message<F>(
+    pub async fn receive_message_old<F>(
         &self,
         expect_empty: bool,
         mut should_continue: F,
@@ -202,6 +230,58 @@ impl ConnectedClient {
         Ok(rx)
     }
 
+    pub async fn receive_message<F>(
+        &self,
+        expect_empty: bool,
+        mut should_continue: F,
+        opts: &ReceiveOptions,
+    ) -> Result<mpsc::Receiver<Result<String, Box<dyn Error + Send>>>, Box<dyn Error>>
+    where
+        F: FnMut(&str) -> bool + Send + 'static,
+    {
+        let stream = Arc::clone(&self.stream);
+        let (tx, rx) = mpsc::channel(opts.channel_buffer_size);
+        let max_chunk_size = opts.max_chunk_size;
+
+        tokio::spawn(async move {
+            let mut guard = stream.lock().await;
+            let limited_reader = ChunkLimiter::new(&mut *guard, max_chunk_size);
+            let buf_reader = BufReader::new(limited_reader);
+            let mut framed = FramedRead::new(buf_reader, LinesCodec::new());
+
+            while let Some(line_res) = framed.next().await {
+                let line_res = line_res.map_err(|e| Box::new(e) as Box<dyn Error + Send>);
+
+                match line_res {
+                    Ok(line) => {
+                        if expect_empty && !line.is_empty() {
+                            let _ = tx
+                                .send(Err(Box::new(CustomError(format!(
+                                    "Expected empty line, got: {:?}",
+                                    line
+                                )))
+                                    as Box<dyn Error + Send>))
+                                .await;
+                            break;
+                        }
+
+                        let _ = tx.send(Ok(line.clone())).await;
+
+                        if !should_continue(&line) {
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = tx.send(Err(err)).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
     pub async fn send_json(&self, payload: &Value) -> Result<(), Box<dyn Error>> {
         let json_string = payload.to_string() + "\n";
         self.send_message(&json_string).await
@@ -210,12 +290,13 @@ impl ConnectedClient {
     pub async fn receive_json<F>(
         &self,
         should_continue: F,
+        opts: &ReceiveOptions,
     ) -> Result<mpsc::Receiver<Result<Value, Box<dyn Error + Send>>>, Box<dyn Error>>
     where
         F: FnMut(&str) -> bool + Send + 'static,
     {
-        let mut rx = self.receive_message(false, should_continue).await?;
-        let (tx, new_rx) = mpsc::channel(100);
+        let mut rx = self.receive_message(false, should_continue, opts).await?;
+        let (tx, new_rx) = mpsc::channel(opts.channel_buffer_size);
 
         tokio::spawn(async move {
             while let Some(result) = rx.recv().await {

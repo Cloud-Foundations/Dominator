@@ -1,5 +1,5 @@
 use serde_json::json;
-use srpc_client::ClientConfig;
+use srpc_client::{ClientConfig, ReceiveOptions};
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -36,7 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Receive an empty response
     info!("Waiting for empty string response...");
-    let mut rx = client.receive_message(true, |_| false).await?;
+    let mut rx = client
+        .receive_message(true, |_| false, &ReceiveOptions::default())
+        .await?;
     while let Some(result) = rx.recv().await {
         match result {
             Ok(response) => info!("Received response: {:?}", response),
@@ -55,7 +57,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Receive and parse JSON response
     info!("Waiting for JSON response...");
-    let mut rx = client.receive_json(|_| false).await?;
+    let mut rx = client
+        .receive_json(|_| false, &ReceiveOptions::default())
+        .await?;
     while let Some(result) = rx.recv().await {
         match result {
             Ok(json_response) => info!("Received JSON response: {:?}", json_response),
