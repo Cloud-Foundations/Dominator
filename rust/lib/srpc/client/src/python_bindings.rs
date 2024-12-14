@@ -8,13 +8,15 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
+use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
+use tokio_openssl::SslStream;
 
 #[pyclass]
 pub struct SrpcClientConfig(ClientConfig);
 
 #[pyclass]
-pub struct ConnectedSrpcClient(Arc<Mutex<ConnectedClient>>);
+pub struct ConnectedSrpcClient(Arc<Mutex<ConnectedClient<SslStream<TcpStream>>>>);
 
 #[pymethods]
 impl SrpcClientConfig {

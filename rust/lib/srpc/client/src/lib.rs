@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
@@ -60,12 +60,14 @@ impl Default for ReceiveOptions {
     }
 }
 
-pub struct ConnectedClient {
+pub struct ConnectedClient<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     pub connection_params: ClientConfig,
-    stream: Connected,
+    stream: Arc<Mutex<T>>,
 }
 
-type Connected = Arc<Mutex<SslStream<TcpStream>>>;
 impl ClientConfig {
     pub fn new(host: &str, port: u16, path: &str, cert: &str, key: &str) -> Self {
         ClientConfig {
@@ -77,7 +79,7 @@ impl ClientConfig {
         }
     }
 
-    pub async fn connect(self) -> Result<ConnectedClient, Box<dyn Error>> {
+    pub async fn connect(self) -> Result<ConnectedClient<SslStream<TcpStream>>, Box<dyn Error>> {
         debug!("Attempting to connect to {}:{}...", self.host, self.port);
 
         let connect_timeout = Duration::from_secs(10);
@@ -115,10 +117,7 @@ impl ClientConfig {
 
         debug!("Connection fully established");
 
-        Ok(ConnectedClient {
-            connection_params: self,
-            stream: Arc::new(Mutex::new(stream)),
-        })
+        Ok(ConnectedClient::new(self, stream))
     }
 
     async fn do_http_connect(&self, stream: &TcpStream) -> Result<(), Box<dyn Error>> {
@@ -166,7 +165,17 @@ impl ClientConfig {
     }
 }
 
-impl ConnectedClient {
+impl<T> ConnectedClient<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    pub fn new(connection_params: ClientConfig, stream: T) -> Self {
+        ConnectedClient {
+            connection_params,
+            stream: Arc::new(Mutex::new(stream)),
+        }
+    }
+
     pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
         let stream = self.stream.lock().await;
         let mut pinned = Pin::new(stream);
