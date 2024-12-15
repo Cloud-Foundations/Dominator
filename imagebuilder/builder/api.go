@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/slavedriver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/sshutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
@@ -114,14 +115,15 @@ type manifestConfigType struct {
 }
 
 type masterConfigurationType struct {
-	BindMounts                []string                    `json:",omitempty"`
-	BootstrapStreams          map[string]*bootstrapStream `json:",omitempty"`
-	ImageStreamsCheckInterval uint                        `json:",omitempty"`
-	ImageStreamsToAutoRebuild []string                    `json:",omitempty"`
-	ImageStreamsUrl           string                      `json:",omitempty"`
-	MtimesCopyFilterLines     []string                    `json:",omitempty"`
-	PackagerTypes             map[string]packagerType     `json:",omitempty"`
-	RelationshipsQuickLinks   []WebLink                   `json:",omitempty"`
+	BindMounts                []string                      `json:",omitempty"`
+	BootstrapStreams          map[string]*bootstrapStream   `json:",omitempty"`
+	ImageStreamsCheckInterval uint                          `json:",omitempty"`
+	ImageStreamsToAutoRebuild []string                      `json:",omitempty"`
+	ImageStreamsUrl           string                        `json:",omitempty"`
+	MtimesCopyFilterLines     []string                      `json:",omitempty"`
+	PackagerTypes             map[string]packagerType       `json:",omitempty"`
+	RelationshipsQuickLinks   []WebLink                     `json:",omitempty"`
+	SshMetadataFetcher        sshutil.MetadataFetcherConfig `json:",omitempty"`
 }
 
 // manifestLocationType contains the expanded location of a manifest. These

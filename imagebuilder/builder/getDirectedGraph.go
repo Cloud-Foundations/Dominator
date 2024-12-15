@@ -321,7 +321,8 @@ func (b *Builder) getDependencyData(maxAge time.Duration) *dependencyDataType {
 		b.dependencyDataLock.RLock()
 		dependencyData := b.dependencyData
 		b.dependencyDataLock.RUnlock()
-		if time.Since(dependencyData.lastAttemptTime) < maxAge {
+		if dependencyData != nil &&
+			time.Since(dependencyData.lastAttemptTime) < maxAge {
 			return dependencyData
 		}
 		waitChannel := make(chan struct{}, 1)

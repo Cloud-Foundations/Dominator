@@ -18,7 +18,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/sshutil"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
@@ -96,7 +98,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		return nil, fmt.Errorf("error making mounts private: %s", err)
 	}
 	masterConfiguration, err := loadMasterConfiguration(
-		options.ConfigurationURL)
+		options.ConfigurationURL, params.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("error getting master configuration: %s", err)
 	}
@@ -185,7 +187,8 @@ func loadImageStreams(url, publicUrl string) (
 	return configuration, nil
 }
 
-func loadMasterConfiguration(url string) (*masterConfigurationType, error) {
+func loadMasterConfiguration(url string, logger log.DebugLogger) (
+	*masterConfigurationType, error) {
 	file, err := urlutil.Open(url)
 	if err != nil {
 		return nil, err
@@ -195,6 +198,11 @@ func loadMasterConfiguration(url string) (*masterConfigurationType, error) {
 	if err := json.Read(file, &configuration); err != nil {
 		return nil, fmt.Errorf("error reading configuration from: %s: %s",
 			url, err)
+	}
+	_, err = sshutil.NewMetadataFetcher(configuration.SshMetadataFetcher,
+		sshutil.MetadataFetcherParams{Logger: logger})
+	if err != nil {
+		return nil, err
 	}
 	for _, stream := range configuration.BootstrapStreams {
 		if _, ok := configuration.PackagerTypes[stream.PackagerType]; !ok {
