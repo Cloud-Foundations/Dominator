@@ -39,10 +39,12 @@ pub struct ClientConfig {
     key: String,
 }
 
+#[cfg_attr(feature = "python", derive(FromPyObject))]
 pub struct ReceiveOptions {
     channel_buffer_size: usize,
     max_chunk_size: usize,
     read_next_line_duration: Duration,
+    should_continue_on_timeout: bool,
 }
 
 impl ReceiveOptions {
@@ -50,11 +52,13 @@ impl ReceiveOptions {
         channel_buffer_size: usize,
         max_chunk_size: usize,
         read_next_line_duration: Duration,
+        should_continue_on_timeout: bool,
     ) -> Self {
         ReceiveOptions {
             channel_buffer_size,
             max_chunk_size,
             read_next_line_duration,
+            should_continue_on_timeout,
         }
     }
 }
@@ -65,6 +69,7 @@ impl Default for ReceiveOptions {
             channel_buffer_size: 100,
             max_chunk_size: 16384,
             read_next_line_duration: Duration::from_secs(10),
+            should_continue_on_timeout: true,
         }
     }
 }
@@ -206,6 +211,7 @@ where
         let (tx, rx) = mpsc::channel(opts.channel_buffer_size);
         let max_chunk_size = opts.max_chunk_size;
         let read_next_line_duration = opts.read_next_line_duration;
+        let should_continue_on_timeout = opts.should_continue_on_timeout;
 
         tokio::spawn(async move {
             let mut guard = stream.lock().await;
@@ -213,31 +219,44 @@ where
             let buf_reader = BufReader::new(limited_reader);
             let mut framed = FramedRead::new(buf_reader, LinesCodec::new());
 
-            while let Ok(Some(line_res)) = timeout(read_next_line_duration, framed.next()).await {
-                let line_res = line_res.map_err(|e| Box::new(e) as Box<dyn Error + Send>);
+            loop {
+                let result = timeout(read_next_line_duration, framed.next()).await;
+                match result {
+                    Ok(Some(line_res)) => {
+                        let line_res = line_res.map_err(|e| Box::new(e) as Box<dyn Error + Send>);
 
-                match line_res {
-                    Ok(line) => {
-                        if expect_empty && !line.is_empty() {
-                            let _ = tx
-                                .send(Err(Box::new(CustomError(format!(
-                                    "Expected empty line, got: {:?}",
-                                    line
-                                )))
-                                    as Box<dyn Error + Send>))
-                                .await;
-                            break;
-                        }
+                        match line_res {
+                            Ok(line) => {
+                                if expect_empty && !line.is_empty() {
+                                    let _ = tx
+                                        .send(Err(Box::new(CustomError(format!(
+                                            "Expected empty line, got: {:?}",
+                                            line
+                                        )))
+                                            as Box<dyn Error + Send>))
+                                        .await;
+                                    break;
+                                }
 
-                        let _ = tx.send(Ok(line.clone())).await;
+                                let _ = tx.send(Ok(line.clone())).await;
 
-                        if !should_continue(&line) {
-                            break;
+                                if !should_continue(&line) {
+                                    break;
+                                }
+                            }
+                            Err(err) => {
+                                let _ = tx.send(Err(err)).await;
+                                break;
+                            }
                         }
                     }
-                    Err(err) => {
-                        let _ = tx.send(Err(err)).await;
+                    Ok(None) => {
                         break;
+                    }
+                    Err(_) => {
+                        if !should_continue_on_timeout {
+                            break;
+                        }
                     }
                 }
             }

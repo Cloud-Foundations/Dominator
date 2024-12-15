@@ -246,10 +246,12 @@ impl ConnectedSrpcClient {
         })
     }
 
+    #[pyo3(signature = (should_continue, opts=None))]
     pub fn receive_json_cb<'p>(
         &self,
         py: Python<'p>,
         should_continue: Py<PyFunction>,
+        opts: Option<ReceiveOptions>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         let should_continue = should_continue.clone_ref(py);
@@ -266,7 +268,7 @@ impl ConnectedSrpcClient {
             let rx = client
                 .lock()
                 .await
-                .receive_json(should_continue, &ReceiveOptions::default())
+                .receive_json(should_continue, &opts.unwrap_or_default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
