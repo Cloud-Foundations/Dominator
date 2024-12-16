@@ -209,7 +209,7 @@ where
     {
         let stream = Arc::clone(&self.stream);
         let (tx, rx) = mpsc::channel(opts.channel_buffer_size);
-        let max_chunk_size = opts.max_chunk_size;
+        let max_chunk_size = if expect_empty { 1 } else { opts.max_chunk_size };
         let read_next_line_duration = opts.read_next_line_duration;
         let should_continue_on_timeout = opts.should_continue_on_timeout;
 
