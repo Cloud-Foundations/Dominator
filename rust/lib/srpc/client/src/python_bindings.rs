@@ -1,4 +1,4 @@
-use crate::{ClientConfig, ConnectedClient, ReceiveOptions};
+use crate::{ClientConfig, ConnectedClient, ReceiveOptions, SimpleValue};
 use futures::{Stream, StreamExt};
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
@@ -275,6 +275,27 @@ impl ConnectedSrpcClient {
             Ok(Python::with_gil(|_py| {
                 PyValueStream::new(ValueStreamer::new(rx))
             }))
+        })
+    }
+
+    pub fn request_reply<'p>(
+        &self,
+        py: Python<'p>,
+        method: String,
+        payload: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let value: Value = serde_json::from_str(&payload)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            let response = client
+                .lock()
+                .await
+                .request_reply::<SimpleValue>(&method, value)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            Ok(response.to_string())
         })
     }
 }

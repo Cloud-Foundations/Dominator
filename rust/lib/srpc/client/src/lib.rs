@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use chunk_limiter::ChunkLimiter;
 use futures::StreamExt;
 use openssl::ssl::{Ssl, SslConnector, SslMethod, SslVerifyMode};
@@ -20,7 +21,7 @@ mod tests;
 
 // Custom error type
 #[derive(Debug)]
-struct CustomError(String);
+pub struct CustomError(pub String);
 
 impl fmt::Display for CustomError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -80,6 +81,70 @@ where
 {
     pub connection_params: ClientConfig,
     stream: Arc<Mutex<T>>,
+}
+
+#[async_trait]
+pub trait RequestReply {
+    type Request;
+    type Reply;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static;
+}
+
+pub struct SimpleValue;
+
+#[async_trait]
+impl RequestReply for SimpleValue {
+    type Request = serde_json::Value;
+    type Reply = serde_json::Value;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        client.send_json_and_check(&payload).await?;
+
+        let mut rx = client
+            .receive_json(|_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let json_value = rx.recv().await.ok_or_else(|| {
+            Box::new(CustomError("Expected JSON value".to_string())) as Box<dyn Error + Send>
+        })??;
+        Ok(json_value)
+    }
+}
+
+pub struct StreamValue;
+
+#[async_trait]
+impl RequestReply for StreamValue {
+    type Request = serde_json::Value;
+    type Reply = mpsc::Receiver<Result<serde_json::Value, Box<dyn Error + Send>>>;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        client.send_json_and_check(&payload).await?;
+
+        let rx = client
+            .receive_json(|_| true, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        Ok(rx)
+    }
 }
 
 impl ClientConfig {
@@ -188,6 +253,36 @@ where
             connection_params,
             stream: Arc::new(Mutex::new(stream)),
         }
+    }
+
+    pub async fn request_reply<R>(
+        &self,
+        method: &str,
+        payload: R::Request,
+    ) -> Result<R::Reply, Box<dyn Error + Send>>
+    where
+        R: RequestReply,
+    {
+        self.send_message(method)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        R::request_reply(self, payload).await
     }
 
     pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
