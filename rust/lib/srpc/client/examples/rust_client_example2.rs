@@ -1,3 +1,12 @@
+/** This example demonstrates how to use the srpc_client Rust bindings.
+    RUST_LOG=trace \
+    EXAMPLE_2_SRPC_SERVER_HOST=<host> \
+    EXAMPLE_2_SRPC_SERVER_PORT=<port> \
+    EXAMPLE_2_SRPC_SERVER_ENPOINT=<srpc endpoint> \
+    EXAMPLE_2_SRPC_SERVER_CERT=<path to .cert> \
+    EXAMPLE_2_SRPC_SERVER_KEY=<path to .key> \
+    cargo run --example rust_client_example2
+**/
 use srpc_client::{ClientConfig, ReceiveOptions};
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

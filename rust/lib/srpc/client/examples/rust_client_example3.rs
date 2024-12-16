@@ -1,3 +1,12 @@
+/** This example demonstrates how to use the srpc_client Rust bindings.
+    RUST_LOG=trace \
+    EXAMPLE_3_SRPC_SERVER_HOST=<host> \
+    EXAMPLE_3_SRPC_SERVER_PORT=<port> \
+    EXAMPLE_3_SRPC_SERVER_ENPOINT=<srpc endpoint> \
+    EXAMPLE_3_SRPC_SERVER_CERT=<path to .cert> \
+    EXAMPLE_3_SRPC_SERVER_KEY=<path to .key> \
+    cargo run --example rust_client_example3
+**/
 use std::{collections::HashMap, error::Error};
 
 use srpc_client::{ClientConfig, CustomError, ReceiveOptions, SimpleValue};

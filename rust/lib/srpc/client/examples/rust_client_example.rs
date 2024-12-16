@@ -1,3 +1,12 @@
+/** This example demonstrates how to use the srpc_client Rust bindings.
+    RUST_LOG=trace \
+    EXAMPLE_1_SRPC_SERVER_HOST=<host> \
+    EXAMPLE_1_SRPC_SERVER_PORT=<port> \
+    EXAMPLE_1_SRPC_SERVER_ENPOINT=<srpc endpoint> \
+    EXAMPLE_1_SRPC_SERVER_CERT=<path to .cert> \
+    EXAMPLE_1_SRPC_SERVER_KEY=<path to .key> \
+    cargo run --example rust_client_example
+**/
 use serde_json::json;
 use srpc_client::{ClientConfig, ReceiveOptions};
 use tracing::{error, info, level_filters::LevelFilter};

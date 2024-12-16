@@ -44,6 +44,11 @@ name = "rust_client_example2"
 path = "examples/rust_client_example2.rs"
 required-features = []
 
+[[example]]
+name = "rust_client_example3"
+path = "examples/rust_client_example3.rs"
+required-features = []
+
 [dev-dependencies]
 rstest = "0.23.0"
 test-log = { version = "0.2.16", features = ["trace", "color"] }

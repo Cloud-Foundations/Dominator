@@ -2,9 +2,15 @@
 This example demonstrates how to use the srpc_client Python bindings.
 
 To run this example:
-1. Build the Rust library: maturin build --features python
-2. Install the wheel: pip install target/wheels/srpc_client-*.whl
-3. Run this script: python examples/python_client_example.py
+1. Build and install the Rust python library: maturin develop --features python
+3. Run this script:
+    RUST_LOG=trace \
+    EXAMPLE_1_SRPC_SERVER_HOST=<host> \
+    EXAMPLE_1_SRPC_SERVER_PORT=<port> \
+    EXAMPLE_1_SRPC_SERVER_ENPOINT=<srpc endpoint> \
+    EXAMPLE_1_SRPC_SERVER_CERT=<path to .cert> \
+    EXAMPLE_1_SRPC_SERVER_KEY=<path to .key> \
+    python examples/python_client_example.py
 """
 
 import asyncio
