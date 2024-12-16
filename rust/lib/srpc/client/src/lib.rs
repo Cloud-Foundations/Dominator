@@ -198,6 +198,29 @@ where
         Ok(())
     }
 
+    pub async fn send_message_and_check(&self, message: &str) -> Result<(), Box<dyn Error + Send>> {
+        self.send_message(message)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        Ok(())
+    }
+
     pub async fn receive_message<F>(
         &self,
         expect_empty: bool,
@@ -268,6 +291,29 @@ where
     pub async fn send_json(&self, payload: &Value) -> Result<(), Box<dyn Error>> {
         let json_string = payload.to_string() + "\n";
         self.send_message(&json_string).await
+    }
+
+    pub async fn send_json_and_check(&self, payload: &Value) -> Result<(), Box<dyn Error + Send>> {
+        self.send_json(payload)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        Ok(())
     }
 
     pub async fn receive_json<F>(
