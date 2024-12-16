@@ -73,7 +73,7 @@ func (e *Exponential) StartInterval() {
 // NewRefresher creates a Sleeper with a specified deadline to perform a refresh
 // prior to the deadline, with more frequent retries as the deadline approaches.
 // This is useful for scheduling certificate refreshes.
-// The deadline is time by which a refresh is required.
+// The deadline is the time by which a refresh is required.
 // The minimumDelay is the minimum delay between refresh attempts. If less than
 // or equal to 0, the default is 1 second.
 // The maximumDelay is the maximum delay between refresh attempts. If less than
