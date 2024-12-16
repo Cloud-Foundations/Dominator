@@ -160,6 +160,22 @@ impl ConnectedSrpcClient {
         })
     }
 
+    pub fn send_message_and_check<'p>(
+        &'p self,
+        py: Python<'p>,
+        message: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .lock()
+                .await
+                .send_message_and_check(&message)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        })
+    }
+
     pub fn receive_message<'p>(
         &self,
         py: Python<'p>,
@@ -221,6 +237,20 @@ impl ConnectedSrpcClient {
                 .lock()
                 .await
                 .send_json(&value)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        })
+    }
+
+    pub fn send_json_and_check<'p>(&self, py: Python<'p>, payload: String) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let value: Value = serde_json::from_str(&payload)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            client
+                .lock()
+                .await
+                .send_json_and_check(&value)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
         })
