@@ -3,13 +3,14 @@ use chunk_limiter::ChunkLimiter;
 use futures::StreamExt;
 use openssl::ssl::{Ssl, SslConnector, SslMethod, SslVerifyMode};
 use serde_json::Value;
+use std::borrow::BorrowMut;
 use std::error::Error;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, OwnedMutexGuard};
 use tokio::time::{timeout, Duration};
 use tokio_openssl::SslStream;
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -145,6 +146,65 @@ impl RequestReply for StreamValue {
             .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
         Ok(rx)
     }
+}
+
+pub struct Conn<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    guard: Option<tokio::sync::OwnedMutexGuard<ConnectedClient<T>>>,
+    rx: mpsc::Receiver<Result<Value, Box<dyn Error + Send>>>,
+}
+
+impl<T> Conn<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    pub async fn new(
+        guard: tokio::sync::OwnedMutexGuard<ConnectedClient<T>>,
+    ) -> Result<Self, Box<dyn Error + Send>> {
+        let rx = guard
+            .receive_json(|_| true, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+
+        Ok(Conn {
+            guard: Some(guard),
+            rx,
+        })
+    }
+
+    pub async fn encode(&self, message: Value) -> Result<(), Box<dyn Error + Send>> {
+        self.guard
+            .as_ref()
+            .unwrap()
+            .send_json(&message)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)
+    }
+
+    pub async fn decode(&mut self) -> Result<Value, Box<dyn Error + Send>> {
+        let rx = self.rx.borrow_mut();
+        let json_value = rx.recv().await.ok_or_else(|| {
+            Box::new(CustomError("Expected JSON value".to_string())) as Box<dyn Error + Send>
+        })??;
+        Ok(json_value)
+    }
+
+    pub fn close(&mut self) -> OwnedMutexGuard<ConnectedClient<T>> {
+        self.guard.take().unwrap()
+    }
+}
+
+pub async fn call<T>(
+    client: OwnedMutexGuard<ConnectedClient<T>>,
+    method: &str,
+) -> Result<Conn<T>, Box<dyn Error + Send>>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    client.send_message_and_check(method).await?;
+    Conn::new(client).await
 }
 
 impl ClientConfig {
@@ -284,6 +344,15 @@ where
 
         R::request_reply(self, payload).await
     }
+
+    // pub async fn call(
+    //     self,
+    //     method: &str,
+    // ) -> Result<Conn<T>, Box<dyn Error + Send>>
+    // {
+    //     self.send_message_and_check(method).await?;
+    //     Conn::new(self.stream.lock_owned().await).await
+    // }
 
     pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
         let stream = self.stream.lock().await;
@@ -467,5 +536,6 @@ fn srpc_client(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<python_bindings::SrpcClientConfig>()?;
     m.add_class::<python_bindings::ConnectedSrpcClient>()?;
+    m.add_class::<python_bindings::SrpcMethodCallConn>()?;
     Ok(())
 }

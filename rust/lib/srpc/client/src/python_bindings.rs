@@ -1,4 +1,4 @@
-use crate::{ClientConfig, ConnectedClient, ReceiveOptions, SimpleValue};
+use crate::{ClientConfig, Conn, ConnectedClient, ReceiveOptions, SimpleValue};
 use futures::{Stream, StreamExt};
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
@@ -19,6 +19,9 @@ pub struct SrpcClientConfig(ClientConfig);
 #[pyclass]
 pub struct ConnectedSrpcClient(Arc<Mutex<ConnectedClient<SslStream<TcpStream>>>>);
 
+#[pyclass]
+pub struct SrpcMethodCallConn(Arc<Mutex<Conn<SslStream<TcpStream>>>>);
+
 #[pymethods]
 impl SrpcClientConfig {
     #[new]
@@ -33,7 +36,9 @@ impl SrpcClientConfig {
                 .connect()
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
-                .map(|c| ConnectedSrpcClient(Arc::new(Mutex::new(c))))
+                .map(|c| {
+                    ConnectedSrpcClient(Arc::new(Mutex::new(c)))
+                })
         })
     }
 }
@@ -151,9 +156,8 @@ impl ConnectedSrpcClient {
     ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = client.lock().await;
             client
-                .lock()
-                .await
                 .send_message(&message)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
@@ -167,9 +171,8 @@ impl ConnectedSrpcClient {
     ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = client.lock().await;
             client
-                .lock()
-                .await
                 .send_message_and_check(&message)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
@@ -184,9 +187,8 @@ impl ConnectedSrpcClient {
     ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = client.lock().await;
             let rx = client
-                .lock()
-                .await
                 .receive_message(
                     expect_empty,
                     move |_| should_continue,
@@ -217,9 +219,8 @@ impl ConnectedSrpcClient {
                         .unwrap_or(false)
                 })
             };
+            let client = client.lock().await;
             let rx = client
-                .lock()
-                .await
                 .receive_message(expect_empty, should_continue, &ReceiveOptions::default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
@@ -233,23 +234,25 @@ impl ConnectedSrpcClient {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let value: Value = serde_json::from_str(&payload)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            let client = client.lock().await;
             client
-                .lock()
-                .await
                 .send_json(&value)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
         })
     }
 
-    pub fn send_json_and_check<'p>(&self, py: Python<'p>, payload: String) -> PyResult<Bound<'p, PyAny>> {
+    pub fn send_json_and_check<'p>(
+        &self,
+        py: Python<'p>,
+        payload: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let value: Value = serde_json::from_str(&payload)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            let client = client.lock().await;
             client
-                .lock()
-                .await
                 .send_json_and_check(&value)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))
@@ -263,9 +266,8 @@ impl ConnectedSrpcClient {
     ) -> PyResult<Bound<'p, PyAny>> {
         let client = self.0.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = client.lock().await;
             let rx = client
-                .lock()
-                .await
                 .receive_json(move |_| should_continue, &ReceiveOptions::default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
@@ -295,9 +297,8 @@ impl ConnectedSrpcClient {
                         .unwrap_or(false)
                 })
             };
+            let client = client.lock().await;
             let rx = client
-                .lock()
-                .await
                 .receive_json(should_continue, &opts.unwrap_or_default())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
@@ -319,13 +320,53 @@ impl ConnectedSrpcClient {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let value: Value = serde_json::from_str(&payload)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            let client = client.lock().await;
             let response = client
-                .lock()
-                .await
                 .request_reply::<SimpleValue>(&method, value)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            // TODO: Figure out how to marshall this as a python dict
             Ok(response.to_string())
+        })
+    }
+
+    pub fn call<'p>(&self, py: Python<'p>, method: String) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = client.lock_owned().await;
+            let conn = crate::call(guard, &method)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            Ok(SrpcMethodCallConn(Arc::new(
+                Mutex::new(conn),
+            )))
+        })
+    }
+}
+
+#[pymethods]
+impl SrpcMethodCallConn {
+    pub fn decode<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = client.lock_owned().await;
+            let response = guard
+                .decode()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            Ok(response.to_string())
+        })
+    }
+
+    pub fn close<'p>(&mut self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let client = self.0.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = client.lock_owned().await;
+            guard.close();
+            Ok(())
         })
     }
 }
