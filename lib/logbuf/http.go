@@ -351,8 +351,7 @@ func (lb *LogBuffer) httpShowPreviousPanicHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "Logfile for previous invocation has expired")
 		return
 	}
-	err := lb.dumpFile(writer, path.Join(lb.options.Directory, *panicLogfile),
-		recentFirst, regexpList)
+	err := lb.dumpFile(writer, *panicLogfile, recentFirst, regexpList)
 	if err == nil {
 		return
 	}
