@@ -12,15 +12,20 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
+type allCpuStats struct {
+	self     cpuStats
+	children cpuStats
+}
+
 type cpuStats struct {
 	realTime time.Time
-	userTime time.Time
-	sysTime  time.Time
+	userTime time.Duration
+	sysTime  time.Duration
 }
 
 var (
-	startCpuStats *cpuStats = getCpuStats()
-	lastCpuStats  *cpuStats = startCpuStats
+	startCpuStats *allCpuStats = getCpuStats()
+	lastCpuStats  *allCpuStats = startCpuStats
 )
 
 func handleFunc(serveMux *http.ServeMux, pattern string,
@@ -41,8 +46,8 @@ func setSecurityHeaders(w http.ResponseWriter) {
 }
 
 func writeCpuStats(writer io.Writer, prefix string, start, current *cpuStats) {
-	userCpuTime := current.userTime.Sub(start.userTime)
-	sysCpuTime := current.sysTime.Sub(start.sysTime)
+	userCpuTime := current.userTime - start.userTime
+	sysCpuTime := current.sysTime - start.sysTime
 	realTime := current.realTime.Sub(start.realTime)
 	cpuTime := userCpuTime + sysCpuTime
 	fmt.Fprintf(writer,
@@ -56,18 +61,25 @@ func writeHeader(writer io.Writer, req *http.Request, noGC bool) {
 		`<table border="1" bordercolor=#e0e0e0 style="border-collapse: collapse">`)
 	fmt.Fprintf(writer, "  <tr>\n")
 	fmt.Fprintf(writer, "    <td>Start time: %s</td>\n",
-		startCpuStats.realTime.Format(format.TimeFormatSeconds))
-	uptime := currentCpuStats.realTime.Sub(startCpuStats.realTime)
+		startCpuStats.self.realTime.Format(format.TimeFormatSeconds))
+	uptime := currentCpuStats.self.realTime.Sub(startCpuStats.self.realTime)
 	uptime += time.Millisecond * 50
 	uptime = (uptime / time.Millisecond / 100) * time.Millisecond * 100
 	fmt.Fprintf(writer, "    <td>Uptime: %s</td>\n", format.Duration(uptime))
 	fmt.Fprintf(writer, "  </tr>\n")
 	fmt.Fprintf(writer, "  <tr>\n")
-	writeCpuStats(writer, "Total", startCpuStats, currentCpuStats)
-	writeCpuStats(writer, "Recent", lastCpuStats, currentCpuStats)
-	lastCpuStats = currentCpuStats
+	writeCpuStats(writer, "Process Total",
+		&startCpuStats.self, &currentCpuStats.self)
+	writeCpuStats(writer, "Recent", &lastCpuStats.self, &currentCpuStats.self)
 	fmt.Fprintf(writer, "  </tr>\n")
 	fmt.Fprintf(writer, "  <tr>\n")
+	writeCpuStats(writer, "Subprocess Total",
+		&startCpuStats.children, &currentCpuStats.children)
+	writeCpuStats(writer, "Recent",
+		&lastCpuStats.children, &currentCpuStats.children)
+	fmt.Fprintf(writer, "  </tr>\n")
+	fmt.Fprintf(writer, "  <tr>\n")
+	lastCpuStats = currentCpuStats
 	var memStatsBeforeGC runtime.MemStats
 	runtime.ReadMemStats(&memStatsBeforeGC)
 	if noGC {
@@ -106,18 +118,40 @@ func writeHeader(writer io.Writer, req *http.Request, noGC bool) {
 	}
 }
 
-func getCpuStats() *cpuStats {
-	uTime, sTime := getRusage()
-	return &cpuStats{
-		realTime: time.Now(),
-		userTime: uTime,
-		sysTime:  sTime,
+func getCpuStats() *allCpuStats {
+	myUserTime, mySysTime, err := getRusage(wsyscall.RUSAGE_SELF)
+	if err != nil {
+		return nil
+	}
+	childUserTime, childSysTime, err := getRusage(wsyscall.RUSAGE_CHILDREN)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	return &allCpuStats{
+		self: cpuStats{
+			realTime: now,
+			userTime: myUserTime,
+			sysTime:  mySysTime,
+		},
+		children: cpuStats{
+			realTime: now,
+			userTime: childUserTime,
+			sysTime:  childSysTime,
+		},
 	}
 }
 
-func getRusage() (time.Time, time.Time) {
+// getRusage returns the user and system time used.
+func getRusage(who int) (time.Duration, time.Duration, error) {
 	var rusage wsyscall.Rusage
-	wsyscall.Getrusage(wsyscall.RUSAGE_SELF, &rusage)
-	return time.Unix(int64(rusage.Utime.Sec), int64(rusage.Utime.Usec)*1000),
-		time.Unix(int64(rusage.Stime.Sec), int64(rusage.Stime.Usec)*1000)
+	if err := wsyscall.Getrusage(who, &rusage); err != nil {
+		return 0, 0, err
+	}
+	return timevalToTime(rusage.Utime), timevalToTime(rusage.Stime), nil
+}
+
+func timevalToTime(timeval wsyscall.Timeval) time.Duration {
+	return time.Duration(timeval.Sec)*time.Second +
+		time.Duration(timeval.Usec)*time.Microsecond
 }
