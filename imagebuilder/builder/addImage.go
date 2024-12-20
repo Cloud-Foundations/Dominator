@@ -221,6 +221,9 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 			return request.Variables[name]
 		})
 		tgs[key] = newValue
+		if value != "" && newValue == "" {
+			delete(tgs, key)
+		}
 	}
 	img := &image.Image{
 		BuildLog:   &image.Annotation{Object: &hashVal},
