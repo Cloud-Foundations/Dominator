@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 )
 
 var (
@@ -117,6 +118,7 @@ func (lw *LockWatcher) incrementNumLockTimeouts() {
 	defer lw.statsMutex.Unlock()
 	lw.stats.NumLockTimeouts++
 	lw.stats.WaitingForLock = true
+	lw.stats.recordTime()
 }
 
 func (lw *LockWatcher) incrementNumRLockTimeouts() {
@@ -124,6 +126,7 @@ func (lw *LockWatcher) incrementNumRLockTimeouts() {
 	defer lw.statsMutex.Unlock()
 	lw.stats.NumRLockTimeouts++
 	lw.stats.WaitingForRLock = true
+	lw.stats.recordTime()
 }
 
 func (lw *LockWatcher) incrementNumWLockTimeouts() {
@@ -131,6 +134,7 @@ func (lw *LockWatcher) incrementNumWLockTimeouts() {
 	defer lw.statsMutex.Unlock()
 	lw.stats.NumWLockTimeouts++
 	lw.stats.WaitingForWLock = true
+	lw.stats.recordTime()
 }
 
 func (lw *LockWatcher) loop(check func(), stopChannel <-chan struct{}) {
@@ -251,8 +255,7 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 		if stats.WaitingForLock {
 			fmt.Fprintf(writer, " still waiting for lock")
 		}
-		_, err := fmt.Fprint(writer, "</font><br>\n\n")
-		return true, err
+		return stats.writeTimes(writer)
 	}
 	if stats.NumRLockTimeouts < 1 && stats.NumWLockTimeouts < 1 {
 		return false, nil
@@ -276,6 +279,27 @@ func (lw *LockWatcher) writeHtml(writer io.Writer,
 		if stats.WaitingForWLock {
 			fmt.Fprintf(writer, ", still waiting for WLock")
 		}
+	}
+	return stats.writeTimes(writer)
+}
+
+func (stats *LockWatcherStats) recordTime() {
+	now := time.Now()
+	if stats.FirstTimeout.IsZero() {
+		stats.FirstTimeout = now
+	}
+	stats.LastTimeout = now
+}
+
+func (stats LockWatcherStats) writeTimes(writer io.Writer) (bool, error) {
+	now := time.Now()
+	fmt.Fprintf(writer, "<br>First timeout: %s (%s ago)",
+		stats.FirstTimeout.Format(format.TimeFormatSeconds),
+		format.Duration(now.Sub(stats.FirstTimeout)))
+	if !stats.FirstTimeout.Equal(stats.LastTimeout) {
+		fmt.Fprintf(writer, ", last timeout: %s (%s ago)",
+			stats.LastTimeout.Format(format.TimeFormatSeconds),
+			format.Duration(now.Sub(stats.LastTimeout)))
 	}
 	_, err := fmt.Fprintln(writer, "</font><br>")
 	return true, err

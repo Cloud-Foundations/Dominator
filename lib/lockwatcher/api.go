@@ -36,6 +36,8 @@ type LockWatcherOptions struct {
 }
 
 type LockWatcherStats struct {
+	FirstTimeout     time.Time
+	LastTimeout      time.Time
 	NumLockTimeouts  uint64 // Populated for sync.Mutex
 	NumRLockTimeouts uint64 // Populated for sync.RWMutex
 	NumWLockTimeouts uint64 // Populated for sync.RWMutex
