@@ -228,6 +228,7 @@ var subcommands = []commands.Command{
 	{"export-local-vm", "IPaddr", 1, 1, exportLocalVmSubcommand},
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
 	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},
+	{"get-vm-hypervisor", "IPaddr", 1, 1, getVmHypervisorSubcommand},
 	{"get-vm-info", "IPaddr", 1, 1, getVmInfoSubcommand},
 	{"get-vm-infos", "", 0, 0, getVmInfosSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
