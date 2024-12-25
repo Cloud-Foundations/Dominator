@@ -1,6 +1,7 @@
 package serverlogger
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -22,10 +23,6 @@ type loggerMapT struct {
 	*serverutil.PerUserMethodLimiter
 	sync.Mutex
 	loggerMap map[string]*Logger
-}
-
-type grabWriter struct {
-	data []byte
 }
 
 var loggerMap *loggerMapT = &loggerMapT{
@@ -54,11 +51,6 @@ func getCallerName(depth int) string {
 	} else {
 		return splitName[len(splitName)-1]
 	}
-}
-
-func (w *grabWriter) Write(p []byte) (int, error) {
-	w.data = p
-	return len(p), nil
 }
 
 func newLogger(name string, options logbuf.Options, flags int) *Logger {
@@ -128,11 +120,11 @@ func (l *Logger) fatals(msg string) {
 }
 
 func (l *Logger) log(level int16, msg string, dying bool) {
-	buffer := &grabWriter{}
+	buffer := &bytes.Buffer{}
 	rawLogger := log.New(buffer, "", l.flags)
 	rawLogger.Output(4, msg)
 	if l.level >= level {
-		l.circularBuffer.Write(buffer.data)
+		l.circularBuffer.Write(buffer.Bytes())
 	}
 	recalculateLevels := false
 	l.mutex.Lock()
@@ -140,11 +132,11 @@ func (l *Logger) log(level int16, msg string, dying bool) {
 	for streamer := range l.streamers {
 		if streamer.debugLevel >= level &&
 			(streamer.includeRegex == nil ||
-				streamer.includeRegex.Match(buffer.data)) &&
+				streamer.includeRegex.Match(buffer.Bytes())) &&
 			(streamer.excludeRegex == nil ||
-				!streamer.excludeRegex.Match(buffer.data)) {
+				!streamer.excludeRegex.Match(buffer.Bytes())) {
 			select {
-			case streamer.output <- buffer.data:
+			case streamer.output <- buffer.Bytes():
 			default:
 				delete(l.streamers, streamer)
 				close(streamer.output)
