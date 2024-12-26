@@ -89,6 +89,14 @@ func Lstat(path string, statbuf *Stat_t) error {
 	return lstat(path, statbuf)
 }
 
+func Mkfifo(path string, mode uint32) error {
+	return mkfifo(path, mode)
+}
+
+func Mknod(path string, mode uint32, dev int) error {
+	return mknod(path, mode, dev)
+}
+
 func Mount(source string, target string, fstype string, flags uintptr,
 	data string) error {
 	return mount(source, target, fstype, flags, data)

@@ -62,6 +62,14 @@ func lstat(path string, statbuf *Stat_t) error {
 	return syscall.ENOTSUP
 }
 
+func mkfifo(path string, mode uint32) error {
+	return syscall.ENOTSUP
+}
+
+func mknod(path string, mode uint32, dev int) error {
+	return syscall.ENOTSUP
+}
+
 func mount(source string, target string, fstype string, flags uintptr,
 	data string) error {
 	return syscall.ENOTSUP
