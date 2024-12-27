@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 const (
 	timeFormat  string = "02 Jan 2006 15:04:05 MST"
-	symlinkMode        = syscall.S_IFLNK | syscall.S_IRWXU | syscall.S_IRWXG |
-		syscall.S_IRWXO
+	symlinkMode        = wsyscall.S_IFLNK | wsyscall.S_IRWXU |
+		wsyscall.S_IRWXG | wsyscall.S_IRWXO
 )
 
 func (fs *FileSystem) list(w io.Writer, listSelector ListSelector,
@@ -142,14 +142,14 @@ func listUntilName(w io.Writer, mode FileMode, numLinks int, uid uint32,
 	}
 	if listSelector&ListSelectSkipSizeDevnum == 0 {
 		var err error
-		switch mode & syscall.S_IFMT {
-		case syscall.S_IFREG:
+		switch mode & wsyscall.S_IFMT {
+		case wsyscall.S_IFREG:
 			if data == 0 && seconds < 0 && nanoSeconds < 0 {
 				_, err = fmt.Fprintf(w, "%10s ", "computed")
 			} else {
 				_, err = fmt.Fprintf(w, "%10d ", data)
 			}
-		case syscall.S_IFBLK, syscall.S_IFCHR:
+		case wsyscall.S_IFBLK, wsyscall.S_IFCHR:
 			_, err = fmt.Fprintf(w, "%#10x ", data)
 		default:
 			_, err = fmt.Fprintf(w, "%11s", "")
@@ -194,40 +194,40 @@ func (mode FileMode) string() string {
 		}
 		w++
 	}
-	switch mode & syscall.S_IFMT {
-	case syscall.S_IFSOCK:
+	switch mode & wsyscall.S_IFMT {
+	case wsyscall.S_IFSOCK:
 		buf[0] = 's'
-	case syscall.S_IFLNK:
+	case wsyscall.S_IFLNK:
 		buf[0] = 'l'
-	case syscall.S_IFREG:
+	case wsyscall.S_IFREG:
 		buf[0] = '-'
-	case syscall.S_IFBLK:
+	case wsyscall.S_IFBLK:
 		buf[0] = 'b'
-	case syscall.S_IFDIR:
+	case wsyscall.S_IFDIR:
 		buf[0] = 'd'
-	case syscall.S_IFCHR:
+	case wsyscall.S_IFCHR:
 		buf[0] = 'c'
-	case syscall.S_IFIFO:
+	case wsyscall.S_IFIFO:
 		buf[0] = 'p'
 	default:
 		buf[0] = '?'
 	}
-	if mode&syscall.S_ISUID != 0 {
-		if mode&syscall.S_IXUSR == 0 {
+	if mode&wsyscall.S_ISUID != 0 {
+		if mode&wsyscall.S_IXUSR == 0 {
 			buf[3] = 'S'
 		} else {
 			buf[3] = 's'
 		}
 	}
-	if mode&syscall.S_ISGID != 0 {
-		if mode&syscall.S_IXGRP == 0 {
+	if mode&wsyscall.S_ISGID != 0 {
+		if mode&wsyscall.S_IXGRP == 0 {
 			buf[6] = 'S'
 		} else {
 			buf[6] = 's'
 		}
 	}
-	if mode&syscall.S_ISVTX != 0 {
-		if mode&syscall.S_IXOTH == 0 {
+	if mode&wsyscall.S_ISVTX != 0 {
+		if mode&wsyscall.S_IXOTH == 0 {
 			buf[9] = 'T'
 		} else {
 			buf[9] = 't'
