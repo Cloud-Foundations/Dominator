@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -134,7 +133,7 @@ func (t *uType) copyFilesToCache(filesToCopyToCache []sub.FileToCopyToCache) {
 
 func copyFile(destPathname, sourcePathname string, doHardlink bool) error {
 	dirname := filepath.Dir(destPathname)
-	if err := os.MkdirAll(dirname, syscall.S_IRWXU); err != nil {
+	if err := os.MkdirAll(dirname, wsyscall.S_IRWXU); err != nil {
 		return err
 	}
 	if doHardlink {
@@ -359,7 +358,7 @@ func checkNonMtimeChange(filename string, inode filesystem.GenericInode) bool {
 		if err := wsyscall.Lstat(filename, &stat); err != nil {
 			return true
 		}
-		if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
+		if stat.Mode&wsyscall.S_IFMT == wsyscall.S_IFREG {
 			oldInode := scanner.MakeRegularInode(&stat)
 			oldInode.Hash = inode.Hash
 			oldInode.MtimeNanoSeconds = inode.MtimeNanoSeconds
@@ -373,8 +372,8 @@ func checkNonMtimeChange(filename string, inode filesystem.GenericInode) bool {
 		if err := wsyscall.Lstat(filename, &stat); err != nil {
 			return true
 		}
-		if stat.Mode&syscall.S_IFMT == syscall.S_IFBLK ||
-			stat.Mode&syscall.S_IFMT == syscall.S_IFCHR {
+		if stat.Mode&wsyscall.S_IFMT == wsyscall.S_IFBLK ||
+			stat.Mode&wsyscall.S_IFMT == wsyscall.S_IFCHR {
 			oldInode := scanner.MakeSpecialInode(&stat)
 			oldInode.MtimeNanoSeconds = inode.MtimeNanoSeconds
 			oldInode.MtimeSeconds = inode.MtimeSeconds
