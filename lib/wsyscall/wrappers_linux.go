@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
+	"unsafe"
 )
 
 const (
@@ -45,6 +46,8 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 
 	sys_SETNS = 308 // 64 bit only.
+
+	BLKGETSIZE = 0x00001260
 )
 
 func convertStat(dest *Stat_t, source *syscall.Stat_t) {
@@ -80,6 +83,36 @@ func dup3(oldfd int, newfd int, flags int) error {
 
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.Fallocate(fd, mode, off, len)
+}
+
+func fstat(fd int, statbuf *Stat_t) error {
+	var rawStatbuf syscall.Stat_t
+	if err := syscall.Fstat(fd, &rawStatbuf); err != nil {
+		return err
+	}
+	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	fd, err := syscall.Open(device, os.O_RDONLY|syscall.O_CLOEXEC, 0666)
+	if err != nil {
+		return 0, fmt.Errorf("error opening: %s: %s", device, err)
+	}
+	defer syscall.Close(fd)
+	var statbuf Stat_t
+	if err := Fstat(fd, &statbuf); err != nil {
+		return 0, fmt.Errorf("error stating: %s: %s\n", device, err)
+	} else if statbuf.Mode&syscall.S_IFMT != syscall.S_IFBLK {
+		return 0, fmt.Errorf("%s is not a block device, mode: %0o",
+			device, statbuf.Mode)
+	}
+	var blk uint64
+	err = Ioctl(fd, BLKGETSIZE, uintptr(unsafe.Pointer(&blk)))
+	if err != nil {
+		return 0, fmt.Errorf("error geting device size: %s: %s", device, err)
+	}
+	return blk << 9, nil
 }
 
 func getFileDescriptorLimit() (uint64, uint64, error) {
@@ -248,6 +281,10 @@ func unshareMountNamespace() error {
 func sync() error {
 	syscall.Sync()
 	return nil
+}
+
+func unmount(target string, flags int) error {
+	return syscall.Unmount(target, flags)
 }
 
 func unshareNetNamespace() (int, int, error) {

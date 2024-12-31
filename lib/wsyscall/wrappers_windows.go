@@ -46,6 +46,14 @@ func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
 }
 
+func fstat(fd int, stat *Stat_t) error {
+	return syscall.ENOTSUP
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	return 0, syscall.ENOTSUP
+}
+
 func getFileDescriptorLimit() (uint64, uint64, error) {
 	return 0, 0, syscall.ENOTSUP
 }
@@ -100,6 +108,10 @@ func stat(path string, statbuf *Stat_t) error {
 }
 
 func sync() error {
+	return syscall.ENOTSUP
+}
+
+func unmount(target string, flags int) error {
 	return syscall.ENOTSUP
 }
 

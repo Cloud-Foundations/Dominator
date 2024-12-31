@@ -75,6 +75,14 @@ func Fallocate(fd int, mode uint32, off int64, len int64) error {
 	return fallocate(fd, mode, off, len)
 }
 
+func Fstat(fd int, stat *Stat_t) error {
+	return fstat(fd, stat)
+}
+
+func GetDeviceSize(device string) (uint64, error) {
+	return getDeviceSize(device)
+}
+
 // GetFileDescriptorLimit returns the current limit and maximum limit on number
 // of open file descriptors.
 func GetFileDescriptorLimit() (uint64, uint64, error) {
@@ -147,6 +155,10 @@ func Stat(path string, statbuf *Stat_t) error {
 
 func Sync() error {
 	return sync()
+}
+
+func Unmount(target string, flags int) error {
+	return unmount(target, flags)
 }
 
 // UnshareMountNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNS)

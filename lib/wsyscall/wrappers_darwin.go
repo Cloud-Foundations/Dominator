@@ -64,6 +64,19 @@ func dup3(oldfd int, newfd int, flags int) error {
 	return syscall.ENOTSUP
 }
 
+func fstat(fd int, statbuf *Stat_t) error {
+	var rawStatbuf syscall.Stat_t
+	if err := syscall.Fstat(fd, &rawStatbuf); err != nil {
+		return err
+	}
+	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	return 0, syscall.ENOTSUP
+}
+
 func getFileDescriptorLimit() (uint64, uint64, error) {
 	var rlim syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
@@ -171,6 +184,10 @@ func stat(path string, statbuf *Stat_t) error {
 
 func sync() error {
 	return syscall.Sync()
+}
+
+func unmount(target string, flags int) error {
+	return syscall.Unmount(target, flags)
 }
 
 func unshareNetNamespace() (int, int, error) {
