@@ -126,14 +126,6 @@ func SetAllUid(uid int) error {
 	return setAllUid(uid)
 }
 
-// SetPriority sets the CPU priority of the specified process, for all OS
-// threads. If pid is zero, the priority of the calling process is set.
-// On platforms which do not support changing the process priority, an error is
-// always returned.
-func SetPriority(pid, priority int) error {
-	return setPriority(pid, priority)
-}
-
 // SetMyPriority sets the priority of the current process, for all OS threads.
 // On platforms which do not support changing the process priority, an error is
 // always returned.
@@ -147,6 +139,20 @@ func SetMyPriority(priority int) error {
 // other platforms an error is returned.
 func SetNetNamespace(fd int) error {
 	return setNetNamespace(fd)
+}
+
+// SetPriority sets the CPU priority of the specified process, for all OS
+// threads. If pid is zero, the priority of the calling process is set.
+// On platforms which do not support changing the process priority, an error is
+// always returned.
+func SetPriority(pid, priority int) error {
+	return setPriority(pid, priority)
+}
+
+// SetSysProcAttrChroot sets the Chroot field in attr. It returns an error if
+// this operation is not supported.
+func SetSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	return setSysProcAttrChroot(attr, chroot)
 }
 
 func Stat(path string, statbuf *Stat_t) error {

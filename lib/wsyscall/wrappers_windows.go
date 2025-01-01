@@ -95,11 +95,15 @@ func setAllUid(uid int) error {
 	return syscall.ENOTSUP
 }
 
+func setNetNamespace(namespaceFd int) error {
+	return syscall.ENOTSUP
+}
+
 func setPriority(pid, priority int) error {
 	return syscall.ENOTSUP
 }
 
-func setNetNamespace(namespaceFd int) error {
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
 	return syscall.ENOTSUP
 }
 

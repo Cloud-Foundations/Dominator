@@ -165,12 +165,17 @@ func setAllUid(uid int) error {
 	return syscall.Setreuid(uid, uid)
 }
 
+func setNetNamespace(namespaceFd int) error {
+	return syscall.ENOTSUP
+}
+
 func setPriority(pid, priority int) error {
 	return syscall.Setpriority(syscall.PRIO_PROCESS, pid, priority)
 }
 
-func setNetNamespace(namespaceFd int) error {
-	return syscall.ENOTSUP
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	attr.Chroot = chroot
+	return nil
 }
 
 func stat(path string, statbuf *Stat_t) error {

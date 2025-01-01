@@ -208,6 +208,16 @@ func setAllUid(uid int) error {
 	return syscall.Setresuid(uid, uid, uid)
 }
 
+func setNetNamespace(namespaceFd int) error {
+	runtime.LockOSThread()
+	_, _, errno := syscall.Syscall(sys_SETNS, uintptr(namespaceFd),
+		uintptr(syscall.CLONE_NEWNET), 0)
+	if errno != 0 {
+		return os.NewSyscallError("setns", errno)
+	}
+	return nil
+}
+
 // setPriority sets the priority of the specified process, for all OS threads.
 // It will iterate over all the threads and set the priority on each, since the
 // Linux implementation of setpriority(2) only applies to a thread, not the
@@ -241,15 +251,9 @@ func setPriority(pid, priority int) error {
 	return nil
 }
 
-func setNetNamespace(namespaceFd int) error {
-	runtime.LockOSThread()
-	_, _, errno := syscall.Syscall(sys_SETNS, uintptr(namespaceFd),
-		uintptr(syscall.CLONE_NEWNET), 0)
-	if errno != 0 {
-		return os.NewSyscallError("setns", errno)
-	}
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	attr.Chroot = chroot
 	return nil
-
 }
 
 func stat(path string, statbuf *Stat_t) error {
