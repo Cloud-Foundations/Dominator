@@ -49,6 +49,16 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctimespec
 }
 
+func convertStatfs(dest *Statfs_t, source *syscall.Statfs_t) {
+	dest.Type = uint64(source.Type)
+	dest.Bsize = uint64(source.Bsize)
+	dest.Blocks = source.Blocks
+	dest.Bfree = source.Bfree
+	dest.Bavail = source.Bavail
+	dest.Files = source.Files
+	dest.Ffree = source.Ffree
+}
+
 func dup(oldfd int) (int, error) {
 	return syscall.Dup(oldfd)
 }
@@ -184,6 +194,15 @@ func stat(path string, statbuf *Stat_t) error {
 		return err
 	}
 	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func statfs(path string, buf *Statfs_t) error {
+	var rawBuf syscall.Statfs_t
+	if err := syscall.Statfs(path, &rawBuf); err != nil {
+		return err
+	}
+	convertStatfs(buf, &rawBuf)
 	return nil
 }
 

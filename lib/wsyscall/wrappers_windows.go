@@ -111,6 +111,10 @@ func stat(path string, statbuf *Stat_t) error {
 	return syscall.ENOTSUP
 }
 
+func statfs(path string, buf *Statfs_t) error {
+	return syscall.ENOTSUP
+}
+
 func sync() error {
 	return syscall.ENOTSUP
 }

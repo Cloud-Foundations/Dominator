@@ -54,6 +54,16 @@ type Stat_t struct {
 	Ctim    syscall.Timespec
 }
 
+type Statfs_t struct {
+	Type   uint64
+	Bsize  uint64
+	Blocks uint64
+	Bfree  uint64
+	Bavail uint64
+	Files  uint64
+	Ffree  uint64
+}
+
 type Timeval struct {
 	Sec  int64
 	Usec int64
@@ -157,6 +167,10 @@ func SetSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
 
 func Stat(path string, statbuf *Stat_t) error {
 	return stat(path, statbuf)
+}
+
+func Statfs(path string, buf *Statfs_t) error {
+	return statfs(path, buf)
 }
 
 func Sync() error {
