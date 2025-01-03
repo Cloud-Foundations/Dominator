@@ -13,10 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"text/template"
 	"time"
-	"unsafe"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -200,27 +198,6 @@ func getRootPartition(bootDevice string) (string, error) {
 	}
 }
 
-func getDeviceSize(device string) (uint64, error) {
-	fd, err := syscall.Open(device, os.O_RDONLY|syscall.O_CLOEXEC, 0666)
-	if err != nil {
-		return 0, fmt.Errorf("error opening: %s: %s", device, err)
-	}
-	defer syscall.Close(fd)
-	var statbuf syscall.Stat_t
-	if err := syscall.Fstat(fd, &statbuf); err != nil {
-		return 0, fmt.Errorf("error stating: %s: %s\n", device, err)
-	} else if statbuf.Mode&syscall.S_IFMT != syscall.S_IFBLK {
-		return 0, fmt.Errorf("%s is not a block device, mode: %0o",
-			device, statbuf.Mode)
-	}
-	var blk uint64
-	err = wsyscall.Ioctl(fd, BLKGETSIZE, uintptr(unsafe.Pointer(&blk)))
-	if err != nil {
-		return 0, fmt.Errorf("error geting device size: %s: %s", device, err)
-	}
-	return blk << 9, nil
-}
-
 func lookPath(rootDir, file string) (string, error) {
 	if strings.Contains(file, "/") {
 		if err := findExecutable(rootDir, file); err != nil {
@@ -286,7 +263,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	doUnmount := true
 	defer func() {
 		if doUnmount {
-			syscall.Unmount(mountPoint, 0)
+			wsyscall.Unmount(mountPoint, 0)
 		}
 	}()
 	os.RemoveAll(filepath.Join(mountPoint, "lost+found"))
@@ -325,7 +302,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	doUnmount = false
 	startTime := time.Now()
-	if err := syscall.Unmount(mountPoint, 0); err != nil {
+	if err := wsyscall.Unmount(mountPoint, 0); err != nil {
 		return err
 	}
 	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
@@ -353,7 +330,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 	logger log.Logger) error {
 	if params.Size < 1 {
 		var err error
-		params.Size, err = getDeviceSize(deviceName)
+		params.Size, err = wsyscall.GetDeviceSize(deviceName)
 		if err != nil {
 			return err
 		}
@@ -498,7 +475,7 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	}
 	if doChroot {
 		cmd.Dir = "/"
-		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: chrootDir}
+		wsyscall.SetSysProcAttrChroot(cmd.SysProcAttr, chrootDir)
 		logger.Debugf(0, "running(chroot=%s): %s %s\n",
 			chrootDir, cmd.Path, strings.Join(cmd.Args[1:], " "))
 	} else {
