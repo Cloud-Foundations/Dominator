@@ -30,6 +30,10 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 )
 
+func convertStatAny(dest *Stat_t, source any) error {
+	return syscall.ENOTSUP
+}
+
 func dup(oldfd int) (int, error) {
 	return 0, syscall.ENOTSUP
 }

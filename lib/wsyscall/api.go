@@ -69,6 +69,12 @@ type Timeval struct {
 	Usec int64
 }
 
+// ConvertStat will convert a *syscall.Stat_t to a *Stat_t. It returns an error
+// if buf is not of type *syscall.Stat_t.
+func ConvertStat(dest *Stat_t, source any) error {
+	return convertStatAny(dest, source)
+}
+
 func Dup(oldfd int) (int, error) {
 	return dup(oldfd)
 }

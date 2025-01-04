@@ -1,6 +1,7 @@
 package wsyscall
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -47,6 +48,15 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Atim = source.Atimespec
 	dest.Mtim = source.Mtimespec
 	dest.Ctim = source.Ctimespec
+}
+
+func convertStatAny(dest *Stat_t, source any) error {
+	_source, ok := source.(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("source type: %T is not *syscall.Stat_t", source)
+	}
+	convertStat(dest, _source)
+	return nil
 }
 
 func convertStatfs(dest *Statfs_t, source *syscall.Statfs_t) {
