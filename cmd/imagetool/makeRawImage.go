@@ -5,15 +5,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
-
-const filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
-	syscall.S_IROTH
 
 func makeRawImageSubcommand(args []string, logger log.DebugLogger) error {
 	_, objectClient := getClients()
@@ -66,6 +63,6 @@ func makeRawImage(objectClient *objectclient.ObjectClient, name,
 	} else {
 		options.OverlayFiles = overlayFiles
 	}
-	return util.WriteRawWithOptions(fs, objectsGetter, rawFilename, filePerms,
-		tableType, options, logger)
+	return util.WriteRawWithOptions(fs, objectsGetter, rawFilename,
+		fsutil.PublicFilePerms, tableType, options, logger)
 }

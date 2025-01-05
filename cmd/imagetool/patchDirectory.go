@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
@@ -84,7 +83,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	if err := wsyscall.UnshareMountNamespace(); err != nil {
 		return fmt.Errorf("unable to unshare mount namesace: %s", err)
 	}
-	syscall.Unmount(rootDir, 0)
+	wsyscall.Unmount(rootDir, 0)
 	err := wsyscall.Mount(dirName, rootDir, "", wsyscall.MS_BIND, "")
 	if err != nil {
 		return fmt.Errorf("unable to bind mount %s to %s: %s",
