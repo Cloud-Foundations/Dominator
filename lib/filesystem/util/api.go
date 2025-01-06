@@ -56,8 +56,15 @@ func CopyMtimesWithFilter(source, dest *filesystem.FileSystem,
 	copyMtimes(source, dest, filt)
 }
 
+// DeleteFilteredFiles will walk the directory tree under rootDir and will
+// delete inodes which match the filter.
+func DeleteFilteredFiles(rootDir string, filt *filter.Filter) error {
+	return deleteFilteredFiles(rootDir, filt)
+}
+
+// Deprecated: typo in function name.
 func DeletedFilteredFiles(rootDir string, filt *filter.Filter) error {
-	return deletedFilteredFiles(rootDir, filt)
+	return deleteFilteredFiles(rootDir, filt)
 }
 
 func GetBootInfo(fs *filesystem.FileSystem, rootLabel string,
