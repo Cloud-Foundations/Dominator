@@ -172,7 +172,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 			errors.New("error processing manifest: " + err.Error())
 	}
 	if applyFilter && manifestConfig.Filter != nil {
-		err := util.DeletedFilteredFiles(rootDir, manifestConfig.Filter)
+		err := util.DeleteFilteredFiles(rootDir, manifestConfig.Filter)
 		if err != nil {
 			return manifestType{}, err
 		}

@@ -168,7 +168,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)
 	}
-	if err := util.DeletedFilteredFiles(dirname, tmpFilter); err != nil {
+	if err := util.DeleteFilteredFiles(dirname, tmpFilter); err != nil {
 		return nil, err
 	}
 	fmt.Fprintln(buildLog, "Scanning file-system and uploading objects")
