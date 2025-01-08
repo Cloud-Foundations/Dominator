@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/tar"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
 
@@ -32,31 +34,46 @@ func tarImageAndWrite(objectClient *objectclient.ObjectClient, imageName,
 		return err
 	}
 	deleteOutfile := true
-	output := io.Writer(os.Stdout)
+	output := os.Stdout
 	if outputFilename != "" {
-		var err error
-		file, err := os.Create(outputFilename)
+		output, err = os.Create(outputFilename)
 		if err != nil {
 			return err
 		}
-		writer := bufio.NewWriter(file)
-		output = writer
 		defer func() {
-			writer.Flush()
-			file.Close()
 			if deleteOutfile {
+				output.Close()
 				os.Remove(outputFilename)
 			}
 		}()
 	}
+	writer := bufio.NewWriter(output)
 	if *compress {
-		zWriter := gzip.NewWriter(output)
-		defer zWriter.Close()
-		output = zWriter
+		err = tarCompressed(writer, fs, objectsGetter)
+	} else {
+		err = tar.Write(writer, fs, objectsGetter)
 	}
-	if err := tar.Write(output, fs, objectsGetter); err != nil {
+	if err != nil {
 		return err
+	}
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	if output != os.Stdout {
+		if err := output.Close(); err != nil {
+			return err
+		}
 	}
 	deleteOutfile = false
 	return nil
+}
+
+func tarCompressed(writer io.Writer, fs *filesystem.FileSystem,
+	objectsGetter objectserver.ObjectsGetter) error {
+	zWriter := gzip.NewWriter(writer)
+	if err := tar.Write(zWriter, fs, objectsGetter); err != nil {
+		zWriter.Close()
+		return err
+	}
+	return zWriter.Close()
 }
