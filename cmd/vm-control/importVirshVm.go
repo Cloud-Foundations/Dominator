@@ -15,6 +15,7 @@ import (
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -330,7 +331,7 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 			return fmt.Errorf("no Hypervisor directory for: %s", inputFilename)
 		}
 		outputDirname := filepath.Join(volumeRoot, "import", myPidStr)
-		if err := os.MkdirAll(outputDirname, dirPerms); err != nil {
+		if err := os.MkdirAll(outputDirname, fsutil.DirPerms); err != nil {
 			return err
 		}
 		defer os.RemoveAll(outputDirname)

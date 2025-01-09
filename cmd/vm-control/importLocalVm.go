@@ -22,12 +22,6 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
-	privateFilePerms = syscall.S_IRUSR | syscall.S_IWUSR
-)
-
 var (
 	errorCommitAbandoned = errors.New("you abandoned your VM")
 	errorCommitDeferred  = errors.New("you deferred committing your VM")
@@ -112,20 +106,20 @@ func importLocalVmInfo(vmInfo proto.VmInfo, rootVolume string,
 		return err
 	}
 	dirname := filepath.Join(directories[0], "import")
-	if err := os.Mkdir(dirname, dirPerms); err != nil {
+	if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
 		if !os.IsExist(err) {
 			return err
 		}
 	}
 	dirname = filepath.Join(dirname, fmt.Sprintf("%d", os.Getpid()))
-	if err := os.Mkdir(dirname, dirPerms); err != nil {
+	if err := os.Mkdir(dirname, fsutil.DirPerms); err != nil {
 		return err
 	}
 	defer os.RemoveAll(dirname)
 	logger.Debugf(0, "created: %s\n", dirname)
 	rootFilename := filepath.Join(dirname, "root")
 	if err := os.Link(rootVolume, rootFilename); err != nil {
-		err = fsutil.CopyFile(rootFilename, rootVolume, privateFilePerms)
+		err = fsutil.CopyFile(rootFilename, rootVolume, fsutil.PrivateFilePerms)
 		if err != nil {
 			return err
 		}

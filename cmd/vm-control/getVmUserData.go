@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -74,7 +75,7 @@ func getVmUserDataOnHypervisor(hypervisor string, ipAddr net.IP,
 	}
 	defer conn.Close()
 	file, err := os.OpenFile(*userDataFile, os.O_WRONLY|os.O_CREATE,
-		privateFilePerms)
+		fsutil.PrivateFilePerms)
 	if err != nil {
 		io.CopyN(ioutil.Discard, conn, int64(length))
 		return err
