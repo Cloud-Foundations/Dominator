@@ -165,7 +165,9 @@ func makeVolume(volume proto.Volume, index int,
 			Io:    "native",
 		},
 		Source: sourceType{File: exportFilename},
-		Target: targetType{Device: "vd" + string('a'+index), Bus: "virtio"},
-		Type:   "file",
+		Target: targetType{
+			Device: "vd" + string([]byte{'a' + byte(index)}),
+			Bus:    "virtio"},
+		Type: "file",
 	}, nil
 }
