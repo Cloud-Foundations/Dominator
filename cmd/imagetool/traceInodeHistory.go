@@ -73,5 +73,4 @@ func traceInodeHistory(imageName, inodePath string) error {
 		lastNumLinks = img.FileSystem.BuildNumLinksTable()[inum]
 		sourceImageName = img.SourceImage
 	}
-	return nil
 }
