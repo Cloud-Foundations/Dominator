@@ -195,7 +195,7 @@ func handleSignals(logger log.Logger) {
 	if *pidfile == "" {
 		return
 	}
-	sigtermChannel := make(chan os.Signal)
+	sigtermChannel := make(chan os.Signal, 1)
 	signal.Notify(sigtermChannel, syscall.SIGTERM, syscall.SIGINT)
 	writePidfile()
 	go func() {

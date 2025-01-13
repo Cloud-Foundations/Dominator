@@ -335,7 +335,7 @@ func getHostsIncludes() map[string]struct{} {
 }
 
 func hostsFilterReader(dataChannel <-chan interface{},
-	eventChannel chan<- struct{}, waitGroup *sync.WaitGroup, lock sync.RWMutex,
+	eventChannel chan<- struct{}, waitGroup *sync.WaitGroup, lock *sync.RWMutex,
 	hostsMapPtr *map[string]struct{}) {
 	for data := range dataChannel {
 		lines := data.([]string)
@@ -354,11 +354,11 @@ func hostsFilterReader(dataChannel <-chan interface{},
 func startHostsExcludeReader(filename string, eventChannel chan<- struct{},
 	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
 	startHostsFilterReader(filename, eventChannel, waitGroup,
-		hostsExcludeMapMutex, &hostsExcludeMap, logger)
+		&hostsExcludeMapMutex, &hostsExcludeMap, logger)
 }
 
 func startHostsFilterReader(filename string, eventChannel chan<- struct{},
-	waitGroup *sync.WaitGroup, lock sync.RWMutex,
+	waitGroup *sync.WaitGroup, lock *sync.RWMutex,
 	hostsMapPtr *map[string]struct{}, logger log.DebugLogger) {
 	if filename == "" {
 		return
@@ -378,7 +378,7 @@ func startHostsFilterReader(filename string, eventChannel chan<- struct{},
 func startHostsIncludeReader(filename string, eventChannel chan<- struct{},
 	waitGroup *sync.WaitGroup, logger log.DebugLogger) {
 	startHostsFilterReader(filename, eventChannel, waitGroup,
-		hostsIncludeMapMutex, &hostsIncludeMap, logger)
+		&hostsIncludeMapMutex, &hostsIncludeMap, logger)
 }
 
 func (ir *invertedRegexp) MatchString(s string) bool {
