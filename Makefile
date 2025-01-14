@@ -1,6 +1,7 @@
 all:
 	CGO_ENABLED=0 go install ./cmd/*
 	@cd c; make
+	go vet -composites=false ./cmd/*
 
 build-darwin:
 	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
@@ -72,6 +73,9 @@ test:
 	sed -e 's@^@github.com/Cloud-Foundations/Dominator/@' -e 's@/[^/]*$$@@' |\
 	sort -u | xargs go test
 
+
+vet:
+	go vet ./cmd/*
 
 website:
 	@./scripts/make-website ${TARGET_DIR}
