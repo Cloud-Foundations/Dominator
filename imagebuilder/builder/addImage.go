@@ -139,7 +139,7 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 func listPackages(g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(g, nil, w, rootDir, nil, packagerPathname, cmd)
+		return runInTarget(g, nil, w, w, rootDir, nil, packagerPathname, cmd)
 	})
 }
 
@@ -292,7 +292,7 @@ func runTest(g *goroutine.Goroutine, rootDir, prog string) testResultType {
 	errChannel := make(chan error, 1)
 	timer := time.NewTimer(time.Second * 10)
 	go func() {
-		errChannel <- runInTarget(g, nil, &result, rootDir, nil,
+		errChannel <- runInTarget(g, nil, &result, &result, rootDir, nil,
 			packagerPathname, "run", prog)
 	}()
 	select {

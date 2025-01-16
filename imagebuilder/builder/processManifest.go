@@ -210,7 +210,7 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	defer g.Quit()
-	err = runInTarget(g, file, buildLog, rootDir, envGetter,
+	err = runInTarget(g, file, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "copy-in", "/etc/resolv.conf")
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
@@ -307,7 +307,7 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	}
 	fmt.Fprintln(buildLog, "\nUpgrading packages:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "upgrade")
 	if err != nil {
 		return errors.New("error upgrading: " + err.Error())
@@ -320,7 +320,7 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	startTime = time.Now()
 	args := []string{"install"}
 	args = append(args, packageList...)
-	err = runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err = runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, args...)
 	if err != nil {
 		return errors.New("error installing: " + err.Error())
@@ -379,7 +379,7 @@ func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
 	for _, name := range names {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
-		err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+		err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 			packagerPathname, "run", filepath.Join("/.scripts", name))
 		if err != nil {
 			return errors.New("error running script: " + name + ": " +
@@ -400,7 +400,7 @@ func updatePackageDatabase(g *goroutine.Goroutine, rootDir string,
 	envGetter environmentGetter, buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nUpdating package database:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "update")
 	if err != nil {
 		return errors.New("error updating: " + err.Error())

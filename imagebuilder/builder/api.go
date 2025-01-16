@@ -142,6 +142,7 @@ type manifestType struct {
 
 type packagerType struct {
 	CleanCommand   argList
+	CleanPatterns  []string
 	InstallCommand argList
 	ListCommand    listCommandType
 	RemoveCommand  argList
