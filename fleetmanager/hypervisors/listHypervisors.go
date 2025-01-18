@@ -26,6 +26,21 @@ const (
 
 type hypervisorList []*hypervisorType
 
+func roundUpMemoryInMiB(input uint64) uint64 {
+	numShift := 0
+	memoryInMiB := input
+	for ; memoryInMiB >= 16; numShift++ {
+		memoryInMiB >>= 1
+	}
+	if memoryInMiB == 15 {
+		memoryInMiB++
+		memoryInMiB <<= numShift
+	} else {
+		memoryInMiB = input
+	}
+	return memoryInMiB
+}
+
 func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 	numVMs uint, tw *html.TableWriter) {
 	var memoryInMiBAllocated, memoryInMiBTotal uint64
@@ -34,7 +49,7 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 	var volumeBytesAllocated, volumeBytesTotal uint64
 	for _, h := range hypervisors {
 		memoryInMiBAllocated += h.allocatedMemory
-		memoryInMiBTotal += h.memoryInMiB
+		memoryInMiBTotal += roundUpMemoryInMiB(h.memoryInMiB)
 		milliCPUsAllocated += h.allocatedMilliCPUs
 		cpusTotal += h.numCPUs
 		volumeBytesAllocated += h.allocatedVolumeBytes
@@ -42,8 +57,16 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 	}
 	memoryShift, memoryMultiplier := format.GetMiltiplier(
 		memoryInMiBAllocated << 20)
+	if memoryInMiBAllocated == 0 {
+		memoryShift, memoryMultiplier = format.GetMiltiplier(
+			memoryInMiBTotal << 20)
+	}
 	volumeShift, volumeMultiplier := format.GetMiltiplier(
 		volumeBytesAllocated)
+	if volumeBytesAllocated == 0 {
+		volumeShift, volumeMultiplier = format.GetMiltiplier(
+			volumeBytesTotal)
+	}
 	var vmsString string
 	if location == "" {
 		vmsString = fmt.Sprintf("<a href=\"listVMs\">%d</a>", numVMs)
@@ -109,17 +132,7 @@ func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
 		machineType = `<a href="` + machineTypeURL + `">` + machineType +
 			`</a>`
 	}
-	numShift := 0
-	memoryInMiB := h.memoryInMiB
-	for ; memoryInMiB >= 16; numShift++ {
-		memoryInMiB >>= 1
-	}
-	if memoryInMiB == 15 {
-		memoryInMiB++
-		memoryInMiB <<= numShift
-	} else {
-		memoryInMiB = h.memoryInMiB
-	}
+	memoryInMiB := roundUpMemoryInMiB(h.memoryInMiB)
 	memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
 	volumeShift, volumeMultiplier := format.GetMiltiplier(
 		h.totalVolumeBytes)
