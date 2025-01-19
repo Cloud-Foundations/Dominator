@@ -150,6 +150,12 @@ func dialHTTPEndpoint(network, address string, tlsConfig *tls.Config,
 			dataConn.Close()
 		}
 	}()
+	if *srpcDefaultConnectTimeout > 0 {
+		connectDeadline := time.Now().Add(*srpcDefaultConnectTimeout)
+		if err := unsecuredConn.SetDeadline(connectDeadline); err != nil {
+			return nil, err
+		}
+	}
 	if fullTLS {
 		tlsConn := tls.Client(unsecuredConn, tlsConfig)
 		if err := tlsConn.Handshake(); err != nil {
@@ -172,6 +178,11 @@ func dialHTTPEndpoint(network, address string, tlsConfig *tls.Config,
 			return nil, err
 		}
 		dataConn = tlsConn
+	}
+	if *srpcDefaultConnectTimeout > 0 {
+		if err := unsecuredConn.SetDeadline(time.Time{}); err != nil {
+			return nil, err
+		}
 	}
 	doClose = false
 	return newClient(unsecuredConn, dataConn, endpoint.tls, endpoint.coderMaker)
@@ -295,6 +306,12 @@ func (client *Client) call(serviceMethod string) (*Conn, error) {
 }
 
 func (client *Client) callWithLock(serviceMethod string) (*Conn, error) {
+	if client.timeout > 0 {
+		deadline := time.Now().Add(client.timeout)
+		if err := client.conn.SetDeadline(deadline); err != nil {
+			return nil, err
+		}
+	}
 	_, err := client.bufrw.WriteString(serviceMethod + "\n")
 	if err != nil {
 		return nil, err
@@ -401,4 +418,15 @@ func (client *Client) setKeepAlivePeriod(d time.Duration) error {
 		return nil
 	}
 	return client.tcpConn.SetKeepAlivePeriod(d)
+}
+
+func (client *Client) setTimeout(timeout time.Duration) error {
+	if timeout > 0 {
+		client.timeout = timeout
+		return nil
+	}
+	if client.timeout > 0 {
+		return client.conn.SetDeadline(time.Time{})
+	}
+	return nil
 }

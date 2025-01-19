@@ -1,11 +1,17 @@
 package srpc
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
 func (conn *Conn) close() error {
 	err := conn.Flush()
-	if conn.parent != nil {
-		conn.parent.callLock.Unlock()
+	if client := conn.parent; client != nil {
+		if client.timeout > 0 {
+			client.conn.SetDeadline(time.Time{})
+		}
+		client.callLock.Unlock()
 	}
 	return err
 }
