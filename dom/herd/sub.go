@@ -313,6 +313,9 @@ func (sub *Sub) processFileUpdates() bool {
 }
 
 func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
+	if err := srpcClient.SetTimeout(5 * time.Minute); err != nil {
+		sub.herd.logger.Printf("poll(%s): error setting timeout: %s\n", sub)
+	}
 	// If the planned image has just become available, force a full poll.
 	if previousStatus == statusSynced &&
 		!sub.havePlannedImage &&
