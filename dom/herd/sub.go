@@ -652,6 +652,8 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		returnStatus = statusFetching
 	}
 	if len(objectsToPush) > 0 {
+		logger.Printf("Calling %s:ObjectServer.AddObjects() for: %d objects\n",
+			sub, len(objectsToPush))
 		sub.herd.cpuSharer.GrabSemaphore(sub.herd.pushSemaphore)
 		defer func() { <-sub.herd.pushSemaphore }()
 		sub.status = statusPushing
@@ -776,10 +778,12 @@ func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 	for hash := range unusedObjects {
 		hashes = append(hashes, hash)
 	}
+	startTime := time.Now()
 	if err := client.Cleanup(srpcClient, hashes); err != nil {
 		srpcClient.Close()
 		logger.Printf("Error calling %s:Subd.Cleanup(): %s\n", sub, err)
 	}
+	cleanupTimeDistribution.Add(time.Since(startTime))
 }
 
 func (sub *Sub) checkForEnoughSpace(freeSpace *uint64,

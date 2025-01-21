@@ -122,7 +122,9 @@ func (herd *Herd) lockWithTimeout(timeout time.Duration) {
 func (herd *Herd) pollNextSub() bool {
 	if herd.nextSubToPoll >= uint(len(herd.subsByIndex)) {
 		herd.nextSubToPoll = 0
-		herd.previousScanDuration = time.Since(herd.currentScanStartTime)
+		scanDuration := time.Since(herd.currentScanStartTime)
+		herd.previousScanDuration = scanDuration
+		cycleTimeDistribution.Add(scanDuration)
 		herd.scanCounter++
 		herd.totalScanDuration += herd.previousScanDuration
 		return true
