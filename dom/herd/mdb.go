@@ -5,12 +5,14 @@ import (
 	"time"
 
 	filegenclient "github.com/Cloud-Foundations/Dominator/lib/filegen/client"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
 func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
 	herd.logger.Printf("MDB data received: %d subs\n", len(mdb.Machines))
+	startTime := time.Now()
 	numNew, numDeleted, numChanged, wantedImages, clientResourcesToDelete :=
 		herd.mdbUpdateGetLock(mdb)
 	// Closing resources can lead to a release/grab cycle, so need to grab the
@@ -35,8 +37,9 @@ func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
 		pluralChanged = ""
 	}
 	herd.logger.Printf(
-		"MDB update: %d new sub%s, %d removed sub%s, %d changed sub%s",
-		numNew, pluralNew, numDeleted, pluralDeleted, numChanged, pluralChanged)
+		"MDB update: %d new sub%s, %d removed sub%s, %d changed sub%s in %s",
+		numNew, pluralNew, numDeleted, pluralDeleted, numChanged, pluralChanged,
+		format.Duration(time.Since(startTime)))
 }
 
 func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
