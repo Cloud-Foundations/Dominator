@@ -2,6 +2,7 @@ package filegen
 
 import (
 	"bytes"
+	"path"
 	"sort"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
 type hashGenerator interface {
@@ -38,8 +41,26 @@ func (m *Manager) registerHashGeneratorForPath(pathname string,
 	}
 	notifyChan := make(chan string, 1)
 	pathMgr := &pathManager{
-		generator:     gen,
-		machineHashes: make(map[string]expiringHash)}
+		distributionFailed:     m.bucketer.NewCumulativeDistribution(),
+		distributionSuccessful: m.bucketer.NewCumulativeDistribution(),
+		generator:              gen,
+		machineHashes:          make(map[string]expiringHash)}
+	err := tricorder.RegisterMetric(
+		path.Join("filegen/generators", pathname, "failed-durations"),
+		pathMgr.distributionFailed,
+		units.Millisecond,
+		"duration of failed generator calls")
+	if err != nil {
+		panic(err)
+	}
+	err = tricorder.RegisterMetric(
+		path.Join("filegen/generators", pathname, "successful-durations"),
+		pathMgr.distributionSuccessful,
+		units.Millisecond,
+		"duration of successful generator calls")
+	if err != nil {
+		panic(err)
+	}
 	m.rwMutex.Lock()
 	m.pathManagers[pathname] = pathMgr
 	m.rwMutex.Unlock()
@@ -56,8 +77,8 @@ func (m *Manager) processPathDataInvalidations(pathname string,
 		if machineName == "" {
 			m.rwMutex.RLock()
 			for _, mdbData := range m.machineData {
-				hashVal, length, validUntil, err := pathMgr.generator.generate(
-					mdbData, m.logger)
+				hashVal, length, validUntil, err := pathMgr.generate(mdbData,
+					m.logger)
 				if err != nil {
 					continue
 				}
@@ -81,8 +102,8 @@ func (m *Manager) processPathDataInvalidations(pathname string,
 			m.rwMutex.RLock()
 			mdbData := m.machineData[machineName]
 			m.rwMutex.RUnlock()
-			hashVal, length, validUntil, err := pathMgr.generator.generate(
-				mdbData, m.logger)
+			hashVal, length, validUntil, err := pathMgr.generate(mdbData,
+				m.logger)
 			if err != nil {
 				continue
 			}
@@ -119,8 +140,7 @@ func (m *Manager) scheduleTimer(pathname string, hostname string,
 		if !ok {
 			return
 		}
-		hashVal, length, validUntil, err := pathMgr.generator.generate(mdbData,
-			m.logger)
+		hashVal, length, validUntil, err := pathMgr.generate(mdbData, m.logger)
 		if err != nil {
 			m.logger.Printf("Error regenerating path: %s for machine: %s: %s\n",
 				pathname, hostname, err)
@@ -154,6 +174,19 @@ func (m *Manager) getRegisteredPaths() []string {
 	m.rwMutex.RUnlock()
 	sort.Strings(pathnames)
 	return pathnames
+}
+
+func (p *pathManager) generate(machine mdb.Machine, logger log.Logger) (
+	hash.Hash, uint64, time.Time, error) {
+	startTime := time.Now()
+	hashVal, length, expiresAt, err := p.generator.generate(machine, logger)
+	timeTaken := time.Since(startTime)
+	if err == nil {
+		p.distributionSuccessful.Add(timeTaken)
+	} else {
+		p.distributionFailed.Add(timeTaken)
+	}
+	return hashVal, length, expiresAt, err
 }
 
 func (g *hashGeneratorWrapper) generate(machine mdb.Machine,

@@ -19,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
 // FileGenerator is the interface that wraps the Generate method.
@@ -39,19 +40,22 @@ type expiringHash struct {
 }
 
 type pathManager struct {
-	generator hashGenerator
-	rwMutex   sync.RWMutex
+	distributionFailed     *tricorder.CumulativeDistribution
+	distributionSuccessful *tricorder.CumulativeDistribution
+	generator              hashGenerator
+	rwMutex                sync.RWMutex
 	// Protected by lock.
-	machineHashes map[string]expiringHash
+	machineHashes map[string]expiringHash // Key: hostname.
 }
 
 type Manager struct {
 	rwMutex sync.RWMutex
 	// Protected by lock.
-	pathManagers map[string]*pathManager
-	machineData  map[string]mdb.Machine
+	pathManagers map[string]*pathManager // Key: pathname.
+	machineData  map[string]mdb.Machine  // Key: hostname.
 	clients      map[<-chan *proto.ServerMessage]chan<- *proto.ServerMessage
 	// Not protected by lock.
+	bucketer     *tricorder.Bucketer
 	objectServer *memory.ObjectServer
 	logger       log.Logger
 }
