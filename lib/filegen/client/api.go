@@ -1,7 +1,9 @@
 package client
 
 import (
+	"io"
 	"sync"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -53,6 +55,8 @@ type Manager struct {
 	objectWaiters          map[hash.Hash][]chan<- hash.Hash
 	numObjectWaiters       gauge
 	logger                 log.Logger
+	lastLostHeartbeatTime  time.Time
+	lostHeartbeat          bool
 }
 
 // New creates a new *Manager. Object data will be added to the object server
@@ -85,4 +89,9 @@ func (m *Manager) Remove(hostname string) {
 // info data being sent to the corresponding channel.
 func (m *Manager) Update(machine Machine) {
 	m.updateMachineChannel <- buildMachine(machine)
+}
+
+// WriteHtml will write HTML-formatted statistics information to writer.
+func (m *Manager) WriteHtml(writer io.Writer) {
+	m.writeHtml(writer)
 }
