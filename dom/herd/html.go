@@ -33,6 +33,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		herd.writeDisableStatus(writer)
 		fmt.Fprintln(writer, "<br>")
 	}
+	herd.computedFilesManager.WriteHtml(writer)
 	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
 	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
