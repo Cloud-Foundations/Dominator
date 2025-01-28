@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -106,10 +109,27 @@ func (m *Manager) getSource(sourceName string) *sourceType {
 		return source
 	}
 	source = new(sourceType)
-	sendChannel := make(chan *proto.ClientRequest, 4096)
+	var peakQueueLength, queueLength uint
+	sendChannel, receiveChannel := queue.NewChannelPair[*proto.ClientRequest](
+		func(length uint) {
+			queueLength = length
+			if length > peakQueueLength {
+				peakQueueLength = length
+			}
+		})
+	tricorder.RegisterMetric(
+		path.Join("filegen/client/sources", sourceName, "current-queue-length"),
+		&queueLength,
+		units.None,
+		"current number of entries in send queue")
+	tricorder.RegisterMetric(
+		path.Join("filegen/client/sources", sourceName, "peak-queue-length"),
+		&peakQueueLength,
+		units.None,
+		"maximum number of entries in send queue")
 	source.sendChannel = sendChannel
 	m.sourceMap[sourceName] = source
-	go manageSource(sourceName, m.sourceReconnectChannel, sendChannel,
+	go manageSource(sourceName, m.sourceReconnectChannel, receiveChannel,
 		m.serverMessageChannel, m.logger)
 	return source
 }
@@ -141,14 +161,10 @@ func clearTimer(timer *time.Timer) {
 func manageSource(sourceName string, sourceReconnectChannel chan<- string,
 	clientRequestChannel <-chan *proto.ClientRequest,
 	serverMessageChannel chan<- *serverMessageType, logger log.Logger) {
-	closeNotifyChannel := make(chan struct{})
-	initialRetryTimeout := time.Millisecond * 100
-	retryTimeout := initialRetryTimeout
+	closeNotifyChannel := make(chan struct{}, 1)
+	sleeper := backoffdelay.NewExponential(100*time.Millisecond, time.Minute, 1)
 	reconnect := false
-	for ; ; time.Sleep(retryTimeout) {
-		if retryTimeout < time.Minute {
-			retryTimeout *= 2
-		}
+	for ; ; sleeper.Sleep() {
 		client, err := srpc.DialHTTP("tcp", sourceName, time.Second*15)
 		if err != nil {
 			logger.Printf("error connecting to: %s: %s\n", sourceName, err)
@@ -160,7 +176,7 @@ func manageSource(sourceName string, sourceReconnectChannel chan<- string,
 			logger.Println(err)
 			continue
 		}
-		retryTimeout = initialRetryTimeout
+		sleeper.Reset()
 		go handleServerMessages(sourceName, conn, serverMessageChannel,
 			closeNotifyChannel, logger)
 		if reconnect {
