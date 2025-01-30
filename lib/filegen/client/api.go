@@ -9,6 +9,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
@@ -29,7 +30,7 @@ type Machine struct {
 
 type machineType struct {
 	machine       mdb.Machine
-	updateChannel chan<- []proto.FileInfo
+	updateSender  queue.Sender[[]proto.FileInfo]
 	computedFiles map[string]string   // map[pathname] => source
 	sourceToPaths map[string][]string // map[source] => []pathnames
 }
@@ -72,9 +73,10 @@ func New(objSrv objectserver.ObjectServer, logger log.Logger) *Manager {
 // guaranteed that corresponding object data are in the object server before
 // file information is available.
 func (m *Manager) Add(machine Machine, size uint) <-chan []proto.FileInfo {
-	updateChannel := make(chan []proto.FileInfo, size)
 	mach := buildMachine(machine)
-	mach.updateChannel = updateChannel
+	sender, updateChannel := queue.NewReceiveChannel[[]proto.FileInfo](size,
+		nil)
+	mach.updateSender = sender
 	m.addMachineChannel <- mach
 	return updateChannel
 }
