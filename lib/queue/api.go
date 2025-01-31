@@ -11,6 +11,16 @@ type Closer interface {
 
 type LengthRecorder func(uint)
 
+type Queue[T any] interface {
+	Receiver[T]
+	Sender[T]
+}
+
+type Receiver[T any] interface {
+	Receive() (T, bool)
+	ReceiveAll() []T
+}
+
 type Sender[T any] interface {
 	Send(value T)
 }
@@ -48,6 +58,18 @@ func NewDataQueue() (chan<- interface{}, <-chan interface{}) {
 // A background goroutine is created.
 func NewEventQueue() (chan<- struct{}, <-chan struct{}) {
 	return newEventQueue()
+}
+
+// NewQueue creates a queue of the specified type.
+// The Send method always succeeds and will store data in an internal buffer.
+// The Receive method always succeeds and returns true if it received data.
+// The ReceiveAll method always succeeds and returns a slice of T containing
+// the data received.
+// No goroutine is created.
+// If lengthRecorder is not nil, it will be called to record the length of the
+// internal buffer whenever it changes.
+func NewQueue[T any](lengthRecorder LengthRecorder) Queue[T] {
+	return newQueue[T](lengthRecorder)
 }
 
 // NewReceiveChannel creates a channel that may be used for reading and a
