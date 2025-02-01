@@ -81,6 +81,20 @@ func (m *Manager) Add(machine Machine, size uint) <-chan []proto.FileInfo {
 	return updateChannel
 }
 
+// AddAndGetReceiver will add a machine to the Manager. Re-adding a machine will
+// result in a panic.
+// A queue.Receiver is returned from which file information may be read. It is
+// guaranteed that corresponding object data are in the object server before
+// file information is available.
+func (m *Manager) AddAndGetReceiver(
+	machine Machine) queue.Receiver[[]proto.FileInfo] {
+	mach := buildMachine(machine)
+	queue := queue.NewQueue[[]proto.FileInfo](nil)
+	mach.updateSender = queue
+	m.addMachineChannel <- mach
+	return queue
+}
+
 // Remove will remove a machine from the Manager. The corresponding file info
 // channel will be closed.
 func (m *Manager) Remove(hostname string) {
