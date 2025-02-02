@@ -76,8 +76,9 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 				cancelChannel: make(chan struct{}),
 			}
 			herd.subsByName[machine.Hostname] = sub
-			sub.fileUpdateChannel = herd.computedFilesManager.Add(
-				filegenclient.Machine{machine, sub.getComputedFiles(img)}, 16)
+			sub.fileUpdateReceiver =
+				herd.computedFilesManager.AddAndGetReceiver(
+					filegenclient.Machine{machine, sub.getComputedFiles(img)})
 			numNew++
 		} else {
 			if sub.mdb.RequiredImage != machine.RequiredImage {

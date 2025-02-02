@@ -257,59 +257,57 @@ func (sub *Sub) loadConfiguration() {
 
 func (sub *Sub) processFileUpdates() bool {
 	haveUpdates := false
-	for {
-		image := sub.requiredImage
-		if image != nil && sub.computedInodes == nil {
-			sub.computedInodes = make(map[string]*filesystem.RegularInode)
-			sub.deletingFlagMutex.Lock()
-			if sub.deleting {
-				sub.deletingFlagMutex.Unlock()
-				return false
-			}
-			computedFiles := sub.getComputedFiles(image)
-			sub.herd.cpuSharer.ReleaseCpu()
-			sub.herd.computedFilesManager.Update(
-				filegenclient.Machine{sub.mdb, computedFiles})
-			sub.herd.cpuSharer.GrabCpu()
+	image := sub.requiredImage
+	if image != nil && sub.computedInodes == nil {
+		sub.computedInodes = make(map[string]*filesystem.RegularInode)
+		sub.deletingFlagMutex.Lock()
+		if sub.deleting {
 			sub.deletingFlagMutex.Unlock()
+			return false
 		}
-		select {
-		case fileInfos := <-sub.fileUpdateChannel:
-			if image == nil {
+		computedFiles := sub.getComputedFiles(image)
+		sub.herd.cpuSharer.ReleaseCpu()
+		sub.herd.logger.Debugf(0,
+			"processFileUpdates(%s): updating filegen manager\n", sub)
+		sub.herd.computedFilesManager.Update(
+			filegenclient.Machine{sub.mdb, computedFiles})
+		sub.herd.cpuSharer.GrabCpu()
+		sub.deletingFlagMutex.Unlock()
+	}
+	for _, fileInfos := range sub.fileUpdateReceiver.ReceiveAll() {
+		if image == nil {
+			continue
+		}
+		filenameToInodeTable := image.FileSystem.FilenameToInodeTable()
+		for _, fileInfo := range fileInfos {
+			if fileInfo.Hash == zeroHash {
+				continue // No object.
+			}
+			inum, ok := filenameToInodeTable[fileInfo.Pathname]
+			if !ok {
 				continue
 			}
-			filenameToInodeTable := image.FileSystem.FilenameToInodeTable()
-			for _, fileInfo := range fileInfos {
-				if fileInfo.Hash == zeroHash {
-					continue // No object.
-				}
-				inum, ok := filenameToInodeTable[fileInfo.Pathname]
-				if !ok {
-					continue
-				}
-				genericInode, ok := image.FileSystem.InodeTable[inum]
-				if !ok {
-					continue
-				}
-				cInode, ok := genericInode.(*filesystem.ComputedRegularInode)
-				if !ok {
-					continue
-				}
-				rInode := &filesystem.RegularInode{
-					Mode:         cInode.Mode,
-					Uid:          cInode.Uid,
-					Gid:          cInode.Gid,
-					MtimeSeconds: -1, // The time is set during the compute.
-					Size:         fileInfo.Length,
-					Hash:         fileInfo.Hash,
-				}
-				sub.computedInodes[fileInfo.Pathname] = rInode
-				haveUpdates = true
+			genericInode, ok := image.FileSystem.InodeTable[inum]
+			if !ok {
+				continue
 			}
-		default:
-			return haveUpdates
+			cInode, ok := genericInode.(*filesystem.ComputedRegularInode)
+			if !ok {
+				continue
+			}
+			rInode := &filesystem.RegularInode{
+				Mode:         cInode.Mode,
+				Uid:          cInode.Uid,
+				Gid:          cInode.Gid,
+				MtimeSeconds: -1, // The time is set during the compute.
+				Size:         fileInfo.Length,
+				Hash:         fileInfo.Hash,
+			}
+			sub.computedInodes[fileInfo.Pathname] = rInode
+			haveUpdates = true
 		}
 	}
+	return haveUpdates
 }
 
 func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {

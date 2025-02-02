@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	filegenproto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
@@ -82,7 +83,7 @@ type Sub struct {
 	plannedImage                 *image.Image // Updated only by sub goroutine.
 	clientResource               *srpc.ClientResource
 	computedInodes               map[string]*filesystem.RegularInode
-	fileUpdateChannel            <-chan []filegenproto.FileInfo
+	fileUpdateReceiver           queue.Receiver[[]filegenproto.FileInfo]
 	busyFlagMutex                sync.Mutex
 	busy                         bool
 	deletingFlagMutex            sync.Mutex
