@@ -141,7 +141,9 @@ func (herd *Herd) pollNextSub() bool {
 		if !sub.tryMakeBusy() {
 			return
 		}
-		sub.connectAndPoll()
+		if sub.connectAndPoll() { // Returns true if a retry is reasonable.
+			sub.connectAndPoll()
+		}
 		sub.makeUnbusy()
 	})
 	return false

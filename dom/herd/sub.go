@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	filegenclient "github.com/Cloud-Foundations/Dominator/lib/filegen/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
@@ -132,7 +133,9 @@ func (sub *Sub) makeUnbusy() {
 	sub.busy = false
 }
 
-func (sub *Sub) connectAndPoll() {
+// Returns true if a client connection was open but the Poll failed due to an
+// I/O error, indicating a retry is reasonable.
+func (sub *Sub) connectAndPoll() bool {
 	sub.loadConfiguration()
 	if sub.processFileUpdates() {
 		sub.generationCount = 0 // Force a full poll.
@@ -140,7 +143,7 @@ func (sub *Sub) connectAndPoll() {
 	sub.deletingFlagMutex.Lock()
 	if sub.deleting {
 		sub.deletingFlagMutex.Unlock()
-		return
+		return false
 	}
 	if sub.clientResource == nil {
 		sub.clientResource = srpc.NewClientResource("tcp", sub.address())
@@ -175,41 +178,41 @@ func (sub *Sub) connectAndPoll() {
 		sub.isInsecure = false
 		sub.pollTime = time.Time{}
 		if err == resourcepool.ErrorResourceLimitExceeded {
-			return
+			return false
 		}
 		if err, ok := err.(*net.OpError); ok {
 			if _, ok := err.Err.(*net.DNSError); ok {
 				sub.status = statusDNSError
-				return
+				return false
 			}
 			if err.Timeout() {
 				sub.status = statusConnectTimeout
-				return
+				return false
 			}
 		}
 		if err == srpc.ErrorConnectionRefused {
 			sub.status = statusConnectionRefused
-			return
+			return false
 		}
 		if err == srpc.ErrorNoRouteToHost {
 			sub.status = statusNoRouteToHost
-			return
+			return false
 		}
 		if err == srpc.ErrorMissingCertificate {
 			sub.lastReachableTime = dialReturnedTime
 			sub.status = statusMissingCertificate
-			return
+			return false
 		}
 		if err == srpc.ErrorBadCertificate {
 			sub.lastReachableTime = dialReturnedTime
 			sub.status = statusBadCertificate
-			return
+			return false
 		}
 		sub.status = statusFailedToConnect
 		if *logUnknownSubConnectErrors {
 			sub.herd.logger.Println(err)
 		}
-		return
+		return false
 	}
 	defer srpcClient.Put()
 	if srpcClient.IsEncrypted() {
@@ -230,12 +233,13 @@ func (sub *Sub) connectAndPoll() {
 		break
 	case <-sub.cancelChannel:
 		sub.herd.cpuSharer.GrabCpu()
-		return
+		return false
 	}
 	pollWaitTimeDistribution.Add(time.Since(waitStartTime))
 	sub.status = statusPolling
-	sub.poll(srpcClient, previousStatus)
+	retval := sub.poll(srpcClient, previousStatus)
 	<-sub.herd.pollSemaphore
+	return retval
 }
 
 func (sub *Sub) loadConfiguration() {
@@ -310,7 +314,9 @@ func (sub *Sub) processFileUpdates() bool {
 	return haveUpdates
 }
 
-func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
+// Returns true if the Poll failed due to an I/O error, indicating a retry is
+// reasonable.
+func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) bool {
 	if err := srpcClient.SetTimeout(5 * time.Minute); err != nil {
 		sub.herd.logger.Printf("poll(%s): error setting timeout: %s\n", sub)
 	}
@@ -363,16 +369,19 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	if err := client.CallPoll(srpcClient, request, &reply); err != nil {
 		srpcClient.Close()
 		if err == io.EOF {
-			return
+			return true
 		}
 		sub.pollTime = time.Time{}
+		var retval bool
 		if err == srpc.ErrorAccessToMethodDenied {
 			sub.status = statusPollDenied
 		} else {
 			sub.status = statusFailedToPoll
+			retval = true
 		}
-		logger.Printf("Error calling %s.Poll(): %s\n", sub, err)
-		return
+		logger.Printf("Error calling %s.Poll(%s): %s\n",
+			sub, format.Duration(time.Since(sub.lastPollStartTime)), err)
+		return retval
 	}
 	sub.lastDisruptionState = reply.DisruptionState
 	sub.lastPollSucceededTime = time.Now()
@@ -404,7 +413,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		if err := fs.RebuildInodePointers(); err != nil {
 			sub.status = statusFailedToPoll
 			logger.Printf("Error building pointers for: %s %s\n", sub, err)
-			return
+			return false
 		}
 		fs.BuildEntryMap()
 		sub.fileSystem = fs
@@ -419,30 +428,30 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	sub.updateConfiguration(srpcClient, reply)
 	if reply.FetchInProgress {
 		sub.status = statusFetching
-		return
+		return false
 	}
 	if reply.UpdateInProgress {
 		sub.status = statusUpdating
-		return
+		return false
 	}
 	if reply.LastWriteError != "" {
 		sub.status = statusUnwritable
 		sub.reclaim()
-		return
+		return false
 	}
 	if reply.GenerationCount < 1 {
 		sub.status = statusSubNotReady
-		return
+		return false
 	}
 	if reply.LockedByAnotherClient {
 		sub.status = statusLocked
 		sub.reclaim()
-		return
+		return false
 	}
 	if previousStatus == statusLocked { // Not locked anymore, but was locked.
 		if sub.fileSystem == nil {
 			sub.generationCount = 0 // Force a full poll next cycle.
-			return
+			return false
 		}
 	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
@@ -450,7 +459,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.status = statusFailedToFetch
 		if sub.fileSystem == nil {
 			sub.generationCount = 0 // Force a full poll next cycle.
-			return
+			return false
 		}
 	}
 	if previousStatus == statusUpdating {
@@ -469,12 +478,12 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		}
 		sub.scanCountAtLastUpdateEnd = reply.ScanCount
 		sub.reclaim()
-		return
+		return false
 	}
 	if sub.checkCancel() {
 		// Configuration change pending: skip further processing. Do not reclaim
 		// file-system and objectcache data: it will speed up the next Poll.
-		return
+		return false
 	}
 	if !haveImage {
 		if sub.requiredImageName == "" {
@@ -482,7 +491,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		} else {
 			sub.status = statusImageNotReady
 		}
-		return
+		return false
 	}
 	if previousStatus == statusFailedToUpdate ||
 		previousStatus == statusWaitingForNextFullPoll {
@@ -492,14 +501,14 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 				sub.reclaim()
 			}
 			sub.status = previousStatus
-			return
+			return false
 		}
 		if sub.fileSystem == nil {
 			// Force a full poll next cycle so that we can see the state of the
 			// sub.
 			sub.generationCount = 0
 			sub.status = previousStatus
-			return
+			return false
 		}
 	}
 	if previousStatus == statusDisruptionRequested ||
@@ -517,26 +526,26 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if sub.fileSystem == nil {
 		sub.status = previousStatus
-		return
+		return false
 	}
 	if idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
 		reply.FreeSpace, true); !idle {
 		sub.status = status
 		sub.reclaim()
-		return
+		return false
 	}
 	sub.status = statusComputingUpdate
 	if idle, status := sub.sendUpdate(srpcClient); !idle {
 		sub.status = status
 		sub.reclaim()
-		return
+		return false
 	}
 	if idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
 		reply.FreeSpace, false); !idle {
 		if status != statusImageNotReady && status != statusNotEnoughFreeSpace {
 			sub.status = status
 			sub.reclaim()
-			return
+			return false
 		}
 	}
 	if previousStatus == statusWaitingForNextFullPoll &&
@@ -546,6 +555,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	sub.status = statusSynced
 	sub.cleanup(srpcClient)
 	sub.reclaim()
+	return false
 }
 
 func (sub *Sub) reclaim() {
