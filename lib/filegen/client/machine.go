@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
@@ -23,6 +24,13 @@ func buildMachine(machine Machine) *machineType {
 		machine:       machine.Machine,
 		computedFiles: computedFiles,
 		sourceToPaths: sourceToPaths}
+}
+
+func logFiles(hostname string, files []proto.FileInfo, logger log.DebugLogger) {
+	for index, file := range files {
+		logger.Debugf(0, "filegen: %s: sending file[%d]: %s hash: %0x\n",
+			hostname, index, file.Pathname, file.Hash)
+	}
 }
 
 func (m *Manager) addMachine(machine *machineType) {
@@ -119,22 +127,25 @@ func (m *Manager) handleYieldResponse(machine *machineType,
 	}
 	if len(objectsToWaitFor) > 0 {
 		go waitForObjectsAndSendUpdate(waiterChannel, objectsToWaitFor,
-			machine.updateSender, files, &m.numObjectWaiters)
+			machine.updateSender, files, &m.numObjectWaiters,
+			machine.machine.Hostname, m.logger)
 	} else {
 		machine.updateSender.Send(files)
+		logFiles(machine.machine.Hostname, files, m.logger)
 	}
 }
 
 func waitForObjectsAndSendUpdate(objectChannel <-chan hash.Hash,
 	objectsToWaitFor map[hash.Hash]struct{},
 	updateSender queue.Sender[[]proto.FileInfo], files []proto.FileInfo,
-	numObjectWaiters *gauge) {
+	numObjectWaiters *gauge, hostname string, logger log.DebugLogger) {
 	numObjectWaiters.increment()
 	defer numObjectWaiters.decrement()
 	for hashVal := range objectChannel {
 		delete(objectsToWaitFor, hashVal)
 		if len(objectsToWaitFor) < 1 {
 			updateSender.Send(files)
+			logFiles(hostname, files, logger)
 			return
 		}
 	}

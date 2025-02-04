@@ -55,7 +55,7 @@ type Manager struct {
 	sourceReconnectChannel chan<- string
 	objectWaiters          map[hash.Hash][]chan<- hash.Hash
 	numObjectWaiters       gauge
-	logger                 log.Logger
+	logger                 log.DebugLogger
 	lastLostHeartbeatTime  time.Time
 	lostHeartbeat          bool
 }

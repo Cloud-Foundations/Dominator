@@ -11,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -33,7 +34,7 @@ func newManager(objSrv objectserver.ObjectServer, logger log.Logger) *Manager {
 		serverMessageChannel:   make(chan *serverMessageType, 1),
 		sourceReconnectChannel: sourceReconnectChannel,
 		objectWaiters:          make(map[hash.Hash][]chan<- hash.Hash),
-		logger:                 logger}
+		logger:                 debuglogger.Upgrade(logger)}
 	tricorder.RegisterMetric("filegen/client/num-object-waiters",
 		&m.numObjectWaiters.value, units.None,
 		"number of goroutines waiting for objects")
