@@ -161,6 +161,8 @@ func (m *Manager) scheduleTimer(pathname string, hostname string,
 		for _, clientChannel := range m.clients {
 			clientChannel <- message
 		}
+		m.logger.Debugf(1, "scheduleTimer: machine: %s, path: %s, hash: %0x\n",
+			hostname, pathname, hashVal)
 		m.scheduleTimer(pathname, mdbData.Hostname, validUntil)
 	})
 }

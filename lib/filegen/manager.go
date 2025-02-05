@@ -2,6 +2,7 @@ package filegen
 
 import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -18,7 +19,7 @@ func newManager(logger log.Logger) *Manager {
 		bucketer: tricorder.NewGeometricBucketer(0.01, 1e5),
 		clients: make(
 			map[<-chan *proto.ServerMessage]chan<- *proto.ServerMessage),
-		logger:       logger,
+		logger:       debuglogger.Upgrade(logger),
 		machineData:  make(map[string]mdb.Machine),
 		objectServer: memory.NewObjectServer(),
 		pathManagers: make(map[string]*pathManager),

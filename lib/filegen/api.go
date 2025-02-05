@@ -57,7 +57,7 @@ type Manager struct {
 	// Not protected by lock.
 	bucketer     *tricorder.Bucketer
 	objectServer *memory.ObjectServer
-	logger       log.Logger
+	logger       log.DebugLogger
 }
 
 // New creates a new *Manager. Only one should be created per application.

@@ -78,6 +78,9 @@ func (m *Manager) handleRequest(decoder srpc.Decoder,
 		for _, pathname := range request.Pathnames {
 			if fileInfo, ok := m.computeFile(request.Machine, pathname); ok {
 				fileInfos = append(fileInfos, fileInfo)
+				m.logger.Debugf(1,
+					"handleRequest(): machine: %s, path: %s, hash: %0x\n",
+					request.Machine.Hostname, pathname, fileInfo.Hash)
 			}
 		}
 		serverMessage.YieldResponse = &proto.YieldResponse{
@@ -105,6 +108,7 @@ func (m *Manager) updateMachineData(machine mdb.Machine) {
 	defer m.rwMutex.Unlock()
 	if oldMachine, ok := m.machineData[machine.Hostname]; !ok {
 		m.machineData[machine.Hostname] = machine
+		m.logger.Debugf(0, "updateMachineData(%s): added\n", machine.Hostname)
 	} else if !oldMachine.Compare(machine) {
 		m.machineData[machine.Hostname] = machine
 		for _, pathMgr := range m.pathManagers {
@@ -112,6 +116,7 @@ func (m *Manager) updateMachineData(machine mdb.Machine) {
 			delete(pathMgr.machineHashes, machine.Hostname)
 			pathMgr.rwMutex.Unlock()
 		}
+		m.logger.Debugf(0, "updateMachineData(%s): changed\n", machine.Hostname)
 	}
 }
 
