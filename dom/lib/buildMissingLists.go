@@ -7,32 +7,20 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-func (sub *Sub) buildMissingLists(img *image.Image, pushComputedFiles bool,
-	ignoreMissingComputedFiles bool, logger log.Logger) (
+func (sub *Sub) buildMissingLists(requiredImage, plannedImage *image.Image,
+	pushComputedFiles, ignoreMissingComputedFiles bool, logger log.Logger) (
 	map[hash.Hash]uint64, map[hash.Hash]struct{}) {
 	objectsToFetch := make(map[hash.Hash]uint64)
 	objectsToPush := make(map[hash.Hash]struct{})
-	for inum, inode := range img.FileSystem.InodeTable {
-		if rInode, ok := inode.(*filesystem.RegularInode); ok {
-			if rInode.Size > 0 {
-				objectsToFetch[rInode.Hash] = rInode.Size
-			}
-		} else if pushComputedFiles {
-			if _, ok := inode.(*filesystem.ComputedRegularInode); ok {
-				pathname := img.FileSystem.InodeToFilenamesTable()[inum][0]
-				if inode, ok := sub.ComputedInodes[pathname]; !ok {
-					if ignoreMissingComputedFiles {
-						continue
-					}
-					logger.Printf(
-						"buildMissingLists(%s): missing computed file: %s\n",
-						sub, pathname)
-					return nil, nil
-				} else {
-					objectsToPush[inode.Hash] = struct{}{}
-				}
-			}
-		}
+	ok := sub.updateMissingLists(requiredImage, pushComputedFiles,
+		ignoreMissingComputedFiles, objectsToFetch, objectsToPush, logger)
+	if !ok {
+		return nil, nil
+	}
+	ok = sub.updateMissingLists(plannedImage, false, false,
+		objectsToFetch, objectsToPush, logger)
+	if !ok {
+		return nil, nil
 	}
 	for _, hashVal := range sub.ObjectCache {
 		delete(objectsToFetch, hashVal)
@@ -47,4 +35,38 @@ func (sub *Sub) buildMissingLists(img *image.Image, pushComputedFiles bool,
 		}
 	}
 	return objectsToFetch, objectsToPush
+}
+
+// Returns false if there was a problem updating the missing lists.
+func (sub *Sub) updateMissingLists(img *image.Image,
+	pushComputedFiles, ignoreMissingComputedFiles bool,
+	objectsToFetch map[hash.Hash]uint64, objectsToPush map[hash.Hash]struct{},
+	logger log.Logger) bool {
+	if img == nil {
+		return true
+	}
+	inodeToFilenamesTable := img.FileSystem.InodeToFilenamesTable()
+	for inum, inode := range img.FileSystem.InodeTable {
+		if rInode, ok := inode.(*filesystem.RegularInode); ok {
+			if rInode.Size > 0 {
+				objectsToFetch[rInode.Hash] = rInode.Size
+			}
+		} else if pushComputedFiles {
+			if _, ok := inode.(*filesystem.ComputedRegularInode); ok {
+				pathname := inodeToFilenamesTable[inum][0]
+				if inode, ok := sub.ComputedInodes[pathname]; !ok {
+					if ignoreMissingComputedFiles {
+						continue
+					}
+					logger.Printf(
+						"buildMissingLists(%s): missing computed file: %s\n",
+						sub, pathname)
+					return false
+				} else {
+					objectsToPush[inode.Hash] = struct{}{}
+				}
+			}
+		}
+	}
+	return true
 }
