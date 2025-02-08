@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
@@ -26,7 +27,8 @@ func (sub *Sub) buildUpdateRequest(request *subproto.UpdateRequest) (
 		return false, true
 	}
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStop)
-	computeTimeDistribution.Add(time.Since(computeStartTime))
+	timeTaken := time.Since(computeStartTime)
+	computeTimeDistribution.Add(timeTaken)
 	sub.lastComputeUpdateCpuDuration = time.Duration(
 		rusageStop.Utime.Sec)*time.Second +
 		time.Duration(rusageStop.Utime.Usec)*time.Microsecond -
@@ -41,8 +43,8 @@ func (sub *Sub) buildUpdateRequest(request *subproto.UpdateRequest) (
 		len(request.InodesToChange) > 0 ||
 		sub.lastSuccessfulImageName != sub.requiredImageName {
 		sub.herd.logger.Debugf(0,
-			"buildUpdateRequest(%s) took: %s user CPU time\n",
-			sub, sub.lastComputeUpdateCpuDuration)
+			"buildUpdateRequest(%s) took: %s user CPU time in %s\n",
+			sub, sub.lastComputeUpdateCpuDuration, format.Duration(timeTaken))
 		return false, false
 	}
 	return true, false
