@@ -528,24 +528,33 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) bool {
 		sub.status = previousStatus
 		return false
 	}
-	if idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
-		reply.FreeSpace, true); !idle {
-		sub.status = status
-		sub.reclaim()
-		return false
-	}
-	sub.status = statusComputingUpdate
-	if idle, status := sub.sendUpdate(srpcClient); !idle {
-		sub.status = status
-		sub.reclaim()
-		return false
-	}
-	if idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
-		reply.FreeSpace, false); !idle {
-		if status != statusImageNotReady && status != statusNotEnoughFreeSpace {
+	if sub.requiredImage != nil {
+		idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
+			reply.FreeSpace, true)
+		if !idle {
 			sub.status = status
 			sub.reclaim()
 			return false
+		}
+		sub.status = statusComputingUpdate
+		if idle, status := sub.sendUpdate(srpcClient); !idle {
+			sub.status = status
+			sub.reclaim()
+			return false
+		}
+	} else {
+		sub.status = statusImageNotReady
+	}
+	if sub.plannedImage != sub.requiredImage {
+		idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
+			reply.FreeSpace, false)
+		if !idle {
+			if status != statusImageNotReady &&
+				status != statusNotEnoughFreeSpace {
+				sub.status = status
+				sub.reclaim()
+				return false
+			}
 		}
 	}
 	if previousStatus == statusWaitingForNextFullPoll &&
@@ -620,10 +629,16 @@ func compareConfigs(oldConf, newConf subproto.Configuration) bool {
 
 // Returns true if all required objects are available.
 func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
-	freeSpace *uint64, pushComputedFiles bool) (
+	freeSpace *uint64, isRequiredImage bool) (
 	bool, subStatus) {
 	if img == nil {
 		return false, statusImageNotReady
+	}
+	var imageType string
+	if isRequiredImage {
+		imageType = "required"
+	} else {
+		imageType = "planned"
 	}
 	logger := sub.herd.logger
 	subObj := lib.Sub{
@@ -633,8 +648,12 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		ComputedInodes: sub.computedInodes,
 		ObjectCache:    sub.objectCache,
 		ObjectGetter:   sub.herd.objectServer}
+	startTime := time.Now()
 	objectsToFetch, objectsToPush := lib.BuildMissingLists(subObj, img,
-		pushComputedFiles, false, logger)
+		isRequiredImage, false, logger)
+	sub.herd.logger.Debugf(0,
+		"lib.BuildMissingLists(%s) for %s image took: %s\n",
+		sub, imageType, format.Duration(time.Since(startTime)))
 	if objectsToPush == nil {
 		return false, statusMissingComputedFile
 	}
@@ -644,8 +663,8 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		if !sub.checkForEnoughSpace(freeSpace, objectsToFetch) {
 			return false, statusNotEnoughFreeSpace
 		}
-		logger.Printf("Calling %s:Subd.Fetch() for: %d objects\n",
-			sub, len(objectsToFetch))
+		logger.Printf("Calling %s:Subd.Fetch(%s) for: %d objects\n",
+			sub, imageType, len(objectsToFetch))
 		err := client.Fetch(srpcClient, sub.herd.imageManager.String(),
 			objectcache.ObjectMapToCache(objectsToFetch))
 		if err != nil {
