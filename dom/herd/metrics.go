@@ -9,20 +9,23 @@ import (
 )
 
 var (
-	cleanupTimeDistribution    *tricorder.CumulativeDistribution
-	computeCpuTimeDistribution *tricorder.CumulativeDistribution
-	computeTimeDistribution    *tricorder.CumulativeDistribution
-	connectDistribution        *tricorder.CumulativeDistribution
-	cycleTimeDistribution      *tricorder.CumulativeDistribution
-	mdbUpdateTimeDistribution  *tricorder.CumulativeDistribution
-	fullPollDistribution       *tricorder.CumulativeDistribution
-	shortPollDistribution      *tricorder.CumulativeDistribution
-	pollWaitTimeDistribution   *tricorder.CumulativeDistribution
+	cleanupComputeTimeDistribution *tricorder.CumulativeDistribution
+	cleanupTimeDistribution        *tricorder.CumulativeDistribution
+	computeCpuTimeDistribution     *tricorder.CumulativeDistribution
+	computeTimeDistribution        *tricorder.CumulativeDistribution
+	connectDistribution            *tricorder.CumulativeDistribution
+	cycleTimeDistribution          *tricorder.CumulativeDistribution
+	mdbUpdateTimeDistribution      *tricorder.CumulativeDistribution
+	fullPollDistribution           *tricorder.CumulativeDistribution
+	shortPollDistribution          *tricorder.CumulativeDistribution
+	pollWaitTimeDistribution       *tricorder.CumulativeDistribution
 )
 
 func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
 	makeCpuSharerMetrics(dir, "cpu-sharer", herd.cpuSharer)
 	latencyBucketer := tricorder.NewGeometricBucketer(0.1, 1e6)
+	cleanupComputeTimeDistribution = makeMetric(dir, latencyBucketer,
+		"cleanup-compute-time", "cleanup compute time")
 	cleanupTimeDistribution = makeMetric(dir, latencyBucketer,
 		"cleanup-time", "cleanup time")
 	computeCpuTimeDistribution = makeMetric(dir, latencyBucketer,

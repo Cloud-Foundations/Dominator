@@ -768,9 +768,10 @@ func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	return false
 }
 
-// cleanup will tell the Sub to remove unused objects and that and disruptive
+// cleanup will tell the Sub to remove unused objects and that any disruptive
 // updates have completed.
 func (sub *Sub) cleanup(srpcClient *srpc.Client) {
+	startTime := time.Now()
 	logger := sub.herd.logger
 	unusedObjects := make(map[hash.Hash]bool)
 	for _, hash := range sub.objectCache {
@@ -799,13 +800,15 @@ func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 	}
 	if len(unusedObjects) < 1 &&
 		sub.lastDisruptionState == subproto.DisruptionStateAnytime {
+		cleanupComputeTimeDistribution.Add(time.Since(startTime))
 		return
 	}
 	hashes := make([]hash.Hash, 0, len(unusedObjects))
 	for hash := range unusedObjects {
 		hashes = append(hashes, hash)
 	}
-	startTime := time.Now()
+	cleanupComputeTimeDistribution.Add(time.Since(startTime))
+	startTime = time.Now()
 	if err := client.Cleanup(srpcClient, hashes); err != nil {
 		srpcClient.Close()
 		logger.Printf("Error calling %s:Subd.Cleanup(): %s\n", sub, err)
