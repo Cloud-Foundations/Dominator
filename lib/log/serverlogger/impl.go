@@ -126,6 +126,9 @@ func (l *Logger) log(level int16, msg string, dying bool) {
 	if l.level >= level {
 		l.circularBuffer.Write(buffer.Bytes())
 	}
+	if !l.haveStreamers { // Fast return if no streamers.
+		return
+	}
 	recalculateLevels := false
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -192,8 +195,8 @@ func (l *Logger) setLevel(maxLevel int16) {
 	if maxLevel < -1 {
 		maxLevel = -1
 	}
-	l.level = maxLevel
 	l.mutex.Lock()
+	l.level = maxLevel
 	l.updateMaxLevel()
 	l.mutex.Unlock()
 }
@@ -212,6 +215,7 @@ func (l *Logger) watch(conn *srpc.Conn, streamer *streamerType) {
 	channel := make(chan []byte, 256)
 	streamer.output = channel
 	l.mutex.Lock()
+	l.haveStreamers = true
 	l.streamers[streamer] = struct{}{}
 	l.updateMaxLevel()
 	l.mutex.Unlock()
@@ -249,6 +253,9 @@ func (l *Logger) watch(conn *srpc.Conn, streamer *streamerType) {
 	}
 	l.mutex.Lock()
 	delete(l.streamers, streamer)
+	if len(l.streamers) < 1 {
+		l.haveStreamers = false
+	}
 	l.updateMaxLevel()
 	l.mutex.Unlock()
 	// Drain the channel.
