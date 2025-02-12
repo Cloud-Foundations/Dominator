@@ -120,12 +120,22 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
-	for _, values := range manifestConfig.SourceImageTagsToMatch {
+	// Perform variable expansion on the source image tags to match. If the
+	// values for a tag key all expand to empty strings, delete the key. This
+	// makes tag matching optional, which is the intended behaviour.
+	for key, values := range manifestConfig.SourceImageTagsToMatch {
+		allEmpty := true
 		for index, value := range values {
 			newValue := expand.Expression(value, func(name string) string {
 				return envGetter.getenv()[name]
 			})
+			if newValue != "" {
+				allEmpty = false
+			}
 			values[index] = newValue
+		}
+		if allEmpty {
+			delete(manifestConfig.SourceImageTagsToMatch, key)
 		}
 	}
 	return manifestConfig, nil
