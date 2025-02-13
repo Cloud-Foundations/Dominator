@@ -44,7 +44,7 @@ var (
 	expiresIn = flag.Duration("expiresIn", 0,
 		"How long before the image expires (auto deletes). Default: never")
 	filterFile = flag.String("filterFile", "",
-		"Filter file to apply when adding images")
+		"Filter file to apply when adding, diffing or showing images")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager (to find VM to scan)")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
