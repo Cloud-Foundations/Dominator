@@ -6,8 +6,11 @@ import (
 
 var (
 	excludeFilterLines = []string{
+		"/.*app-log.*",
 		"/etc/fstab",
-		"/tmp(|.*)",
+		"/file.log",
+		"/foo(|.*)$",
+		"/tmp(|/.*)$",
 	}
 
 	includeFilterLines = []string{
@@ -22,9 +25,11 @@ func TestExclude(t *testing.T) {
 		t.Error(err)
 	}
 	expectedNonMatches := []string{
+		"/.myprog-log.err",
 		"/bin",
 		"/etc",
 		"/etc/passwd",
+		"/tmpfile",
 	}
 	for _, line := range expectedNonMatches {
 		if filt.Match(line) {
@@ -32,7 +37,14 @@ func TestExclude(t *testing.T) {
 		}
 	}
 	expectedMatches := []string{
+		"/.myapp-log.err",
+		"/.myapp-logout",
 		"/etc/fstab",
+		"/file.log",
+		"/file%log",
+		"/foo",
+		"/foobar",
+		"/foo/bar",
 		"/tmp",
 		"/tmp/file",
 	}

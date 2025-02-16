@@ -3,7 +3,6 @@ package filter
 import (
 	"fmt"
 	"io"
-	"regexp"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
@@ -39,14 +38,14 @@ func read(reader io.Reader) (*Filter, error) {
 }
 
 func (filter *Filter) compile() error {
-	filter.filterExpressions = make([]*regexp.Regexp, len(filter.FilterLines))
+	filter.matchers = make([]matcherI, len(filter.FilterLines))
 	for index, reEntry := range filter.FilterLines {
 		if reEntry == "!" {
 			filter.invertMatches = true
 			continue
 		}
 		var err error
-		filter.filterExpressions[index], err = regexp.Compile("^" + reEntry)
+		filter.matchers[index], err = compileMatcher(reEntry)
 		if err != nil {
 			return err
 		}
@@ -55,7 +54,7 @@ func (filter *Filter) compile() error {
 }
 
 func (filter *Filter) match(pathname string) bool {
-	if len(filter.filterExpressions) != len(filter.FilterLines) {
+	if len(filter.matchers) != len(filter.FilterLines) {
 		filter.compile()
 	}
 	defaultRetval := false
@@ -64,8 +63,8 @@ func (filter *Filter) match(pathname string) bool {
 		defaultRetval = true
 		matchRetval = false
 	}
-	for _, regex := range filter.filterExpressions {
-		if regex != nil && regex.MatchString(pathname) {
+	for _, matcher := range filter.matchers {
+		if matcher != nil && matcher.MatchString(pathname) {
 			return matchRetval
 		}
 	}

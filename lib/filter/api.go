@@ -2,7 +2,6 @@ package filter
 
 import (
 	"io"
-	"regexp"
 )
 
 // A Filter contains a list of regular expressions matching pathnames which
@@ -14,15 +13,19 @@ import (
 // pushing to a sub, all files are pushed but files on the sub which are not in
 // the image are not removed from the sub.
 type Filter struct {
-	FilterLines       []string
-	filterExpressions []*regexp.Regexp
-	invertMatches     bool
+	FilterLines   []string
+	matchers      []matcherI
+	invertMatches bool
 }
 
 // A MergeableFilter may be used to combine multiple Filters, eliminating
 // duplicate match expressions.
 type MergeableFilter struct {
 	filterLines map[string]struct{}
+}
+
+type matcherI interface {
+	MatchString(s string) bool
 }
 
 // Load will load a Filter from a file containing newline separated regular
