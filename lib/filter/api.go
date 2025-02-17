@@ -90,3 +90,8 @@ func (mf *MergeableFilter) Merge(filter *Filter) {
 func (filter *Filter) Write(writer io.Writer) error {
 	return filter.write(writer)
 }
+
+// WriteHtml will write the filter with appropriate HTML markups.
+func (filter *Filter) WriteHtml(writer io.Writer) {
+	filter.writeHtml(writer)
+}

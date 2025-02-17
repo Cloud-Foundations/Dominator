@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"io"
 	"testing"
 )
 
@@ -53,6 +54,7 @@ func TestExclude(t *testing.T) {
 			t.Errorf("\"%s\" should have matched", line)
 		}
 	}
+	filt.WriteHtml(io.Discard)
 }
 
 func TestInverted(t *testing.T) {
@@ -80,4 +82,5 @@ func TestInverted(t *testing.T) {
 			t.Errorf("\"%s\" should have matched", line)
 		}
 	}
+	filt.WriteHtml(io.Discard)
 }
