@@ -19,10 +19,9 @@ func (s state) listFilterHandler(w http.ResponseWriter, req *http.Request) {
 	} else if image.Filter == nil {
 		fmt.Fprintln(writer, "Sparse filter")
 	} else {
-		fmt.Fprintf(writer, "Filter lines for image: %s\n", imageName)
-		fmt.Fprintln(writer, "<pre>")
-		image.Filter.Write(writer)
-		fmt.Fprintln(writer, "</pre>")
+		fmt.Fprintf(writer, "Filter lines for image: %s<p>\n", imageName)
+		image.Filter.WriteHtml(writer)
 	}
+	fmt.Fprintln(writer, "</h3>")
 	fmt.Fprintln(writer, "</body>")
 }
