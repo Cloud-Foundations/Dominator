@@ -36,7 +36,12 @@ func CompareFiles(leftFilename, rightFilename string) (bool, error) {
 }
 
 func CopyFile(destFilename, sourceFilename string, mode os.FileMode) error {
-	return copyFile(destFilename, sourceFilename, mode)
+	return copyFile(destFilename, sourceFilename, mode, false)
+}
+
+func CopyFileExclusive(destFilename, sourceFilename string,
+	mode os.FileMode) error {
+	return copyFile(destFilename, sourceFilename, mode, true)
 }
 
 // CopyToFile will create a new file, write length bytes from reader to the
@@ -45,12 +50,21 @@ func CopyFile(destFilename, sourceFilename string, mode os.FileMode) error {
 // destFilename is unchanged.
 func CopyToFile(destFilename string, perm os.FileMode, reader io.Reader,
 	length uint64) error {
-	return copyToFile(destFilename, perm, reader, length)
+	return copyToFile(destFilename, perm, reader, length, false)
+}
+
+// CopyToFileExclusive will exclusively create a new file, write length bytes
+// from reader to the file and then atomically renames the file to destFilename.
+// If length is zero all remaining bytes from reader are written. If there are
+// any errors, then destFilename is unchanged.
+func CopyToFileExclusive(destFilename string, perm os.FileMode,
+	reader io.Reader, length uint64) error {
+	return copyToFile(destFilename, perm, reader, length, true)
 }
 
 // CopyTree will copy a directory tree.
 func CopyTree(destDir, sourceDir string) error {
-	return copyTree(destDir, sourceDir, copyFile)
+	return copyTree(destDir, sourceDir, CopyFile)
 }
 
 // CopyTreeWithCopyFunc is similar to CopyTree except it uses a specified copy

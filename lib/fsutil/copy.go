@@ -11,10 +11,15 @@ import (
 )
 
 func copyToFile(destFilename string, perm os.FileMode, reader io.Reader,
-	length uint64) error {
+	length uint64, exclusive bool) error {
 	tmpFilename := destFilename + "~"
-	destFile, err := os.OpenFile(tmpFilename,
-		os.O_CREATE|os.O_TRUNC|os.O_WRONLY, perm)
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	} else {
+		flags |= os.O_TRUNC
+	}
+	destFile, err := os.OpenFile(tmpFilename, flags, perm)
 	if err != nil {
 		return err
 	}
@@ -101,7 +106,8 @@ func copyTree(destDir, sourceDir string,
 	return nil
 }
 
-func copyFile(destFilename, sourceFilename string, mode os.FileMode) error {
+func copyFile(destFilename, sourceFilename string, mode os.FileMode,
+	exclusive bool) error {
 	if mode == 0 {
 		var stat wsyscall.Stat_t
 		if err := wsyscall.Stat(sourceFilename, &stat); err != nil {
@@ -114,5 +120,5 @@ func copyFile(destFilename, sourceFilename string, mode os.FileMode) error {
 		return errors.New(sourceFilename + ": " + err.Error())
 	}
 	defer sourceFile.Close()
-	return copyToFile(destFilename, mode, sourceFile, 0)
+	return copyToFile(destFilename, mode, sourceFile, 0, exclusive)
 }
