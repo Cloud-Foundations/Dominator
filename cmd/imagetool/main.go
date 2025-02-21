@@ -92,7 +92,7 @@ var (
 	tableType   mbr.TableType = mbr.TABLE_TYPE_MSDOS
 	tagsToMatch tags.MatchTags
 	timeout     = flag.Duration("timeout", 0,
-		"Timeout for get subcommand")
+		"Timeout for get and wait subcommands")
 
 	logger            log.DebugLogger
 	minimumExpiration = 15 * time.Minute
@@ -183,10 +183,10 @@ var subcommands = []commands.Command{
 		getImagePackageListSubcommand},
 	{"get-replication-master", "", 0, 0, getReplicationMasterSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
-	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
-	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
 	{"list-mdb", "", 0, 0, listMdbImagesSubcommand},
 	{"list-not-in-mdb", "", 0, 0, listImagesNotInMdbSubcommand},
+	{"listdirs", "", 0, 0, listDirectoriesSubcommand},
+	{"listunrefobj", "", 0, 0, listUnreferencedObjectsSubcommand},
 	{"make-raw-image", "         name rawfile", 2, 2, makeRawImageSubcommand},
 	{"match-triggers", "         name triggers-file", 2, 2,
 		matchTriggersSubcommand},
@@ -201,9 +201,9 @@ var subcommands = []commands.Command{
 	{"show", "                   name", 1, 1, showImageSubcommand},
 	{"show-bad-computed-files", "", 0, 0, showBadComputedFilesSubcommand},
 	{"show-bad-image-subs", "", 0, 0, showBadImageSubsSubcommand},
-	{"show-filter", "            name", 1, 1, showImageFilterSubcommand},
 	{"show-computed-file-subs", "filename source", 2, 2,
 		showComputedFileSubsSubcommand},
+	{"show-filter", "            name", 1, 1, showImageFilterSubcommand},
 	{"show-inode", "             name inodePath", 2, 2,
 		showImageInodeSubcommand},
 	{"show-metadata", "          name", 1, 1, showImageMetadataSubcommand},
@@ -213,6 +213,7 @@ var subcommands = []commands.Command{
 	{"test-download-speed", "    name", 1, 1, testDownloadSpeedSubcommand},
 	{"trace-inode-history", "    name inodePath", 2, 2,
 		traceInodeHistorySubcommand},
+	{"wait", "                   name", 1, 1, waitImageSubcommand},
 }
 
 var (
