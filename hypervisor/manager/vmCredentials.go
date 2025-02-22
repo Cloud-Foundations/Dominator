@@ -414,6 +414,7 @@ func (vm *vmInfoType) refreshCredentialsLoop(notifier <-chan time.Time) {
 			stopTimer(requestorTimer)
 			stopTimer(roleTimer)
 			if !ok {
+				vm.logger.Println("credentials refresher stopped")
 				return
 			}
 			requestorRefresher.SetDeadline(requestorExpiresAt)

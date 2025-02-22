@@ -3778,6 +3778,10 @@ func (vm *vmInfoType) delete() {
 	for ch := range vm.metadataChannels {
 		close(ch)
 	}
+	if vm.identityProviderNotifier != nil {
+		close(vm.identityProviderNotifier)
+		vm.identityProviderNotifier = nil
+	}
 	vm.mutex.Unlock()
 	for _, volume := range vm.VolumeLocations {
 		os.Remove(volume.Filename)
