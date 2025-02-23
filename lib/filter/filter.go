@@ -3,6 +3,7 @@ package filter
 import (
 	"fmt"
 	"io"
+	"regexp"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
@@ -51,6 +52,19 @@ func (filter *Filter) compile() error {
 		}
 	}
 	return nil
+}
+
+func (filter *Filter) listUnoptimised() []string {
+	if len(filter.matchers) != len(filter.FilterLines) {
+		filter.compile()
+	}
+	var lines []string
+	for index, line := range filter.FilterLines {
+		if _, ok := filter.matchers[index].(*regexp.Regexp); ok {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func (filter *Filter) match(pathname string) bool {

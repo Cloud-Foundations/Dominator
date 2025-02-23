@@ -57,6 +57,11 @@ func (left *Filter) Equal(right *Filter) bool {
 	return left.equal(right)
 }
 
+// ListUnoptimised returns the unoptimised regular expressions.
+func (filter *Filter) ListUnoptimised() []string {
+	return filter.listUnoptimised()
+}
+
 // Match will return true if pathname matches one of the regular expressions.
 // The Compile method will be automatically called if it has not been called
 // yet.
@@ -76,16 +81,6 @@ func (filter *Filter) ReplaceStrings(replaceFunc func(string) string) {
 	filter.replaceStrings(replaceFunc)
 }
 
-// ExportFilter will return a Filter from previously merged Filters.
-func (mf *MergeableFilter) ExportFilter() *Filter {
-	return mf.exportFilter()
-}
-
-// Merge will merge a Filter.
-func (mf *MergeableFilter) Merge(filter *Filter) {
-	mf.merge(filter)
-}
-
 // Write will write the filter as newline separated regular expressions.
 func (filter *Filter) Write(writer io.Writer) error {
 	return filter.write(writer)
@@ -94,4 +89,14 @@ func (filter *Filter) Write(writer io.Writer) error {
 // WriteHtml will write the filter with appropriate HTML markups.
 func (filter *Filter) WriteHtml(writer io.Writer) {
 	filter.writeHtml(writer)
+}
+
+// ExportFilter will return a Filter from previously merged Filters.
+func (mf *MergeableFilter) ExportFilter() *Filter {
+	return mf.exportFilter()
+}
+
+// Merge will merge a Filter.
+func (mf *MergeableFilter) Merge(filter *Filter) {
+	mf.merge(filter)
 }
