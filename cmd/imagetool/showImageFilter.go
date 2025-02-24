@@ -19,5 +19,18 @@ func showImageFilter(imageName string) error {
 	if err != nil {
 		return err
 	}
-	return filt.Write(os.Stdout)
+	if err := filt.Write(os.Stdout); err != nil {
+		return err
+	}
+	unoptimisedLines := filt.ListUnoptimised()
+	if len(unoptimisedLines) > 0 {
+		fmt.Fprintln(os.Stderr,
+			"The following filter expressions are not optimised:")
+		for _, line := range unoptimisedLines {
+			if _, err := fmt.Fprintln(os.Stderr, line); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
