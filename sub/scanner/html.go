@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -26,6 +28,7 @@ func (fsh *FileSystemHistory) writeHtml(writer io.Writer) {
 		fmt.Fprintf(writer, "Last change: %s (%s ago)<br>\n",
 			fsh.timeOfLastChange, time.Since(fsh.timeOfLastChange))
 	}
+	fmt.Fprintln(writer, `Show <a href="showScanFilter">scan filter</a><br>`)
 }
 
 func (fs *FileSystem) writeHtml(writer io.Writer) {
@@ -43,4 +46,16 @@ func (configuration *Configuration) writeHtml(writer io.Writer) {
 			ctx.SpeedPercent(), format.FormatBytes(ctx.MaximumSpeed()))
 	}
 	fmt.Fprintf(writer, "Network Speed: %s<br>\n", speed)
+}
+
+func (configuration *Configuration) showScanFilterHandler(
+	w http.ResponseWriter, req *http.Request) {
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	fmt.Fprintln(writer, "<title>Scan filter</title>")
+	fmt.Fprintln(writer, "<body>")
+	fmt.Fprintln(writer, "<h3>")
+	configuration.ScanFilter.WriteHtml(writer)
+	fmt.Fprintln(writer, "</h3>")
+	fmt.Fprintln(writer, "</body>")
 }

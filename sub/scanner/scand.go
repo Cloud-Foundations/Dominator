@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -25,6 +26,7 @@ func startScannerDaemon(rootDirectoryName string, cacheDirectoryName string,
 func startScanning(rootDirectoryName string, cacheDirectoryName string,
 	configuration *Configuration, logger log.Logger,
 	mainFunc func(<-chan *FileSystem, func(disableScanner bool))) {
+	html.HandleFunc("/showScanFilter", configuration.showScanFilterHandler)
 	fsChannel := make(chan *FileSystem)
 	disableScanRequest = make(chan bool, 1)
 	disableScanAcknowledge = make(chan bool)
