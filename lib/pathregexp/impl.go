@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+type containsMatcher string
+
 type exactMatcher string
 
 type prefixMatcher string
@@ -20,6 +22,9 @@ type treeMatcher string
 func compile(expression string) (Regexp, error) {
 	if expression == "" {
 		return nil, errors.New("empty expression")
+	}
+	if matcher := compileContainsMatcher(expression); matcher != "" {
+		return matcher, nil
 	}
 	builder := &strings.Builder{}
 	length := len(expression)
@@ -63,6 +68,39 @@ func compile(expression string) (Regexp, error) {
 	return prefixMatcher(builder.String()), nil
 }
 
+func compileContainsMatcher(expression string) containsMatcher {
+	if len(expression) < 6 {
+		return ""
+	}
+	if !strings.HasPrefix(expression, "/.*") {
+		return ""
+	}
+	if !strings.HasSuffix(expression, ".*") {
+		return ""
+	}
+	builder := &strings.Builder{}
+	length := len(expression) - 2
+	for index := 3; index < length; index++ {
+		ch := expression[index]
+		if isPlain(ch) {
+			builder.WriteByte(ch)
+			continue
+		}
+		if ch == '[' && index+2 < length && expression[index+2] == ']' {
+			if middleChar := expression[index+1]; middleChar != '^' {
+				builder.WriteByte(middleChar)
+				index += 2
+				continue
+			}
+		}
+		return ""
+	}
+	if builder.Len() > 0 {
+		return containsMatcher(builder.String())
+	}
+	return ""
+}
+
 func isOptimised(regex Regexp) bool {
 	_, isRegex := regex.(*regexp.Regexp)
 	return !isRegex
@@ -86,6 +124,16 @@ func isPlain(ch byte) bool {
 		return false
 	}
 	return true
+}
+
+func (m containsMatcher) MatchString(s string) bool {
+	if len(s) < 1 {
+		return false
+	}
+	if s[0] != '/' {
+		return false
+	}
+	return strings.Contains(s, string(m))
 }
 
 func (m exactMatcher) MatchString(s string) bool {
