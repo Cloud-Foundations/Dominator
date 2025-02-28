@@ -3,7 +3,8 @@ package filter
 import (
 	"fmt"
 	"io"
-	"regexp"
+
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 const (
@@ -22,12 +23,12 @@ func (filter *Filter) writeHtml(writer io.Writer) {
 	}
 	var showLegend bool
 	for index, line := range filter.FilterLines {
-		if _, ok := filter.matchers[index].(*regexp.Regexp); ok {
+		if ok := pathregexp.IsOptimised(filter.matchers[index]); ok {
+			fmt.Fprintf(writer, "<code>%s</code><br>\n", line)
+		} else {
 			fmt.Fprintf(writer,
 				"<font color=\"%s\"><code>%s</code></font><br>\n", colour, line)
 			showLegend = true
-		} else {
-			fmt.Fprintf(writer, "<code>%s</code><br>\n", line)
 		}
 	}
 	if !showLegend {

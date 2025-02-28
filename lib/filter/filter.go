@@ -3,9 +3,9 @@ package filter
 import (
 	"fmt"
 	"io"
-	"regexp"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 func load(filename string) (*Filter, error) {
@@ -39,14 +39,14 @@ func read(reader io.Reader) (*Filter, error) {
 }
 
 func (filter *Filter) compile() error {
-	filter.matchers = make([]matcherI, len(filter.FilterLines))
+	filter.matchers = make([]pathregexp.Regexp, len(filter.FilterLines))
 	for index, reEntry := range filter.FilterLines {
 		if reEntry == "!" {
 			filter.invertMatches = true
 			continue
 		}
 		var err error
-		filter.matchers[index], err = compileMatcher(reEntry)
+		filter.matchers[index], err = pathregexp.Compile(reEntry)
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func (filter *Filter) listUnoptimised() []string {
 	}
 	var lines []string
 	for index, line := range filter.FilterLines {
-		if _, ok := filter.matchers[index].(*regexp.Regexp); ok {
+		if ok := pathregexp.IsOptimised(filter.matchers[index]); !ok {
 			lines = append(lines, line)
 		}
 	}

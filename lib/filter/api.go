@@ -2,6 +2,8 @@ package filter
 
 import (
 	"io"
+
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 // A Filter contains a list of regular expressions matching pathnames which
@@ -14,7 +16,7 @@ import (
 // the image are not removed from the sub.
 type Filter struct {
 	FilterLines   []string
-	matchers      []matcherI
+	matchers      []pathregexp.Regexp
 	invertMatches bool
 }
 
@@ -22,10 +24,6 @@ type Filter struct {
 // duplicate match expressions.
 type MergeableFilter struct {
 	filterLines map[string]struct{}
-}
-
-type matcherI interface {
-	MatchString(s string) bool
 }
 
 // Load will load a Filter from a file containing newline separated regular
