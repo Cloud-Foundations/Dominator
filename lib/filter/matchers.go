@@ -7,7 +7,14 @@ import (
 )
 
 type exactMatcher string
+
 type prefixMatcher string
+
+type prefixRegexpMatcher struct {
+	prefix string
+	regexp *regexp.Regexp
+}
+
 type treeMatcher string
 
 func compileMatcher(expression string) (matcherI, error) {
@@ -34,6 +41,19 @@ func compileMatcher(expression string) (matcherI, error) {
 		}
 		if ch == '.' && index == length-2 && expression[index+1] == '*' {
 			return prefixMatcher(builder.String()), nil
+		}
+		if ch == '.' &&
+			builder.Len() > 1 &&
+			index+2 < length &&
+			expression[index+1] == '*' {
+			re, err := regexp.Compile("^" + expression[index:])
+			if err != nil {
+				return nil, err
+			}
+			return &prefixRegexpMatcher{
+				prefix: builder.String(),
+				regexp: re,
+			}, nil
 		}
 		if expression[index:] == "(|/.*)$" && builder.Len() > 0 {
 			return treeMatcher(builder.String()), nil
@@ -69,6 +89,13 @@ func (m exactMatcher) MatchString(s string) bool {
 
 func (m prefixMatcher) MatchString(s string) bool {
 	return strings.HasPrefix(s, string(m))
+}
+
+func (m *prefixRegexpMatcher) MatchString(s string) bool {
+	if !strings.HasPrefix(s, m.prefix) {
+		return false
+	}
+	return m.regexp.MatchString(s[len(m.prefix):])
 }
 
 func (m treeMatcher) MatchString(s string) bool {
