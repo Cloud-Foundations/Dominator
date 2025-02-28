@@ -2,7 +2,8 @@ package triggers
 
 import (
 	"io"
-	"regexp"
+
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 type MergeableTriggers struct {
@@ -17,7 +18,7 @@ type mergeableTrigger struct {
 
 type Trigger struct {
 	MatchLines   []string
-	matchRegexes []*regexp.Regexp
+	matchRegexes []pathregexp.Regexp
 	Service      string
 	SortName     string `json:",omitempty"`
 	DoReboot     bool   `json:",omitempty"`
