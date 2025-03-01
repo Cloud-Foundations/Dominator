@@ -156,6 +156,16 @@ func doMain() int {
 	}
 	logger = cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
+	if *cpuPercent > 100 {
+		logger.Fatalln(os.Stderr, "Cannot specify -cpuPercent over 100")
+	}
+	if *networkSpeedPercent > 100 {
+		logger.Fatalln(os.Stderr,
+			"Cannot specify -networkSpeedPercent over 100")
+	}
+	if *scanSpeedPercent > 100 {
+		logger.Fatalln(os.Stderr, "Cannot specify -scanSpeedPercent over 100")
+	}
 	if *triggersFile != "" && *triggersString != "" {
 		logger.Fatalln(os.Stderr,
 			"Cannot specify both -triggersFile and -triggersString")

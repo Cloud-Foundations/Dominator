@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -31,7 +32,9 @@ func fetchImage(srpcClient *srpc.Client, imageName string) error {
 		Client:   srpcClient,
 	}
 	var generationCount, lastGenerationCount, lastScanCount uint64
-	return pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, true,
+	err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, true,
 		&generationCount, &lastGenerationCount, &lastScanCount,
 		logger)
+	fmt.Fprintln(os.Stderr)
+	return err
 }

@@ -43,7 +43,9 @@ func fetch(srpcClient *srpc.Client, hashesFilename string) error {
 	}
 	return srpcClient.RequestReply("Subd.Fetch", sub.FetchRequest{
 		ServerAddress: serverAddress,
+		SpeedPercent:  byte(*networkSpeedPercent),
 		Wait:          true,
-		Hashes:        hashes},
+		Hashes:        hashes,
+	},
 		&sub.FetchResponse{})
 }

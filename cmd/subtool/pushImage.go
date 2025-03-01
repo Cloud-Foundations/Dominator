@@ -288,6 +288,7 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 			err := fetchUntil(subObj, sub.FetchRequest{
 				LockFor:       *lockDuration,
 				ServerAddress: imageServerAddress,
+				SpeedPercent:  byte(*networkSpeedPercent),
 				Wait:          true,
 				Hashes:        objectcache.ObjectMapToCache(objectsToFetch)},
 				timeoutTime, logger)
