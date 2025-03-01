@@ -125,6 +125,7 @@ func getSubClientRetry(logger log.DebugLogger) *srpc.Client {
 
 var subcommands = []commands.Command{
 	{"boost-cpu-limit", "", 0, 0, boostCpuLimitSubcommand},
+	{"boost-scan-limit", "", 0, 0, boostScanLimitSubcommand},
 	{"cleanup", "", 0, 0, cleanupSubcommand},
 	{"delete", "pathname...", 1, 1, deleteSubcommand},
 	{"fetch", "hashesFile", 1, 1, fetchSubcommand},
