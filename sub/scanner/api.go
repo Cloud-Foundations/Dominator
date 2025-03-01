@@ -29,6 +29,10 @@ func (configuration *Configuration) BoostCpuLimit(logger log.Logger) {
 	configuration.boostCpuLimit(logger)
 }
 
+func (configuration *Configuration) BoostScanLimit(logger log.Logger) {
+	configuration.boostScanLimit(logger)
+}
+
 func (configuration *Configuration) RegisterMetrics(
 	dir *tricorder.DirectorySpec) error {
 	return configuration.registerMetrics(dir)
@@ -36,6 +40,10 @@ func (configuration *Configuration) RegisterMetrics(
 
 func (configuration *Configuration) RestoreCpuLimit(logger log.Logger) {
 	configuration.restoreCpuLimit(logger)
+}
+
+func (configuration *Configuration) RestoreScanLimit(logger log.Logger) {
+	configuration.restoreScanLimit(logger)
 }
 
 func (configuration *Configuration) WriteHtml(writer io.Writer) {

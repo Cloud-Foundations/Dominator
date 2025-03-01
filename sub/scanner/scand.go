@@ -62,7 +62,8 @@ func scannerDaemon(rootDirectoryName string, cacheDirectoryName string,
 				syscall.Setpriority(syscall.PRIO_PROCESS, 0, 15)
 				loweredPriority = true
 			}
-			configuration.RestoreCpuLimit(logger) // Reset after scan.
+			configuration.RestoreCpuLimit(logger)  // Reset after scan.
+			configuration.RestoreScanLimit(logger) // Reset after scan.
 		}
 	}
 }
@@ -76,10 +77,13 @@ func doDisableScanner(disableScanner bool) {
 	}
 }
 
+// checkScanDisableRequest returns true if there is a pending request to disable
+// scanning. The request is consumed. This function does not block.
 func checkScanDisableRequest() bool {
-	if len(disableScanRequest) > 0 {
-		<-disableScanRequest
+	select {
+	case <-disableScanRequest:
 		return true
+	default:
+		return false
 	}
-	return false
 }
