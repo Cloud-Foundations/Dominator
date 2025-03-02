@@ -85,7 +85,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	if lastConnectedTime.IsZero() {
 		fmt.Fprintln(writer, "<br>")
 	} else {
-		fmt.Fprintf(writer, ", last received: %s (%s)<br>\n",
+		fmt.Fprintf(writer, ", last received: %s (%s ago)<br>\n",
 			lastConnectedTime.Format(format.TimeFormatSeconds),
 			format.Duration(time.Since(lastConnectedTime)))
 	}
