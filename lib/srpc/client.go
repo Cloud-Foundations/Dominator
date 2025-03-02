@@ -266,7 +266,7 @@ func newClient(rawConn, dataConn net.Conn, isEncrypted bool,
 				bufio.NewWriter(client.conn))
 		}
 	}
-	logger.Debugf(0, "made %s connection to: %s\n",
+	logger.Debugf(1, "made %s connection to: %s\n",
 		client.connType, client.remoteAddr)
 	return client, nil
 }
