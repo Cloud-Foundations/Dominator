@@ -10,9 +10,10 @@ func newRefresher(deadline time.Time,
 		minimumDelay = time.Second
 	}
 	return &Refresher{
-		deadline: deadline,
-		maximum:  maximumDelay,
-		minimum:  minimumDelay,
+		deadline:  deadline,
+		maximum:   maximumDelay,
+		minimum:   minimumDelay,
+		sleepFunc: time.Sleep,
 	}
 }
 
@@ -31,7 +32,7 @@ func (r *Refresher) setDeadline(deadline time.Time) {
 }
 
 func (r *Refresher) sleep() {
-	time.Sleep(r.WaitInterval())
+	r.sleepFunc(r.WaitInterval())
 }
 
 func (r *Refresher) waitInterval() time.Duration {

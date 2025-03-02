@@ -14,9 +14,10 @@ type Exponential struct {
 }
 
 type Refresher struct {
-	deadline time.Time
-	maximum  time.Duration
-	minimum  time.Duration
+	deadline  time.Time
+	maximum   time.Duration
+	minimum   time.Duration
+	sleepFunc func(time.Duration)
 }
 
 type Resetter interface {
@@ -50,6 +51,11 @@ func (e *Exponential) RemainingInterval() time.Duration {
 // Reset will set the sleep duration to the minimum delay.
 func (e *Exponential) Reset() {
 	e.reset()
+}
+
+// SetSleepFunc will set the function used to sleep. The default is time.Sleep.
+func (e *Exponential) SetSleepFunc(sleepFunc func(time.Duration)) {
+	e.sleepFunc = sleepFunc
 }
 
 // Sleep will sleep and then increase the duration for the next Sleep, until
@@ -92,6 +98,11 @@ func (r *Refresher) ResetTimer(timer *time.Timer) {
 // SetDeadline will update the refresh deadline.
 func (r *Refresher) SetDeadline(deadline time.Time) {
 	r.setDeadline(deadline)
+}
+
+// SetSleepFunc will set the function used to sleep. The default is time.Sleep.
+func (r *Refresher) SetSleepFunc(sleepFunc func(time.Duration)) {
+	r.sleepFunc = sleepFunc
 }
 
 // Sleep will sleep until the next refresh should be attempted.
