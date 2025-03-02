@@ -126,7 +126,9 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a>",
 		numDeviantSubs)
 	fmt.Fprintf(writer,
-		" (<a href=\"showDeviantSubs?output=json\">JSON</a>")
+		" (<a href=\"showDeviantSubs?output=text\">text</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showDeviantSubs?output=json\">JSON</a>")
 	fmt.Fprintf(writer,
 		", <a href=\"showDeviantSubs?output=csv\">CSV</a>)<br>\n")
 	fmt.Fprintf(writer,
