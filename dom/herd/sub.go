@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	filegenclient "github.com/Cloud-Foundations/Dominator/lib/filegen/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -115,6 +116,8 @@ func (sub *Sub) getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
 	return computedFiles
 }
 
+// tryMakeBusy returns true if it made the sub busy, else false indicating that
+// the sub is already busy. It does not block.
 func (sub *Sub) tryMakeBusy() bool {
 	sub.busyFlagMutex.Lock()
 	defer sub.busyFlagMutex.Unlock()
@@ -126,6 +129,17 @@ func (sub *Sub) tryMakeBusy() bool {
 	return true
 }
 
+// makeBusy waits until it makes the sub busy.
+func (sub *Sub) makeBusy() {
+	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
+	for {
+		if sub.tryMakeBusy() {
+			return
+		}
+		sleeper.Sleep()
+	}
+}
+
 func (sub *Sub) makeUnbusy() {
 	sub.busyFlagMutex.Lock()
 	defer sub.busyFlagMutex.Unlock()
@@ -135,7 +149,10 @@ func (sub *Sub) makeUnbusy() {
 
 // Returns true if a client connection was open but the Poll failed due to an
 // I/O error, indicating a retry is reasonable.
-func (sub *Sub) connectAndPoll() bool {
+// If fastMessageChannel is not nil, fast updates are requested and relevant
+// messages are sent to the channel.
+func (sub *Sub) connectAndPoll(
+	fastMessageChannel chan<- FastUpdateMessage) bool {
 	sub.loadConfiguration()
 	if sub.processFileUpdates() {
 		sub.generationCount = 0 // Force a full poll.
@@ -236,10 +253,71 @@ func (sub *Sub) connectAndPoll() bool {
 		return false
 	}
 	pollWaitTimeDistribution.Add(time.Since(waitStartTime))
+	if fastMessageChannel != nil {
+		if err := client.BoostCpuLimit(srpcClient); err != nil {
+			sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		}
+		sub.boostScanSpeed(srpcClient, fastMessageChannel)
+	}
 	sub.status = statusPolling
-	retval := sub.poll(srpcClient, previousStatus)
+	retval := sub.poll(srpcClient, previousStatus, fastMessageChannel != nil)
 	<-sub.herd.pollSemaphore
 	return retval
+}
+
+func (sub *Sub) boostScanSpeed(srpcClient *srpc.Client,
+	fastMessageChannel chan<- FastUpdateMessage) {
+	if fastMessageChannel == nil {
+		return
+	}
+	if sub.configToRestore != nil {
+		return
+	}
+	if err := client.BoostScanLimit(srpcClient); err == nil {
+		return
+	} else {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+	}
+	oldSubConfig, err := client.GetConfiguration(srpcClient)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	newSubConfig := oldSubConfig
+	newSubConfig.NetworkSpeedPercent = 100
+	newSubConfig.ScanSpeedPercent = 100
+	if err := client.SetConfiguration(srpcClient, newSubConfig); err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	sub.configToRestore = &oldSubConfig
+	sub.sendFastUpdateMessage(fastMessageChannel,
+		"increased scan speed percent")
+}
+
+func (sub *Sub) restoreScanSpeed(fastMessageChannel chan<- FastUpdateMessage) {
+	if fastMessageChannel == nil {
+		return
+	}
+	if sub.configToRestore == nil {
+		return
+	}
+	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
+		sub.herd.dialer)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	defer srpcClient.Put()
+	err = client.SetConfiguration(srpcClient, *sub.configToRestore)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	sub.sendFastUpdateMessage(fastMessageChannel,
+		fmt.Sprintf("restored scan speed percent to %d%%",
+			sub.configToRestore.ScanSpeedPercent))
+	sub.configToRestore = nil
 }
 
 func (sub *Sub) loadConfiguration() {
@@ -316,7 +394,8 @@ func (sub *Sub) processFileUpdates() bool {
 
 // Returns true if the Poll failed due to an I/O error, indicating a retry is
 // reasonable.
-func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) bool {
+func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus,
+	fast bool) bool {
 	if err := srpcClient.SetTimeout(5 * time.Minute); err != nil {
 		sub.herd.logger.Printf("poll(%s): error setting timeout: %s\n", sub)
 	}
@@ -530,7 +609,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) bool {
 	}
 	if sub.requiredImage != nil {
 		idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
-			reply.FreeSpace, true)
+			reply.FreeSpace, true, fast)
 		if !idle {
 			sub.status = status
 			sub.reclaim()
@@ -547,7 +626,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) bool {
 	}
 	if sub.plannedImage != sub.requiredImage {
 		idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
-			reply.FreeSpace, false)
+			reply.FreeSpace, false, fast)
 		if !idle {
 			if status != statusImageNotReady &&
 				status != statusNotEnoughFreeSpace {
@@ -629,7 +708,7 @@ func compareConfigs(oldConf, newConf subproto.Configuration) bool {
 
 // Returns true if all required objects are available.
 func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
-	freeSpace *uint64, isRequiredImage bool) (
+	freeSpace *uint64, isRequiredImage, fast bool) (
 	bool, subStatus) {
 	if img == nil {
 		return false, statusImageNotReady
@@ -665,8 +744,15 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		}
 		logger.Printf("Calling %s:Subd.Fetch(%s) for: %d objects\n",
 			sub, imageType, len(objectsToFetch))
-		err := client.Fetch(srpcClient, sub.herd.imageManager.String(),
-			objectcache.ObjectMapToCache(objectsToFetch))
+		request := subproto.FetchRequest{
+			ServerAddress: sub.herd.imageManager.String(),
+			Hashes:        objectcache.ObjectMapToCache(objectsToFetch),
+		}
+		if fast {
+			request.SpeedPercent = 100
+		}
+		var response subproto.FetchResponse
+		err := client.CallFetch(srpcClient, request, &response)
 		if err != nil {
 			srpcClient.Close()
 			logger.Printf("Error calling %s:Subd.Fetch(): %s\n", sub, err)
@@ -858,6 +944,24 @@ func (sub *Sub) checkCancel() bool {
 	}
 }
 
+func (sub *Sub) fastUpdate(timeout time.Duration,
+	authInfo *srpc.AuthInformation) (
+	<-chan FastUpdateMessage, error) {
+	if !sub.checkAdminAccess(authInfo) {
+		return nil, errors.New("no access to sub")
+	}
+	if sub.requiredImageName == "" {
+		return nil, errors.New("no RequiredImage specified")
+	}
+	if sub.requiredImage == nil {
+		return nil, fmt.Errorf("image: %s does not exist yet",
+			sub.requiredImageName)
+	}
+	progressChannel := make(chan FastUpdateMessage, 16)
+	go sub.processFastUpdate(progressChannel, timeout)
+	return progressChannel, nil
+}
+
 func (sub *Sub) forceDisruptiveUpdate(authInfo *srpc.AuthInformation) error {
 	switch sub.status {
 	case statusDisruptionRequested:
@@ -876,5 +980,63 @@ func (sub *Sub) sendCancel() {
 	select {
 	case sub.cancelChannel <- struct{}{}:
 	default:
+	}
+}
+
+func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
+	timeout time.Duration) {
+	defer close(progressChannel)
+	select {
+	case sub.herd.fastUpdateSemaphore <- struct{}{}:
+		sub.sendFastUpdateMessage(progressChannel, "got fast update slot")
+	default:
+		sub.sendFastUpdateMessage(progressChannel,
+			"waiting for fast update slot")
+		sub.herd.fastUpdateSemaphore <- struct{}{}
+		sub.sendFastUpdateMessage(progressChannel,
+			"finished waiting for fast update slot")
+	}
+	defer func() {
+		<-sub.herd.fastUpdateSemaphore
+	}()
+	if !sub.tryMakeBusy() {
+		sub.sendFastUpdateMessage(progressChannel,
+			"waiting for sub to not be busy")
+		sub.makeBusy()
+	}
+	defer sub.makeUnbusy()
+	sub.sendFastUpdateMessage(progressChannel, "made sub busy")
+	sub.herd.cpuSharer.GrabCpu()
+	defer sub.herd.cpuSharer.ReleaseCpu()
+	sleeper := backoffdelay.NewExponential(10*time.Millisecond, time.Second, 2)
+	sleeper.SetSleepFunc(sub.herd.cpuSharer.Sleep)
+	var prevStatus subStatus
+	timeoutTime := time.Now().Add(timeout)
+	defer sub.restoreScanSpeed(progressChannel)
+	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
+		if sub.deleting {
+			sub.sendFastUpdateMessage(progressChannel, "deleting")
+			return
+		}
+		if sub.status != prevStatus {
+			sub.sendFastUpdateMessage(progressChannel, sub.status.String())
+			prevStatus = sub.status
+			sleeper.Reset()
+		}
+		switch sub.status {
+		case statusSynced, statusUpdatesDisabled, statusUnsafeUpdate:
+			return
+		default:
+		}
+		sub.connectAndPoll(progressChannel)
+	}
+	sub.sendFastUpdateMessage(progressChannel, "timed out")
+}
+
+func (sub *Sub) sendFastUpdateMessage(ch chan<- FastUpdateMessage,
+	message string) {
+	ch <- FastUpdateMessage{
+		Message: message,
+		Synced:  sub.status == statusSynced,
 	}
 }
