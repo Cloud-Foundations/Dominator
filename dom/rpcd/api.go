@@ -29,6 +29,7 @@ func Setup(herd *herd.Herd, logger log.Logger) {
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
 				"ClearSafetyShutoff",
+				"FastUpdate",
 				"ForceDisruptiveUpdate",
 				"GetInfoForSubs",
 				"ListSubs",
