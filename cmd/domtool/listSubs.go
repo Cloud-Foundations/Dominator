@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	domclient "github.com/Cloud-Foundations/Dominator/dom/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/dominator"
@@ -27,15 +27,11 @@ func listSubs(client *srpc.Client) error {
 		StatusesToMatch:  statusesToMatch,
 		TagsToMatch:      tagsToMatch,
 	}
-	var reply dominator.ListSubsResponse
-	if err := client.RequestReply("Dominator.ListSubs", request,
-		&reply); err != nil {
+	hostnames, err = domclient.ListSubs(client, request)
+	if err != nil {
 		return err
 	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	for _, hostname := range reply.Hostnames {
+	for _, hostname := range hostnames {
 		fmt.Println(hostname)
 	}
 	return nil

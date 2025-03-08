@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	domclient "github.com/Cloud-Foundations/Dominator/dom/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -32,12 +33,8 @@ func getInfoForSubs(client *srpc.Client) error {
 		StatusesToMatch:  statusesToMatch,
 		TagsToMatch:      tagsToMatch,
 	}
-	var reply dominator.GetInfoForSubsResponse
-	if err := client.RequestReply("Dominator.GetInfoForSubs", request,
-		&reply); err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
+	reply, err := domclient.GetInfoForSubs(client, request)
+	if err != nil {
 		return err
 	}
 	json.WriteWithIndent(os.Stdout, "    ", reply.Subs)

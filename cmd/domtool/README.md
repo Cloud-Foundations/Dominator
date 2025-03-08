@@ -34,9 +34,13 @@ Some of the sub-commands available are:
 - **disable-updates** *reason*: tell *dominator* to not perform automatic
                                 updates of *subs*. The given *reason* must be
                                 provided and is logged
+- **disruption-cancel** *sub*: cancel disruption for the specified *sub*
+- **disruption-check** *sub*: check the disruption state for the specified *sub*
+- **disruption-request** *sub*: request disruption for the specified *sub*
 - **enable-updates** *reason*: tell *dominator* to perform automatic updates of
                                *subs*. The given *reason* must be provided and
                                is logged
+- **fast-update** *sub*: perform a fast update for the specified *sub*
 - **force-disruptive-update** *sub*: do a one-time clearing of the `disruption
                                      denied` condition for the specified *sub*,
 				     allowing the update to continue
@@ -45,8 +49,13 @@ Some of the sub-commands available are:
 			 MDB
 - **get-info-for-subs**: get information for all/selected *subs* and write to
                          stdout in JSON format
+- **get-machine-from-mdb** *sub*: get machine data for the specified *sub* from
+                                  the MDB server and write to stdout in JSON
+                                  format
 - **get-mdb**: get machine data from the MDB server and write to stdout in JSON
                format
+- **get-mdb-updates**: get machine data from the MDB server and a stream of
+                       updates and write to stdout in JSON format
 - **get-subs-configuration**: get the current configuration that is pushed to
                               all *subs*
 - **list-subs**: list all/selected *subs* and write to stdout
