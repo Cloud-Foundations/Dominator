@@ -861,10 +861,11 @@ type VmInfo struct {
 }
 
 type Volume struct {
-	Format    VolumeFormat    `json:",omitempty"`
-	Interface VolumeInterface `json:",omitempty"`
-	Size      uint64          `json:",omitempty"`
-	Type      VolumeType      `json:",omitempty"`
+	Format    VolumeFormat      `json:",omitempty"`
+	Interface VolumeInterface   `json:",omitempty"`
+	Size      uint64            `json:",omitempty"`
+	Snapshots map[string]uint64 `json:",omitempty"`
+	Type      VolumeType        `json:",omitempty"`
 }
 
 type VolumeFormat uint

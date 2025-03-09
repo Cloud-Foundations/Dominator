@@ -479,7 +479,7 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 		return false
 	}
 	for index, leftVolume := range left.Volumes {
-		if leftVolume != right.Volumes[index] {
+		if !leftVolume.Equal(&right.Volumes[index]) {
 			return false
 		}
 	}
@@ -487,6 +487,32 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 		return false
 	}
 	if left.WatchdogModel != right.WatchdogModel {
+		return false
+	}
+	return true
+}
+
+func (left *Volume) Equal(right *Volume) bool {
+	if left.Format != right.Format {
+		return false
+	}
+	if left.Interface != right.Interface {
+		return false
+	}
+	if left.Size != right.Size {
+		return false
+	}
+	if len(left.Snapshots) != len(right.Snapshots) {
+		return false
+	}
+	for name, leftSize := range left.Snapshots {
+		if rightSize, ok := right.Snapshots[name]; !ok {
+			return false
+		} else if leftSize != rightSize {
+			return false
+		}
+	}
+	if left.Type != right.Type {
 		return false
 	}
 	return true
