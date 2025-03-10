@@ -148,8 +148,12 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.vms[ipAddr] = &vmInfo
 		vmInfo.setupLockWatcher()
 		if err := vmInfo.loadIdentityRequestorCert(); err != nil {
-			vmInfo.logger.Println(
-				"failed to load identity requestor certificate")
+			vmInfo.logger.Printf(
+				"failed to load identity requestor certificate: %s\n", err)
+			continue
+		}
+		if err := vmInfo.scanSnapshots(); err != nil {
+			vmInfo.logger.Printf("failed to scan snapshots: %s\n", err)
 			continue
 		}
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {

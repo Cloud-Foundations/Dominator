@@ -1669,7 +1669,7 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, snapshotName string) error {
-	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
 	if err != nil {
 		return err
 	}
@@ -1680,7 +1680,11 @@ func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	vm.blockMutations = true
 	vm.mutex.Unlock()
 	defer vm.allowMutationsAndUnlock(false)
-	return vm.discardSnapshot(snapshotName)
+	changed, err := vm.discardSnapshot(snapshotName, snapshotSuffix)
+	if changed {
+		vm.writeAndSendInfo()
+	}
+	return err
 }
 
 func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
@@ -3242,7 +3246,7 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
 	snapshotName string) error {
-	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
 	if err != nil {
 		return err
 	}
@@ -3253,18 +3257,28 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 	vm.blockMutations = true
 	vm.mutex.Unlock()
 	defer vm.allowMutationsAndUnlock(false)
+	var changed bool
+	defer func() {
+		if changed {
+			vm.writeAndSendInfo()
+		}
+	}()
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
 			return errors.New("VM is not stopped")
 		}
 	}
-	for _, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + "." + snapshotName
+	for index, volume := range vm.VolumeLocations {
+		snapshotFilename := volume.Filename + "." + snapshotSuffix
 		if err := os.Rename(snapshotFilename, volume.Filename); err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		}
+		vm.mutex.Lock()
+		delete(vm.Volumes[index].Snapshots, snapshotName)
+		vm.mutex.Unlock()
+		changed = true
 	}
 	return nil
 }
@@ -3443,7 +3457,7 @@ func (m *Manager) sendVmInfo(ipAddress string, vm *proto.VmInfo) {
 
 func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	forceIfNotStopped, snapshotRootOnly bool, snapshotName string) error {
-	snapshotName, err := sanitiseSnapshotName(snapshotName)
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
 	if err != nil {
 		return err
 	}
@@ -3466,23 +3480,40 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			return errors.New("VM is not stopped")
 		}
 	}
-	if err := vm.discardSnapshot(snapshotName); err != nil {
+	changed, err := vm.discardSnapshot(snapshotName, snapshotSuffix)
+	if err != nil {
+		if changed {
+			vm.writeAndSendInfo()
+		}
 		return err
 	}
 	doCleanup := true
 	defer func() {
 		if doCleanup {
-			vm.discardSnapshot(snapshotName)
+			if cng, _ := vm.discardSnapshot(snapshotName, snapshotSuffix); cng {
+				changed = true
+			}
+		}
+		if changed {
+			vm.writeAndSendInfo()
 		}
 	}()
 	for index, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + "." + snapshotName
+		snapshotFilename := volume.Filename + "." + snapshotSuffix
 		if index == 0 || !snapshotRootOnly {
 			err := fsutil.CopyFile(snapshotFilename, volume.Filename,
 				fsutil.PrivateFilePerms)
 			if err != nil {
 				return err
 			}
+			fi, err := os.Stat(snapshotFilename)
+			if err != nil {
+				return fmt.Errorf("cannot stat: %s: %s", snapshotFilename, err)
+			}
+			vm.mutex.Lock()
+			vm.Volumes[index].Snapshots[snapshotName] = uint64(fi.Size())
+			vm.mutex.Unlock()
+			changed = true
 		}
 	}
 	doCleanup = false
@@ -3836,13 +3867,22 @@ func (vm *vmInfoType) destroy() {
 	vm.delete()
 }
 
-func (vm *vmInfoType) discardSnapshot(snapshotName string) error {
-	for _, volume := range vm.VolumeLocations {
-		if err := removeFile(volume.Filename + "." + snapshotName); err != nil {
-			return err
+// discardSnapshot will delete the specified snapshot. The VM lock will be
+// grabbed and released.
+// true is returned if the VM data structure is modified.
+func (vm *vmInfoType) discardSnapshot(snapshotName, snapshotSuff string) (
+	bool, error) {
+	var changed bool
+	for index, volume := range vm.VolumeLocations {
+		if err := removeFile(volume.Filename + "." + snapshotSuff); err != nil {
+			return changed, err
 		}
+		vm.mutex.Lock()
+		delete(vm.Volumes[index].Snapshots, snapshotName)
+		vm.mutex.Unlock()
+		changed = true
 	}
-	return nil
+	return changed, nil
 }
 
 func (vm *vmInfoType) getActiveInitrdPath() string {
