@@ -492,6 +492,14 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	return true
 }
 
+func (vm *VmInfo) TotalStorage() uint64 {
+	var storage uint64
+	for _, volume := range vm.Volumes {
+		storage += volume.TotalStorage()
+	}
+	return storage
+}
+
 func (left *Volume) Equal(right *Volume) bool {
 	if left.Format != right.Format {
 		return false
@@ -516,6 +524,14 @@ func (left *Volume) Equal(right *Volume) bool {
 		return false
 	}
 	return true
+}
+
+func (volume *Volume) TotalStorage() uint64 {
+	storage := volume.Size
+	for _, size := range volume.Snapshots {
+		storage += size
+	}
+	return storage
 }
 
 func (volumeFormat VolumeFormat) MarshalText() ([]byte, error) {
