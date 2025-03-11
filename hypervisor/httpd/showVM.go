@@ -53,7 +53,7 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 		var storage uint64
 		volumeSizes := make([]string, 0, len(vm.Volumes))
 		for _, volume := range vm.Volumes {
-			storage += volume.Size
+			storage += volume.TotalStorage()
 			volumeSizes = append(volumeSizes, format.FormatBytes(volume.Size))
 		}
 		var tagNames []string
