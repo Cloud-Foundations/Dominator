@@ -10,7 +10,7 @@ func (t *srpcType) SnapshotVm(conn *srpc.Conn,
 	request hypervisor.SnapshotVmRequest,
 	reply *hypervisor.SnapshotVmResponse) error {
 	err := t.manager.SnapshotVm(request.IpAddress, conn.GetAuthInformation(),
-		request.ForceIfNotStopped, request.RootOnly)
+		request.ForceIfNotStopped, request.RootOnly, request.Name)
 	*reply = hypervisor.SnapshotVmResponse{errors.ErrorToString(err)}
 	return nil
 }

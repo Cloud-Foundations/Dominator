@@ -26,7 +26,10 @@ func discardVmSnapshot(vmHostname string, logger log.DebugLogger) error {
 
 func discardVmSnapshotOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.DiscardVmSnapshotRequest{ipAddr}
+	request := proto.DiscardVmSnapshotRequest{
+		IpAddress: ipAddr,
+		Name:      *snapshotName,
+	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err

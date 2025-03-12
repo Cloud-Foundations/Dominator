@@ -10,9 +10,11 @@ import (
 	"path"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 )
 
 const (
@@ -52,8 +54,39 @@ func (objSrv *ObjectServer) addObject(reader io.Reader, length uint64,
 	}
 }
 
+// addOrCompare returns the following:
+//
+//	a boolean which is true if the object is new
+//	an error or nil if no error.
 func (objSrv *ObjectServer) addOrCompare(hashVal hash.Hash, data []byte,
 	filename string) (bool, error) {
+	sleeper := backoffdelay.NewExponential(time.Duration(len(data)),
+		time.Second, 1)
+	gc := objSrv.gc
+	var firstRetryTime time.Time
+	var loggedRetry bool
+	for {
+		isNew, err := objSrv.addOrCompareOnce(hashVal, data, filename, &gc)
+		if err == nil {
+			return isNew, nil
+		}
+		if !os.IsExist(err) {
+			return false, err
+		}
+		if !loggedRetry {
+			if firstRetryTime.IsZero() {
+				firstRetryTime = time.Now()
+			} else if time.Since(firstRetryTime) > time.Second {
+				objSrv.Logger.Printf("retrying: %s\n", err)
+				loggedRetry = true
+			}
+		}
+		sleeper.Sleep()
+	}
+}
+
+func (objSrv *ObjectServer) addOrCompareOnce(hashVal hash.Hash, data []byte,
+	filename string, gc *objectserver.GarbageCollector) (bool, error) {
 	fi, err := os.Lstat(filename)
 	if err == nil {
 		if !fi.Mode().IsRegular() {
@@ -65,14 +98,15 @@ func (objSrv *ObjectServer) addOrCompare(hashVal hash.Hash, data []byte,
 		// No collision and no error: it's the same object. Go home early.
 		return false, nil
 	}
-	if objSrv.gc != nil { // Have external garbage collector: trigger it inline.
+	if *gc != nil { // Have external garbage collector: trigger it inline.
 		objSrv.garbageCollector(nil)
+		*gc = nil
 	}
 	err = os.MkdirAll(path.Dir(filename), fsutil.PrivateDirPerms)
 	if err != nil {
 		return false, err
 	}
-	err = fsutil.CopyToFile(filename, fsutil.PrivateFilePerms,
+	err = fsutil.CopyToFileExclusive(filename, fsutil.PrivateFilePerms,
 		bytes.NewReader(data), uint64(len(data)))
 	if err != nil {
 		return false, err

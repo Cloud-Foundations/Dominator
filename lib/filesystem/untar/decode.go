@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type decoderData struct {
@@ -28,8 +29,9 @@ func decode(tarReader *tar.Reader, hasher Hasher, filter *filter.Filter) (
 	fileSystem.InodeTable = make(filesystem.InodeTable)
 	// Create a default top-level directory which may be updated.
 	decoderData.addInode("/", &fileSystem.DirectoryInode)
-	fileSystem.DirectoryInode.Mode = syscall.S_IFDIR | syscall.S_IRWXU |
-		syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH
+	fileSystem.DirectoryInode.Mode = wsyscall.S_IFDIR | wsyscall.S_IRWXU |
+		wsyscall.S_IRGRP | wsyscall.S_IXGRP | wsyscall.S_IROTH |
+		wsyscall.S_IXOTH
 	decoderData.directoryTable["/"] = &fileSystem.DirectoryInode
 	for {
 		header, err := tarReader.Next()

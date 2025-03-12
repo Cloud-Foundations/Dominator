@@ -45,8 +45,11 @@ Some of the sub-commands available are:
 			 *Hypervisor* back into service
 - **get-capacity**: get capacity for a specific *Hypervisor* directly from the
                     *Hypervisor*
+- **get-identity-provider**: get the Keymaster-compatible Identity Provider for
+                             a specific *Hypervisor*
 - **get-machine-info**: get information for a specific *Hypervisor* from the
                         *Fleet Manager*
+- **get-public-key**: get the PEM-encoded public key for a specific *Hypervisor*
 - **get-updates**: get and show a continuous stream of updates from a
                    *Hypervisor* or *Fleet Manager*. This is primarily for
                    debugging

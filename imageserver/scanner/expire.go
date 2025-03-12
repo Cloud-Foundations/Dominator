@@ -25,13 +25,18 @@ func (imdb *ImageDataBase) expireImage(img *image.Image, name string) {
 		time.AfterFunc(duration, func() { imdb.expireImage(img, name) })
 		return
 	}
-	imdb.Lock()
-	defer imdb.Unlock()
 	imdb.Logger.Printf("Auto expiring (deleting) image: %s\n", name)
-	if err := os.Remove(path.Join(imdb.BaseDirectory, name)); err != nil {
+	pathname := path.Join(imdb.BaseDirectory, name)
+	// Only rename file while lock is held, because removing can be slow.
+	imdb.Lock()
+	if err := os.Rename(pathname, pathname+"~"); err != nil {
 		imdb.Logger.Println(err)
 	}
 	imdb.deleteImageAndUpdateUnreferencedObjectsList(name)
+	imdb.Unlock()
+	if err := os.Remove(pathname + "~"); err != nil {
+		imdb.Logger.Println(err)
+	}
 }
 
 // This may be called with the lock held.

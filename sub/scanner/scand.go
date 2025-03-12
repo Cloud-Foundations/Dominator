@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -25,6 +26,7 @@ func startScannerDaemon(rootDirectoryName string, cacheDirectoryName string,
 func startScanning(rootDirectoryName string, cacheDirectoryName string,
 	configuration *Configuration, logger log.Logger,
 	mainFunc func(<-chan *FileSystem, func(disableScanner bool))) {
+	html.HandleFunc("/showScanFilter", configuration.showScanFilterHandler)
 	fsChannel := make(chan *FileSystem)
 	disableScanRequest = make(chan bool, 1)
 	disableScanAcknowledge = make(chan bool)
@@ -60,7 +62,8 @@ func scannerDaemon(rootDirectoryName string, cacheDirectoryName string,
 				syscall.Setpriority(syscall.PRIO_PROCESS, 0, 15)
 				loweredPriority = true
 			}
-			configuration.RestoreCpuLimit(logger) // Reset after scan.
+			configuration.RestoreCpuLimit(logger)  // Reset after scan.
+			configuration.RestoreScanLimit(logger) // Reset after scan.
 		}
 	}
 }
@@ -74,10 +77,13 @@ func doDisableScanner(disableScanner bool) {
 	}
 }
 
+// checkScanDisableRequest returns true if there is a pending request to disable
+// scanning. The request is consumed. This function does not block.
 func checkScanDisableRequest() bool {
-	if len(disableScanRequest) > 0 {
-		<-disableScanRequest
+	select {
+	case <-disableScanRequest:
 		return true
+	default:
+		return false
 	}
-	return false
 }

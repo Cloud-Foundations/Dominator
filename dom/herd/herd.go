@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -53,6 +54,7 @@ func newHerd(imageServerAddress string, objectServer objectserver.ObjectServer,
 	numPollSlots := uint(runtime.NumCPU()) * *pollSlotsPerCPU
 	herd.pollSemaphore = make(chan struct{}, numPollSlots)
 	herd.pushSemaphore = make(chan struct{}, runtime.NumCPU())
+	herd.fastUpdateSemaphore = make(chan struct{}, runtime.NumCPU())
 	herd.cpuSharer = cpusharer.NewFifoCpuSharer()
 	herd.cpuSharer.SetGrabTimeout(time.Minute * 15)
 	herd.dialer = libnet.NewCpuSharingDialer(reverseconnection.NewDialer(
@@ -98,6 +100,20 @@ func (herd *Herd) enableUpdates() error {
 	return nil
 }
 
+func (herd *Herd) fastUpdate(request domproto.FastUpdateRequest,
+	authInfo *srpc.AuthInformation) (<-chan FastUpdateMessage, error) {
+	if request.Timeout < time.Millisecond {
+		request.Timeout = 15 * time.Minute
+	}
+	herd.Lock()
+	sub, ok := herd.subsByName[request.Hostname]
+	herd.Unlock()
+	if !ok {
+		return nil, errors.New("unknown sub: " + request.Hostname)
+	}
+	return sub.fastUpdate(request.Timeout, authInfo)
+}
+
 func (herd *Herd) forceDisruptiveUpdate(hostname string,
 	authInfo *srpc.AuthInformation) error {
 	herd.Lock()
@@ -122,7 +138,9 @@ func (herd *Herd) lockWithTimeout(timeout time.Duration) {
 func (herd *Herd) pollNextSub() bool {
 	if herd.nextSubToPoll >= uint(len(herd.subsByIndex)) {
 		herd.nextSubToPoll = 0
-		herd.previousScanDuration = time.Since(herd.currentScanStartTime)
+		scanDuration := time.Since(herd.currentScanStartTime)
+		herd.previousScanDuration = scanDuration
+		cycleTimeDistribution.Add(scanDuration)
 		herd.scanCounter++
 		herd.totalScanDuration += herd.previousScanDuration
 		return true
@@ -139,7 +157,9 @@ func (herd *Herd) pollNextSub() bool {
 		if !sub.tryMakeBusy() {
 			return
 		}
-		sub.connectAndPoll()
+		if sub.connectAndPoll(nil) { // Returns true if a retry is reasonable
+			sub.connectAndPoll(nil)
+		}
 		sub.makeUnbusy()
 	})
 	return false

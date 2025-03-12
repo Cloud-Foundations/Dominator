@@ -264,6 +264,33 @@ func getCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
 	return reply, nil
 }
 
+func getIdentityProvider(client srpc.ClientI) (string, error) {
+	request := proto.GetIdentityProviderRequest{}
+	var reply proto.GetIdentityProviderResponse
+	err := client.RequestReply("Hypervisor.GetIdentityProvider",
+		request, &reply)
+	if err != nil {
+		return "", err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return "", err
+	}
+	return reply.BaseUrl, nil
+}
+
+func getPublicKey(client srpc.ClientI) ([]byte, error) {
+	request := proto.GetPublicKeyRequest{}
+	var reply proto.GetPublicKeyResponse
+	err := client.RequestReply("Hypervisor.GetPublicKey", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	return reply.KeyPEM, nil
+}
+
 func getRootCookiePath(client *srpc.Client) (string, error) {
 	request := proto.GetRootCookiePathRequest{}
 	var reply proto.GetRootCookiePathResponse
@@ -446,6 +473,17 @@ func reorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
 		return err
 	}
 	return errors.New(reply.Error)
+}
+
+func replaceVmIdentity(client srpc.ClientI,
+	request proto.ReplaceVmIdentityRequest) error {
+	var response proto.ReplaceVmIdentityResponse
+	err := client.RequestReply("Hypervisor.ReplaceVmIdentity", request,
+		&response)
+	if err != nil {
+		return err
+	}
+	return errors.New(response.Error)
 }
 
 func scanVmRoot(client *srpc.Client, ipAddr net.IP,

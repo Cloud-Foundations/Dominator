@@ -121,6 +121,8 @@ var subcommands = []commands.Command{
 	{"enable-hypervisor", "", 0, 0, enableHypervisorSubcommand},
 	{"get-capacity", "", 0, 0, getCapacitySubcommand},
 	{"get-machine-info", "hostname", 1, 1, getMachineInfoSubcommand},
+	{"get-identity-provider", "", 0, 0, getIdentityProviderSubcommand},
+	{"get-public-key", "", 0, 0, getPublicKeySubcommand},
 	{"get-updates", "", 0, 0, getUpdatesSubcommand},
 	{"hold-lock", "", 0, 0, holdLockSubcommand},
 	{"hold-vm-lock", "", 1, 1, holdVmLockSubcommand},

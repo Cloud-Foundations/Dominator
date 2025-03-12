@@ -27,6 +27,10 @@ type BoostCpuLimitRequest struct{}
 
 type BoostCpuLimitResponse struct{}
 
+type BoostScanLimitRequest struct{}
+
+type BoostScanLimitResponse struct{}
+
 type CleanupRequest struct {
 	Hashes []hash.Hash
 }
@@ -40,6 +44,7 @@ type DisruptionState uint
 type FetchRequest struct {
 	LockFor       time.Duration // Duration to lock other clients from mutating.
 	ServerAddress string
+	SpeedPercent  byte
 	Wait          bool
 	Hashes        []hash.Hash
 }

@@ -1,12 +1,15 @@
 package client
 
 import (
+	"io"
 	"sync"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
@@ -27,7 +30,7 @@ type Machine struct {
 
 type machineType struct {
 	machine       mdb.Machine
-	updateChannel chan<- []proto.FileInfo
+	updateSender  queue.Sender[[]proto.FileInfo]
 	computedFiles map[string]string   // map[pathname] => source
 	sourceToPaths map[string][]string // map[source] => []pathnames
 }
@@ -52,7 +55,9 @@ type Manager struct {
 	sourceReconnectChannel chan<- string
 	objectWaiters          map[hash.Hash][]chan<- hash.Hash
 	numObjectWaiters       gauge
-	logger                 log.Logger
+	logger                 log.DebugLogger
+	lastLostHeartbeatTime  time.Time
+	lostHeartbeat          bool
 }
 
 // New creates a new *Manager. Object data will be added to the object server
@@ -68,11 +73,26 @@ func New(objSrv objectserver.ObjectServer, logger log.Logger) *Manager {
 // guaranteed that corresponding object data are in the object server before
 // file information is available.
 func (m *Manager) Add(machine Machine, size uint) <-chan []proto.FileInfo {
-	updateChannel := make(chan []proto.FileInfo, size)
 	mach := buildMachine(machine)
-	mach.updateChannel = updateChannel
+	sender, updateChannel := queue.NewReceiveChannel[[]proto.FileInfo](size,
+		nil)
+	mach.updateSender = sender
 	m.addMachineChannel <- mach
 	return updateChannel
+}
+
+// AddAndGetReceiver will add a machine to the Manager. Re-adding a machine will
+// result in a panic.
+// A queue.Receiver is returned from which file information may be read. It is
+// guaranteed that corresponding object data are in the object server before
+// file information is available.
+func (m *Manager) AddAndGetReceiver(
+	machine Machine) queue.Receiver[[]proto.FileInfo] {
+	mach := buildMachine(machine)
+	queue := queue.NewQueue[[]proto.FileInfo](nil)
+	mach.updateSender = queue
+	m.addMachineChannel <- mach
+	return queue
 }
 
 // Remove will remove a machine from the Manager. The corresponding file info
@@ -85,4 +105,9 @@ func (m *Manager) Remove(hostname string) {
 // info data being sent to the corresponding channel.
 func (m *Manager) Update(machine Machine) {
 	m.updateMachineChannel <- buildMachine(machine)
+}
+
+// WriteHtml will write HTML-formatted statistics information to writer.
+func (m *Manager) WriteHtml(writer io.Writer) {
+	m.writeHtml(writer)
 }

@@ -126,9 +126,14 @@ func (b *Builder) dependencyGeneratorLoop(
 			}
 		case <-timer.C:
 		}
+		startTime := time.Now()
 		dependencyResult, err := b.generateDependencyData()
 		if dependencyResult == nil {
-			dependencyResult = &dependencyResultType{fetchTime: 6 * time.Second}
+			now := time.Now()
+			dependencyResult = &dependencyResultType{
+				fetchTime:  now.Sub(startTime),
+				resultTime: now,
+			}
 		}
 		if err != nil {
 			b.logger.Printf("failed to generate dependencies: %s\n", err)
@@ -180,7 +185,9 @@ func (b *Builder) dependencyGeneratorLoop(
 
 func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 	var directoriesToRemove []string
+	state := concurrent.NewState(0)
 	defer func() {
+		state.Reap()
 		for _, directory := range directoriesToRemove {
 			os.RemoveAll(directory)
 		}
@@ -191,7 +198,6 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 	startTime := time.Now()
 	streams := make(map[string]*imageStreamType, len(streamNames))
 	// First pass to process local manifests and start Git fetches.
-	state := concurrent.NewState(0)
 	var lock sync.Mutex
 	fetchLog := bytes.NewBuffer(nil)
 	var serialisedFetchTime time.Duration
@@ -321,7 +327,8 @@ func (b *Builder) getDependencyData(maxAge time.Duration) *dependencyDataType {
 		b.dependencyDataLock.RLock()
 		dependencyData := b.dependencyData
 		b.dependencyDataLock.RUnlock()
-		if time.Since(dependencyData.lastAttemptTime) < maxAge {
+		if dependencyData != nil &&
+			time.Since(dependencyData.lastAttemptTime) < maxAge {
 			return dependencyData
 		}
 		waitChannel := make(chan struct{}, 1)

@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	filegenclient "github.com/Cloud-Foundations/Dominator/lib/filegen/client"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
@@ -114,6 +116,8 @@ func (sub *Sub) getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
 	return computedFiles
 }
 
+// tryMakeBusy returns true if it made the sub busy, else false indicating that
+// the sub is already busy. It does not block.
 func (sub *Sub) tryMakeBusy() bool {
 	sub.busyFlagMutex.Lock()
 	defer sub.busyFlagMutex.Unlock()
@@ -125,6 +129,17 @@ func (sub *Sub) tryMakeBusy() bool {
 	return true
 }
 
+// makeBusy waits until it makes the sub busy.
+func (sub *Sub) makeBusy() {
+	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
+	for {
+		if sub.tryMakeBusy() {
+			return
+		}
+		sleeper.Sleep()
+	}
+}
+
 func (sub *Sub) makeUnbusy() {
 	sub.busyFlagMutex.Lock()
 	defer sub.busyFlagMutex.Unlock()
@@ -132,7 +147,12 @@ func (sub *Sub) makeUnbusy() {
 	sub.busy = false
 }
 
-func (sub *Sub) connectAndPoll() {
+// Returns true if a client connection was open but the Poll failed due to an
+// I/O error, indicating a retry is reasonable.
+// If fastMessageChannel is not nil, fast updates are requested and relevant
+// messages are sent to the channel.
+func (sub *Sub) connectAndPoll(
+	fastMessageChannel chan<- FastUpdateMessage) bool {
 	sub.loadConfiguration()
 	if sub.processFileUpdates() {
 		sub.generationCount = 0 // Force a full poll.
@@ -140,7 +160,7 @@ func (sub *Sub) connectAndPoll() {
 	sub.deletingFlagMutex.Lock()
 	if sub.deleting {
 		sub.deletingFlagMutex.Unlock()
-		return
+		return false
 	}
 	if sub.clientResource == nil {
 		sub.clientResource = srpc.NewClientResource("tcp", sub.address())
@@ -175,41 +195,41 @@ func (sub *Sub) connectAndPoll() {
 		sub.isInsecure = false
 		sub.pollTime = time.Time{}
 		if err == resourcepool.ErrorResourceLimitExceeded {
-			return
+			return false
 		}
 		if err, ok := err.(*net.OpError); ok {
 			if _, ok := err.Err.(*net.DNSError); ok {
 				sub.status = statusDNSError
-				return
+				return false
 			}
 			if err.Timeout() {
 				sub.status = statusConnectTimeout
-				return
+				return false
 			}
 		}
 		if err == srpc.ErrorConnectionRefused {
 			sub.status = statusConnectionRefused
-			return
+			return false
 		}
 		if err == srpc.ErrorNoRouteToHost {
 			sub.status = statusNoRouteToHost
-			return
+			return false
 		}
 		if err == srpc.ErrorMissingCertificate {
 			sub.lastReachableTime = dialReturnedTime
 			sub.status = statusMissingCertificate
-			return
+			return false
 		}
 		if err == srpc.ErrorBadCertificate {
 			sub.lastReachableTime = dialReturnedTime
 			sub.status = statusBadCertificate
-			return
+			return false
 		}
 		sub.status = statusFailedToConnect
 		if *logUnknownSubConnectErrors {
 			sub.herd.logger.Println(err)
 		}
-		return
+		return false
 	}
 	defer srpcClient.Put()
 	if srpcClient.IsEncrypted() {
@@ -230,12 +250,74 @@ func (sub *Sub) connectAndPoll() {
 		break
 	case <-sub.cancelChannel:
 		sub.herd.cpuSharer.GrabCpu()
-		return
+		return false
 	}
 	pollWaitTimeDistribution.Add(time.Since(waitStartTime))
+	if fastMessageChannel != nil {
+		if err := client.BoostCpuLimit(srpcClient); err != nil {
+			sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		}
+		sub.boostScanSpeed(srpcClient, fastMessageChannel)
+	}
 	sub.status = statusPolling
-	sub.poll(srpcClient, previousStatus)
+	retval := sub.poll(srpcClient, previousStatus, fastMessageChannel != nil)
 	<-sub.herd.pollSemaphore
+	return retval
+}
+
+func (sub *Sub) boostScanSpeed(srpcClient *srpc.Client,
+	fastMessageChannel chan<- FastUpdateMessage) {
+	if fastMessageChannel == nil {
+		return
+	}
+	if sub.configToRestore != nil {
+		return
+	}
+	if err := client.BoostScanLimit(srpcClient); err == nil {
+		return
+	} else {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+	}
+	oldSubConfig, err := client.GetConfiguration(srpcClient)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	newSubConfig := oldSubConfig
+	newSubConfig.NetworkSpeedPercent = 100
+	newSubConfig.ScanSpeedPercent = 100
+	if err := client.SetConfiguration(srpcClient, newSubConfig); err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	sub.configToRestore = &oldSubConfig
+	sub.sendFastUpdateMessage(fastMessageChannel,
+		"increased scan speed percent")
+}
+
+func (sub *Sub) restoreScanSpeed(fastMessageChannel chan<- FastUpdateMessage) {
+	if fastMessageChannel == nil {
+		return
+	}
+	if sub.configToRestore == nil {
+		return
+	}
+	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
+		sub.herd.dialer)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	defer srpcClient.Put()
+	err = client.SetConfiguration(srpcClient, *sub.configToRestore)
+	if err != nil {
+		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		return
+	}
+	sub.sendFastUpdateMessage(fastMessageChannel,
+		fmt.Sprintf("restored scan speed percent to %d%%",
+			sub.configToRestore.ScanSpeedPercent))
+	sub.configToRestore = nil
 }
 
 func (sub *Sub) loadConfiguration() {
@@ -257,62 +339,66 @@ func (sub *Sub) loadConfiguration() {
 
 func (sub *Sub) processFileUpdates() bool {
 	haveUpdates := false
-	for {
-		image := sub.requiredImage
-		if image != nil && sub.computedInodes == nil {
-			sub.computedInodes = make(map[string]*filesystem.RegularInode)
-			sub.deletingFlagMutex.Lock()
-			if sub.deleting {
-				sub.deletingFlagMutex.Unlock()
-				return false
-			}
-			computedFiles := sub.getComputedFiles(image)
-			sub.herd.cpuSharer.ReleaseCpu()
-			sub.herd.computedFilesManager.Update(
-				filegenclient.Machine{sub.mdb, computedFiles})
-			sub.herd.cpuSharer.GrabCpu()
+	image := sub.requiredImage
+	if image != nil && sub.computedInodes == nil {
+		sub.computedInodes = make(map[string]*filesystem.RegularInode)
+		sub.deletingFlagMutex.Lock()
+		if sub.deleting {
 			sub.deletingFlagMutex.Unlock()
+			return false
 		}
-		select {
-		case fileInfos := <-sub.fileUpdateChannel:
-			if image == nil {
+		computedFiles := sub.getComputedFiles(image)
+		sub.herd.cpuSharer.ReleaseCpu()
+		sub.herd.logger.Debugf(0,
+			"processFileUpdates(%s): updating filegen manager\n", sub)
+		sub.herd.computedFilesManager.Update(
+			filegenclient.Machine{sub.mdb, computedFiles})
+		sub.herd.cpuSharer.GrabCpu()
+		sub.deletingFlagMutex.Unlock()
+	}
+	for _, fileInfos := range sub.fileUpdateReceiver.ReceiveAll() {
+		if image == nil {
+			continue
+		}
+		filenameToInodeTable := image.FileSystem.FilenameToInodeTable()
+		for _, fileInfo := range fileInfos {
+			if fileInfo.Hash == zeroHash {
+				continue // No object.
+			}
+			inum, ok := filenameToInodeTable[fileInfo.Pathname]
+			if !ok {
 				continue
 			}
-			filenameToInodeTable := image.FileSystem.FilenameToInodeTable()
-			for _, fileInfo := range fileInfos {
-				if fileInfo.Hash == zeroHash {
-					continue // No object.
-				}
-				inum, ok := filenameToInodeTable[fileInfo.Pathname]
-				if !ok {
-					continue
-				}
-				genericInode, ok := image.FileSystem.InodeTable[inum]
-				if !ok {
-					continue
-				}
-				cInode, ok := genericInode.(*filesystem.ComputedRegularInode)
-				if !ok {
-					continue
-				}
-				rInode := &filesystem.RegularInode{
-					Mode:         cInode.Mode,
-					Uid:          cInode.Uid,
-					Gid:          cInode.Gid,
-					MtimeSeconds: -1, // The time is set during the compute.
-					Size:         fileInfo.Length,
-					Hash:         fileInfo.Hash,
-				}
-				sub.computedInodes[fileInfo.Pathname] = rInode
-				haveUpdates = true
+			genericInode, ok := image.FileSystem.InodeTable[inum]
+			if !ok {
+				continue
 			}
-		default:
-			return haveUpdates
+			cInode, ok := genericInode.(*filesystem.ComputedRegularInode)
+			if !ok {
+				continue
+			}
+			rInode := &filesystem.RegularInode{
+				Mode:         cInode.Mode,
+				Uid:          cInode.Uid,
+				Gid:          cInode.Gid,
+				MtimeSeconds: -1, // The time is set during the compute.
+				Size:         fileInfo.Length,
+				Hash:         fileInfo.Hash,
+			}
+			sub.computedInodes[fileInfo.Pathname] = rInode
+			haveUpdates = true
 		}
 	}
+	return haveUpdates
 }
 
-func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
+// Returns true if the Poll failed due to an I/O error, indicating a retry is
+// reasonable.
+func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus,
+	fast bool) bool {
+	if err := srpcClient.SetTimeout(5 * time.Minute); err != nil {
+		sub.herd.logger.Printf("poll(%s): error setting timeout: %s\n", sub)
+	}
 	// If the planned image has just become available, force a full poll.
 	if previousStatus == statusSynced &&
 		!sub.havePlannedImage &&
@@ -362,16 +448,19 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	if err := client.CallPoll(srpcClient, request, &reply); err != nil {
 		srpcClient.Close()
 		if err == io.EOF {
-			return
+			return true
 		}
 		sub.pollTime = time.Time{}
+		var retval bool
 		if err == srpc.ErrorAccessToMethodDenied {
 			sub.status = statusPollDenied
 		} else {
 			sub.status = statusFailedToPoll
+			retval = true
 		}
-		logger.Printf("Error calling %s.Poll(): %s\n", sub, err)
-		return
+		logger.Printf("Error calling %s.Poll(%s): %s\n",
+			sub, format.Duration(time.Since(sub.lastPollStartTime)), err)
+		return retval
 	}
 	sub.lastDisruptionState = reply.DisruptionState
 	sub.lastPollSucceededTime = time.Now()
@@ -403,7 +492,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		if err := fs.RebuildInodePointers(); err != nil {
 			sub.status = statusFailedToPoll
 			logger.Printf("Error building pointers for: %s %s\n", sub, err)
-			return
+			return false
 		}
 		fs.BuildEntryMap()
 		sub.fileSystem = fs
@@ -418,30 +507,30 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	sub.updateConfiguration(srpcClient, reply)
 	if reply.FetchInProgress {
 		sub.status = statusFetching
-		return
+		return false
 	}
 	if reply.UpdateInProgress {
 		sub.status = statusUpdating
-		return
+		return false
 	}
 	if reply.LastWriteError != "" {
 		sub.status = statusUnwritable
 		sub.reclaim()
-		return
+		return false
 	}
 	if reply.GenerationCount < 1 {
 		sub.status = statusSubNotReady
-		return
+		return false
 	}
 	if reply.LockedByAnotherClient {
 		sub.status = statusLocked
 		sub.reclaim()
-		return
+		return false
 	}
 	if previousStatus == statusLocked { // Not locked anymore, but was locked.
 		if sub.fileSystem == nil {
 			sub.generationCount = 0 // Force a full poll next cycle.
-			return
+			return false
 		}
 	}
 	if previousStatus == statusFetching && reply.LastFetchError != "" {
@@ -449,7 +538,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		sub.status = statusFailedToFetch
 		if sub.fileSystem == nil {
 			sub.generationCount = 0 // Force a full poll next cycle.
-			return
+			return false
 		}
 	}
 	if previousStatus == statusUpdating {
@@ -468,12 +557,12 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		}
 		sub.scanCountAtLastUpdateEnd = reply.ScanCount
 		sub.reclaim()
-		return
+		return false
 	}
 	if sub.checkCancel() {
 		// Configuration change pending: skip further processing. Do not reclaim
 		// file-system and objectcache data: it will speed up the next Poll.
-		return
+		return false
 	}
 	if !haveImage {
 		if sub.requiredImageName == "" {
@@ -481,7 +570,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 		} else {
 			sub.status = statusImageNotReady
 		}
-		return
+		return false
 	}
 	if previousStatus == statusFailedToUpdate ||
 		previousStatus == statusWaitingForNextFullPoll {
@@ -491,14 +580,14 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 				sub.reclaim()
 			}
 			sub.status = previousStatus
-			return
+			return false
 		}
 		if sub.fileSystem == nil {
 			// Force a full poll next cycle so that we can see the state of the
 			// sub.
 			sub.generationCount = 0
 			sub.status = previousStatus
-			return
+			return false
 		}
 	}
 	if previousStatus == statusDisruptionRequested ||
@@ -516,26 +605,35 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	}
 	if sub.fileSystem == nil {
 		sub.status = previousStatus
-		return
+		return false
 	}
-	if idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
-		reply.FreeSpace, true); !idle {
-		sub.status = status
-		sub.reclaim()
-		return
-	}
-	sub.status = statusComputingUpdate
-	if idle, status := sub.sendUpdate(srpcClient); !idle {
-		sub.status = status
-		sub.reclaim()
-		return
-	}
-	if idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
-		reply.FreeSpace, false); !idle {
-		if status != statusImageNotReady && status != statusNotEnoughFreeSpace {
+	if sub.requiredImage != nil {
+		idle, status := sub.fetchMissingObjects(srpcClient, sub.requiredImage,
+			reply.FreeSpace, true, fast)
+		if !idle {
 			sub.status = status
 			sub.reclaim()
-			return
+			return false
+		}
+		sub.status = statusComputingUpdate
+		if idle, status := sub.sendUpdate(srpcClient); !idle {
+			sub.status = status
+			sub.reclaim()
+			return false
+		}
+	} else {
+		sub.status = statusImageNotReady
+	}
+	if sub.plannedImage != sub.requiredImage {
+		idle, status := sub.fetchMissingObjects(srpcClient, sub.plannedImage,
+			reply.FreeSpace, false, fast)
+		if !idle {
+			if status != statusImageNotReady &&
+				status != statusNotEnoughFreeSpace {
+				sub.status = status
+				sub.reclaim()
+				return false
+			}
 		}
 	}
 	if previousStatus == statusWaitingForNextFullPoll &&
@@ -545,6 +643,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus) {
 	sub.status = statusSynced
 	sub.cleanup(srpcClient)
 	sub.reclaim()
+	return false
 }
 
 func (sub *Sub) reclaim() {
@@ -609,10 +708,16 @@ func compareConfigs(oldConf, newConf subproto.Configuration) bool {
 
 // Returns true if all required objects are available.
 func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
-	freeSpace *uint64, pushComputedFiles bool) (
+	freeSpace *uint64, isRequiredImage, fast bool) (
 	bool, subStatus) {
 	if img == nil {
 		return false, statusImageNotReady
+	}
+	var imageType string
+	if isRequiredImage {
+		imageType = "required"
+	} else {
+		imageType = "planned"
 	}
 	logger := sub.herd.logger
 	subObj := lib.Sub{
@@ -622,8 +727,12 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		ComputedInodes: sub.computedInodes,
 		ObjectCache:    sub.objectCache,
 		ObjectGetter:   sub.herd.objectServer}
+	startTime := time.Now()
 	objectsToFetch, objectsToPush := lib.BuildMissingLists(subObj, img,
-		pushComputedFiles, false, logger)
+		isRequiredImage, false, logger)
+	sub.herd.logger.Debugf(0,
+		"lib.BuildMissingLists(%s) for %s image took: %s\n",
+		sub, imageType, format.Duration(time.Since(startTime)))
 	if objectsToPush == nil {
 		return false, statusMissingComputedFile
 	}
@@ -633,10 +742,17 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		if !sub.checkForEnoughSpace(freeSpace, objectsToFetch) {
 			return false, statusNotEnoughFreeSpace
 		}
-		logger.Printf("Calling %s:Subd.Fetch() for: %d objects\n",
-			sub, len(objectsToFetch))
-		err := client.Fetch(srpcClient, sub.herd.imageManager.String(),
-			objectcache.ObjectMapToCache(objectsToFetch))
+		logger.Printf("Calling %s:Subd.Fetch(%s) for: %d objects\n",
+			sub, imageType, len(objectsToFetch))
+		request := subproto.FetchRequest{
+			ServerAddress: sub.herd.imageManager.String(),
+			Hashes:        objectcache.ObjectMapToCache(objectsToFetch),
+		}
+		if fast {
+			request.SpeedPercent = 100
+		}
+		var response subproto.FetchResponse
+		err := client.CallFetch(srpcClient, request, &response)
 		if err != nil {
 			srpcClient.Close()
 			logger.Printf("Error calling %s:Subd.Fetch(): %s\n", sub, err)
@@ -649,6 +765,8 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 		returnStatus = statusFetching
 	}
 	if len(objectsToPush) > 0 {
+		logger.Printf("Calling %s:ObjectServer.AddObjects() for: %d objects\n",
+			sub, len(objectsToPush))
 		sub.herd.cpuSharer.GrabSemaphore(sub.herd.pushSemaphore)
 		defer func() { <-sub.herd.pushSemaphore }()
 		sub.status = statusPushing
@@ -736,9 +854,10 @@ func (sub *Sub) checkForUnsafeChange(request subproto.UpdateRequest) bool {
 	return false
 }
 
-// cleanup will tell the Sub to remove unused objects and that and disruptive
+// cleanup will tell the Sub to remove unused objects and that any disruptive
 // updates have completed.
 func (sub *Sub) cleanup(srpcClient *srpc.Client) {
+	startTime := time.Now()
 	logger := sub.herd.logger
 	unusedObjects := make(map[hash.Hash]bool)
 	for _, hash := range sub.objectCache {
@@ -767,16 +886,20 @@ func (sub *Sub) cleanup(srpcClient *srpc.Client) {
 	}
 	if len(unusedObjects) < 1 &&
 		sub.lastDisruptionState == subproto.DisruptionStateAnytime {
+		cleanupComputeTimeDistribution.Add(time.Since(startTime))
 		return
 	}
 	hashes := make([]hash.Hash, 0, len(unusedObjects))
 	for hash := range unusedObjects {
 		hashes = append(hashes, hash)
 	}
+	cleanupComputeTimeDistribution.Add(time.Since(startTime))
+	startTime = time.Now()
 	if err := client.Cleanup(srpcClient, hashes); err != nil {
 		srpcClient.Close()
 		logger.Printf("Error calling %s:Subd.Cleanup(): %s\n", sub, err)
 	}
+	cleanupTimeDistribution.Add(time.Since(startTime))
 }
 
 func (sub *Sub) checkForEnoughSpace(freeSpace *uint64,
@@ -821,6 +944,24 @@ func (sub *Sub) checkCancel() bool {
 	}
 }
 
+func (sub *Sub) fastUpdate(timeout time.Duration,
+	authInfo *srpc.AuthInformation) (
+	<-chan FastUpdateMessage, error) {
+	if !sub.checkAdminAccess(authInfo) {
+		return nil, errors.New("no access to sub")
+	}
+	if sub.requiredImageName == "" {
+		return nil, errors.New("no RequiredImage specified")
+	}
+	if sub.requiredImage == nil {
+		return nil, fmt.Errorf("image: %s does not exist yet",
+			sub.requiredImageName)
+	}
+	progressChannel := make(chan FastUpdateMessage, 16)
+	go sub.processFastUpdate(progressChannel, timeout)
+	return progressChannel, nil
+}
+
 func (sub *Sub) forceDisruptiveUpdate(authInfo *srpc.AuthInformation) error {
 	switch sub.status {
 	case statusDisruptionRequested:
@@ -839,5 +980,63 @@ func (sub *Sub) sendCancel() {
 	select {
 	case sub.cancelChannel <- struct{}{}:
 	default:
+	}
+}
+
+func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
+	timeout time.Duration) {
+	defer close(progressChannel)
+	select {
+	case sub.herd.fastUpdateSemaphore <- struct{}{}:
+		sub.sendFastUpdateMessage(progressChannel, "got fast update slot")
+	default:
+		sub.sendFastUpdateMessage(progressChannel,
+			"waiting for fast update slot")
+		sub.herd.fastUpdateSemaphore <- struct{}{}
+		sub.sendFastUpdateMessage(progressChannel,
+			"finished waiting for fast update slot")
+	}
+	defer func() {
+		<-sub.herd.fastUpdateSemaphore
+	}()
+	if !sub.tryMakeBusy() {
+		sub.sendFastUpdateMessage(progressChannel,
+			"waiting for sub to not be busy")
+		sub.makeBusy()
+	}
+	defer sub.makeUnbusy()
+	sub.sendFastUpdateMessage(progressChannel, "made sub busy")
+	sub.herd.cpuSharer.GrabCpu()
+	defer sub.herd.cpuSharer.ReleaseCpu()
+	sleeper := backoffdelay.NewExponential(10*time.Millisecond, time.Second, 2)
+	sleeper.SetSleepFunc(sub.herd.cpuSharer.Sleep)
+	var prevStatus subStatus
+	timeoutTime := time.Now().Add(timeout)
+	defer sub.restoreScanSpeed(progressChannel)
+	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
+		if sub.deleting {
+			sub.sendFastUpdateMessage(progressChannel, "deleting")
+			return
+		}
+		if sub.status != prevStatus {
+			sub.sendFastUpdateMessage(progressChannel, sub.status.String())
+			prevStatus = sub.status
+			sleeper.Reset()
+		}
+		switch sub.status {
+		case statusSynced, statusUpdatesDisabled, statusUnsafeUpdate:
+			return
+		default:
+		}
+		sub.connectAndPoll(progressChannel)
+	}
+	sub.sendFastUpdateMessage(progressChannel, "timed out")
+}
+
+func (sub *Sub) sendFastUpdateMessage(ch chan<- FastUpdateMessage,
+	message string) {
+	ch <- FastUpdateMessage{
+		Message: message,
+		Synced:  sub.status == statusSynced,
 	}
 }

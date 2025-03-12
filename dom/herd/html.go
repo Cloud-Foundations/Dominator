@@ -33,6 +33,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		herd.writeDisableStatus(writer)
 		fmt.Fprintln(writer, "<br>")
 	}
+	herd.computedFilesManager.WriteHtml(writer)
 	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
 	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
@@ -125,7 +126,9 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a>",
 		numDeviantSubs)
 	fmt.Fprintf(writer,
-		" (<a href=\"showDeviantSubs?output=json\">JSON</a>")
+		" (<a href=\"showDeviantSubs?output=text\">text</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showDeviantSubs?output=json\">JSON</a>")
 	fmt.Fprintf(writer,
 		", <a href=\"showDeviantSubs?output=csv\">CSV</a>)<br>\n")
 	fmt.Fprintf(writer,

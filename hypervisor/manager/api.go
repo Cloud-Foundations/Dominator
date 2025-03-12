@@ -3,6 +3,7 @@ package manager
 import (
 	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -18,9 +19,15 @@ import (
 )
 
 const (
-	IdentityCertFile = "identity.cert"
-	IdentityKeyFile  = "identity.key"
-	UserDataFile     = "user-data.raw"
+	IdentityEd25519SshCertFile  = "identity-Ed25519.SSH-cert"
+	IdentityEd25519SshKeyFile   = "identity-Ed25519.SSH-key"
+	IdentityEd25519X509CertFile = "identity-Ed25519.X509-cert"
+	IdentityEd25519X509KeyFile  = "identity-Ed25519.X509-key"
+	IdentityRsaSshCertFile      = "identity-RSA.SSH-cert"
+	IdentityRsaSshKeyFile       = IdentityRsaX509KeyFile
+	IdentityRsaX509CertFile     = "identity.cert"
+	IdentityRsaX509KeyFile      = "identity.key"
+	UserDataFile                = "user-data.raw"
 )
 
 type addressPoolType struct {
@@ -48,6 +55,9 @@ type Manager struct {
 	numCPUs           uint
 	objectCache       *cachingreader.ObjectServer
 	objectVolumeIndex int // -1: not on a volume mount, else index of mount.
+	privateKeyPEM     []byte
+	publicKeyDER      []byte
+	publicKeyPEM      []byte
 	rootCookie        []byte
 	serialNumber      string
 	shuttingDown      bool
@@ -71,6 +81,7 @@ type Manager struct {
 type StartOptions struct {
 	BridgeMap            map[string]net.Interface // Key: interface name.
 	DhcpServer           DhcpServer
+	IdentityProvider     string
 	ImageServerAddress   string
 	LockCheckInterval    time.Duration
 	LockLogTimeout       time.Duration
@@ -108,6 +119,8 @@ type vmInfoType struct {
 	dirname                    string
 	doNotWriteOrSend           bool
 	hasHealthAgent             bool
+	identityProviderNotifier   chan<- time.Time
+	identityProviderTransport  *http.Transport
 	ipAddress                  string
 	logger                     log.DebugLogger
 	manager                    *Manager
@@ -280,8 +293,8 @@ func (m *Manager) DiscardVmOldUserData(ipAddr net.IP,
 }
 
 func (m *Manager) DiscardVmSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation) error {
-	return m.discardVmSnapshot(ipAddr, authInfo)
+	authInfo *srpc.AuthInformation, snapshotName string) error {
+	return m.discardVmSnapshot(ipAddr, authInfo, snapshotName)
 }
 
 func (m *Manager) ExportLocalVm(authInfo *srpc.AuthInformation,
@@ -307,6 +320,16 @@ func (m *Manager) GetImageServerAddress() string {
 
 func (m *Manager) GetNumVMs() (uint, uint) {
 	return m.getNumVMs()
+}
+
+// GetIdentityProvider returns the base URL of the Identity Provider.
+func (m *Manager) GetIdentityProvider() (string, error) {
+	return m.StartOptions.IdentityProvider, nil
+}
+
+// GetPublicKey returns the PEM-encoded public key.
+func (m *Manager) GetPublicKey() ([]byte, error) {
+	return m.publicKeyPEM, nil
 }
 
 func (m *Manager) GetRootCookiePath() string {
@@ -466,6 +489,12 @@ func (m *Manager) ReplaceVmCredentials(
 	return m.replaceVmCredentials(request, authInfo)
 }
 
+func (m *Manager) ReplaceVmIdentity(
+	request proto.ReplaceVmIdentityRequest,
+	authInfo *srpc.AuthInformation) error {
+	return m.replaceVmIdentity(request, authInfo)
+}
+
 func (m *Manager) ReplaceVmImage(conn *srpc.Conn,
 	authInfo *srpc.AuthInformation) error {
 	return m.replaceVmImage(conn, authInfo)
@@ -477,8 +506,10 @@ func (m *Manager) ReplaceVmUserData(ipAddr net.IP, reader io.Reader,
 }
 
 func (m *Manager) RestoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool) error {
-	return m.restoreVmFromSnapshot(ipAddr, authInfo, forceIfNotStopped)
+	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
+	snapshotName string) error {
+	return m.restoreVmFromSnapshot(ipAddr, authInfo, forceIfNotStopped,
+		snapshotName)
 }
 
 func (m *Manager) RestoreVmImage(ipAddr net.IP,
@@ -511,8 +542,9 @@ func (m *Manager) ShutdownVMsAndExit() {
 }
 
 func (m *Manager) SnapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	forceIfNotStopped, snapshotRootOnly bool) error {
-	return m.snapshotVm(ipAddr, authInfo, forceIfNotStopped, snapshotRootOnly)
+	forceIfNotStopped, snapshotRootOnly bool, snapshotName string) error {
+	return m.snapshotVm(ipAddr, authInfo, forceIfNotStopped, snapshotRootOnly,
+		snapshotName)
 }
 
 func (m *Manager) StartVm(ipAddr net.IP, authInfo *srpc.AuthInformation,

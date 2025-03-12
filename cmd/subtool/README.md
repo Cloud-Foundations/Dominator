@@ -27,6 +27,7 @@ Some of the sub-commands available are:
 
 - **boost-cpu-limit**: raise the CPU limit until the next scan cycle (this does
                        not change the priority (nice) level)
+- **boost-scan-limit**: raise the scan I/O limit until the next scan cycle
 - **cleanup**: empty the object cache
 - **delete**: delete specified pathnames
 - **fetch**: tell *subd* to fetch the specified object from the objectserver

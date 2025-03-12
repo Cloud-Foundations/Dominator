@@ -3,10 +3,9 @@ package main
 import (
 	"fmt"
 
+	domclient "github.com/Cloud-Foundations/Dominator/dom/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/dominator"
-	"github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
 func getSubsConfigurationSubcommand(args []string,
@@ -18,12 +17,10 @@ func getSubsConfigurationSubcommand(args []string,
 }
 
 func getSubsConfiguration(client *srpc.Client) error {
-	var request dominator.GetSubsConfigurationRequest
-	var reply dominator.GetSubsConfigurationResponse
-	if err := client.RequestReply("Dominator.GetSubsConfiguration", request,
-		&reply); err != nil {
+	configuration, err := domclient.GetSubsConfiguration(client)
+	if err != nil {
 		return err
 	}
-	fmt.Println(sub.Configuration(reply))
+	fmt.Println(configuration)
 	return nil
 }

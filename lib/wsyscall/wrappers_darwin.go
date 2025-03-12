@@ -1,6 +1,7 @@
 package wsyscall
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -49,6 +50,25 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Ctim = source.Ctimespec
 }
 
+func convertStatAny(dest *Stat_t, source any) error {
+	_source, ok := source.(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("source type: %T is not *syscall.Stat_t", source)
+	}
+	convertStat(dest, _source)
+	return nil
+}
+
+func convertStatfs(dest *Statfs_t, source *syscall.Statfs_t) {
+	dest.Type = uint64(source.Type)
+	dest.Bsize = uint64(source.Bsize)
+	dest.Blocks = source.Blocks
+	dest.Bfree = source.Bfree
+	dest.Bavail = source.Bavail
+	dest.Files = source.Files
+	dest.Ffree = source.Ffree
+}
+
 func dup(oldfd int) (int, error) {
 	return syscall.Dup(oldfd)
 }
@@ -62,6 +82,19 @@ func dup3(oldfd int, newfd int, flags int) error {
 		return syscall.Dup2(oldfd, newfd)
 	}
 	return syscall.ENOTSUP
+}
+
+func fstat(fd int, statbuf *Stat_t) error {
+	var rawStatbuf syscall.Stat_t
+	if err := syscall.Fstat(fd, &rawStatbuf); err != nil {
+		return err
+	}
+	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	return 0, syscall.ENOTSUP
 }
 
 func getFileDescriptorLimit() (uint64, uint64, error) {
@@ -127,6 +160,14 @@ func lstat(path string, statbuf *Stat_t) error {
 	return nil
 }
 
+func mkfifo(path string, mode uint32) error {
+	return syscall.Mkfifo(path, mode)
+}
+
+func mknod(path string, mode uint32, dev int) error {
+	return syscall.Mknod(path, mode, dev)
+}
+
 func mount(source string, target string, fstype string, flags uintptr,
 	data string) error {
 	return syscall.ENOTSUP
@@ -144,12 +185,17 @@ func setAllUid(uid int) error {
 	return syscall.Setreuid(uid, uid)
 }
 
+func setNetNamespace(namespaceFd int) error {
+	return syscall.ENOTSUP
+}
+
 func setPriority(pid, priority int) error {
 	return syscall.Setpriority(syscall.PRIO_PROCESS, pid, priority)
 }
 
-func setNetNamespace(namespaceFd int) error {
-	return syscall.ENOTSUP
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	attr.Chroot = chroot
+	return nil
 }
 
 func stat(path string, statbuf *Stat_t) error {
@@ -161,8 +207,21 @@ func stat(path string, statbuf *Stat_t) error {
 	return nil
 }
 
+func statfs(path string, buf *Statfs_t) error {
+	var rawBuf syscall.Statfs_t
+	if err := syscall.Statfs(path, &rawBuf); err != nil {
+		return err
+	}
+	convertStatfs(buf, &rawBuf)
+	return nil
+}
+
 func sync() error {
 	return syscall.Sync()
+}
+
+func unmount(target string, flags int) error {
+	return syscall.Unmount(target, flags)
 }
 
 func unshareNetNamespace() (int, int, error) {

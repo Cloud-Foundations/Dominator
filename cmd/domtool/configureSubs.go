@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 
+	domclient "github.com/Cloud-Foundations/Dominator/dom/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/dominator"
+	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 )
 
 func configureSubsSubcommand(args []string, logger log.DebugLogger) error {
@@ -16,11 +17,10 @@ func configureSubsSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func configureSubs(client *srpc.Client) error {
-	var request dominator.ConfigureSubsRequest
-	var reply dominator.ConfigureSubsResponse
-	request.CpuPercent = *cpuPercent
-	request.NetworkSpeedPercent = *networkSpeedPercent
-	request.ScanExclusionList = scanExcludeList
-	request.ScanSpeedPercent = *scanSpeedPercent
-	return client.RequestReply("Dominator.ConfigureSubs", request, &reply)
+	return domclient.ConfigureSubs(client, subproto.Configuration{
+		CpuPercent:          *cpuPercent,
+		NetworkSpeedPercent: *networkSpeedPercent,
+		ScanExclusionList:   scanExcludeList,
+		ScanSpeedPercent:    *scanSpeedPercent,
+	})
 }

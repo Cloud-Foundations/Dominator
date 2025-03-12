@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -44,7 +43,6 @@ var (
 )
 
 func okHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(os.Stderr, "HACK: okHandler()\n")
 	w.Write(ok)
 }
 

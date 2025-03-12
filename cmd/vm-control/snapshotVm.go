@@ -26,8 +26,12 @@ func snapshotVm(vmHostname string, logger log.DebugLogger) error {
 
 func snapshotVmOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.SnapshotVmRequest{ipAddr, *forceIfNotStopped,
-		*snapshotRootOnly}
+	request := proto.SnapshotVmRequest{
+		IpAddress:         ipAddr,
+		ForceIfNotStopped: *forceIfNotStopped,
+		Name:              *snapshotName,
+		RootOnly:          *snapshotRootOnly,
+	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err

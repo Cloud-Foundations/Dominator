@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -14,11 +13,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 const (
-	dirPerms  = syscall.S_IRWXU
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP
+	dirPerms  = wsyscall.S_IRWXU
+	filePerms = wsyscall.S_IRUSR | wsyscall.S_IWUSR | wsyscall.S_IRGRP
 )
 
 func createEmptyFile(filename string) error {
@@ -45,11 +45,11 @@ func unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 		return err
 	}
 	defer os.RemoveAll(inodesDir)
-	var statfs syscall.Statfs_t
-	if err := syscall.Statfs(inodesDir, &statfs); err != nil {
+	var statfs wsyscall.Statfs_t
+	if err := wsyscall.Statfs(inodesDir, &statfs); err != nil {
 		return fmt.Errorf("unable to Statfs: %s %s\n", inodesDir, err)
 	}
-	if fs.TotalDataBytes > uint64(statfs.Bsize)*statfs.Bfree {
+	if fs.TotalDataBytes > statfs.Bsize*statfs.Bfree {
 		return errors.New("image will not fit on file-system")
 	}
 	hashes, inums, lengths := getHashes(fs)

@@ -8,24 +8,34 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
-var latencyBucketer *tricorder.Bucketer
-var computeCpuTimeDistribution *tricorder.CumulativeDistribution
-var computeTimeDistribution *tricorder.CumulativeDistribution
-var connectDistribution *tricorder.CumulativeDistribution
-var mdbUpdateTimeDistribution *tricorder.CumulativeDistribution
-var fullPollDistribution *tricorder.CumulativeDistribution
-var shortPollDistribution *tricorder.CumulativeDistribution
-var pollWaitTimeDistribution *tricorder.CumulativeDistribution
+var (
+	cleanupComputeTimeDistribution *tricorder.CumulativeDistribution
+	cleanupTimeDistribution        *tricorder.CumulativeDistribution
+	computeCpuTimeDistribution     *tricorder.CumulativeDistribution
+	computeTimeDistribution        *tricorder.CumulativeDistribution
+	connectDistribution            *tricorder.CumulativeDistribution
+	cycleTimeDistribution          *tricorder.CumulativeDistribution
+	mdbUpdateTimeDistribution      *tricorder.CumulativeDistribution
+	fullPollDistribution           *tricorder.CumulativeDistribution
+	shortPollDistribution          *tricorder.CumulativeDistribution
+	pollWaitTimeDistribution       *tricorder.CumulativeDistribution
+)
 
 func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
 	makeCpuSharerMetrics(dir, "cpu-sharer", herd.cpuSharer)
-	latencyBucketer = tricorder.NewGeometricBucketer(0.1, 100e3)
+	latencyBucketer := tricorder.NewGeometricBucketer(0.1, 1e6)
+	cleanupComputeTimeDistribution = makeMetric(dir, latencyBucketer,
+		"cleanup-compute-time", "cleanup compute time")
+	cleanupTimeDistribution = makeMetric(dir, latencyBucketer,
+		"cleanup-time", "cleanup time")
 	computeCpuTimeDistribution = makeMetric(dir, latencyBucketer,
 		"compute-cputime", "compute CPU time")
 	computeTimeDistribution = makeMetric(dir, latencyBucketer,
 		"compute-time", "compute time")
 	connectDistribution = makeMetric(dir, latencyBucketer,
 		"connect-latency", "connect duration")
+	cycleTimeDistribution = makeMetric(dir, latencyBucketer,
+		"cycle-time", "cycle time")
 	mdbUpdateTimeDistribution = makeMetric(dir, latencyBucketer,
 		"mdb-update-time", "time to update Herd MDB data")
 	fullPollDistribution = makeMetric(dir, latencyBucketer,
@@ -38,7 +48,7 @@ func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
 
 func makeMetric(dir *tricorder.DirectorySpec, bucketer *tricorder.Bucketer,
 	name string, comment string) *tricorder.CumulativeDistribution {
-	distribution := latencyBucketer.NewCumulativeDistribution()
+	distribution := bucketer.NewCumulativeDistribution()
 	dir.RegisterMetric(name, distribution, units.Millisecond, comment)
 	return distribution
 }

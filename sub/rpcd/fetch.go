@@ -88,8 +88,14 @@ func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 	benchmark := false
 	linkSpeed, haveLinkSpeed := netspeed.GetSpeedToAddress(
 		request.ServerAddress)
+	speedPercent := uint64(t.params.NetworkReaderContext.SpeedPercent())
+	if request.SpeedPercent >= 100 {
+		speedPercent = 100
+	} else if uint64(request.SpeedPercent) > speedPercent {
+		speedPercent = uint64(request.SpeedPercent)
+	}
 	if haveLinkSpeed {
-		t.logFetch(request, linkSpeed, username)
+		t.logFetch(request, linkSpeed, speedPercent, username)
 	} else {
 		if t.params.NetworkReaderContext.MaximumSpeed() < 1 {
 			benchmark = enoughBytesForBenchmark(objectServer, request)
@@ -103,11 +109,11 @@ func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 					"Fetch(%s) %d objects and benchmark speed%s\n",
 					request.ServerAddress, len(request.Hashes), suffix)
 			} else {
-				t.logFetch(request, 0, username)
+				t.logFetch(request, 0, 100, username)
 			}
 		} else {
 			t.logFetch(request, t.params.NetworkReaderContext.MaximumSpeed(),
-				username)
+				speedPercent, username)
 		}
 	}
 	objectsReader, err := objectServer.GetObjects(request.Hashes)
@@ -126,14 +132,15 @@ func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 			return err
 		}
 		r := io.Reader(reader)
-		if haveLinkSpeed {
-			if linkSpeed > 0 {
-				r = rateio.NewReaderContext(linkSpeed,
-					uint64(t.params.NetworkReaderContext.SpeedPercent()),
-					&rateio.ReadMeasurer{}).NewReader(reader)
+		if speedPercent < 100 {
+			if haveLinkSpeed {
+				if linkSpeed > 0 {
+					r = rateio.NewReaderContext(linkSpeed, speedPercent,
+						&rateio.ReadMeasurer{}).NewReader(reader)
+				}
+			} else if !benchmark {
+				r = t.params.NetworkReaderContext.NewReader(reader)
 			}
-		} else if !benchmark {
-			r = t.params.NetworkReaderContext.NewReader(reader)
 		}
 		t.params.WorkdirGoroutine.Run(func() {
 			err = readOne(t.config.ObjectsDirectoryName, hash, length, r)
@@ -161,13 +168,11 @@ func (t *rpcType) doFetch(request sub.FetchRequest, username string) error {
 	return nil
 }
 
-func (t *rpcType) logFetch(request sub.FetchRequest, speed uint64,
+func (t *rpcType) logFetch(request sub.FetchRequest, speed, speedPercent uint64,
 	username string) {
 	speedString := "unlimited speed"
-	if speed > 0 {
-		speedString = format.FormatBytes(
-			speed*uint64(
-				t.params.NetworkReaderContext.SpeedPercent())/100) + "/s"
+	if speed > 0 && speedPercent < 100 {
+		speedString = format.FormatBytes(speed*speedPercent/100) + "/s"
 	}
 	var suffix string
 	if username != "" {

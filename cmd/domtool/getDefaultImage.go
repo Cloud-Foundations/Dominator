@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
+	domclient "github.com/Cloud-Foundations/Dominator/dom/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/dominator"
 )
 
 func getDefaultImageSubcommand(args []string, logger log.DebugLogger) error {
@@ -16,14 +16,12 @@ func getDefaultImageSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func getDefaultImage(client *srpc.Client) error {
-	var request dominator.GetDefaultImageRequest
-	var reply dominator.GetDefaultImageResponse
-	if err := client.RequestReply("Dominator.GetDefaultImage", request,
-		&reply); err != nil {
+	imageName, err := domclient.GetDefaultImage(client)
+	if err != nil {
 		return err
 	}
-	if reply.ImageName != "" {
-		fmt.Println(reply.ImageName)
+	if imageName != "" {
+		fmt.Println(imageName)
 	}
 	return nil
 }

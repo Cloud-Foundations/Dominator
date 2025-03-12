@@ -30,6 +30,10 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 )
 
+func convertStatAny(dest *Stat_t, source any) error {
+	return syscall.ENOTSUP
+}
+
 func dup(oldfd int) (int, error) {
 	return 0, syscall.ENOTSUP
 }
@@ -46,6 +50,14 @@ func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.ENOTSUP
 }
 
+func fstat(fd int, stat *Stat_t) error {
+	return syscall.ENOTSUP
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	return 0, syscall.ENOTSUP
+}
+
 func getFileDescriptorLimit() (uint64, uint64, error) {
 	return 0, 0, syscall.ENOTSUP
 }
@@ -59,6 +71,14 @@ func ioctl(fd int, request, argp uintptr) error {
 }
 
 func lstat(path string, statbuf *Stat_t) error {
+	return syscall.ENOTSUP
+}
+
+func mkfifo(path string, mode uint32) error {
+	return syscall.ENOTSUP
+}
+
+func mknod(path string, mode uint32, dev int) error {
 	return syscall.ENOTSUP
 }
 
@@ -79,11 +99,15 @@ func setAllUid(uid int) error {
 	return syscall.ENOTSUP
 }
 
+func setNetNamespace(namespaceFd int) error {
+	return syscall.ENOTSUP
+}
+
 func setPriority(pid, priority int) error {
 	return syscall.ENOTSUP
 }
 
-func setNetNamespace(namespaceFd int) error {
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
 	return syscall.ENOTSUP
 }
 
@@ -91,7 +115,15 @@ func stat(path string, statbuf *Stat_t) error {
 	return syscall.ENOTSUP
 }
 
+func statfs(path string, buf *Statfs_t) error {
+	return syscall.ENOTSUP
+}
+
 func sync() error {
+	return syscall.ENOTSUP
+}
+
+func unmount(target string, flags int) error {
 	return syscall.ENOTSUP
 }
 

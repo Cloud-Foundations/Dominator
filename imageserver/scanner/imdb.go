@@ -106,38 +106,62 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 }
 
+// changeImageExpiration returns true if the image was changed, else false.
 func (imdb *ImageDataBase) changeImageExpiration(name string,
 	expiresAt time.Time, authInfo *srpc.AuthInformation) (bool, error) {
 	if err := imdb.checkExpiration(expiresAt, authInfo); err != nil {
 		return false, err
 	}
 	imdb.Lock()
-	defer imdb.Unlock()
-	if img, _ := imdb.getImageWithLock(name); img == nil {
+	haveLock := true
+	defer func() {
+		if haveLock {
+			imdb.Unlock()
+		}
+	}()
+	imgType, _ := imdb.getImageTypeWithLock(name)
+	if imgType == nil {
 		return false, errors.New("image not found")
-	} else if err := imdb.checkPermissions(name, img, authInfo); err != nil {
-		return false, err
-	} else if img.ExpiresAt.IsZero() {
-		return false, errors.New("image does not expire")
-	} else if expiresAt.IsZero() {
-		if err := imdb.writeNewExpiration(name, img, expiresAt); err != nil {
-			return false, err
-		}
-		img.ExpiresAt = expiresAt
-		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-		return true, nil
-	} else if expiresAt.Before(img.ExpiresAt) {
-		return false, errors.New("cannot shorten expiration time")
-	} else if expiresAt.After(img.ExpiresAt) {
-		if err := imdb.writeNewExpiration(name, img, expiresAt); err != nil {
-			return false, err
-		}
-		img.ExpiresAt = expiresAt
-		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-		return true, nil
-	} else {
-		return false, nil
 	}
+	img := imgType.image
+	if img == nil {
+		return false, errors.New("image not found")
+	}
+	if err := imdb.checkPermissions(name, img, authInfo); err != nil {
+		return false, err
+	}
+	if img.ExpiresAt.IsZero() {
+		return false, errors.New("image does not expire")
+	}
+	if imgType.modifying {
+		return false, errors.New("image being modified")
+	}
+	imgType.modifying = true
+	defer func() {
+		if !haveLock {
+			imdb.Lock()
+		}
+		imgType.modifying = false
+		if !haveLock {
+			imdb.Unlock()
+		}
+	}()
+	imdb.Unlock()
+	haveLock = false
+	if expiresAt.IsZero() || expiresAt.After(img.ExpiresAt) {
+		if err := imdb.writeNewExpiration(name, img, expiresAt); err != nil {
+			return false, err
+		}
+		imdb.Lock()
+		haveLock = true
+		img.ExpiresAt = expiresAt
+		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
+		return true, nil
+	}
+	if expiresAt.Before(img.ExpiresAt) {
+		return false, errors.New("cannot shorten expiration time")
+	}
+	return false, nil
 }
 
 // This must be called with the lock held.
@@ -413,8 +437,14 @@ func (imdb *ImageDataBase) getImage(name string) *image.Image {
 	return img
 }
 
-func (imdb *ImageDataBase) getImageWithLock(name string) (*image.Image, bool) {
+func (imdb *ImageDataBase) getImageTypeWithLock(name string) (
+	*imageType, bool) {
 	img, ok := imdb.imageMap[name]
+	return img, ok
+}
+
+func (imdb *ImageDataBase) getImageWithLock(name string) (*image.Image, bool) {
+	img, ok := imdb.getImageTypeWithLock(name)
 	if img != nil {
 		return img.image, ok
 	}
@@ -544,7 +574,7 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 	delete(imdb.mkdirNotifiers, channel)
 }
 
-// This must be called with the lock held.
+// This must be called with the modifying flag set to true.
 func (imdb *ImageDataBase) writeNewExpiration(name string,
 	oldImage *image.Image, expiresAt time.Time) error {
 	img := *oldImage

@@ -30,6 +30,18 @@ type EnableUpdatesRequest struct {
 
 type EnableUpdatesResponse struct{}
 
+type FastUpdateRequest struct {
+	Hostname string
+	Timeout  time.Duration // Default: 15 minutes.
+}
+
+type FastUpdateResponse struct { // Multiple responses are sent.
+	Error           string // If non-empty, this is the final response.
+	Final           bool   // If true, this is the final response.
+	ProgressMessage string // Status updates and errors.
+	Synced          bool   // If true, the sub is synced with the image.
+}
+
 type ForceDisruptiveUpdateRequest struct {
 	Hostname string
 }

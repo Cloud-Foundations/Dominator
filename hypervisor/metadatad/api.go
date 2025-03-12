@@ -34,9 +34,18 @@ func StartServer(hypervisorPortNum uint, bridges []net.Interface,
 		logger:            logger,
 	}
 	s.fileHandlers = map[string]string{
-		constants.MetadataIdentityCert: manager.IdentityCertFile,
-		constants.MetadataIdentityKey:  manager.IdentityKeyFile,
-		constants.MetadataUserData:     manager.UserDataFile,
+		constants.MetadataIdentityEd25519SshCert:  manager.IdentityEd25519SshCertFile,
+		constants.MetadataIdentityEd25519SshKey:   manager.IdentityEd25519SshKeyFile,
+		constants.MetadataIdentityEd25519X509Cert: manager.IdentityEd25519X509CertFile,
+		constants.MetadataIdentityEd25519X509Key:  manager.IdentityEd25519X509KeyFile,
+		constants.MetadataIdentityCert:            manager.IdentityRsaX509CertFile,
+		constants.MetadataIdentityKey:             manager.IdentityRsaX509KeyFile,
+		constants.MetadataIdentityRsaSshCert:      manager.IdentityRsaSshCertFile,
+		constants.MetadataIdentityRsaSshKey:       manager.IdentityRsaSshKeyFile,
+
+		constants.MetadataIdentityRsaX509Cert: manager.IdentityRsaX509CertFile,
+		constants.MetadataIdentityRsaX509Key:  manager.IdentityRsaX509KeyFile,
+		constants.MetadataUserData:            manager.UserDataFile,
 	}
 	s.infoHandlers = map[string]metadataWriter{
 		constants.MetadataEpochTime:   s.showTime,

@@ -8,7 +8,7 @@ import (
 var sleepBucketer *tricorder.Bucketer
 
 func init() {
-	sleepBucketer = tricorder.NewGeometricBucketer(1e-3, 1e3)
+	sleepBucketer = tricorder.NewGeometricBucketer(1e-3, 1e9)
 }
 
 func (ctx *ReaderContext) registerMetrics(dir *tricorder.DirectorySpec,

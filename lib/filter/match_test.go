@@ -1,13 +1,18 @@
 package filter
 
 import (
+	"io"
 	"testing"
 )
 
 var (
 	excludeFilterLines = []string{
+		"/.*app-log.*",
 		"/etc/fstab",
-		"/tmp(|.*)",
+		"/etc/ssh/ssh_host_.*_key(|[.]pub)$",
+		"/file.log",
+		"/foo(|.*)$",
+		"/tmp(|/.*)$",
 	}
 
 	includeFilterLines = []string{
@@ -22,9 +27,12 @@ func TestExclude(t *testing.T) {
 		t.Error(err)
 	}
 	expectedNonMatches := []string{
+		"/.myprog-log.err",
 		"/bin",
 		"/etc",
 		"/etc/passwd",
+		"/etc/ssh/ssh_config",
+		"/tmpfile",
 	}
 	for _, line := range expectedNonMatches {
 		if filt.Match(line) {
@@ -32,7 +40,16 @@ func TestExclude(t *testing.T) {
 		}
 	}
 	expectedMatches := []string{
+		"/.myapp-log.err",
+		"/.myapp-logout",
 		"/etc/fstab",
+		"/etc/ssh/ssh_host_rsa_key",
+		"/etc/ssh/ssh_host_rsa_key.pub",
+		"/file.log",
+		"/file%log",
+		"/foo",
+		"/foobar",
+		"/foo/bar",
 		"/tmp",
 		"/tmp/file",
 	}
@@ -41,6 +58,7 @@ func TestExclude(t *testing.T) {
 			t.Errorf("\"%s\" should have matched", line)
 		}
 	}
+	filt.WriteHtml(io.Discard)
 }
 
 func TestInverted(t *testing.T) {
@@ -68,4 +86,5 @@ func TestInverted(t *testing.T) {
 			t.Errorf("\"%s\" should have matched", line)
 		}
 	}
+	filt.WriteHtml(io.Discard)
 }

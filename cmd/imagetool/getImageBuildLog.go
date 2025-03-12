@@ -34,6 +34,6 @@ func getImageBuildLog(objectClient *objectclient.ObjectClient,
 		_, err := io.Copy(os.Stdout, reader)
 		return err
 	} else {
-		return fsutil.CopyToFile(outFileName, filePerms, reader, 0)
+		return fsutil.CopyToFile(outFileName, fsutil.PublicFilePerms, reader, 0)
 	}
 }

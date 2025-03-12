@@ -4,6 +4,8 @@ import (
 	"reflect"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
@@ -24,6 +26,13 @@ func buildMachine(machine Machine) *machineType {
 		sourceToPaths: sourceToPaths}
 }
 
+func logFiles(hostname string, files []proto.FileInfo, logger log.DebugLogger) {
+	for index, file := range files {
+		logger.Debugf(0, "filegen: %s: sending file[%d]: %s hash: %0x\n",
+			hostname, index, file.Pathname, file.Hash)
+	}
+}
+
 func (m *Manager) addMachine(machine *machineType) {
 	hostname := machine.machine.Hostname
 	_, ok := m.machineMap[hostname]
@@ -39,7 +48,9 @@ func (m *Manager) removeMachine(hostname string) {
 		panic(hostname + ": not present")
 	} else {
 		delete(m.machineMap, hostname)
-		close(machine.updateChannel)
+		if closer, ok := machine.updateSender.(queue.Closer); ok {
+			closer.Close()
+		}
 	}
 }
 
@@ -78,7 +89,7 @@ func (m *Manager) sendYieldRequests(machine *machineType) {
 func (m *Manager) handleYieldResponse(machine *machineType,
 	files []proto.FileInfo) {
 	objectsToWaitFor := make(map[hash.Hash]struct{})
-	waiterChannel := make(chan hash.Hash)
+	waiterChannel := make(chan hash.Hash, 1)
 	// Get list of objects to wait for.
 	for _, file := range files {
 		sourceName, ok := machine.computedFiles[file.Pathname]
@@ -99,6 +110,8 @@ func (m *Manager) handleYieldResponse(machine *machineType,
 		hashes := []hash.Hash{file.Hash}
 		if lengths, err := m.objectServer.CheckObjects(hashes); err != nil {
 			panic(err)
+		} else if _, ok := objectsToWaitFor[file.Hash]; ok {
+			continue // Already waiting for this object.
 		} else if lengths[0] < 1 {
 			// Not already in objectserver, so add to the list to wait for.
 			request := &proto.ClientRequest{
@@ -114,25 +127,26 @@ func (m *Manager) handleYieldResponse(machine *machineType,
 	}
 	if len(objectsToWaitFor) > 0 {
 		go waitForObjectsAndSendUpdate(waiterChannel, objectsToWaitFor,
-			machine.updateChannel, files, &m.numObjectWaiters)
+			machine.updateSender, files, &m.numObjectWaiters,
+			machine.machine.Hostname, m.logger)
 	} else {
-		machine.updateChannel <- files
+		machine.updateSender.Send(files)
+		logFiles(machine.machine.Hostname, files, m.logger)
 	}
 }
 
 func waitForObjectsAndSendUpdate(objectChannel <-chan hash.Hash,
 	objectsToWaitFor map[hash.Hash]struct{},
-	updateChannel chan<- []proto.FileInfo, files []proto.FileInfo,
-	numObjectWaiters *gauge) {
+	updateSender queue.Sender[[]proto.FileInfo], files []proto.FileInfo,
+	numObjectWaiters *gauge, hostname string, logger log.DebugLogger) {
 	numObjectWaiters.increment()
-	defer func() {
-		numObjectWaiters.decrement()
-		recover() // If updateChannel is closed, it means the machine went away.
-	}()
+	defer numObjectWaiters.decrement()
 	for hashVal := range objectChannel {
 		delete(objectsToWaitFor, hashVal)
 		if len(objectsToWaitFor) < 1 {
-			updateChannel <- files // This will panic if the machine went away.
+			updateSender.Send(files)
+			logFiles(hostname, files, logger)
+			return
 		}
 	}
 }

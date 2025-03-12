@@ -6,9 +6,11 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -46,11 +48,24 @@ func diffTypedImages(tool string, lName string, rName string) error {
 		} else if lFilter.Equal(rFilter) {
 			filt = lFilter
 		}
-		if lfs, err = applyDeleteFilter(lfs, filt); err != nil {
-			return fmt.Errorf("error filtering left image: %s", err)
-		}
-		if rfs, err = applyDeleteFilter(rfs, filt); err != nil {
-			return fmt.Errorf("error filtering right image: %s", err)
+		if filt != nil {
+			startTime := time.Now()
+			if err := filt.Compile(); err != nil {
+				return err
+			}
+			var leftError error
+			rightErrorChannel := make(chan error, 1)
+			go applyDeleteFilterBackground(&rfs, filt, rightErrorChannel)
+			lfs, leftError = applyDeleteFilter(lfs, filt)
+			rightError := <-rightErrorChannel
+			if leftError != nil {
+				return fmt.Errorf("error filtering left image: %s", leftError)
+			}
+			if rightError != nil {
+				return fmt.Errorf("error filtering right image: %s", rightError)
+			}
+			logger.Debugf(0, "applied filter in %s\n",
+				format.Duration(time.Since(startTime)))
 		}
 	}
 	err = diffImages(tool, lfs, rfs)
@@ -58,6 +73,13 @@ func diffTypedImages(tool string, lName string, rName string) error {
 		return fmt.Errorf("error diffing images: %s", err)
 	}
 	return nil
+}
+
+func applyDeleteFilterBackground(fs **filesystem.FileSystem,
+	filt *filter.Filter, errorChannel chan<- error) {
+	newFs, err := applyDeleteFilter(*fs, filt)
+	*fs = newFs
+	errorChannel <- err
 }
 
 func diffImages(tool string, lfs, rfs *filesystem.FileSystem) error {

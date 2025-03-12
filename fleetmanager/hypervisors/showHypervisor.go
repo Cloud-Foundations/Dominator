@@ -3,12 +3,15 @@ package hypervisors
 import (
 	"bufio"
 	"fmt"
+	"time"
+
 	"io"
 	"net"
 	"net/http"
 	"sort"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
@@ -75,7 +78,17 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		}
 		tw.Close()
 	}
-	fmt.Fprintf(writer, "Status: %s<br>\n", h.getHealthStatus())
+	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus())
+	h.mutex.RLock()
+	lastConnectedTime := h.lastConnectedTime
+	h.mutex.RUnlock()
+	if lastConnectedTime.IsZero() {
+		fmt.Fprintln(writer, "<br>")
+	} else {
+		fmt.Fprintf(writer, ", last received: %s (%s ago)<br>\n",
+			lastConnectedTime.Format(format.TimeFormatSeconds),
+			format.Duration(time.Since(lastConnectedTime)))
+	}
 	fmt.Fprintf(writer,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
 		len(h.vms), hostname, constants.HypervisorPortNumber)

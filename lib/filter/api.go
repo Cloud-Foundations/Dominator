@@ -2,7 +2,8 @@ package filter
 
 import (
 	"io"
-	"regexp"
+
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 // A Filter contains a list of regular expressions matching pathnames which
@@ -14,9 +15,9 @@ import (
 // pushing to a sub, all files are pushed but files on the sub which are not in
 // the image are not removed from the sub.
 type Filter struct {
-	FilterLines       []string
-	filterExpressions []*regexp.Regexp
-	invertMatches     bool
+	FilterLines   []string
+	matchers      []pathregexp.Regexp
+	invertMatches bool
 }
 
 // A MergeableFilter may be used to combine multiple Filters, eliminating
@@ -54,6 +55,11 @@ func (left *Filter) Equal(right *Filter) bool {
 	return left.equal(right)
 }
 
+// ListUnoptimised returns the unoptimised regular expressions.
+func (filter *Filter) ListUnoptimised() []string {
+	return filter.listUnoptimised()
+}
+
 // Match will return true if pathname matches one of the regular expressions.
 // The Compile method will be automatically called if it has not been called
 // yet.
@@ -73,6 +79,16 @@ func (filter *Filter) ReplaceStrings(replaceFunc func(string) string) {
 	filter.replaceStrings(replaceFunc)
 }
 
+// Write will write the filter as newline separated regular expressions.
+func (filter *Filter) Write(writer io.Writer) error {
+	return filter.write(writer)
+}
+
+// WriteHtml will write the filter with appropriate HTML markups.
+func (filter *Filter) WriteHtml(writer io.Writer) {
+	filter.writeHtml(writer)
+}
+
 // ExportFilter will return a Filter from previously merged Filters.
 func (mf *MergeableFilter) ExportFilter() *Filter {
 	return mf.exportFilter()
@@ -81,9 +97,4 @@ func (mf *MergeableFilter) ExportFilter() *Filter {
 // Merge will merge a Filter.
 func (mf *MergeableFilter) Merge(filter *Filter) {
 	mf.merge(filter)
-}
-
-// Write will write the filter as newline separated regular expressions.
-func (filter *Filter) Write(writer io.Writer) error {
-	return filter.write(writer)
 }

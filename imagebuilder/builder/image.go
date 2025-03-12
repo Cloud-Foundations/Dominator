@@ -255,6 +255,15 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	if err != nil {
 		return nil, err
 	}
+	if imageFilter != nil {
+		if lines := imageFilter.ListUnoptimised(); len(lines) > 0 {
+			fmt.Fprintln(buildLog,
+				"The following filter expressions are unoptimised:")
+			for _, line := range lines {
+				fmt.Fprintln(buildLog, line)
+			}
+		}
+	}
 	tgs, err := loadTags(manifestDir)
 	if err != nil {
 		return nil, err
@@ -485,9 +494,19 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, false, err
 	}
+	if imageFilter != nil {
+		if err := imageFilter.Compile(); err != nil {
+			return nil, false, fmt.Errorf("error compiling filter: %s", err)
+		}
+	}
 	addFilter, err := filter.Load(filepath.Join(manifestDir, "filter.add"))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, false, err
+	}
+	if addFilter != nil {
+		if err := addFilter.Compile(); err != nil {
+			return nil, false, fmt.Errorf("error compiling filter.add: %s", err)
+		}
 	}
 	if imageFilter == nil && addFilter == nil {
 		return nil, false, nil

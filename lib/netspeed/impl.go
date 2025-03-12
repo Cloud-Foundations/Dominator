@@ -46,12 +46,12 @@ func getSpeedToHost(hostname string) (uint64, bool) {
 		return 0, false
 	}
 	defer file.Close()
-	var value uint64
+	var value int64
 	nScanned, err := fmt.Fscanf(file, "%d", &value)
-	if err != nil || nScanned < 1 {
+	if err != nil || nScanned < 1 || value < 0 {
 		return 0, false
 	}
-	speed = value * 1000000 / 8
+	speed = uint64(value) * 1000000 / 8
 	lock.Lock()
 	hostToSpeed[hostname] = speed
 	lock.Unlock()

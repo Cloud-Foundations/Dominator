@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
+	"unsafe"
 )
 
 const (
@@ -45,6 +46,8 @@ const (
 	S_IXUSR  = syscall.S_IXUSR
 
 	sys_SETNS = 308 // 64 bit only.
+
+	BLKGETSIZE = 0x00001260
 )
 
 func convertStat(dest *Stat_t, source *syscall.Stat_t) {
@@ -61,6 +64,25 @@ func convertStat(dest *Stat_t, source *syscall.Stat_t) {
 	dest.Atim = source.Atim
 	dest.Mtim = source.Mtim
 	dest.Ctim = source.Ctim
+}
+
+func convertStatAny(dest *Stat_t, source any) error {
+	_source, ok := source.(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("source type: %T is not *syscall.Stat_t", source)
+	}
+	convertStat(dest, _source)
+	return nil
+}
+
+func convertStatfs(dest *Statfs_t, source *syscall.Statfs_t) {
+	dest.Type = uint64(source.Type)
+	dest.Bsize = uint64(source.Bsize)
+	dest.Blocks = source.Blocks
+	dest.Bfree = source.Bfree
+	dest.Bavail = source.Bavail
+	dest.Files = source.Files
+	dest.Ffree = source.Ffree
 }
 
 func dup(oldfd int) (int, error) {
@@ -80,6 +102,36 @@ func dup3(oldfd int, newfd int, flags int) error {
 
 func fallocate(fd int, mode uint32, off int64, len int64) error {
 	return syscall.Fallocate(fd, mode, off, len)
+}
+
+func fstat(fd int, statbuf *Stat_t) error {
+	var rawStatbuf syscall.Stat_t
+	if err := syscall.Fstat(fd, &rawStatbuf); err != nil {
+		return err
+	}
+	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func getDeviceSize(device string) (uint64, error) {
+	fd, err := syscall.Open(device, os.O_RDONLY|syscall.O_CLOEXEC, 0666)
+	if err != nil {
+		return 0, fmt.Errorf("error opening: %s: %s", device, err)
+	}
+	defer syscall.Close(fd)
+	var statbuf Stat_t
+	if err := Fstat(fd, &statbuf); err != nil {
+		return 0, fmt.Errorf("error stating: %s: %s\n", device, err)
+	} else if statbuf.Mode&syscall.S_IFMT != syscall.S_IFBLK {
+		return 0, fmt.Errorf("%s is not a block device, mode: %0o",
+			device, statbuf.Mode)
+	}
+	var blk uint64
+	err = Ioctl(fd, BLKGETSIZE, uintptr(unsafe.Pointer(&blk)))
+	if err != nil {
+		return 0, fmt.Errorf("error geting device size: %s: %s", device, err)
+	}
+	return blk << 9, nil
 }
 
 func getFileDescriptorLimit() (uint64, uint64, error) {
@@ -143,6 +195,14 @@ func lstat(path string, statbuf *Stat_t) error {
 	return nil
 }
 
+func mkfifo(path string, mode uint32) error {
+	return syscall.Mkfifo(path, mode)
+}
+
+func mknod(path string, mode uint32, dev int) error {
+	return syscall.Mknod(path, mode, dev)
+}
+
 func mount(source string, target string, fstype string, flags uintptr,
 	data string) error {
 	var linuxFlags uintptr
@@ -165,6 +225,16 @@ func setAllGid(gid int) error {
 
 func setAllUid(uid int) error {
 	return syscall.Setresuid(uid, uid, uid)
+}
+
+func setNetNamespace(namespaceFd int) error {
+	runtime.LockOSThread()
+	_, _, errno := syscall.Syscall(sys_SETNS, uintptr(namespaceFd),
+		uintptr(syscall.CLONE_NEWNET), 0)
+	if errno != 0 {
+		return os.NewSyscallError("setns", errno)
+	}
+	return nil
 }
 
 // setPriority sets the priority of the specified process, for all OS threads.
@@ -200,15 +270,9 @@ func setPriority(pid, priority int) error {
 	return nil
 }
 
-func setNetNamespace(namespaceFd int) error {
-	runtime.LockOSThread()
-	_, _, errno := syscall.Syscall(sys_SETNS, uintptr(namespaceFd),
-		uintptr(syscall.CLONE_NEWNET), 0)
-	if errno != 0 {
-		return os.NewSyscallError("setns", errno)
-	}
+func setSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	attr.Chroot = chroot
 	return nil
-
 }
 
 func stat(path string, statbuf *Stat_t) error {
@@ -217,6 +281,15 @@ func stat(path string, statbuf *Stat_t) error {
 		return err
 	}
 	convertStat(statbuf, &rawStatbuf)
+	return nil
+}
+
+func statfs(path string, buf *Statfs_t) error {
+	var rawBuf syscall.Statfs_t
+	if err := syscall.Statfs(path, &rawBuf); err != nil {
+		return err
+	}
+	convertStatfs(buf, &rawBuf)
 	return nil
 }
 
@@ -240,6 +313,10 @@ func unshareMountNamespace() error {
 func sync() error {
 	syscall.Sync()
 	return nil
+}
+
+func unmount(target string, flags int) error {
+	return syscall.Unmount(target, flags)
 }
 
 func unshareNetNamespace() (int, int, error) {

@@ -2,6 +2,7 @@ package builder
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/expand"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
@@ -44,10 +47,24 @@ func cleanPackages(g *goroutine.Goroutine, rootDir string,
 	buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nCleaning packages:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, rootDir, nil, packagerPathname,
-		"clean")
+	err := runInTarget(g, nil, buildLog, buildLog, rootDir, nil,
+		packagerPathname, "clean")
 	if err != nil {
 		return errors.New("error cleaning: " + err.Error())
+	}
+	stdout := &bytes.Buffer{}
+	err = runInTarget(g, nil, stdout, buildLog, rootDir, nil, packagerPathname,
+		"show-clean-patterns")
+	if err != nil {
+		fmt.Fprintf(buildLog, "Deep clean failed: %s\n", err)
+	} else {
+		filter, err := filter.Read(stdout)
+		if err != nil {
+			return err
+		}
+		if err := util.DeleteFilteredFiles(rootDir, filter); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(buildLog, "Package clean took: %s\n",
 		format.Duration(time.Since(startTime)))
@@ -56,7 +73,7 @@ func cleanPackages(g *goroutine.Goroutine, rootDir string,
 
 func clearResolvConf(g *goroutine.Goroutine, writer io.Writer,
 	rootDir string) error {
-	return runInTarget(g, nil, writer, rootDir, nil,
+	return runInTarget(g, nil, writer, writer, rootDir, nil,
 		"/bin/cp", "/dev/null", "/etc/resolv.conf")
 }
 
@@ -102,7 +119,7 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 		return nil, err
 	}
 	defer g.Quit()
-	err = runInTarget(g, nil, buildLog, "", nil, args[0], args[1:]...)
+	err = runInTarget(g, nil, buildLog, buildLog, "", nil, args[0], args[1:]...)
 	if err != nil {
 		return nil, err
 	} else {
@@ -155,6 +172,12 @@ func (packager *packagerType) writePackageInstallerContents(writer io.Writer) {
 	if multiplier < 1 {
 		multiplier = 1
 	}
+	fmt.Fprintln(writer, `if [ "$cmd" = "show-clean-patterns" ]; then`)
+	for _, line := range packager.CleanPatterns {
+		fmt.Fprintf(writer, "    echo '%s'\n", line)
+	}
+	fmt.Fprintln(writer, `    exit 0`)
+	fmt.Fprintln(writer, `fi`)
 	fmt.Fprintf(writer,
 		"[ \"$cmd\" = \"show-size-multiplier\" ] && exec echo %d\n", multiplier)
 	writePackagerCommand(writer, "update", packager.UpdateCommand)

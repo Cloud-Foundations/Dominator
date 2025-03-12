@@ -1,7 +1,7 @@
 package triggers
 
 import (
-	"regexp"
+	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
 func newTriggers() *Triggers {
@@ -13,10 +13,11 @@ func (triggers *Triggers) compile() error {
 		return nil
 	}
 	for _, trigger := range triggers.Triggers {
-		trigger.matchRegexes = make([]*regexp.Regexp, len(trigger.MatchLines))
+		trigger.matchRegexes = make([]pathregexp.Regexp,
+			len(trigger.MatchLines))
 		for index, line := range trigger.MatchLines {
 			var err error
-			trigger.matchRegexes[index], err = regexp.Compile("^" + line)
+			trigger.matchRegexes[index], err = pathregexp.Compile(line)
 			if err != nil {
 				return err
 			}

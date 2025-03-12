@@ -23,6 +23,7 @@ func (measurer *ReadMeasurer) MeasureReadIO(bytesSinceLastMeasurement uint64) (
 func (measurer *ReadMeasurer) Reset() {}
 
 type ReaderContext struct {
+	disabled              bool
 	maxIOPerSecond        uint64
 	speedPercent          uint64
 	measurer              ReadIOMeasurer
@@ -35,6 +36,14 @@ type ReaderContext struct {
 func NewReaderContext(maxIOPerSecond uint64, speedPercent uint64,
 	measurer ReadIOMeasurer) *ReaderContext {
 	return newReaderContext(maxIOPerSecond, speedPercent, measurer)
+}
+
+func (ctx *ReaderContext) DisableLimits(disable bool) {
+	ctx.disableLimits(disable)
+}
+
+func (ctx *ReaderContext) Disabled() bool {
+	return ctx.disabled
 }
 
 func (ctx *ReaderContext) InitialiseMaximumSpeed(maxSpeed uint64) {

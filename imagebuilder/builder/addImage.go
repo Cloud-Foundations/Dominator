@@ -139,7 +139,7 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 func listPackages(g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(g, nil, w, rootDir, nil, packagerPathname, cmd)
+		return runInTarget(g, nil, w, w, rootDir, nil, packagerPathname, cmd)
 	})
 }
 
@@ -168,7 +168,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)
 	}
-	if err := util.DeletedFilteredFiles(dirname, tmpFilter); err != nil {
+	if err := util.DeleteFilteredFiles(dirname, tmpFilter); err != nil {
 		return nil, err
 	}
 	fmt.Fprintln(buildLog, "Scanning file-system and uploading objects")
@@ -221,6 +221,9 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 			return request.Variables[name]
 		})
 		tgs[key] = newValue
+		if value != "" && newValue == "" {
+			delete(tgs, key)
+		}
 	}
 	img := &image.Image{
 		BuildLog:   &image.Annotation{Object: &hashVal},
@@ -289,7 +292,7 @@ func runTest(g *goroutine.Goroutine, rootDir, prog string) testResultType {
 	errChannel := make(chan error, 1)
 	timer := time.NewTimer(time.Second * 10)
 	go func() {
-		errChannel <- runInTarget(g, nil, &result, rootDir, nil,
+		errChannel <- runInTarget(g, nil, &result, &result, rootDir, nil,
 			packagerPathname, "run", prog)
 	}()
 	select {

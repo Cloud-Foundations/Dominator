@@ -57,10 +57,10 @@ Some of the sub-commands available are:
 - **get-package-list**: get package list for an image
 - **get-replication-master**: show the replication master for the imageserver
 - **list**: list all images
-- **listdirs**: list all directories
-- **listunrefobj**: list the unreferenced objects on the server
 - **list-mdb**: list all image names in the MDB (images may not exist)
 - **list-not-in-mdb**: list all images not listed in the MDB
+- **listdirs**: list all directories
+- **listunrefobj**: list the unreferenced objects on the server
 - **make-raw-image**: make a bootable RAW image from an image
 - **match-triggers**: match a path to a triggers file
 - **merge-filters**: merge filter files
@@ -72,11 +72,11 @@ Some of the sub-commands available are:
 - **show-bad-computed-files**: show the subs (and their images) which want
                                computed files which are not available
 - **show-bad-image-subs**: show the subs which have missing or expired images
-- **show-filter**: show the filter for an image
 - **show-computed-file-subs**: show the subs (and their images) which should
                                receive the specified computed file. This is
 			       useful if you want to deprecate a computed file
 			       and need to see where it is being used
+- **show-filter**: show the filter for an image
 - **show-inode**: show metadata for an inode in an image
 - **show-metadata**: show metadata for an image
 - **show-triggers**: show triggers for an image
@@ -84,6 +84,7 @@ Some of the sub-commands available are:
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
 - **trace-inode-history**: trace the change history of an inode in an image and its sources
+- **wait**: wait (with timeout) for an image to exist
 
 ## Security
 *[Imageserver](../imageserver/README.md)* restricts RPC access using TLS client

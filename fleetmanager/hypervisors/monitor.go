@@ -45,6 +45,7 @@ func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn,
 			}
 			lastReceiveTime = time.Now()
 			h.mutex.Lock()
+			h.lastConnectedTime = lastReceiveTime
 			h.probeStatus = probeStatusConnected
 			h.mutex.Unlock()
 		case <-timer.C:

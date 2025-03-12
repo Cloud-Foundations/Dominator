@@ -54,9 +54,25 @@ type Stat_t struct {
 	Ctim    syscall.Timespec
 }
 
+type Statfs_t struct {
+	Type   uint64
+	Bsize  uint64
+	Blocks uint64
+	Bfree  uint64
+	Bavail uint64
+	Files  uint64
+	Ffree  uint64
+}
+
 type Timeval struct {
 	Sec  int64
 	Usec int64
+}
+
+// ConvertStat will convert a *syscall.Stat_t to a *Stat_t. It returns an error
+// if buf is not of type *syscall.Stat_t.
+func ConvertStat(dest *Stat_t, source any) error {
+	return convertStatAny(dest, source)
 }
 
 func Dup(oldfd int) (int, error) {
@@ -75,6 +91,14 @@ func Fallocate(fd int, mode uint32, off int64, len int64) error {
 	return fallocate(fd, mode, off, len)
 }
 
+func Fstat(fd int, stat *Stat_t) error {
+	return fstat(fd, stat)
+}
+
+func GetDeviceSize(device string) (uint64, error) {
+	return getDeviceSize(device)
+}
+
 // GetFileDescriptorLimit returns the current limit and maximum limit on number
 // of open file descriptors.
 func GetFileDescriptorLimit() (uint64, uint64, error) {
@@ -87,6 +111,14 @@ func Ioctl(fd int, request, argp uintptr) error {
 
 func Lstat(path string, statbuf *Stat_t) error {
 	return lstat(path, statbuf)
+}
+
+func Mkfifo(path string, mode uint32) error {
+	return mkfifo(path, mode)
+}
+
+func Mknod(path string, mode uint32, dev int) error {
+	return mknod(path, mode, dev)
 }
 
 func Mount(source string, target string, fstype string, flags uintptr,
@@ -110,14 +142,6 @@ func SetAllUid(uid int) error {
 	return setAllUid(uid)
 }
 
-// SetPriority sets the CPU priority of the specified process, for all OS
-// threads. If pid is zero, the priority of the calling process is set.
-// On platforms which do not support changing the process priority, an error is
-// always returned.
-func SetPriority(pid, priority int) error {
-	return setPriority(pid, priority)
-}
-
 // SetMyPriority sets the priority of the current process, for all OS threads.
 // On platforms which do not support changing the process priority, an error is
 // always returned.
@@ -133,12 +157,34 @@ func SetNetNamespace(fd int) error {
 	return setNetNamespace(fd)
 }
 
+// SetPriority sets the CPU priority of the specified process, for all OS
+// threads. If pid is zero, the priority of the calling process is set.
+// On platforms which do not support changing the process priority, an error is
+// always returned.
+func SetPriority(pid, priority int) error {
+	return setPriority(pid, priority)
+}
+
+// SetSysProcAttrChroot sets the Chroot field in attr. It returns an error if
+// this operation is not supported.
+func SetSysProcAttrChroot(attr *syscall.SysProcAttr, chroot string) error {
+	return setSysProcAttrChroot(attr, chroot)
+}
+
 func Stat(path string, statbuf *Stat_t) error {
 	return stat(path, statbuf)
 }
 
+func Statfs(path string, buf *Statfs_t) error {
+	return statfs(path, buf)
+}
+
 func Sync() error {
 	return sync()
+}
+
+func Unmount(target string, flags int) error {
+	return unmount(target, flags)
 }
 
 // UnshareMountNamespace is a safe wrapper for the Linux unshare(CLONE_NEWNS)

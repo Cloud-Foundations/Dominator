@@ -27,6 +27,11 @@ func newReaderContext(maxIOPerSecond uint64, speedPercent uint64,
 	return &ctx
 }
 
+func (ctx *ReaderContext) disableLimits(disable bool) {
+	ctx.disabled = disable
+	ctx.measurer.Reset()
+}
+
 func (ctx *ReaderContext) initialiseMaximumSpeed(maxSpeed uint64) {
 	if ctx.maxIOPerSecond > 0 {
 		fmt.Println("Maximum speed already set")
@@ -60,17 +65,20 @@ func (ctx *ReaderContext) format() string {
 }
 
 func (rd *Reader) read(b []byte) (n int, err error) {
-	if rd.ctx.maxIOPerSecond < 1 {
-		// Unspecified capacity: go at maximum speed.
+	if rd.ctx.disabled { // Limits disabled: go at maximum speed.
 		return rd.rd.Read(b)
 	}
-	if rd.ctx.speedPercent >= 100 {
+	if rd.ctx.maxIOPerSecond < 1 { // Unspecified capacity: go at maximum speed.
+		return rd.rd.Read(b)
+	}
+	speedPercent := rd.ctx.speedPercent
+	if speedPercent >= 100 {
 		// Operate at maximum speed: get out of the way.
 		return rd.rd.Read(b)
 	}
 	if rd.ctx.bytesSinceLastPause >= rd.ctx.chunklen {
 		// Need to slow down.
-		desiredPerSecond := rd.ctx.maxIOPerSecond * rd.ctx.speedPercent / 100
+		desiredPerSecond := rd.ctx.maxIOPerSecond * speedPercent / 100
 		if desiredPerSecond < 1 {
 			desiredPerSecond = rd.ctx.maxIOPerSecond / 1000
 		}
@@ -91,7 +99,18 @@ func (rd *Reader) read(b []byte) (n int, err error) {
 			if rd.ctx.sleepTimeDistribution != nil {
 				rd.ctx.sleepTimeDistribution.Add(duration)
 			}
-			time.Sleep(duration)
+			// Interrupt sleep if configuration speed increased so that it takes
+			// effect quickly.
+			for sleepTime := time.Second; duration > 0; duration -= sleepTime {
+				if rd.ctx.disabled || rd.ctx.speedPercent > speedPercent {
+					break
+				}
+				sleepTime := duration
+				if sleepTime > time.Second {
+					sleepTime = time.Second
+				}
+				time.Sleep(sleepTime)
+			}
 		}
 		rd.ctx.bytesSinceLastPause = 0
 	}

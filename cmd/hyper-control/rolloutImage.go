@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
@@ -19,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/cpusharer"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
@@ -31,11 +31,6 @@ import (
 	sub_proto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	subclient "github.com/Cloud-Foundations/Dominator/sub/client"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/messages"
-)
-
-const (
-	filePerms = syscall.S_IRUSR | syscall.S_IWUSR | syscall.S_IRGRP |
-		syscall.S_IROTH
 )
 
 type hypervisorType struct {
@@ -226,7 +221,8 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 		oldImageName := tgs["RequiredImage"]
 		tgs["RequiredImage"] = imageName
 		delete(tgs, "PlannedImage")
-		err := json.WriteToFile(tagsFilename, filePerms, "    ", tgs)
+		err := json.WriteToFile(tagsFilename, fsutil.PublicFilePerms, "    ",
+			tgs)
 		if err != nil {
 			return err
 		}

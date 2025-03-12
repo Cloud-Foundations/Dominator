@@ -11,7 +11,8 @@ func (t *srpcType) RestoreVmFromSnapshot(conn *srpc.Conn,
 	reply *hypervisor.RestoreVmFromSnapshotResponse) error {
 	response := hypervisor.RestoreVmFromSnapshotResponse{
 		errors.ErrorToString(t.manager.RestoreVmFromSnapshot(request.IpAddress,
-			conn.GetAuthInformation(), request.ForceIfNotStopped))}
+			conn.GetAuthInformation(), request.ForceIfNotStopped,
+			request.Name))}
 	*reply = response
 	return nil
 }

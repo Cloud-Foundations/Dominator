@@ -125,6 +125,7 @@ func getSubClientRetry(logger log.DebugLogger) *srpc.Client {
 
 var subcommands = []commands.Command{
 	{"boost-cpu-limit", "", 0, 0, boostCpuLimitSubcommand},
+	{"boost-scan-limit", "", 0, 0, boostScanLimitSubcommand},
 	{"cleanup", "", 0, 0, cleanupSubcommand},
 	{"delete", "pathname...", 1, 1, deleteSubcommand},
 	{"fetch", "hashesFile", 1, 1, fetchSubcommand},
@@ -155,6 +156,16 @@ func doMain() int {
 	}
 	logger = cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
+	if *cpuPercent > 100 {
+		logger.Fatalln(os.Stderr, "Cannot specify -cpuPercent over 100")
+	}
+	if *networkSpeedPercent > 100 {
+		logger.Fatalln(os.Stderr,
+			"Cannot specify -networkSpeedPercent over 100")
+	}
+	if *scanSpeedPercent > 100 {
+		logger.Fatalln(os.Stderr, "Cannot specify -scanSpeedPercent over 100")
+	}
 	if *triggersFile != "" && *triggersString != "" {
 		logger.Fatalln(os.Stderr,
 			"Cannot specify both -triggersFile and -triggersString")

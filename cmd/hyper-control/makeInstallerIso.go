@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"syscall"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -21,11 +20,6 @@ import (
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
-)
-
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
 )
 
 func makeInstallerIsoSubcommand(args []string, logger log.DebugLogger) error {
@@ -151,7 +145,7 @@ func packInitrd(filename, rootDir string) error {
 }
 
 func unpackInitrd(rootDir, filename string) error {
-	if err := os.Mkdir(rootDir, dirPerms); err != nil {
+	if err := os.Mkdir(rootDir, fsutil.DirPerms); err != nil {
 		return err
 	}
 	file, err := os.Open(filename)
@@ -228,12 +222,12 @@ func walkTree(rootDir string) ([]string, error) {
 }
 
 func writeConfigFiles(rootDir string, configFiles map[string][]byte) error {
-	if err := os.MkdirAll(rootDir, dirPerms); err != nil {
+	if err := os.MkdirAll(rootDir, fsutil.DirPerms); err != nil {
 		return err
 	}
 	for name, data := range configFiles {
-		err := fsutil.CopyToFile(filepath.Join(rootDir, name), filePerms,
-			bytes.NewReader(data), uint64(len(data)))
+		err := fsutil.CopyToFile(filepath.Join(rootDir, name),
+			fsutil.PublicFilePerms, bytes.NewReader(data), uint64(len(data)))
 		if err != nil {
 			return err
 		}

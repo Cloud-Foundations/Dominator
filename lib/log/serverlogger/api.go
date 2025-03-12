@@ -29,9 +29,10 @@ type Logger struct {
 	accessChecker  func(method string, authInfo *srpc.AuthInformation) bool
 	circularBuffer *logbuf.LogBuffer
 	flags          int
-	level          int16
-	maxLevel       int16
 	mutex          sync.Mutex // Lock everything below.
+	haveStreamers  bool       // Only locked when updating.
+	level          int16      // Only locked when updating.
+	maxLevel       int16      // Only locked when updating.
 	streamers      map[*streamerType]struct{}
 }
 

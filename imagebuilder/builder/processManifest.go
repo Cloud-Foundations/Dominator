@@ -120,12 +120,22 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
-	for _, values := range manifestConfig.SourceImageTagsToMatch {
+	// Perform variable expansion on the source image tags to match. If the
+	// values for a tag key all expand to empty strings, delete the key. This
+	// makes tag matching optional, which is the intended behaviour.
+	for key, values := range manifestConfig.SourceImageTagsToMatch {
+		allEmpty := true
 		for index, value := range values {
 			newValue := expand.Expression(value, func(name string) string {
 				return envGetter.getenv()[name]
 			})
+			if newValue != "" {
+				allEmpty = false
+			}
 			values[index] = newValue
+		}
+		if allEmpty {
+			delete(manifestConfig.SourceImageTagsToMatch, key)
 		}
 	}
 	return manifestConfig, nil
@@ -172,7 +182,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 			errors.New("error processing manifest: " + err.Error())
 	}
 	if applyFilter && manifestConfig.Filter != nil {
-		err := util.DeletedFilteredFiles(rootDir, manifestConfig.Filter)
+		err := util.DeleteFilteredFiles(rootDir, manifestConfig.Filter)
 		if err != nil {
 			return manifestType{}, err
 		}
@@ -210,7 +220,7 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	defer g.Quit()
-	err = runInTarget(g, file, buildLog, rootDir, envGetter,
+	err = runInTarget(g, file, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "copy-in", "/etc/resolv.conf")
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
@@ -307,7 +317,7 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	}
 	fmt.Fprintln(buildLog, "\nUpgrading packages:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "upgrade")
 	if err != nil {
 		return errors.New("error upgrading: " + err.Error())
@@ -320,7 +330,7 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	startTime = time.Now()
 	args := []string{"install"}
 	args = append(args, packageList...)
-	err = runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err = runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, args...)
 	if err != nil {
 		return errors.New("error installing: " + err.Error())
@@ -379,7 +389,7 @@ func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
 	for _, name := range names {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
-		err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+		err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 			packagerPathname, "run", filepath.Join("/.scripts", name))
 		if err != nil {
 			return errors.New("error running script: " + name + ": " +
@@ -400,7 +410,7 @@ func updatePackageDatabase(g *goroutine.Goroutine, rootDir string,
 	envGetter environmentGetter, buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nUpdating package database:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, rootDir, envGetter,
+	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "update")
 	if err != nil {
 		return errors.New("error updating: " + err.Error())

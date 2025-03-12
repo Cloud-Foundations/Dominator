@@ -5,6 +5,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 )
 
+// The Connect RPC is fully streamed. The client sends ClientRequest messages
+// and the server sends (potentially unsolicted) ServerMessage messages.
+
 type GetObjectRequest struct {
 	Hash hash.Hash
 }

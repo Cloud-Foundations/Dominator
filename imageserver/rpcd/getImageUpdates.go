@@ -1,6 +1,9 @@
 package rpcd
 
 import (
+	"time"
+
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
@@ -21,6 +24,7 @@ func (t *srpcType) GetFilteredImageUpdates(conn *srpc.Conn) error {
 func (t *srpcType) getImageUpdates(conn *srpc.Conn,
 	request imageserver.GetFilteredImageUpdatesRequest) error {
 	defer conn.Flush()
+	startTime := time.Now()
 	t.logger.Printf("New image replication client connected from: %s\n",
 		conn.RemoteAddr())
 	select {
@@ -72,8 +76,9 @@ func (t *srpcType) getImageUpdates(conn *srpc.Conn,
 		t.logger.Println(err)
 		return err
 	}
-	t.logger.Println(
-		"Finished sending initial image list to replication client")
+	t.logger.Printf(
+		"Finished sending initial image list to replication client in %s\n",
+		format.Duration(time.Since(startTime)))
 	closeChannel := conn.GetCloseNotifier()
 	for {
 		select {

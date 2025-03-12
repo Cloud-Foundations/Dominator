@@ -89,6 +89,8 @@ var (
 
 	srpcClientDoNotUseMethodPowers = flag.Bool("srpcClientDoNotUseMethodPowers",
 		false, "If true, do not use method powers when connecting to servers")
+	srpcDefaultConnectTimeout = flag.Duration("srpcDefaultConnectTimeout",
+		15*time.Second, "Default timeout (I/O deadline) during HTTP CONNECT")
 	srpcDefaultKeepAlivePeriod = flag.Duration("srpcDefaultKeepAlivePeriod",
 		5*time.Minute, "Default TCP keep-alive period")
 	srpcProxy = flag.String("srpcProxy", "",
@@ -104,6 +106,11 @@ var (
 // connections are permitted (i.e. insecure mode).
 func CheckTlsRequired() bool {
 	return tlsRequired
+}
+
+// GetClientTlsConfig returns a clone of the client TLS config.
+func GetClientTlsConfig() *tls.Config {
+	return clientTlsConfig.Clone()
 }
 
 // GetEarliestClientCertExpiration returns the earliest expiration time of any
@@ -342,6 +349,7 @@ type Client struct {
 	remoteAddr        string
 	resource          *ClientResource
 	tcpConn           libnet.TCPConn // The underlying raw TCP connection (if TCP).
+	timeout           time.Duration
 }
 
 // DialHTTP connects to an HTTP SRPC server at the specified network address
@@ -445,6 +453,12 @@ func (client *Client) SetKeepAlive(keepalive bool) error {
 // SetKeepAlivePeriod sets the period between keepalive messages.
 func (client *Client) SetKeepAlivePeriod(d time.Duration) error {
 	return client.setKeepAlivePeriod(d)
+}
+
+// SetTimeout sets the read and write deadlines associated with the underlying
+// connection prior to each method call.
+func (client *Client) SetTimeout(timeout time.Duration) error {
+	return client.setTimeout(timeout)
 }
 
 // RequestReply sends a request message to the named Service.Method function,

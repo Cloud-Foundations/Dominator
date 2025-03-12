@@ -11,7 +11,7 @@ func (t *srpcType) DiscardVmSnapshot(conn *srpc.Conn,
 	reply *hypervisor.DiscardVmSnapshotResponse) error {
 	response := hypervisor.DiscardVmSnapshotResponse{
 		errors.ErrorToString(t.manager.DiscardVmSnapshot(request.IpAddress,
-			conn.GetAuthInformation()))}
+			conn.GetAuthInformation(), request.Name))}
 	*reply = response
 	return nil
 }

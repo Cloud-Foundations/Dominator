@@ -5,11 +5,11 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 func copyFilteredFilesSubcommand(args []string, logger log.DebugLogger) error {
@@ -48,10 +48,8 @@ func copyFilteredRoot(scanFilter, imageFilter *filter.Filter,
 	return walkFilteredRoot(scanFilter, imageFilter, sourceDirectory,
 		sourceRoot,
 		func(path string, fi os.FileInfo) error {
-			stat, ok := fi.Sys().(*syscall.Stat_t)
-			if !ok {
-				return fmt.Errorf("bad FileInfo.Sys() type: %T", fi.Sys())
-			}
+			var stat wsyscall.Stat_t
+			wsyscall.ConvertStat(&stat, fi.Sys())
 			destpath := filepath.Join(destDirectory, path)
 			srcpath := filepath.Join(sourceDirectory, path)
 			if fi.IsDir() {

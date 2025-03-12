@@ -15,12 +15,18 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	filegenproto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
+
+type FastUpdateMessage struct {
+	Message string // Status updates and errors.
+	Synced  bool   // If true, the sub is synced with the image.
+}
 
 type subStatus uint
 
@@ -82,7 +88,7 @@ type Sub struct {
 	plannedImage                 *image.Image // Updated only by sub goroutine.
 	clientResource               *srpc.ClientResource
 	computedInodes               map[string]*filesystem.RegularInode
-	fileUpdateChannel            <-chan []filegenproto.FileInfo
+	fileUpdateReceiver           queue.Receiver[[]filegenproto.FileInfo]
 	busyFlagMutex                sync.Mutex
 	busy                         bool
 	deletingFlagMutex            sync.Mutex
@@ -99,6 +105,7 @@ type Sub struct {
 	freeSpaceThreshold           *uint64
 	computedFilesChangeTime      time.Time
 	scanCountAtLastUpdateEnd     uint64
+	configToRestore              *subproto.Configuration
 	isInsecure                   bool
 	status                       subStatus
 	publishedStatus              subStatus
@@ -145,6 +152,7 @@ type Herd struct {
 	subsByName               map[string]*Sub
 	subsByIndex              []*Sub // Sorted by Sub.hostname.
 	pollSemaphore            chan struct{}
+	fastUpdateSemaphore      chan struct{}
 	pushSemaphore            chan struct{}
 	cpuSharer                *cpusharer.FifoCpuSharer
 	dialer                   net.Dialer
@@ -186,6 +194,11 @@ func (herd *Herd) DisableUpdates(username, reason string) error {
 
 func (herd *Herd) EnableUpdates() error {
 	return herd.enableUpdates()
+}
+
+func (herd *Herd) FastUpdate(request domproto.FastUpdateRequest,
+	authInfo *srpc.AuthInformation) (<-chan FastUpdateMessage, error) {
+	return herd.fastUpdate(request, authInfo)
 }
 
 func (herd *Herd) ForceDisruptiveUpdate(hostname string,

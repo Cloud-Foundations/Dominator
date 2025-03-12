@@ -44,8 +44,8 @@ func newNamespaceTargetWithMounts(rootDir string, bindMounts []string) (
 
 // Run a command in the target root directory in the specified namespace and
 // with a new PID namespace.
-func runInTarget(g *goroutine.Goroutine, input io.Reader, output io.Writer,
-	rootDir string, envGetter environmentGetter,
+func runInTarget(g *goroutine.Goroutine, stdin io.Reader, stdout io.Writer,
+	stderr io.Writer, rootDir string, envGetter environmentGetter,
 	prog string, args ...string) error {
 	var environmentToInject map[string]string
 	if envGetter != nil {
@@ -55,9 +55,9 @@ func runInTarget(g *goroutine.Goroutine, input io.Reader, output io.Writer,
 	cmd.Env = stripVariables(os.Environ(), environmentToCopy, environmentToSet,
 		environmentToInject)
 	cmd.Dir = "/"
-	cmd.Stdin = input
-	cmd.Stdout = output
-	cmd.Stderr = output
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:     rootDir,
 		Setsid:     true,

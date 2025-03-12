@@ -97,6 +97,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if err := manager.checkVsockets(); err != nil {
 		return nil, err
 	}
+	if err := manager.loadKeys(); err != nil {
+		return nil, err
+	}
 	if err := manager.loadSubnets(); err != nil {
 		return nil, err
 	}
@@ -144,6 +147,15 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
 		vmInfo.setupLockWatcher()
+		if err := vmInfo.loadIdentityRequestorCert(); err != nil {
+			vmInfo.logger.Printf(
+				"failed to load identity requestor certificate: %s\n", err)
+			continue
+		}
+		if err := vmInfo.scanSnapshots(); err != nil {
+			vmInfo.logger.Printf("failed to scan snapshots: %s\n", err)
+			continue
+		}
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {
 			manager.Logger.Println(err)
 			if ipAddr == "0.0.0.0" {

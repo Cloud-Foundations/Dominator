@@ -350,6 +350,7 @@ type DiscardVmOldUserDataResponse struct {
 
 type DiscardVmSnapshotRequest struct {
 	IpAddress net.IP
+	Name      string
 }
 
 type DiscardVmSnapshotResponse struct {
@@ -377,6 +378,20 @@ type GetCapacityResponse struct {
 	MemoryInMiB      uint64 `json:",omitempty"`
 	NumCPUs          uint   `json:",omitempty"`
 	TotalVolumeBytes uint64 `json:",omitempty"`
+}
+
+type GetIdentityProviderRequest struct{}
+
+type GetIdentityProviderResponse struct {
+	Error   string
+	BaseUrl string
+}
+
+type GetPublicKeyRequest struct{}
+
+type GetPublicKeyResponse struct {
+	Error  string
+	KeyPEM []byte
 }
 
 type GetRootCookiePathRequest struct{}
@@ -653,6 +668,15 @@ type ReplaceVmCredentialsResponse struct {
 	Error string
 }
 
+type ReplaceVmIdentityRequest struct {
+	IdentityRequestorCertificate []byte // PEM encoded.
+	IpAddress                    net.IP
+}
+
+type ReplaceVmIdentityResponse struct {
+	Error string
+}
+
 type ReplaceVmImageRequest struct {
 	DhcpTimeout      time.Duration
 	ImageDataSize    uint64
@@ -686,6 +710,7 @@ type ReplaceVmUserDataResponse struct {
 type RestoreVmFromSnapshotRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
+	Name              string
 }
 
 type RestoreVmFromSnapshotResponse struct {
@@ -739,6 +764,7 @@ type SetDisabledStateResponse struct {
 type SnapshotVmRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
+	Name              string
 	RootOnly          bool
 }
 
@@ -835,10 +861,11 @@ type VmInfo struct {
 }
 
 type Volume struct {
-	Format    VolumeFormat    `json:",omitempty"`
-	Interface VolumeInterface `json:",omitempty"`
-	Size      uint64          `json:",omitempty"`
-	Type      VolumeType      `json:",omitempty"`
+	Format    VolumeFormat      `json:",omitempty"`
+	Interface VolumeInterface   `json:",omitempty"`
+	Size      uint64            `json:",omitempty"`
+	Snapshots map[string]uint64 `json:",omitempty"`
+	Type      VolumeType        `json:",omitempty"`
 }
 
 type VolumeFormat uint

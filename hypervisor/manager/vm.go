@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -93,18 +94,21 @@ func computeSize(minimumFreeBytes, roundupPower, size uint64) uint64 {
 	return imageUnits << roundupPower
 }
 
-func copyData(filename string, reader io.Reader, length uint64) error {
+// copyData will create and truncate the specified file and will copy data to
+// the file. If reader is nil, the file is fallocated or zero-filled.
+func copyData(filename string, reader io.Reader, length uint64,
+	logger log.DebugLogger) error {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY,
 		fsutil.PrivateFilePerms)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if err := setVolumeSize(filename, length); err != nil {
+	if err := os.Truncate(filename, int64(length)); err != nil {
 		return err
 	}
 	if reader == nil {
-		return nil
+		return fsutil.FallocateOrFill(filename, length, logger)
 	}
 	_, err = io.CopyN(file, reader, int64(length))
 	return err
@@ -305,6 +309,17 @@ func removeFile(filename string) error {
 		}
 	}
 	return nil
+}
+
+func sanitiseSnapshotName(name string) (string, error) {
+	if name == "" {
+		return "snapshot", nil
+	}
+	if strings.ContainsAny(name, ".:/") {
+		return "",
+			fmt.Errorf("prohibited characters in snapshot name: \"%s\"", name)
+	}
+	return "snapshot:" + name, nil
 }
 
 func setVolumeSize(filename string, size uint64) error {
@@ -1173,7 +1188,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	var identityName string
 	if len(request.IdentityCertificate) > 0 && len(request.IdentityKey) > 0 {
 		var err error
-		identityName, identityExpires, err = validateIdentityKeyPair(
+		var tlsCert *tls.Certificate
+		tlsCert, identityName, err = validateIdentityKeyPair(
 			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
 		if err != nil {
 			if err := maybeDrainAll(conn, request); err != nil {
@@ -1181,6 +1197,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			}
 			return sendError(conn, err)
 		}
+		identityExpires = tlsCert.Leaf.NotAfter
 	}
 	vm, err := m.allocateVm(request, conn.GetAuthInformation())
 	if err != nil {
@@ -1206,8 +1223,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		return sendError(conn, err)
 	}
 	err = writeKeyPair(request.IdentityCertificate, request.IdentityKey,
-		filepath.Join(vm.dirname, IdentityCertFile),
-		filepath.Join(vm.dirname, IdentityKeyFile))
+		filepath.Join(vm.dirname, IdentityRsaX509CertFile),
+		filepath.Join(vm.dirname, IdentityRsaX509KeyFile))
 	if err != nil {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
@@ -1304,7 +1321,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
-		if err := copyData(filename, conn, request.UserDataSize); err != nil {
+		err := copyData(filename, conn, request.UserDataSize, vm.logger)
+		if err != nil {
 			return sendError(conn, err)
 		}
 	}
@@ -1319,12 +1337,14 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			if err := copyData(fname, dataReader, volume.Size); err != nil {
+			err := copyData(fname, dataReader, volume.Size, vm.logger)
+			if err != nil {
 				return sendError(conn, err)
 			}
 			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
 				vinit := request.SecondaryVolumesInit[index]
 				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
+					NoDiscard:                true,
 					BytesPerInode:            vinit.BytesPerInode,
 					Label:                    vinit.Label,
 					ReservedBlocksPercentage: vinit.ReservedBlocksPercentage,
@@ -1333,10 +1353,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 					vm.logger)
 				if err != nil {
 					return sendError(conn, err)
-				}
-				if err := setVolumeSize(fname, volume.Size); err != nil {
-					return fmt.Errorf("error setting size on volume: %s: %s",
-						fname, err)
 				}
 			}
 			vm.Volumes = append(vm.Volumes, volume)
@@ -1475,7 +1491,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(rootFilename, conn, request.ImageDataSize)
+		err := copyData(rootFilename, conn, request.ImageDataSize, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1496,7 +1512,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(rootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1652,7 +1668,11 @@ func (m *Manager) discardVmOldUserData(ipAddr net.IP,
 }
 
 func (m *Manager) discardVmSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation) error {
+	authInfo *srpc.AuthInformation, snapshotName string) error {
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -1660,7 +1680,11 @@ func (m *Manager) discardVmSnapshot(ipAddr net.IP,
 	vm.blockMutations = true
 	vm.mutex.Unlock()
 	defer vm.allowMutationsAndUnlock(false)
-	return vm.discardSnapshot()
+	changed, err := vm.discardSnapshot(snapshotName, snapshotSuffix)
+	if changed {
+		vm.writeAndSendInfo()
+	}
+	return err
 }
 
 func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
@@ -3088,7 +3112,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			newSize = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(tmpRootFilename, conn, request.ImageDataSize)
+		err := copyData(tmpRootFilename, conn, request.ImageDataSize, vm.logger)
 		if err != nil {
 			return err
 		}
@@ -3114,7 +3138,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(tmpRootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength))
+			uint64(httpResponse.ContentLength), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3220,7 +3244,12 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 }
 
 func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool) error {
+	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
+	snapshotName string) error {
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -3228,18 +3257,28 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 	vm.blockMutations = true
 	vm.mutex.Unlock()
 	defer vm.allowMutationsAndUnlock(false)
+	var changed bool
+	defer func() {
+		if changed {
+			vm.writeAndSendInfo()
+		}
+	}()
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
 			return errors.New("VM is not stopped")
 		}
 	}
-	for _, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + ".snapshot"
+	for index, volume := range vm.VolumeLocations {
+		snapshotFilename := volume.Filename + "." + snapshotSuffix
 		if err := os.Rename(snapshotFilename, volume.Filename); err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		}
+		vm.mutex.Lock()
+		delete(vm.Volumes[index].Snapshots, snapshotName)
+		vm.mutex.Unlock()
+		changed = true
 	}
 	return nil
 }
@@ -3417,7 +3456,11 @@ func (m *Manager) sendVmInfo(ipAddress string, vm *proto.VmInfo) {
 }
 
 func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
-	forceIfNotStopped, snapshotRootOnly bool) error {
+	forceIfNotStopped, snapshotRootOnly bool, snapshotName string) error {
+	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
+	if err != nil {
+		return err
+	}
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
 	if err != nil {
 		return err
@@ -3437,23 +3480,40 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			return errors.New("VM is not stopped")
 		}
 	}
-	if err := vm.discardSnapshot(); err != nil {
+	changed, err := vm.discardSnapshot(snapshotName, snapshotSuffix)
+	if err != nil {
+		if changed {
+			vm.writeAndSendInfo()
+		}
 		return err
 	}
 	doCleanup := true
 	defer func() {
 		if doCleanup {
-			vm.discardSnapshot()
+			if cng, _ := vm.discardSnapshot(snapshotName, snapshotSuffix); cng {
+				changed = true
+			}
+		}
+		if changed {
+			vm.writeAndSendInfo()
 		}
 	}()
 	for index, volume := range vm.VolumeLocations {
-		snapshotFilename := volume.Filename + ".snapshot"
+		snapshotFilename := volume.Filename + "." + snapshotSuffix
 		if index == 0 || !snapshotRootOnly {
 			err := fsutil.CopyFile(snapshotFilename, volume.Filename,
 				fsutil.PrivateFilePerms)
 			if err != nil {
 				return err
 			}
+			fi, err := os.Stat(snapshotFilename)
+			if err != nil {
+				return fmt.Errorf("cannot stat: %s: %s", snapshotFilename, err)
+			}
+			vm.mutex.Lock()
+			vm.Volumes[index].Snapshots[snapshotName] = uint64(fi.Size())
+			vm.mutex.Unlock()
+			changed = true
 		}
 	}
 	doCleanup = false
@@ -3724,7 +3784,7 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize)
+	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize, vm.logger)
 	if err != nil {
 		return err
 	}
@@ -3748,6 +3808,10 @@ func (vm *vmInfoType) delete() {
 	}
 	for ch := range vm.metadataChannels {
 		close(ch)
+	}
+	if vm.identityProviderNotifier != nil {
+		close(vm.identityProviderNotifier)
+		vm.identityProviderNotifier = nil
 	}
 	vm.mutex.Unlock()
 	for _, volume := range vm.VolumeLocations {
@@ -3803,13 +3867,22 @@ func (vm *vmInfoType) destroy() {
 	vm.delete()
 }
 
-func (vm *vmInfoType) discardSnapshot() error {
-	for _, volume := range vm.VolumeLocations {
-		if err := removeFile(volume.Filename + ".snapshot"); err != nil {
-			return err
+// discardSnapshot will delete the specified snapshot. The VM lock will be
+// grabbed and released.
+// true is returned if the VM data structure is modified.
+func (vm *vmInfoType) discardSnapshot(snapshotName, snapshotSuff string) (
+	bool, error) {
+	var changed bool
+	for index, volume := range vm.VolumeLocations {
+		if err := removeFile(volume.Filename + "." + snapshotSuff); err != nil {
+			return changed, err
 		}
+		vm.mutex.Lock()
+		delete(vm.Volumes[index].Snapshots, snapshotName)
+		vm.mutex.Unlock()
+		changed = true
 	}
-	return nil
+	return changed, nil
 }
 
 func (vm *vmInfoType) getActiveInitrdPath() string {

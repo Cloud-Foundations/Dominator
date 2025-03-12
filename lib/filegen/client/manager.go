@@ -2,12 +2,18 @@ package client
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"path"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/queue"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -15,27 +21,36 @@ import (
 )
 
 func newManager(objSrv objectserver.ObjectServer, logger log.Logger) *Manager {
-	sourceReconnectChannel := make(chan string)
+	heartbeatChannel := make(chan struct{}, 1)
+	sourceReconnectChannel := make(chan string, 1)
+	var lastHeartbeatTime time.Time
 	m := &Manager{
 		sourceMap:              make(map[string]*sourceType),
 		objectServer:           objSrv,
 		machineMap:             make(map[string]*machineType),
-		addMachineChannel:      make(chan *machineType),
-		removeMachineChannel:   make(chan string),
-		updateMachineChannel:   make(chan *machineType),
-		serverMessageChannel:   make(chan *serverMessageType),
+		addMachineChannel:      make(chan *machineType, 1),
+		removeMachineChannel:   make(chan string, 1),
+		updateMachineChannel:   make(chan *machineType, 1),
+		serverMessageChannel:   make(chan *serverMessageType, 1),
 		sourceReconnectChannel: sourceReconnectChannel,
 		objectWaiters:          make(map[hash.Hash][]chan<- hash.Hash),
-		logger:                 logger}
+		logger:                 debuglogger.Upgrade(logger)}
 	tricorder.RegisterMetric("filegen/client/num-object-waiters",
 		&m.numObjectWaiters.value, units.None,
 		"number of goroutines waiting for objects")
-	go m.manage(sourceReconnectChannel)
+	go m.manage(sourceReconnectChannel, heartbeatChannel)
+	go watchHeartbeat(heartbeatChannel, &lastHeartbeatTime, &m.lostHeartbeat,
+		&m.lastLostHeartbeatTime, logger)
+	tricorder.RegisterMetric("filegen/client/last-heartbeat-time",
+		&lastHeartbeatTime, units.None,
+		"last manager heartbeat timestamp")
 	return m
 }
 
-func (m *Manager) manage(sourceConnectChannel <-chan string) {
+func (m *Manager) manage(sourceConnectChannel <-chan string,
+	heartbeatChannel chan<- struct{}) {
 	for {
+		timer := time.NewTimer(time.Second)
 		select {
 		case machine := <-m.addMachineChannel:
 			m.addMachine(machine)
@@ -47,6 +62,12 @@ func (m *Manager) manage(sourceConnectChannel <-chan string) {
 			m.processMessage(serverMessage)
 		case sourceName := <-sourceConnectChannel:
 			m.processSourceConnect(sourceName)
+		case <-timer.C:
+		}
+		clearTimer(timer)
+		select {
+		case heartbeatChannel <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -89,25 +110,62 @@ func (m *Manager) getSource(sourceName string) *sourceType {
 		return source
 	}
 	source = new(sourceType)
-	sendChannel := make(chan *proto.ClientRequest, 4096)
+	var peakQueueLength, queueLength uint
+	sendChannel, receiveChannel := queue.NewChannelPair[*proto.ClientRequest](
+		func(length uint) {
+			queueLength = length
+			if length > peakQueueLength {
+				peakQueueLength = length
+			}
+		})
+	tricorder.RegisterMetric(
+		path.Join("filegen/client/sources", sourceName, "current-queue-length"),
+		&queueLength,
+		units.None,
+		"current number of entries in send queue")
+	tricorder.RegisterMetric(
+		path.Join("filegen/client/sources", sourceName, "peak-queue-length"),
+		&peakQueueLength,
+		units.None,
+		"maximum number of entries in send queue")
 	source.sendChannel = sendChannel
 	m.sourceMap[sourceName] = source
-	go manageSource(sourceName, m.sourceReconnectChannel, sendChannel,
+	go manageSource(sourceName, m.sourceReconnectChannel, receiveChannel,
 		m.serverMessageChannel, m.logger)
 	return source
+}
+
+func (m *Manager) writeHtml(writer io.Writer) {
+	lastLostHeartbeatTime := m.lastLostHeartbeatTime
+	if m.lostHeartbeat {
+		fmt.Fprintf(writer,
+			"<font color=\"red\">Lost filegen heartbeat since %s (%s ago)</font><p>",
+			lastLostHeartbeatTime.Format(format.TimeFormatSeconds),
+			format.Duration(time.Since(lastLostHeartbeatTime)))
+	} else if !lastLostHeartbeatTime.IsZero() {
+		fmt.Fprintf(writer,
+			"<font color=\"salmon\">Previously lost filegen heartbeat at %s (%s ago)</font><p>",
+			lastLostHeartbeatTime.Format(format.TimeFormatSeconds),
+			format.Duration(time.Since(lastLostHeartbeatTime)))
+	}
+}
+
+func clearTimer(timer *time.Timer) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
 }
 
 func manageSource(sourceName string, sourceReconnectChannel chan<- string,
 	clientRequestChannel <-chan *proto.ClientRequest,
 	serverMessageChannel chan<- *serverMessageType, logger log.Logger) {
-	closeNotifyChannel := make(chan struct{})
-	initialRetryTimeout := time.Millisecond * 100
-	retryTimeout := initialRetryTimeout
+	closeNotifyChannel := make(chan struct{}, 1)
+	sleeper := backoffdelay.NewExponential(100*time.Millisecond, time.Minute, 1)
 	reconnect := false
-	for ; ; time.Sleep(retryTimeout) {
-		if retryTimeout < time.Minute {
-			retryTimeout *= 2
-		}
+	for ; ; sleeper.Sleep() {
 		client, err := srpc.DialHTTP("tcp", sourceName, time.Second*15)
 		if err != nil {
 			logger.Printf("error connecting to: %s: %s\n", sourceName, err)
@@ -119,7 +177,7 @@ func manageSource(sourceName string, sourceReconnectChannel chan<- string,
 			logger.Println(err)
 			continue
 		}
-		retryTimeout = initialRetryTimeout
+		sleeper.Reset()
 		go handleServerMessages(sourceName, conn, serverMessageChannel,
 			closeNotifyChannel, logger)
 		if reconnect {
@@ -171,5 +229,27 @@ func handleServerMessages(sourceName string, decoder srpc.Decoder,
 			return
 		}
 		serverMessageChannel <- &serverMessageType{sourceName, message}
+	}
+}
+
+func watchHeartbeat(heartbeatChannel <-chan struct{},
+	heartbeatTimestamp *time.Time, heartbeatStopped *bool,
+	lastHeartbeatLostTime *time.Time, logger log.Logger) {
+	timer := time.NewTimer(time.Minute)
+	for {
+		select {
+		case <-timer.C:
+			logger.Println("filegen: manager heartbeat stopped")
+			*heartbeatStopped = true
+			*lastHeartbeatLostTime = time.Now()
+		case <-heartbeatChannel:
+			if *heartbeatStopped {
+				logger.Println("filegen: manager heartbeat resumed")
+				*heartbeatStopped = false
+			}
+			clearTimer(timer)
+			timer.Reset(time.Minute)
+			*heartbeatTimestamp = time.Now()
+		}
 	}
 }

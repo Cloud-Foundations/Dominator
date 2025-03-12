@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
-var modePerm FileMode = syscall.S_IRWXU | syscall.S_IRWXG | syscall.S_IRWXO
+var modePerm FileMode = wsyscall.S_IRWXU | wsyscall.S_IRWXG | wsyscall.S_IRWXO
 
 func forceWriteMetadata(inode GenericInode, name string) error {
 	err := inode.WriteMetadata(name)
@@ -91,9 +92,9 @@ func (inode *SpecialInode) write(name string) error {
 
 func (inode *SpecialInode) make(name string) error {
 	if inode.Mode&syscall.S_IFBLK != 0 || inode.Mode&syscall.S_IFCHR != 0 {
-		return syscall.Mknod(name, uint32(inode.Mode), int(inode.Rdev))
+		return wsyscall.Mknod(name, uint32(inode.Mode), int(inode.Rdev))
 	} else if inode.Mode&syscall.S_IFIFO != 0 {
-		return syscall.Mkfifo(name, uint32(inode.Mode))
+		return wsyscall.Mkfifo(name, uint32(inode.Mode))
 	} else {
 		return errors.New("unsupported mode")
 	}

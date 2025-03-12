@@ -51,6 +51,7 @@ type ImageDataBase struct {
 type imageType struct {
 	computedFiles []filesystem.ComputedFile
 	image         *image.Image
+	modifying     bool
 }
 
 type Params struct {

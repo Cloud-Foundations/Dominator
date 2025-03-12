@@ -280,7 +280,17 @@ func createVmOnHypervisor(hypervisor string,
 				vinit.MountPoint, "ext4", "discard", 0, 2)
 		}
 	}
-	if *identityCertFile != "" && *identityKeyFile != "" {
+	if *identityName != "" {
+		if *identityCertFile != "" {
+			return errors.New(
+				"must not specify identityCertFile when specifying identityName")
+		}
+		if *identityKeyFile != "" {
+			return errors.New(
+				"must not specify identityKeyFile when specifying identityName")
+		}
+		request.DoNotStart = true
+	} else if *identityCertFile != "" && *identityKeyFile != "" {
 		identityCert, err := ioutil.ReadFile(*identityCertFile)
 		if err != nil {
 			return err
@@ -346,6 +356,16 @@ func createVmOnHypervisor(hypervisor string,
 	}
 	if err := hyperclient.AcknowledgeVm(client, reply.IpAddress); err != nil {
 		return fmt.Errorf("error acknowledging VM: %s", err)
+	}
+	if *identityName != "" {
+		err := setupVmWithIdentity(client, hypervisor, reply.IpAddress, logger)
+		if err != nil {
+			e := hyperclient.DestroyVm(client, reply.IpAddress, nil)
+			if e != nil {
+				logger.Println(e)
+			}
+			return err
+		}
 	}
 	fmt.Println(reply.IpAddress)
 	if *doNotStart {
@@ -460,6 +480,16 @@ func readSysfsInt64(filename string) (int64, error) {
 		return 0, fmt.Errorf("only read %d values from: %s", nScanned, filename)
 	}
 	return value, nil
+}
+
+func setupVmWithIdentity(client *srpc.Client, hypervisorAddress string,
+	vmIP net.IP, logger log.DebugLogger) error {
+	err := replaceVmIdentityOnConnectedHypervisor(client, hypervisorAddress,
+		vmIP, logger)
+	if err != nil {
+		return err
+	}
+	return hyperclient.StartVm(client, vmIP, nil)
 }
 
 func (r *wrappedReadCloser) Close() error {

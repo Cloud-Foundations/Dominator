@@ -41,6 +41,7 @@ type hypervisorType struct {
 	deleteScheduled      bool
 	disabled             bool
 	healthStatus         string
+	lastConnectedTime    time.Time
 	lastIpmiProbe        time.Time
 	localTags            tags.Tags
 	location             string

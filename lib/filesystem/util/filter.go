@@ -7,7 +7,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 )
 
-func deletedFilteredFiles(rootDir string, filt *filter.Filter) error {
+func deleteFilteredFiles(rootDir string, filt *filter.Filter) error {
 	startPos := len(rootDir)
 	return filepath.Walk(rootDir,
 		func(path string, fi os.FileInfo, err error) error {

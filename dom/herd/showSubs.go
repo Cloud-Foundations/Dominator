@@ -147,7 +147,7 @@ func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
 	case url.OutputTypeJson:
 		herd.showSubsJSON(writer, selectFunc)
 	case url.OutputTypeText:
-		fmt.Fprintln(writer, "Text output not supported")
+		herd.showSubsText(writer, selectFunc)
 	default:
 		fmt.Fprintln(writer, "Unknown output type")
 	}
@@ -196,6 +196,14 @@ func (herd *Herd) showSubsJSON(writer io.Writer,
 		output = append(output, sub.makeInfo())
 	}
 	json.WriteWithIndent(writer, "   ", output)
+}
+
+func (herd *Herd) showSubsText(writer io.Writer,
+	selectFunc func(*Sub) bool) {
+	subs := herd.getSelectedSubs(selectFunc)
+	for _, sub := range subs {
+		fmt.Fprintln(writer, sub)
+	}
 }
 
 func (sub *Sub) makeInfo() proto.SubInfo {
@@ -327,6 +335,8 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 		newRow(w, "Location", false)
 		tw.WriteData("", sub.mdb.Location)
 	}
+	newRow(w, "Time since last poll attempt", false)
+	showSince(tw, timeNow, sub.lastPollStartTime)
 	newRow(w, "Time since last successful poll", false)
 	showSince(tw, timeNow, sub.lastPollSucceededTime)
 	newRow(w, "Time since last update", false)

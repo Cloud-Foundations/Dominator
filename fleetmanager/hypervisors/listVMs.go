@@ -54,9 +54,7 @@ func getTotalsByOwner(vms []*vmInfoType) map[string]*ownerTotalsType {
 		} else {
 			ownerTotals.VirtualCPUs += vm.VirtualCPUs
 		}
-		for _, volume := range vm.Volumes {
-			ownerTotals.VolumeSize += volume.Size
-		}
+		ownerTotals.VolumeSize += vm.TotalStorage()
 	}
 	return totalsByOwner
 }
@@ -402,9 +400,6 @@ func (vm *vmInfoType) numVolumesTableEntry() string {
 }
 
 func (vm *vmInfoType) storageTotalTableEntry() string {
-	var storage uint64
-	for _, volume := range vm.Volumes {
-		storage += volume.Size
-	}
+	storage := vm.TotalStorage()
 	return format.FormatBytes(storage)
 }

@@ -44,6 +44,8 @@ var (
 	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
 	tagsToMatch tags.MatchTags
+	timeout     = flag.Duration("timeout", 15*time.Minute,
+		"Timeout for long operations")
 
 	dominatorSrpcClient *srpc.Client
 )
@@ -75,6 +77,7 @@ var subcommands = []commands.Command{
 	{"disruption-check", "sub", 1, 1, disruptionCheckSubcommand},
 	{"disruption-request", "sub", 1, 1, disruptionRequestSubcommand},
 	{"enable-updates", "reason", 1, 1, enableUpdatesSubcommand},
+	{"fast-update", "sub", 1, 1, fastUpdateSubcommand},
 	{"force-disruptive-update", "sub", 1, 1, forceDisruptiveUpdateSubcommand},
 	{"get-default-image", "", 0, 0, getDefaultImageSubcommand},
 	{"get-info-for-subs", "", 0, 0, getInfoForSubsSubcommand},
