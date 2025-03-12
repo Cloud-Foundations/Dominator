@@ -823,9 +823,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 	for _, vm := range h.vms {
 		h.allocatedMilliCPUs += uint64(vm.MilliCPUs)
 		h.allocatedMemory += vm.MemoryInMiB
-		for _, volume := range vm.Volumes {
-			h.allocatedVolumeBytes += volume.Size
-		}
+		h.allocatedVolumeBytes += vm.TotalStorage()
 	}
 	m.sendUpdate(h.location, &update)
 }
