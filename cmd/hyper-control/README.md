@@ -87,6 +87,8 @@ Some of the sub-commands available are:
                           *Hypervisor*
 - **rollout-image**: safely roll out specified image to all *Hypervisors* in a
                      location
+- **send-email-to-hypervisor-vm-owners**: send email to owners of VMs on a
+                                          specific *Hypervisor*
 - **show-network-configuration**: show the network configuration for the
                                   specified *Hypervisor*
 - **update-network-configuration**: update the network configuration for the
