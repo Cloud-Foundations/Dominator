@@ -33,10 +33,10 @@ Some of the sub-commands available are:
 - **claim-device**: claim (register) an existing device
 - **export-image**: export image to a specified destination (i.e. S3-backed AMI)
 - **forget-stream**: forget the specified image stream
+- **get-device-for-stream**: get the device ID for the specified image stream
 - **get-raw**: get the raw contents of the device storing the image and write to
                the local file specified by the `-filename` parameter
 - **get-status**: get status information for the *image-unpacker*
-- **get-device-for-stream**: get the device ID for the specified image stream
 - **prepare-for-capture**: prepare a previously unpacked image for capture by
                            adding/updating a bootloader
 - **prepare-for-copy**: prepare the device for copying the contents from the
