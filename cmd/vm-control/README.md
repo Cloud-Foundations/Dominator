@@ -26,11 +26,13 @@ Some of the sub-commands available are:
 - **add-vm-volumes**: add volumes to a VM
 - **become-primary-vm-owner**: become the primary owner of a VM
 - **change-vm-console-type**: change the console type for a VM
+- **change-vm-cpu-priority**: change the CPU priority for a VM
 - **change-vm-cpus**: change the number of CPUs for a VM
 - **change-vm-destroy-protection**: enable/disable destroy protect for a VM
 - **change-vm-machine-type**: change the machine type for a VM
 - **change-vm-memory**: change the memory for a VM
-- **change-vm-owner-users**: change the extra owners for a VM
+- **change-vm-owner-groups**: change the owner groups for a VM
+- **change-vm-owner-users**: change the extra owner users for a VM
 - **change-vm-tags**: change the tags for a VM
 - **change-vm-vcpus**: change the number of vCPUs for a VM
 - **change-vm-volume-interfaces**: change the volume interfaces (device types
@@ -58,6 +60,7 @@ Some of the sub-commands available are:
                        location
 - **get-vm-hypervisor**: get and show the *Hypervisor* for a VM
 - **get-vm-info**: get and show the information for a VM
+- **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
 - **get-vm-user-data**: get (copy) the user data for a VM
 - **get-vm-volume**: get (copy) a specified VM volume
 - **import-local-vm**: import a local raw VM. This is primarily for debugging
@@ -69,11 +72,13 @@ Some of the sub-commands available are:
 - **list-locations**: list locations within the specified top location
 - **list-vms**: list the IP addresses for all VMs
 - **migrate-vm**: migrate a VM to another Hypervisor
+- **parse-virsh-xml**: parse the XML for a virsh VM
 - **patch-vm-image**: patch the root image for a VM. Files listed in the image
                       filter are not changed. The old root image is saved. The
                       VM must not be running
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
 - **reboot-vm**: reboot a VM
+- **reorder-vm-volumes**: re-order the volumes for a VM
 - **replace-vm-credentials**: replace the credentials made available to a VM via
                               the Metadata service. This is primarily for
                               debugging
@@ -92,13 +97,12 @@ Some of the sub-commands available are:
 - **restore-vm-image**: restore the previously saved root image for a VM. The VM
                         must not be running
 - **restore-vm-user-data**: restore the previously saved user data for a VM
-- **reorder-vm-volumes**: re-order the volumes for a VM
-- **set-vm-migrating**: change the VM state to migrating. For debugging only
-- **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **save-vm**: save (backup) all VM data (volumes) and metadata to a storage
                destination
 - **scan-vm-root**: scan the root file-system of stopped VM and write to
                     scanFilename
+- **set-vm-migrating**: change the VM state to migrating. For debugging only
+- **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **start-vm**: start a stopped VM
 - **stop-vm**: stop a running VM. All data and metadata are preserved
 - **trace-vm-metadata**: trace the requests a VM makes to the metadata service
