@@ -69,10 +69,15 @@ func compile(expression string) (Regexp, error) {
 }
 
 func compileContainsMatcher(expression string) containsMatcher {
-	if len(expression) < 6 {
+	if len(expression) < 7 {
 		return ""
 	}
-	if !strings.HasPrefix(expression, "/.*") {
+	index := 0
+	if strings.HasPrefix(expression, "/.*") {
+		index = 3
+	} else if strings.HasPrefix(expression, ".*/") {
+		index = 2
+	} else {
 		return ""
 	}
 	if !strings.HasSuffix(expression, ".*") {
@@ -80,7 +85,7 @@ func compileContainsMatcher(expression string) containsMatcher {
 	}
 	builder := &strings.Builder{}
 	length := len(expression) - 2
-	for index := 3; index < length; index++ {
+	for ; index < length; index++ {
 		ch := expression[index]
 		if isPlain(ch) {
 			builder.WriteByte(ch)

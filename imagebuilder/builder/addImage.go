@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,10 @@ const timeFormat = "2006-01-02:15:04:05"
 var (
 	errorTestTimedOut = errors.New("test timed out")
 	tmpFilter         *filter.Filter
+
+	datestampLock        sync.Mutex // Lock section below.
+	currentDatestamp     string
+	datestampStreamNames map[string]struct{} // Key: stream name.
 )
 
 type hasher struct {
@@ -144,7 +149,27 @@ func listPackages(g *goroutine.Goroutine, rootDir string) (
 }
 
 func makeImageName(streamName string) string {
-	return path.Join(streamName, time.Now().Format(timeFormat))
+	for {
+		if imageName := makeImageNameOnce(streamName); imageName != "" {
+			return imageName
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func makeImageNameOnce(streamName string) string {
+	datestampLock.Lock()
+	defer datestampLock.Unlock()
+	datestamp := time.Now().Format(timeFormat)
+	if datestamp != currentDatestamp {
+		datestampStreamNames = make(map[string]struct{})
+		currentDatestamp = datestamp
+	}
+	if _, ok := datestampStreamNames[streamName]; ok {
+		return ""
+	}
+	datestampStreamNames[streamName] = struct{}{}
+	return path.Join(streamName, datestamp)
 }
 
 func packImage(g *goroutine.Goroutine, client srpc.ClientI,
