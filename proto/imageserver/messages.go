@@ -163,6 +163,7 @@ type Object struct {
 
 type MakeDirectoryRequest struct {
 	DirectoryName string
+	MakeAll       bool
 }
 
 type MakeDirectoryResponse struct{}
