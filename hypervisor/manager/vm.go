@@ -4353,12 +4353,12 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
 		var volumeInterface proto.VolumeInterface
-		if vm.DisableVirtIO {
-			volumeInterface = proto.VolumeInterfaceIDE
-		}
 		if index < len(vm.Volumes) {
 			volumeFormat = vm.Volumes[index].Format
 			volumeInterface = vm.Volumes[index].Interface
+		}
+		if vm.DisableVirtIO && volumeInterface == proto.VolumeInterfaceVirtIO {
+			volumeInterface = proto.VolumeInterfaceIDE
 		}
 		// For the simple cases (VirtIO and IDE), use old-style flags to
 		// maintain compatibility with old versions of QEMU (like 2.0.0).
