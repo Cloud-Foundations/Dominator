@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -496,10 +497,38 @@ func (imdb *ImageDataBase) listImages(
 
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 	authInfo *srpc.AuthInformation, userRpc bool) error {
-	directory.Name = filepath.Clean(directory.Name)
-	pathname := filepath.Join(imdb.BaseDirectory, directory.Name)
 	imdb.Lock()
 	defer imdb.Unlock()
+	return imdb.makeDirectoryWithLock(directory, authInfo, userRpc)
+}
+
+func (imdb *ImageDataBase) makeDirectoryAll(dirname string,
+	authInfo *srpc.AuthInformation) error {
+	imdb.Lock()
+	defer imdb.Unlock()
+	return imdb.makeDirectoryAllRecurse(dirname, authInfo)
+}
+
+func (imdb *ImageDataBase) makeDirectoryAllRecurse(dirname string,
+	authInfo *srpc.AuthInformation) error {
+	if dirname == "." {
+		return errors.New("cannot create root directory")
+	}
+	if _, ok := imdb.directoryMap[dirname]; ok {
+		return nil
+	}
+	parentDir := path.Dir(dirname)
+	if err := imdb.makeDirectoryAllRecurse(parentDir, authInfo); err != nil {
+		return err
+	}
+	return imdb.makeDirectoryWithLock(image.Directory{Name: dirname}, authInfo,
+		true)
+}
+
+func (imdb *ImageDataBase) makeDirectoryWithLock(directory image.Directory,
+	authInfo *srpc.AuthInformation, userRpc bool) error {
+	directory.Name = filepath.Clean(directory.Name)
+	pathname := filepath.Join(imdb.BaseDirectory, directory.Name)
 	oldDirectoryMetadata, ok := imdb.directoryMap[directory.Name]
 	if userRpc {
 		if authInfo == nil {
