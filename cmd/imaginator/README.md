@@ -93,9 +93,10 @@ following fields:
 A [sample configuration file](conf.json) is provided which may be modified to
 suit your environment. This is a fully working configuration and only requires
 modification of the location of the package repositories and the
-`ImageStreamsUrl` for your custom *image streams*.
+`ImageStreamsUrl` for your custom *image streams*. Details on some of the above
+configuration entries are described below.
 
-### Bootstrap Streams configuration
+### BootstrapStreams configuration
 Each *bootstrap stream* is configured by a JSON object with the following
 fields:
 - `BootstrapCommand`: an array of strings containing the bootstrap script to run
@@ -112,11 +113,16 @@ fields:
                       triggers will be attached to the image
 - `PackagerType`: the name of the packager type to use
 
-### Image Streams URL
+### ImageStreams URL
 This is a JSON encoded configuration file listing all the user-defined *image
-streams*. It contains a top-level `Streams` field which in turn contains a table
-of *image stream* names and their respective configurations. The configuration
-for an *image stream* is a JSON object with the following fields:
+streams*. It contains the following top-level fields:
+- `StreamPatterns`: this contains a table of regular expressions matching
+                    *image stream* names and their respective configurations
+- `Streams`:  this contains a table of *image stream* names and their
+              respective configurations
+
+The configuration for an *image stream* is a JSON object with the following
+fields:
 - `BuilderGroups`: a list of groups. Members of these groups are permitted to
                    build images for this stream
 - `BuilderUsers`: a list of users who are permitted to build images for this
@@ -137,10 +143,12 @@ for an *image stream* is a JSON object with the following fields:
 An [example configuration file](streams.json) is provided. Note the use of
 variables in different places.
 
-### Packager Types
+### PackagerTypes
 Each *packager type* is configured by a JSON object with the following fields:
 - `CleanCommand`: an array of strings containing the command to run when
   		  cleaning up packager debris
+- `CleanPatterns`: an array of regular expressions which match pathnames that
+  		   should be removed when cleaning up packager debris
 - `InstallCommand`: an array of strings containing the command to run when
   		    installing packages. The name of the package to be installed
 		    is appended to the command-line

@@ -1,4 +1,14 @@
 {
+  "StreamPatterns": {
+    "users/bar/.*/amd64": {
+      "ManifestUrl": "https://github.com/bar/image-manifests.git",
+      "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
+    },
+    "users/foo/.*/amd64": {
+      "ManifestUrl": "https://github.com/foo/image-manifests.git",
+      "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
+    }
+  },
   "Streams": {
     "base/Debian-10/amd64": {
       "ManifestUrl": "https://github.com/Cloud-Foundations/image-manifests.git",
