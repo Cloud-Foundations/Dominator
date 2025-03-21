@@ -1,5 +1,9 @@
 package builder
 
+import (
+	"fmt"
+)
+
 func (b *Builder) getBootstrapStream(name string) *bootstrapStream {
 	b.streamsLock.RLock()
 	defer b.streamsLock.RUnlock()
@@ -28,6 +32,31 @@ func (b *Builder) getNumStreams() int {
 	b.streamsLock.RLock()
 	defer b.streamsLock.RUnlock()
 	return len(b.bootstrapStreams) + len(b.imageStreams)
+}
+
+func (b *Builder) getPatternedNormalStream(name string) (
+	*imageStreamType, error) {
+	var matchingPatterns []*imageStreamPatternType
+	b.streamsLock.RLock()
+	for _, streamPattern := range b.imageStreamPatterns {
+		if streamPattern.regexp.MatchString(name) {
+			matchingPatterns = append(matchingPatterns, streamPattern)
+		}
+	}
+	b.streamsLock.RUnlock()
+	if len(matchingPatterns) < 1 {
+		return nil, nil
+	}
+	if len(matchingPatterns) > 1 {
+		return nil, fmt.Errorf("multiple stream patterns match: \"%s\"", name)
+	}
+	pattern := matchingPatterns[0]
+	return &imageStreamType{
+		builder:                      b,
+		builderUsers:                 pattern.builderUsers,
+		name:                         name,
+		imageStreamConfigurationType: pattern.imageStreamConfigurationType,
+	}, nil
 }
 
 func (b *Builder) listAllStreamNames() []string {

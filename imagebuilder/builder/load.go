@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -44,6 +45,15 @@ func imageStreamsRealDecoder(reader io.Reader) (
 	var config imageStreamsConfigurationType
 	if err := json.Read(reader, &config); err != nil {
 		return nil, err
+	}
+	for pattern, streamPattern := range config.StreamPatterns {
+		streamPattern.builderUsers = stringutil.ConvertListToMap(
+			streamPattern.BuilderUsers, false)
+		re, err := regexp.Compile("^" + pattern + "$")
+		if err != nil {
+			return nil, err
+		}
+		streamPattern.regexp = re
 	}
 	for _, stream := range config.Streams {
 		stream.builderUsers = stringutil.ConvertListToMap(stream.BuilderUsers,
@@ -323,7 +333,12 @@ func (b *Builder) updateImageStreams(
 		stream.builder = b
 		stream.name = name
 	}
+	var streamPatterns []*imageStreamPatternType
+	for _, imageStreamPattern := range imageStreamsConfiguration.StreamPatterns {
+		streamPatterns = append(streamPatterns, imageStreamPattern)
+	}
 	b.streamsLock.Lock()
+	b.imageStreamPatterns = streamPatterns
 	b.imageStreams = imageStreamsConfiguration.Streams
 	b.streamsLock.Unlock()
 	b.triggerDependencyDataGeneration()

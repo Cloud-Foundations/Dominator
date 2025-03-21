@@ -3,6 +3,8 @@ package builder
 import (
 	"bytes"
 	"io"
+	stdlog "log"
+	"regexp"
 	"sync"
 	"syscall"
 	"time"
@@ -74,23 +76,35 @@ type dependencyDataType struct {
 	lastAttemptError    error
 	lastAttemptFetchLog []byte
 	lastAttemptTime     time.Time
+	patternSources      map[string]struct{}
 	streamToSource      map[string]string // K: stream name, V: source stream.
 	unbuildableSources  map[string]struct{}
 }
 
-type imageStreamsConfigurationType struct {
-	Streams map[string]*imageStreamType `json:",omitempty"`
-}
-
-type imageStreamType struct {
-	builder           *Builder
-	builderUsers      map[string]struct{}
-	name              string
+type imageStreamConfigurationType struct {
 	BuilderGroups     []string
 	BuilderUsers      []string
 	ManifestUrl       string
 	ManifestDirectory string
 	Variables         map[string]string
+}
+
+type imageStreamsConfigurationType struct {
+	StreamPatterns map[string]*imageStreamPatternType `json:",omitempty"`
+	Streams        map[string]*imageStreamType        `json:",omitempty"`
+}
+
+type imageStreamPatternType struct {
+	builderUsers map[string]struct{}
+	imageStreamConfigurationType
+	regexp *regexp.Regexp
+}
+
+type imageStreamType struct {
+	builder      *Builder
+	builderUsers map[string]struct{}
+	name         string
+	imageStreamConfigurationType
 }
 
 type inodeData struct {
@@ -216,6 +230,7 @@ type Builder struct {
 	streamsLoadedChannel        <-chan struct{} // Closed when streams loaded.
 	streamsLock                 sync.RWMutex
 	bootstrapStreams            map[string]*bootstrapStream
+	imageStreamPatterns         []*imageStreamPatternType
 	imageStreams                map[string]*imageStreamType
 	imageStreamsToAutoRebuild   []string
 	relationshipsQuickLinks     []WebLink
@@ -352,7 +367,7 @@ func BuildImageFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (string, error) {
 	_, name, err := buildImageFromManifestAndUpload(client, options, streamName,
-		expiresIn, buildLog)
+		expiresIn, buildLog, stdlog.New(buildLog, "", 0))
 	return name, err
 }
 
@@ -370,7 +385,8 @@ func BuildTreeFromManifest(client *srpc.Client, manifestDir string,
 
 func BuildTreeFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, buildLog io.Writer) (string, error) {
-	return buildTreeFromManifest(client, options, buildLog)
+	return buildTreeFromManifest(client, options, buildLog,
+		stdlog.New(buildLog, "", 0))
 }
 
 func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
@@ -387,7 +403,7 @@ func ProcessManifestWithOptions(options BuildLocalOptions,
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
 	_, err := unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
-		bindMounts, true, nil, buildLog)
+		bindMounts, true, nil, buildLog, stdlog.New(buildLog, "", 0))
 	return err
 }
 
@@ -395,6 +411,7 @@ func UnpackImageAndProcessManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, rootDir string, buildLog io.Writer) error {
 	_, err := unpackImageAndProcessManifest(client,
 		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
-		variablesGetter(options.Variables), buildLog)
+		variablesGetter(options.Variables), buildLog,
+		stdlog.New(buildLog, "", 0))
 	return err
 }

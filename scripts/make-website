@@ -8,8 +8,8 @@ readonly target_dir="$1"
 rm -rf "$target_dir"
 mkdir -p "$target_dir"
 
-# Copy *.css files.
-for file in $(find . -type f -name '*.css' -print); do
+# Copy *.css and *.json files.
+for file in $(find . -type f \( -name '*.css' -o -name '*.json' \) -print); do
     mkdir -p "${target_dir}/${file%/*}"
     cp -p "$file" "${target_dir}/${file}"
 done

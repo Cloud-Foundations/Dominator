@@ -90,7 +90,10 @@ func (b *Builder) build(client srpc.ClientI, request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
 	logWriter io.Writer) (*image.Image, string, error) {
 	startTime := time.Now()
-	builder := b.getImageBuilderWithReload(request.StreamName)
+	builder, err := b.getImageBuilderWithReload(request.StreamName)
+	if err != nil {
+		return nil, "", err
+	}
 	if builder == nil {
 		return nil, "", errors.New("unknown stream: " + request.StreamName)
 	}
@@ -428,24 +431,33 @@ func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
 	}
 }
 
-func (b *Builder) getImageBuilder(streamName string) imageBuilder {
+func (b *Builder) getImageBuilder(streamName string) (imageBuilder, error) {
 	if stream := b.getBootstrapStream(streamName); stream != nil {
-		return stream
+		return stream, nil
 	}
 	if stream := b.getNormalStream(streamName); stream != nil {
-		return stream
+		return stream, nil
+	}
+	if stream, err := b.getPatternedNormalStream(streamName); err != nil {
+		return nil, err
+	} else if stream != nil {
+		return stream, nil
 	}
 	// Ensure a nil interface is returned, not a stream with value == nil.
-	return nil
+	return nil, nil
 }
 
-func (b *Builder) getImageBuilderWithReload(streamName string) imageBuilder {
-	if stream := b.getImageBuilder(streamName); stream != nil {
-		return stream
+func (b *Builder) getImageBuilderWithReload(streamName string) (
+	imageBuilder, error) {
+	stream, err := b.getImageBuilder(streamName)
+	if err != nil {
+		return nil, err
+	} else if stream != nil {
+		return stream, nil
 	}
-	if err := b.reloadNormalStreamsConfiguration(); err != nil {
-		b.logger.Printf("Error reloading configuration: %s\n", err)
-		return nil
+	if e := b.reloadNormalStreamsConfiguration(); e != nil {
+		b.logger.Printf("Error reloading configuration: %s\n", e)
+		return nil, err
 	}
 	return b.getImageBuilder(streamName)
 }

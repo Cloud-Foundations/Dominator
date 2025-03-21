@@ -19,6 +19,7 @@ import (
 type dependencyResultType struct {
 	fetchLog           []byte
 	fetchTime          time.Duration
+	patternSources     map[string]struct{}
 	resultTime         time.Time
 	streamToSource     map[string]string // K: stream name, V: source stream.
 	unbuildableSources map[string]struct{}
@@ -145,6 +146,7 @@ func (b *Builder) dependencyGeneratorLoop(
 			b.dependencyDataLock.Lock()
 			if oldData := b.dependencyData; oldData != nil {
 				dependencyData.generatedAt = oldData.generatedAt
+				dependencyData.patternSources = oldData.patternSources
 				dependencyData.streamToSource = oldData.streamToSource
 				dependencyData.unbuildableSources = oldData.unbuildableSources
 			}
@@ -155,6 +157,7 @@ func (b *Builder) dependencyGeneratorLoop(
 				generatedAt:         dependencyResult.resultTime,
 				lastAttemptFetchLog: dependencyResult.fetchLog,
 				lastAttemptTime:     dependencyResult.resultTime,
+				patternSources:      dependencyResult.patternSources,
 				streamToSource:      dependencyResult.streamToSource,
 				unbuildableSources:  dependencyResult.unbuildableSources,
 			}
@@ -264,12 +267,22 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 	}
 	fmt.Fprintf(fetchLog, "Cumulative fetch time: %s\n",
 		format.Duration(serialisedFetchTime))
+	patternSources := make(map[string]struct{})
 	unbuildableSources := make(map[string]struct{})
 	for streamName, sourceName := range streamToSource {
 		if _, ok := streamToSource[sourceName]; ok {
 			continue
 		}
 		if b.getBootstrapStream(sourceName) != nil {
+			continue
+		}
+		if stream, err := b.getPatternedNormalStream(sourceName); err != nil {
+			unbuildableSources[sourceName] = struct{}{}
+			b.logger.Printf("stream: %s has unbuildable source: %s: %s\n",
+				streamName, sourceName, err)
+			continue
+		} else if stream != nil {
+			patternSources[sourceName] = struct{}{}
 			continue
 		}
 		unbuildableSources[sourceName] = struct{}{}
@@ -286,6 +299,7 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 	return &dependencyResultType{
 		fetchLog:           fetchLog.Bytes(),
 		fetchTime:          serialisedFetchTime,
+		patternSources:     patternSources,
 		resultTime:         finishedTime,
 		streamToSource:     streamToSource,
 		unbuildableSources: unbuildableSources,
@@ -366,6 +380,12 @@ func (b *Builder) getDirectedGraph(request proto.GetDirectedGraphRequest) (
 	for _, streamName := range streamNames {
 		fmt.Fprintf(buffer, "  \"%s\" -> \"%s\"\n",
 			streamName, dependencyData.streamToSource[streamName])
+	}
+	// Mark pattern streams in grey.
+	for streamName := range dependencyData.patternSources {
+		if _, ok := excludedStreams[streamName]; !ok {
+			fmt.Fprintf(buffer, "  \"%s\" [fontcolor=grey]\n", streamName)
+		}
 	}
 	// Mark streams with no source in red, to show they are unbuildable.
 	for streamName := range dependencyData.unbuildableSources {

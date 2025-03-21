@@ -98,5 +98,9 @@ func ListUnreferencedObjects(client srpc.ClientI) (
 }
 
 func MakeDirectory(client srpc.ClientI, dirname string) error {
-	return makeDirectory(client, dirname)
+	return makeDirectory(client, dirname, false)
+}
+
+func MakeDirectoryAll(client srpc.ClientI, dirname string) error {
+	return makeDirectory(client, dirname, true)
 }

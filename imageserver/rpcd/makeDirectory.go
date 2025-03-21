@@ -18,6 +18,11 @@ func (t *srpcType) MakeDirectory(conn *srpc.Conn,
 		t.logger.Printf("MakeDirectory(%s) by %s\n",
 			request.DirectoryName, username)
 	}
-	return t.imageDataBase.MakeDirectory(request.DirectoryName,
-		conn.GetAuthInformation())
+	if request.MakeAll {
+		return t.imageDataBase.MakeDirectoryAll(request.DirectoryName,
+			conn.GetAuthInformation())
+	} else {
+		return t.imageDataBase.MakeDirectory(request.DirectoryName,
+			conn.GetAuthInformation())
+	}
 }

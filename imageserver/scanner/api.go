@@ -175,6 +175,11 @@ func (imdb *ImageDataBase) MakeDirectory(dirname string,
 	return imdb.makeDirectory(image.Directory{Name: dirname}, authInfo, true)
 }
 
+func (imdb *ImageDataBase) MakeDirectoryAll(dirname string,
+	authInfo *srpc.AuthInformation) error {
+	return imdb.makeDirectoryAll(dirname, authInfo)
+}
+
 func (imdb *ImageDataBase) ObjectServer() objectserver.ObjectServer {
 	return imdb.Params.ObjectServer
 }

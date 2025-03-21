@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -176,7 +177,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
 	imageFilter *filter.Filter, rawTags tags.Tags, trig *triggers.Triggers,
-	copyMtimesFilter *filter.Filter, buildLog buildLogger) (
+	copyMtimesFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
 	*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
@@ -217,7 +218,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 		format.FormatBytes(fs.TotalDataBytes-cache.hitBytes),
 		format.Duration(duration), format.FormatBytes(speed))
 	_, oldImage, err := getLatestImage(client, request.StreamName, "", nil,
-		buildLog)
+		buildLog, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error getting latest image: %s", err)
 	} else if oldImage != nil {
