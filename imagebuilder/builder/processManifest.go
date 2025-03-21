@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 )
@@ -144,7 +145,7 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	maxSourceAge time.Duration, rootDir string, bindMounts []string,
 	applyFilter bool, envGetter environmentGetter,
-	buildLog io.Writer) (manifestType, error) {
+	buildLog io.Writer, logger log.Logger) (manifestType, error) {
 	manifestConfig, err := readManifestFile(manifestDir, envGetter)
 	if err != nil {
 		return manifestType{}, err
@@ -166,7 +167,7 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
 		manifestConfig.SourceImageGitCommitId,
 		manifestConfig.SourceImageTagsToMatch,
-		maxSourceAge, rootDir, buildLog)
+		maxSourceAge, rootDir, buildLog, logger)
 	if err != nil {
 		var buildError *BuildErrorType
 		if errors.As(err, &buildError) {

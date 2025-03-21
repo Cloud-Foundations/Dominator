@@ -24,6 +24,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/gitutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -47,7 +48,7 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	}
 	defer os.RemoveAll(manifestDirectory)
 	img, err := buildImageFromManifest(client, manifestDirectory, request,
-		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog)
+		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +245,7 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	request proto.BuildImageRequest, bindMounts []string,
 	envGetter environmentGetter, gitInfo *gitInfoType,
-	mtimesCopyFilter *filter.Filter, buildLog buildLogger) (
+	mtimesCopyFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
 	*image.Image, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
@@ -287,7 +288,8 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	vGetter.add("REQUESTED_GIT_BRANCH", request.GitBranch)
 	request.Variables = vGetter
 	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
-		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog)
+		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog,
+		logger)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +338,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	img, err := packImage(nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		tgs, imageTriggers, mtimesCopyFilter, buildLog)
+		tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +353,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 
 func buildImageFromManifestAndUpload(client srpc.ClientI,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
-	buildLog buildLogger) (*image.Image, string, error) {
+	buildLog buildLogger, logger log.Logger) (*image.Image, string, error) {
 	request := proto.BuildImageRequest{
 		StreamName: streamName,
 		ExpiresIn:  expiresIn,
@@ -362,12 +364,15 @@ func buildImageFromManifestAndUpload(client srpc.ClientI,
 		request,
 		options.BindMounts,
 		&imageStreamType{
-			name:      streamName,
-			Variables: options.Variables,
+			name: streamName,
+			imageStreamConfigurationType: imageStreamConfigurationType{
+				Variables: options.Variables,
+			},
 		},
 		nil,
 		options.MtimesCopyFilter,
-		buildLog)
+		buildLog,
+		logger)
 	if err != nil {
 		return nil, "", err
 	}
@@ -426,14 +431,14 @@ func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
 }
 
 func buildTreeFromManifest(client srpc.ClientI, options BuildLocalOptions,
-	buildLog io.Writer) (string, error) {
+	buildLog io.Writer, logger log.Logger) (string, error) {
 	rootDir, err := makeTempDirectory("", "tree")
 	if err != nil {
 		return "", err
 	}
 	_, err = unpackImageAndProcessManifest(client,
 		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
-		variablesGetter(options.Variables), buildLog)
+		variablesGetter(options.Variables), buildLog, logger)
 	if err != nil {
 		os.RemoveAll(rootDir)
 		return "", err
@@ -559,13 +564,14 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 
 func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 	sourceImageTagsToMatch tags.MatchTags, maxSourceAge time.Duration,
-	rootDir string, buildLog io.Writer) (*sourceImageInfoType, error) {
+	rootDir string, buildLog io.Writer, logger log.Logger) (
+	*sourceImageInfoType, error) {
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
 		return nil, err
 	}
 	imageName, sourceImage, err := getLatestImage(client, streamName,
-		buildCommitId, sourceImageTagsToMatch, buildLog)
+		buildCommitId, sourceImageTagsToMatch, buildLog, logger)
 	if err != nil {
 		return nil, err
 	}

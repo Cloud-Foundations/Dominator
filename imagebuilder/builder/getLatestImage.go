@@ -3,27 +3,34 @@ package builder
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	image_proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func getLatestImage(client srpc.ClientI, imageStream, buildCommitId string,
-	tagsToMatch tags.MatchTags,
-	buildLog io.Writer) (string, *image.Image, error) {
-	imageName, err := imageclient.FindLatestImageReq(client,
-		image_proto.FindLatestImageRequest{
-			BuildCommitId: buildCommitId,
-			DirectoryName: imageStream,
-			TagsToMatch:   tagsToMatch,
-		})
+	tagsToMatch tags.MatchTags, buildLog io.Writer,
+	logger log.Logger) (string, *image.Image, error) {
+	request := image_proto.FindLatestImageRequest{
+		BuildCommitId: buildCommitId,
+		DirectoryName: imageStream,
+		TagsToMatch:   tagsToMatch,
+	}
+	imageName, err := imageclient.FindLatestImageReq(client, request)
 	if err != nil {
-		return "", nil, err
+		if !strings.HasPrefix(err.Error(), "unknown directory:") {
+			return "", nil, err
+		}
+		if e := imageclient.MakeDirectoryAll(client, imageStream); e != nil {
+			return "", nil, e
+		}
 	}
 	if imageName == "" {
 		return "", nil, nil
