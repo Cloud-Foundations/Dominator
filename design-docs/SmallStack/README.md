@@ -213,7 +213,7 @@ Rather than pre-defining (hopefully) all potential grouping types or re-writing 
 
 ### Example Topology
 
-An example topology with two large regions (NYC and SJC) and one smaller region (SYD) is available at [https://github.com/Cloud-Foundations/Dominator/tree/master/cmd/fleet-manager/example-topology](https://github.com/Cloud-Foundations/Dominator/tree/master/cmd/fleet-manager/example-topology). Each region has 3 VLANs:
+An example topology with two large regions (NYC and SJC) and one smaller region (SYD) is available at [example-topology](../../cmd/fleet-manager/example-topology/README.md). Each region has 3 VLANs:
 
 -   Production: for products serving customers
 
@@ -302,8 +302,8 @@ All RPC methods require client-side X509 certificates and are secured with SSL/T
 
 Stated simply: SmallStack uses existing Corporate/Organisational identities/credentials.
 
-Credential Management (Coming soon)
------------------------------------
+Credential Management
+---------------------
 
 As stated above, SmallStack integrates with a simple, yet very secure system to authenticate users when accessing resources (VMs). In many environments, credentials are required not only for *users* but also *services* (aka automation users). A service requires long-lived credentials in order to continue to function. Unfortunately, these long lived credentials are often poorly managed and are frequently stored in convenient but insecure locations (documents, source code repositories, web servers, S3 buckets, etc.). These unsecured credentials are routinely leaked, leading to system and data compromise.
 
