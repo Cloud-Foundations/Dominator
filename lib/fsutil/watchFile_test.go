@@ -63,13 +63,14 @@ func testWatchFile(t *testing.T, dirname string) {
 		rc.Close()
 	}
 	pathExistsLater := path.Join(dirname, "exists-later")
+	errorChannel := make(chan error, 1)
 	go func() {
 		time.Sleep(time.Millisecond * 50)
 		file, err := os.Create(pathExistsLater)
-		if err != nil {
-			panic(err)
+		if file != nil {
+			file.Close()
 		}
-		file.Close()
+		errorChannel <- err
 	}()
 	ch = WatchFile(pathExistsLater, logger)
 	_, err = watchTimeout(ch, time.Millisecond*10)
@@ -101,6 +102,9 @@ func testWatchFile(t *testing.T, dirname string) {
 		t.Fatal(err)
 	} else {
 		rc.Close()
+	}
+	if err := <-errorChannel; err != nil {
+		t.Fatal(err)
 	}
 }
 

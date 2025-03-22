@@ -35,31 +35,43 @@ func CompareFiles(leftFilename, rightFilename string) (bool, error) {
 	return compareFiles(leftFilename, rightFilename)
 }
 
+// CopyFile will create a new file, copies data from the sourceFilename to a
+// tmpfile and then atomically renames the tmpfile to destFilename, ensuring
+// that the file never has incomplete data.
+// If there are any errors, then destFilename is unchanged.
+// CopyFile is not safe to call concurrently for the same file.
 func CopyFile(destFilename, sourceFilename string, mode os.FileMode) error {
 	return copyFile(destFilename, sourceFilename, mode, false)
 }
 
+// CopyFileExclusive will exclusively create a new file, copies data from the
+// sourceFilename to a tmpfile and then atomically moves the tmpfile to
+// destFilename, ensuring that the file never has incomplete data.
+// If there are any errors, then destFilename is unchanged.
 func CopyFileExclusive(destFilename, sourceFilename string,
 	mode os.FileMode) error {
 	return copyFile(destFilename, sourceFilename, mode, true)
 }
 
-// CopyToFile will create a new file, write length bytes from reader to the
-// file and then atomically renames the file to destFilename. If length is zero
-// all remaining bytes from reader are written. If there are any errors, then
-// destFilename is unchanged.
+// CopyToFile will create a new file, write length bytes from reader to a
+// tmpfile and then atomically renames the tmpfile to destFilename, ensuring
+// that the file never has incomplete data.
+// If length is zero all remaining bytes from reader are written. If there are
+// any errors, then destFilename is unchanged.
+// CopyToFile is not safe to call concurrently for the same file.
 func CopyToFile(destFilename string, perm os.FileMode, reader io.Reader,
 	length uint64) error {
-	return copyToFile(destFilename, perm, reader, length, false)
+	return copyToFile(destFilename, perm, reader, length)
 }
 
 // CopyToFileExclusive will exclusively create a new file, write length bytes
-// from reader to the file and then atomically renames the file to destFilename.
+// from reader to a tmpfile and then atomically moves the tmpfile to
+// destFilename, ensuring that the file never has incomplete data.
 // If length is zero all remaining bytes from reader are written. If there are
 // any errors, then destFilename is unchanged.
 func CopyToFileExclusive(destFilename string, perm os.FileMode,
 	reader io.Reader, length uint64) error {
-	return copyToFile(destFilename, perm, reader, length, true)
+	return copyToFileExclusive(destFilename, perm, reader, length)
 }
 
 // CopyTree will copy a directory tree.
