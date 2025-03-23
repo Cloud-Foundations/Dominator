@@ -11,39 +11,68 @@ import (
 )
 
 func copyToFile(destFilename string, perm os.FileMode, reader io.Reader,
-	length uint64, exclusive bool) error {
+	length uint64) error {
 	tmpFilename := destFilename + "~"
-	flags := os.O_CREATE | os.O_WRONLY
-	if exclusive {
-		flags |= os.O_EXCL
-	} else {
-		flags |= os.O_TRUNC
-	}
-	destFile, err := os.OpenFile(tmpFilename, flags, perm)
+	destFile, err := os.OpenFile(tmpFilename,
+		os.O_CREATE|os.O_TRUNC|os.O_WRONLY, perm)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmpFilename)
 	defer destFile.Close()
-	var nCopied int64
-	iLength := int64(length)
-	if length < 1 {
-		if _, err := io.Copy(destFile, reader); err != nil {
-			return fmt.Errorf("error copying: %s", err)
-		}
-	} else {
-		if nCopied, err = io.CopyN(destFile, reader, iLength); err != nil {
-			return fmt.Errorf("error copying: %s", err)
-		}
-		if nCopied != iLength {
-			return fmt.Errorf("expected length: %d, got: %d for: %s\n",
-				length, nCopied, tmpFilename)
-		}
+	if err := copyToWriter(destFile, tmpFilename, reader, length); err != nil {
+		return err
 	}
 	if err := destFile.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmpFilename, destFilename)
+}
+
+func copyToFileExclusive(destFilename string, perm os.FileMode,
+	reader io.Reader, length uint64) error {
+	// First do a read-only test for existence, to limit file-system mutations.
+	if _, err := os.Stat(destFilename); err == nil {
+		return os.ErrExist
+	}
+	tmpFilename := destFilename + "~"
+	destFile, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_EXCL|os.O_WRONLY,
+		perm)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFilename)
+	defer destFile.Close()
+	// At this point we own the tmpfile and implicitly the destfile. Do a quick
+	// check so that we don't waste time writing if it's going to fail later.
+	if _, err := os.Stat(destFilename); err == nil {
+		return os.ErrExist
+	}
+	if err := copyToWriter(destFile, tmpFilename, reader, length); err != nil {
+		return err
+	}
+	if err := destFile.Close(); err != nil {
+		return err
+	}
+	return os.Link(tmpFilename, destFilename)
+}
+
+func copyToWriter(writer io.Writer, filename string, reader io.Reader,
+	length uint64) error {
+	if length < 1 {
+		if _, err := io.Copy(writer, reader); err != nil {
+			return fmt.Errorf("error copying: %s", err)
+		}
+	} else {
+		length := int64(length)
+		if nCopied, err := io.CopyN(writer, reader, length); err != nil {
+			return fmt.Errorf("error copying: %s", err)
+		} else if nCopied != length {
+			return fmt.Errorf("expected length: %d, got: %d for: %s\n",
+				length, nCopied, filename)
+		}
+	}
+	return nil
 }
 
 func copyTree(destDir, sourceDir string,
@@ -120,5 +149,8 @@ func copyFile(destFilename, sourceFilename string, mode os.FileMode,
 		return errors.New(sourceFilename + ": " + err.Error())
 	}
 	defer sourceFile.Close()
-	return copyToFile(destFilename, mode, sourceFile, 0, exclusive)
+	if exclusive {
+		return CopyToFileExclusive(destFilename, mode, sourceFile, 0)
+	}
+	return CopyToFile(destFilename, mode, sourceFile, 0)
 }
