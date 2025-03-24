@@ -236,44 +236,71 @@ func WatchFileStop() {
 	watchFileStop()
 }
 
+// ChecksumReader uses the SHA512 hash to checksum data as they are read.
 type ChecksumReader struct {
 	checksummer hash.Hash
 	reader      io.Reader
 }
 
+// NewChecksumReader creates a ChecksumReader using reader as the underlying
+// source of data. Checksumming is enabled by default.
 func NewChecksumReader(reader io.Reader) *ChecksumReader {
 	return newChecksumReader(reader)
 }
 
+// EnableChecksumming enables checksumming if enable is true and clears any
+// prior checksum data, else disables checksumming.
+func (r *ChecksumReader) EnableChecksumming(enable bool) {
+	r.enableChecksumming(enable)
+}
+
+// GetChecksum returns the checksum of the data read so far. It returns nil if
+// checksumming is disabled.
 func (r *ChecksumReader) GetChecksum() []byte {
 	return r.getChecksum()
 }
 
+// Read will read data into the buffer p.
 func (r *ChecksumReader) Read(p []byte) (int, error) {
 	return r.read(p)
 }
 
+// ReadByte will read a single byte.
 func (r *ChecksumReader) ReadByte() (byte, error) {
 	return r.readByte()
 }
 
+// VerifyChecksum will read a checksum from the underlying reader and will
+// verify it matches the checksum that GetChecksum would return.
 func (r *ChecksumReader) VerifyChecksum() error {
 	return r.verifyChecksum()
 }
 
+// ChecksumWriter uses the SHA512 hash to checksum data as they are written.
 type ChecksumWriter struct {
 	checksummer hash.Hash
 	writer      io.Writer
 }
 
+// NewChecksumWriter creates a ChecksumWriter using writer as the underlying
+// destination for data. Checksumming is enabled by default.
 func NewChecksumWriter(writer io.Writer) *ChecksumWriter {
 	return newChecksumWriter(writer)
 }
 
+// EnableChecksumming enables checksumming if enable is true and clears any
+// prior checksum data, else disables checksumming.
+func (w *ChecksumWriter) EnableChecksumming(enable bool) {
+	w.enableChecksumming(enable)
+}
+
+// Write will write the data specified by p.
 func (w *ChecksumWriter) Write(p []byte) (int, error) {
 	return w.write(p)
 }
 
+// WriteChecksum will write the checksum for the data written so far and will
+// write it to the underlying writer.
 func (w *ChecksumWriter) WriteChecksum() error {
 	return w.writeChecksum()
 }
