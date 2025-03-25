@@ -89,6 +89,14 @@ func (w *ChecksumWriter) enableChecksumming(enable bool) {
 		w.checksummer = nil
 	}
 }
+
+func (w *ChecksumWriter) getChecksum() []byte {
+	if w.checksummer == nil {
+		return nil
+	}
+	return w.checksummer.Sum(nil)
+}
+
 func (w *ChecksumWriter) write(p []byte) (int, error) {
 	if w.checksummer != nil {
 		if _, err := w.checksummer.Write(p); err != nil {
@@ -99,9 +107,10 @@ func (w *ChecksumWriter) write(p []byte) (int, error) {
 }
 
 func (w *ChecksumWriter) writeChecksum() error {
-	if w.checksummer == nil {
+	if checksum := w.getChecksum(); checksum == nil {
 		return errors.New("checksumming disabled")
+	} else {
+		_, err := w.writer.Write(checksum)
+		return err
 	}
-	_, err := w.writer.Write(w.checksummer.Sum(nil))
-	return err
 }

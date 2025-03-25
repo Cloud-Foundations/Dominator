@@ -294,6 +294,12 @@ func (w *ChecksumWriter) EnableChecksumming(enable bool) {
 	w.enableChecksumming(enable)
 }
 
+// GetChecksum returns the checksum of the data written so far. It returns nil
+// if checksumming is disabled.
+func (w *ChecksumWriter) GetChecksum() []byte {
+	return w.getChecksum()
+}
+
 // Write will write the data specified by p.
 func (w *ChecksumWriter) Write(p []byte) (int, error) {
 	return w.write(p)
