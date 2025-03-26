@@ -50,6 +50,7 @@ type ImageDataBase struct {
 
 type imageType struct {
 	computedFiles []filesystem.ComputedFile
+	fileChecksum  []byte
 	image         *image.Image
 	modifying     bool
 }
@@ -135,6 +136,10 @@ func (imdb *ImageDataBase) FindLatestImage(
 
 func (imdb *ImageDataBase) GetImage(name string) *image.Image {
 	return imdb.getImage(name)
+}
+
+func (imdb *ImageDataBase) GetImageFileChecksum(name string) []byte {
+	return imdb.getImageFileChecksum(name)
 }
 
 // GetImageComputedFiles will return the list of computed files for the
