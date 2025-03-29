@@ -36,6 +36,8 @@ type ImageDataBase struct {
 	Config
 	Params
 	lockWatcher *lockwatcher.LockWatcher
+	secretLock  sync.Mutex
+	secret      []byte
 	sync.RWMutex
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
@@ -138,6 +140,10 @@ func (imdb *ImageDataBase) GetImage(name string) *image.Image {
 	return imdb.getImage(name)
 }
 
+func (imdb *ImageDataBase) GetImageArchive(name string) ([]byte, error) {
+	return imdb.getImageArchive(name)
+}
+
 func (imdb *ImageDataBase) GetImageFileChecksum(name string) []byte {
 	return imdb.getImageFileChecksum(name)
 }
@@ -199,6 +205,12 @@ func (imdb *ImageDataBase) RegisterDeleteNotifier() <-chan string {
 
 func (imdb *ImageDataBase) RegisterMakeDirectoryNotifier() <-chan image.Directory {
 	return imdb.registerMakeDirectoryNotifier()
+}
+
+func (imdb *ImageDataBase) RestoreImageFromArchive(
+	request proto.RestoreImageFromArchiveRequest,
+	authInfo *srpc.AuthInformation) error {
+	return imdb.restoreImageFromArchive(request, authInfo)
 }
 
 func (imdb *ImageDataBase) UnregisterAddNotifier(channel <-chan string) {
