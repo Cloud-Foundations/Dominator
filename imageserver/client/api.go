@@ -70,6 +70,11 @@ func GetImageExpiration(client srpc.ClientI, name string) (time.Time, error) {
 	return getImageExpiration(client, name)
 }
 
+func GetImageArchive(client srpc.ClientI, name string) (
+	proto.GetImageArchiveResponse, error) {
+	return getImageArchive(client, name)
+}
+
 func GetReplicationMaster(client srpc.ClientI) (string, error) {
 	return getReplicationMaster(client)
 }
@@ -103,4 +108,10 @@ func MakeDirectory(client srpc.ClientI, dirname string) error {
 
 func MakeDirectoryAll(client srpc.ClientI, dirname string) error {
 	return makeDirectory(client, dirname, true)
+}
+
+func RestoreImageFromArchive(client srpc.ClientI,
+	request proto.RestoreImageFromArchiveRequest) (
+	proto.RestoreImageFromArchiveResponse, error) {
+	return restoreImageFromArchive(client, request)
 }
