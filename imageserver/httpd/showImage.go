@@ -26,6 +26,7 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(writer, "Image: %s UNKNOWN!\n", imageName)
 		return
 	}
+	checksum := s.imageDataBase.GetImageFileChecksum(imageName)
 	fmt.Fprintf(writer, "Information for image: %s<br>\n", imageName)
 	fmt.Fprintln(writer, "</h3>")
 	fmt.Fprintf(writer, "Data size: <a href=\"listImage?%s\">%s</a><br>\n",
@@ -100,6 +101,7 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 		json.WriteWithIndent(writer, "    ", img.Tags)
 		fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 	}
+	fmt.Fprintf(writer, "File checksum: %x<br>\n", checksum)
 	fmt.Fprintln(writer, "</body>")
 }
 

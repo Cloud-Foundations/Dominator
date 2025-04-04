@@ -91,6 +91,16 @@ type GetImageExpirationResponse struct {
 	ExpiresAt time.Time
 }
 
+type GetImageArchiveRequest struct {
+	ImageName string
+}
+
+type GetImageArchiveResponse struct {
+	ArchiveData       []byte // GOB encoding of ImageArchive followed by HMAC.
+	Error             string
+	ReplicationMaster string // If not empty, go here instead.
+}
+
 type GetImageRequest struct {
 	ImageName                  string
 	IgnoreFilesystem           bool
@@ -133,6 +143,11 @@ type GetReplicationMasterResponse struct {
 	ReplicationMaster string
 }
 
+type ImageArchive struct {
+	ImageName string
+	image.Image
+} // HMAC-SHA512 checksum is written after GOB encoded data.
+
 // The ListDirectories() RPC is fully streamed.
 // The client sends no information to the server.
 // The server sends a stream of image.Directory values with an empty string
@@ -167,3 +182,13 @@ type MakeDirectoryRequest struct {
 }
 
 type MakeDirectoryResponse struct{}
+
+type RestoreImageFromArchiveRequest struct {
+	ExpiresAt   time.Time
+	ArchiveData []byte // GOB encoding of ImageArchive followed by HMAC.
+}
+
+type RestoreImageFromArchiveResponse struct {
+	Error             string
+	ReplicationMaster string // If not empty, go here instead.
+}

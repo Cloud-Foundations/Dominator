@@ -2,6 +2,10 @@ package scanner
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha512"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -28,14 +32,16 @@ var (
 
 // writeImage will write an image to the specified filename, ensuring that a
 // failure during the process will not leave a corrupted/truncated file.
+// The file checksum is returned.
 // If exclusive is true, an error will be returned if the file already exists.
-func writeImage(filename string, img *image.Image, exclusive bool) error {
+func writeImage(filename string, img *image.Image, exclusive bool) (
+	[]byte, error) {
 	tmpFilename := filename + "~"
 	os.Remove(tmpFilename)
 	file, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_RDWR|os.O_EXCL,
 		fsutil.PublicFilePerms)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer os.Remove(tmpFilename)
 	defer file.Close()
@@ -43,26 +49,30 @@ func writeImage(filename string, img *image.Image, exclusive bool) error {
 	writer := fsutil.NewChecksumWriter(w)
 	encoder := gob.NewEncoder(writer)
 	if err := encoder.Encode(img); err != nil {
-		return err
+		return nil, err
 	}
 	if err := writer.WriteChecksum(); err != nil {
-		return err
+		return nil, err
 	}
+	fileChecksum := writer.GetChecksum()
 	if err := w.Flush(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := fsutil.FsyncFile(file); err != nil {
-		return err
+		return nil, err
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return nil, err
 	}
 	if exclusive {
 		if err := os.Link(tmpFilename, filename); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return os.Rename(tmpFilename, filename)
+	if err := os.Rename(tmpFilename, filename); err != nil {
+		return nil, err
+	}
+	return fileChecksum, nil
 }
 
 func (imdb *ImageDataBase) addImage(img *image.Image, name string,
@@ -88,23 +98,15 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
 		return err
 	}
-	filename := filepath.Join(imdb.BaseDirectory, name)
-	if e := writeImage(filename, img, imdb.ReplicationMaster == ""); e != nil {
-		if os.IsExist(e) {
+	exclusive := imdb.ReplicationMaster == ""
+	if err := imdb.writeImage(name, img, exclusive); err != nil {
+		if os.IsExist(err) {
 			return errors.New("cannot add previously deleted image: " + name)
 		}
-		return e
+		return err
 	}
-	imdb.scheduleExpiration(img, name)
-	imdb.Lock()
-	imdb.imageMap[name] = &imageType{
-		computedFiles: img.FileSystem.GetComputedFiles(),
-		image:         img,
-	}
-	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-	imdb.Unlock()
 	doCleanup = false
-	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
+	return nil
 }
 
 // changeImageExpiration returns true if the image was changed, else false.
@@ -150,12 +152,14 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 	imdb.Unlock()
 	haveLock = false
 	if expiresAt.IsZero() || expiresAt.After(img.ExpiresAt) {
-		if err := imdb.writeNewExpiration(name, img, expiresAt); err != nil {
+		fileChecksum, err := imdb.writeNewExpiration(name, img, expiresAt)
+		if err != nil {
 			return false, err
 		}
 		imdb.Lock()
 		haveLock = true
 		img.ExpiresAt = expiresAt
+		imgType.fileChecksum = fileChecksum
 		imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 		return true, nil
 	}
@@ -438,6 +442,41 @@ func (imdb *ImageDataBase) getImage(name string) *image.Image {
 	return img
 }
 
+func (imdb *ImageDataBase) getImageArchive(name string) ([]byte, error) {
+	img := imdb.getImage(name)
+	if img == nil {
+		return nil, fmt.Errorf("image: %s does not exist", name)
+	}
+	secret, err := imdb.getSecret()
+	if err != nil {
+		return nil, err
+	}
+	archiveData := &bytes.Buffer{}
+	mac := hmac.New(sha512.New, secret)
+	writer := io.MultiWriter(archiveData, mac)
+	err = gob.NewEncoder(writer).Encode(proto.ImageArchive{
+		ImageName: name,
+		Image:     *img,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := archiveData.Write(mac.Sum(nil)); err != nil {
+		return nil, err
+	}
+	return archiveData.Bytes(), nil
+}
+
+func (imdb *ImageDataBase) getImageFileChecksum(name string) []byte {
+	imdb.RLock()
+	defer imdb.RUnlock()
+	img, ok := imdb.getImageTypeWithLock(name)
+	if ok && img != nil {
+		return img.fileChecksum
+	}
+	return nil
+}
+
 func (imdb *ImageDataBase) getImageTypeWithLock(name string) (
 	*imageType, bool) {
 	img, ok := imdb.imageMap[name]
@@ -461,6 +500,33 @@ func (imdb *ImageDataBase) getImageComputedFiles(name string) (
 		return nil, false
 	}
 	return img.computedFiles, true
+}
+
+func (imdb *ImageDataBase) getSecret() ([]byte, error) {
+	imdb.secretLock.Lock()
+	defer imdb.secretLock.Unlock()
+	if len(imdb.secret) > 0 {
+		return imdb.secret, nil
+	}
+	filename := filepath.Join(imdb.BaseDirectory, ".secret")
+	secret, err := os.ReadFile(filename)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if len(secret) > 0 {
+		imdb.secret = secret
+		return imdb.secret, nil
+	}
+	secret = make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
+	err = os.WriteFile(filename, secret, fsutil.PrivateFilePerms)
+	if err != nil {
+		return nil, err
+	}
+	imdb.secret = secret
+	return imdb.secret, nil
 }
 
 func (imdb *ImageDataBase) listDirectories() []image.Directory {
@@ -584,6 +650,77 @@ func (imdb *ImageDataBase) registerMakeDirectoryNotifier() <-chan image.Director
 	return channel
 }
 
+func (imdb *ImageDataBase) restoreImageFromArchive(
+	req proto.RestoreImageFromArchiveRequest,
+	authInfo *srpc.AuthInformation) error {
+	secret, err := imdb.getSecret()
+	if err != nil {
+		return err
+	}
+	archive := bytes.NewReader(req.ArchiveData)
+	mac := hmac.New(sha512.New, secret)
+	var imageArchive proto.ImageArchive
+	err = gob.NewDecoder(io.TeeReader(archive, mac)).Decode(&imageArchive)
+	if err != nil {
+		return err
+	}
+	img := &imageArchive.Image
+	if err := img.Verify(); err != nil {
+		return err
+	}
+	if err := img.VerifyObjects(imdb.Params.ObjectServer); err != nil {
+		return err
+	}
+	if !img.ExpiresAt.IsZero() {
+		if waitTime := time.Until(img.ExpiresAt); waitTime >= 0 {
+			return fmt.Errorf("cannot restore for: %s",
+				format.Duration(waitTime))
+		}
+		if err := imdb.checkExpiration(req.ExpiresAt, authInfo); err != nil {
+			return err
+		}
+		img.ExpiresAt = req.ExpiresAt
+	}
+	if err := imdb.prepareToWrite(imageArchive.ImageName); err != nil {
+		return err
+	}
+	doCleanup := true
+	defer func() {
+		if doCleanup {
+			imdb.Lock()
+			delete(imdb.imageMap, imageArchive.ImageName)
+			imdb.Unlock()
+		}
+	}()
+	providedMac, err := io.ReadAll(archive)
+	if err != nil {
+		return err
+	}
+	expectedMac := mac.Sum(nil)
+	checksumMatches := hmac.Equal(providedMac, expectedMac)
+	if !checksumMatches {
+		img.CreatedBy = authInfo.Username
+		img.CreatedOn = time.Now()
+	}
+	err = imdb.writeImage(imageArchive.ImageName, img, !checksumMatches)
+	if err != nil {
+		if !checksumMatches && os.IsExist(err) {
+			return fmt.Errorf("HMAC mismatch: expected: %x, provided: %x",
+				expectedMac, providedMac)
+		}
+		return err
+	}
+	doCleanup = false
+	if authInfo == nil || authInfo.Username == "" {
+		imdb.Logger.Printf("RestoreImageFromArchive(%s)\n",
+			imageArchive.ImageName)
+	} else {
+		imdb.Logger.Printf("RestoreImageFromArchive(%s) by %s\n",
+			imageArchive.ImageName, authInfo.Username)
+	}
+	return nil
+}
+
 func (imdb *ImageDataBase) unregisterAddNotifier(channel <-chan string) {
 	imdb.Lock()
 	defer imdb.Unlock()
@@ -603,9 +740,32 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 	delete(imdb.mkdirNotifiers, channel)
 }
 
+// Write the specified image, assuming other writers are blocked and validation
+// checks have been performed.
+func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
+	exclusive bool) error {
+	computedFiles := img.FileSystem.GetComputedFiles()
+	filename := filepath.Join(imdb.BaseDirectory, name)
+	fileChecksum, err := writeImage(filename, img, exclusive)
+	if err != nil {
+		return err
+	}
+	imdb.scheduleExpiration(img, name)
+	imdb.Lock()
+	imdb.imageMap[name] = &imageType{
+		computedFiles: computedFiles,
+		fileChecksum:  fileChecksum,
+		image:         img,
+	}
+	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
+	imdb.Unlock()
+	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
+}
+
 // This must be called with the modifying flag set to true.
+// The file checksum and an error are returned.
 func (imdb *ImageDataBase) writeNewExpiration(name string,
-	oldImage *image.Image, expiresAt time.Time) error {
+	oldImage *image.Image, expiresAt time.Time) ([]byte, error) {
 	img := *oldImage
 	img.ExpiresAt = expiresAt
 	filename := filepath.Join(imdb.BaseDirectory, name)

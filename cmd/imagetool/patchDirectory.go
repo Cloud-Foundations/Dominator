@@ -60,6 +60,9 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
+	if *ignoreFilters {
+		img.Filter = nil
+	}
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
 		return err
 	}

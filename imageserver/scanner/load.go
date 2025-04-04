@@ -155,7 +155,7 @@ func (imdb *ImageDataBase) loadFile(filename string) error {
 	if filename[len(filename)-1] == '~' {
 		return os.Remove(pathname)
 	}
-	img, err := imdb.loadAndVerifyFile(filename)
+	img, checksum, err := imdb.loadAndVerifyFile(filename)
 	if err != nil {
 		if imdb.ReplicationMaster == "" {
 			return err
@@ -195,35 +195,36 @@ func (imdb *ImageDataBase) loadFile(filename string) error {
 	defer imdb.Unlock()
 	imdb.imageMap[filename] = &imageType{
 		computedFiles: img.FileSystem.GetComputedFiles(),
+		fileChecksum:  checksum,
 		image:         img,
 	}
 	return nil
 }
 
 func (imdb *ImageDataBase) loadAndVerifyFile(filename string) (
-	*image.Image, error) {
+	*image.Image, []byte, error) {
 	pathname := path.Join(imdb.BaseDirectory, filename)
 	file, err := os.Open(pathname)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer file.Close()
 	reader := fsutil.NewChecksumReader(file)
 	decoder := gob.NewDecoder(reader)
 	var img image.Image
 	if err := decoder.Decode(&img); err != nil {
-		return nil, fmt.Errorf("error reading: %s: %w", filename, err)
+		return nil, nil, fmt.Errorf("error reading: %s: %w", filename, err)
 	}
 	if err := reader.VerifyChecksum(); err != nil {
 		if err == fsutil.ErrorChecksumMismatch {
-			return nil,
+			return nil, nil,
 				fmt.Errorf("checksum mismatch for image: %s\n", filename)
 		}
 		if err != io.EOF {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return &img, nil
+	return &img, reader.GetChecksum(), nil
 }
 
 func (imdb *ImageDataBase) fetchMissingObjects(img *image.Image,

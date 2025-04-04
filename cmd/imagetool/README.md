@@ -67,6 +67,8 @@ Some of the sub-commands available are:
 - **merge-triggers**: merge trigger files
 - **mkdir**: make a directory
 - **patch-directory**: patch (update) a local directory with an image
+- **restore-from-file**: restore an image from an imagearchive file
+- **save-to-file**: save an image to an imagearchive file or stdout
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
 - **show-bad-computed-files**: show the subs (and their images) which want

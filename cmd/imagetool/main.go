@@ -56,7 +56,7 @@ var (
 	ignoreExpiring = flag.Bool("ignoreExpiring", false,
 		"If true, ignore expiring images when finding images")
 	ignoreFilters = flag.Bool("ignoreFilters", false,
-		"If true, ignore filters when diffing")
+		"If true, ignore filter(s) when diffing/patching")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -196,6 +196,8 @@ var subcommands = []commands.Command{
 	{"mkdir", "                  name", 1, 1, makeDirectorySubcommand},
 	{"patch-directory", "        name directory", 2, 2,
 		patchDirectorySubcommand},
+	{"restore-from-file", "      filename", 1, 1, restoreImageSubcommand},
+	{"save-to-file", "           name [outfile]", 1, 2, saveImageSubcommand},
 	{"scan-filtered-files", "    name directory", 2, 2,
 		scanFilteredFilesSubcommand},
 	{"show", "                   name", 1, 1, showImageSubcommand},
