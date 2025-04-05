@@ -3511,6 +3511,9 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 				return fmt.Errorf("cannot stat: %s: %s", snapshotFilename, err)
 			}
 			vm.mutex.Lock()
+			if vm.Volumes[index].Snapshots == nil {
+				vm.Volumes[index].Snapshots = make(map[string]uint64)
+			}
 			vm.Volumes[index].Snapshots[snapshotName] = uint64(fi.Size())
 			vm.mutex.Unlock()
 			changed = true
