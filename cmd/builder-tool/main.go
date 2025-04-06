@@ -45,7 +45,7 @@ var (
 	showFetchLog = flag.Bool("showFetchLog", false,
 		"If true, show fetch log when getting directed graph")
 	variablesFilename = flag.String("variablesFilename", "",
-		"Name of file to read variables from for local builds")
+		"Name of file to read variables from to inject into builds")
 
 	minimumExpiration = 5 * time.Minute
 )
