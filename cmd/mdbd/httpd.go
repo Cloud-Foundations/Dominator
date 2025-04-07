@@ -51,6 +51,7 @@ func startHttpServer(portNum uint, variables map[string]string,
 	html.HandleFunc("/", s.statusHandler)
 	html.HandleFunc("/getVariable", s.getVariableHandler)
 	html.HandleFunc("/getVariables", s.getVariablesHandler)
+	html.HandleFunc("/showMachine", s.showMachineHandler)
 	html.HandleFunc("/showMdb", s.showMdbHandler)
 	html.HandleFunc("/showPaused", s.showPausedHandler)
 	go http.Serve(listener, nil)
@@ -151,6 +152,20 @@ func (s *httpServer) getVariablesHandler(w http.ResponseWriter,
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	json.WriteWithIndent(writer, "    ", s.variables)
+}
+
+func (s *httpServer) showMachineHandler(w http.ResponseWriter,
+	req *http.Request) {
+	hostname := req.URL.RawQuery
+	if machine, ok := s.mdb.table[hostname]; !ok {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} else {
+		writer := bufio.NewWriter(w)
+		defer writer.Flush()
+		json.WriteWithIndent(writer, "    ", machine)
+	}
 }
 
 func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
