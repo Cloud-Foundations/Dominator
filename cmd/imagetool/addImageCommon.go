@@ -104,11 +104,14 @@ func buildImageWithHasher(imageSClient *srpc.Client, filter *filter.Filter,
 		return nil, err
 	}
 	if fi.IsDir() {
+		startTime := time.Now()
 		sfs, err := scanner.ScanFileSystem(imageFilename, nil, filter, nil, h,
 			nil)
 		if err != nil {
 			return nil, err
 		}
+		logger.Debugf(0, "scanned: %s in %s\n",
+			imageFilename, format.Duration(time.Since(startTime)))
 		return &sfs.FileSystem, nil
 	}
 	imageFile, err := os.Open(imageFilename)

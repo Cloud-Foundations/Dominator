@@ -93,10 +93,12 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 			dirName, rootDir, err)
 	}
 	logger.Debugf(0, "scanning directory: %s\n", dirName)
+	startTime := time.Now()
 	sfs, err := scanner.ScanFileSystem(rootDir, nil, img.Filter, nil, nil, nil)
 	if err != nil {
 		return err
 	}
+	logger.Debugf(0, "scanned in %s\n", format.Duration(time.Since(startTime)))
 	fs := &sfs.FileSystem
 	if err := fs.RebuildInodePointers(); err != nil {
 		return err
@@ -109,7 +111,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	subdDir := filepath.Join(rootDir, ".subd")
 	objectsDir := filepath.Join(subdDir, "objects")
 	defer os.RemoveAll(subdDir)
-	startTime := time.Now()
+	startTime = time.Now()
 	objectsReader, err := objectsGetter.GetObjects(objectsToFetch)
 	if err != nil {
 		return err
@@ -137,6 +139,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	}
 	subRequest.ImageName = imageName
 	logger.Debugln(0, "starting update")
+	startTime = time.Now()
 	_, _, err = sublib.UpdateWithOptions(subRequest, sublib.UpdateOptions{
 		Logger:            logger,
 		ObjectsDir:        objectsDir,
@@ -146,6 +149,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	if err != nil {
 		return err
 	}
+	logger.Debugf(0, "updated in %s\n", format.Duration(time.Since(startTime)))
 	return nil
 }
 
