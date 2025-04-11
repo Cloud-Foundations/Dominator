@@ -8,14 +8,16 @@ import (
 	"os"
 	"path"
 	"sort"
+	"sync"
 	"syscall"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
-	"github.com/Cloud-Foundations/Dominator/lib/filter"
-	"github.com/Cloud-Foundations/Dominator/lib/fsrateio"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
+
+type nilLocker struct{}
 
 func makeRegularInode(stat *wsyscall.Stat_t) *filesystem.RegularInode {
 	var inode filesystem.RegularInode
@@ -46,25 +48,26 @@ func makeSpecialInode(stat *wsyscall.Stat_t) *filesystem.SpecialInode {
 	return &inode
 }
 
-func scanFileSystem(rootDirectoryName string,
-	fsScanContext *fsrateio.ReaderContext, scanFilter *filter.Filter,
-	checkScanDisableRequest func() bool, hasher Hasher, oldFS *FileSystem) (
-	*FileSystem, error) {
-	if checkScanDisableRequest != nil && checkScanDisableRequest() {
+func scanFileSystem(params Params) (*FileSystem, error) {
+	if params.CheckScanDisableRequest != nil &&
+		params.CheckScanDisableRequest() {
 		return nil, errors.New("DisableScan")
 	}
-	var fileSystem FileSystem
-	fileSystem.rootDirectoryName = rootDirectoryName
-	fileSystem.fsScanContext = fsScanContext
-	fileSystem.scanFilter = scanFilter
-	fileSystem.checkScanDisableRequest = checkScanDisableRequest
-	if hasher == nil {
-		fileSystem.hasher = GetSimpleHasher(false)
-	} else {
-		fileSystem.hasher = hasher
+	if params.Hasher == nil {
+		params.Hasher = GetSimpleHasher(false)
 	}
+	fileSystem := FileSystem{
+		hashWaiters: make(map[uint64]<-chan struct{}),
+	}
+	if params.Runner == nil {
+		params.Runner = concurrent.NewAutoScaler(1)
+		fileSystem.fsLock = &nilLocker{}
+	} else {
+		fileSystem.fsLock = &sync.Mutex{}
+	}
+	fileSystem.params = params
 	var stat wsyscall.Stat_t
-	if err := wsyscall.Lstat(rootDirectoryName, &stat); err != nil {
+	if err := wsyscall.Lstat(params.RootDirectoryName, &stat); err != nil {
 		return nil, err
 	}
 	fileSystem.InodeTable = make(filesystem.InodeTable)
@@ -79,25 +82,29 @@ func scanFileSystem(rootDirectoryName string,
 		return nil, errors.New("incompatible hash size")
 	}
 	var oldDirectory *filesystem.DirectoryInode
-	if oldFS != nil && oldFS.InodeTable != nil {
-		oldDirectory = &oldFS.DirectoryInode
+	if params.OldFS != nil && params.OldFS.InodeTable != nil {
+		oldDirectory = &params.OldFS.DirectoryInode
 	}
-	err, _ := scanDirectory(&fileSystem.FileSystem.DirectoryInode, oldDirectory,
-		&fileSystem, oldFS, "/")
-	oldFS = nil
+	err, _ := fileSystem.scanDirectory(&fileSystem.FileSystem.DirectoryInode,
+		oldDirectory, "/")
+	params.OldFS = nil // Indicate early garbage collection.
 	if err != nil {
+		return nil, err
+	}
+	if err := params.Runner.Reap(); err != nil {
 		return nil, err
 	}
 	fileSystem.ComputeTotalDataBytes()
 	if err = fileSystem.RebuildInodePointers(); err != nil {
-		panic(err)
+		return nil, err
 	}
 	return &fileSystem, nil
 }
 
-func scanDirectory(directory, oldDirectory *filesystem.DirectoryInode,
-	fileSystem, oldFS *FileSystem, myPathName string) (error, bool) {
-	file, err := os.Open(path.Join(fileSystem.rootDirectoryName, myPathName))
+func (fs *FileSystem) scanDirectory(directory *filesystem.DirectoryInode,
+	oldDirectory *filesystem.DirectoryInode, myPathName string) (error, bool) {
+	file, err := os.Open(path.Join(fs.params.RootDirectoryName,
+		myPathName))
 	if err != nil {
 		return err, false
 	}
@@ -110,28 +117,28 @@ func scanDirectory(directory, oldDirectory *filesystem.DirectoryInode,
 	entryList := make([]*filesystem.DirectoryEntry, 0, len(names))
 	var copiedDirents int
 	for _, name := range names {
-		if directory == &fileSystem.DirectoryInode && name == ".subd" {
+		if directory == &fs.DirectoryInode && name == ".subd" {
 			continue
 		}
 		filename := path.Join(myPathName, name)
-		if fileSystem.scanFilter != nil &&
-			fileSystem.scanFilter.Match(filename) {
+		if fs.params.ScanFilter != nil &&
+			fs.params.ScanFilter.Match(filename) {
 			continue
 		}
 		var stat wsyscall.Stat_t
-		err := wsyscall.Lstat(path.Join(fileSystem.rootDirectoryName, filename),
-			&stat)
+		err := wsyscall.Lstat(path.Join(fs.params.RootDirectoryName,
+			filename), &stat)
 		if err != nil {
 			if err == syscall.ENOENT {
 				continue
 			}
 			return err, false
 		}
-		if stat.Dev != fileSystem.dev {
+		if stat.Dev != fs.dev {
 			continue
 		}
-		if fileSystem.checkScanDisableRequest != nil &&
-			fileSystem.checkScanDisableRequest() {
+		if fs.params.CheckScanDisableRequest != nil &&
+			fs.params.CheckScanDisableRequest() {
 			return errors.New("DisableScan"), false
 		}
 		dirent := new(filesystem.DirectoryEntry)
@@ -146,16 +153,15 @@ func scanDirectory(directory, oldDirectory *filesystem.DirectoryInode,
 			}
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			err = addDirectory(dirent, oldDirent, fileSystem, oldFS, myPathName,
-				&stat)
+			err = fs.addDirectory(dirent, oldDirent, myPathName, &stat)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
-			err = addRegularFile(dirent, fileSystem, oldFS, myPathName, &stat)
+			err = fs.addRegularFile(dirent, myPathName, &stat)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFLNK {
-			err = addSymlink(dirent, fileSystem, oldFS, myPathName, &stat)
+			err = fs.addSymlink(dirent, myPathName, &stat)
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFSOCK {
 			continue
 		} else {
-			err = addSpecialFile(dirent, fileSystem, oldFS, &stat)
+			err = fs.addSpecialFile(dirent, &stat)
 		}
 		if err != nil {
 			if err == syscall.ENOENT {
@@ -179,19 +185,22 @@ func scanDirectory(directory, oldDirectory *filesystem.DirectoryInode,
 	}
 }
 
-func addDirectory(dirent, oldDirent *filesystem.DirectoryEntry,
-	fileSystem, oldFS *FileSystem,
-	directoryPathName string, stat *wsyscall.Stat_t) error {
+func (fs *FileSystem) addDirectory(dirent *filesystem.DirectoryEntry,
+	oldDirent *filesystem.DirectoryEntry, directoryPathName string,
+	stat *wsyscall.Stat_t) error {
 	myPathName := path.Join(directoryPathName, dirent.Name)
-	if stat.Ino == fileSystem.inodeNumber {
+	if stat.Ino == fs.inodeNumber {
 		return errors.New("recursive directory: " + myPathName)
 	}
-	if _, ok := fileSystem.InodeTable[stat.Ino]; ok {
+	inode := new(filesystem.DirectoryInode)
+	fs.fsLock.Lock()
+	if _, ok := fs.InodeTable[stat.Ino]; ok {
+		fs.fsLock.Unlock()
 		return errors.New("hardlinked directory: " + myPathName)
 	}
-	inode := new(filesystem.DirectoryInode)
+	fs.InodeTable[stat.Ino] = inode
+	fs.fsLock.Unlock()
 	dirent.SetInode(inode)
-	fileSystem.InodeTable[stat.Ino] = inode
 	inode.Mode = filesystem.FileMode(stat.Mode)
 	inode.Uid = stat.Uid
 	inode.Gid = stat.Gid
@@ -201,68 +210,95 @@ func addDirectory(dirent, oldDirent *filesystem.DirectoryEntry,
 			oldInode = oi
 		}
 	}
-	err, copied := scanDirectory(inode, oldInode, fileSystem, oldFS, myPathName)
+	err, copied := fs.scanDirectory(inode, oldInode, myPathName)
 	if err != nil {
 		return err
 	}
 	if copied && filesystem.CompareDirectoriesMetadata(inode, oldInode, nil) {
 		dirent.SetInode(oldInode)
-		fileSystem.InodeTable[stat.Ino] = oldInode
+		fs.fsLock.Lock()
+		fs.InodeTable[stat.Ino] = oldInode
+		fs.fsLock.Unlock()
 	}
-	fileSystem.DirectoryCount++
+	fs.DirectoryCount++
 	return nil
 }
 
-func addRegularFile(dirent *filesystem.DirectoryEntry,
-	fileSystem, oldFS *FileSystem,
+func (fs *FileSystem) addRegularFile(dirent *filesystem.DirectoryEntry,
 	directoryPathName string, stat *wsyscall.Stat_t) error {
-	if inode, ok := fileSystem.InodeTable[stat.Ino]; ok {
+	fs.fsLock.Lock()
+	if ch := fs.hashWaiters[stat.Ino]; ch != nil {
+		fs.fsLock.Unlock()
+		<-ch
+		fs.fsLock.Lock()
+	}
+	if inode, ok := fs.InodeTable[stat.Ino]; ok {
 		if inode, ok := inode.(*filesystem.RegularInode); ok {
 			dirent.SetInode(inode)
+			fs.fsLock.Unlock()
 			return nil
 		}
+		fs.fsLock.Unlock()
 		return errors.New("inode changed type: " + dirent.Name)
 	}
-	inode := makeRegularInode(stat)
-	if inode.Size > 0 {
-		err := scanRegularInode(inode, fileSystem,
-			path.Join(directoryPathName, dirent.Name))
-		if err != nil {
-			return err
-		}
+	channel := make(chan struct{})
+	fs.hashWaiters[stat.Ino] = channel
+	fs.fsLock.Unlock()
+	pathName := path.Join(fs.params.RootDirectoryName, directoryPathName,
+		dirent.Name)
+	file, err := os.Open(pathName)
+	if err != nil {
+		close(channel)
+		return err
 	}
-	if oldFS != nil && oldFS.InodeTable != nil {
-		if oldInode, found := oldFS.InodeTable[stat.Ino]; found {
-			if oldInode, ok := oldInode.(*filesystem.RegularInode); ok {
-				if filesystem.CompareRegularInodes(inode, oldInode, nil) {
-					inode = oldInode
+	inode := makeRegularInode(stat)
+	err = fs.params.Runner.GoRun(func() (uint64, error) {
+		defer close(channel)
+		defer file.Close()
+		if inode.Size > 0 {
+			err := fs.scanRegularInode(inode, file, stat)
+			if err != nil {
+				return 0, err
+			}
+		}
+		if fs.params.OldFS != nil && fs.params.OldFS.InodeTable != nil {
+			if oldInode, found := fs.InodeTable[stat.Ino]; found {
+				if oldInode, ok := oldInode.(*filesystem.RegularInode); ok {
+					if filesystem.CompareRegularInodes(inode, oldInode, nil) {
+						inode = oldInode
+					}
 				}
 			}
 		}
-	}
-	dirent.SetInode(inode)
-	fileSystem.InodeTable[stat.Ino] = inode
-	return nil
+		dirent.SetInode(inode)
+		fs.fsLock.Lock()
+		fs.InodeTable[stat.Ino] = inode
+		fs.fsLock.Unlock()
+		return inode.Size, nil
+	})
+	return err
 }
 
-func addSymlink(dirent *filesystem.DirectoryEntry,
-	fileSystem, oldFS *FileSystem,
+func (fs *FileSystem) addSymlink(dirent *filesystem.DirectoryEntry,
 	directoryPathName string, stat *wsyscall.Stat_t) error {
-	if inode, ok := fileSystem.InodeTable[stat.Ino]; ok {
+	fs.fsLock.Lock()
+	if inode, ok := fs.InodeTable[stat.Ino]; ok {
 		if inode, ok := inode.(*filesystem.SymlinkInode); ok {
 			dirent.SetInode(inode)
+			fs.fsLock.Unlock()
 			return nil
 		}
+		fs.fsLock.Unlock()
 		return errors.New("inode changed type: " + dirent.Name)
 	}
+	fs.fsLock.Unlock()
 	inode := makeSymlinkInode(stat)
-	err := scanSymlinkInode(inode, fileSystem,
-		path.Join(directoryPathName, dirent.Name))
+	err := fs.scanSymlinkInode(inode, path.Join(directoryPathName, dirent.Name))
 	if err != nil {
 		return err
 	}
-	if oldFS != nil && oldFS.InodeTable != nil {
-		if oldInode, found := oldFS.InodeTable[stat.Ino]; found {
+	if fs.params.OldFS != nil && fs.params.OldFS.InodeTable != nil {
+		if oldInode, found := fs.params.OldFS.InodeTable[stat.Ino]; found {
 			if oldInode, ok := oldInode.(*filesystem.SymlinkInode); ok {
 				if filesystem.CompareSymlinkInodes(inode, oldInode, nil) {
 					inode = oldInode
@@ -271,22 +307,28 @@ func addSymlink(dirent *filesystem.DirectoryEntry,
 		}
 	}
 	dirent.SetInode(inode)
-	fileSystem.InodeTable[stat.Ino] = inode
+	fs.fsLock.Lock()
+	fs.InodeTable[stat.Ino] = inode
+	fs.fsLock.Unlock()
 	return nil
 }
 
-func addSpecialFile(dirent *filesystem.DirectoryEntry,
-	fileSystem, oldFS *FileSystem, stat *wsyscall.Stat_t) error {
-	if inode, ok := fileSystem.InodeTable[stat.Ino]; ok {
+func (fs *FileSystem) addSpecialFile(dirent *filesystem.DirectoryEntry,
+	stat *wsyscall.Stat_t) error {
+	fs.fsLock.Lock()
+	if inode, ok := fs.InodeTable[stat.Ino]; ok {
 		if inode, ok := inode.(*filesystem.SpecialInode); ok {
 			dirent.SetInode(inode)
+			fs.fsLock.Unlock()
 			return nil
 		}
+		fs.fsLock.Unlock()
 		return errors.New("inode changed type: " + dirent.Name)
 	}
+	fs.fsLock.Unlock()
 	inode := makeSpecialInode(stat)
-	if oldFS != nil && oldFS.InodeTable != nil {
-		if oldInode, found := oldFS.InodeTable[stat.Ino]; found {
+	if fs.params.OldFS != nil && fs.params.OldFS.InodeTable != nil {
+		if oldInode, found := fs.params.OldFS.InodeTable[stat.Ino]; found {
 			if oldInode, ok := oldInode.(*filesystem.SpecialInode); ok {
 				if filesystem.CompareSpecialInodes(inode, oldInode, nil) {
 					inode = oldInode
@@ -295,7 +337,9 @@ func addSpecialFile(dirent *filesystem.DirectoryEntry,
 		}
 	}
 	dirent.SetInode(inode)
-	fileSystem.InodeTable[stat.Ino] = inode
+	fs.fsLock.Lock()
+	fs.InodeTable[stat.Ino] = inode
+	fs.fsLock.Unlock()
 	return nil
 }
 
@@ -326,35 +370,30 @@ func (h cpuLimitedHasher) hash(reader io.Reader, length uint64) (
 	return h.hasher.Hash(reader, length)
 }
 
-func scanRegularInode(inode *filesystem.RegularInode, fileSystem *FileSystem,
-	myPathName string) error {
-	pathName := path.Join(fileSystem.rootDirectoryName, myPathName)
-	if oh, ok := fileSystem.hasher.(openingHasher); ok {
-		if hashed, err := oh.OpenAndHash(inode, pathName); err != nil {
+func (fs *FileSystem) scanRegularInode(inode *filesystem.RegularInode,
+	file *os.File, stat *wsyscall.Stat_t) error {
+	if rh, ok := fs.params.Hasher.(readingHasher); ok {
+		if hashed, err := rh.ReadAndHash(inode, file, stat); err != nil {
 			return err
 		} else if hashed {
 			return nil
 		}
 	}
-	f, err := os.Open(pathName)
-	if err != nil {
-		return err
+	reader := io.Reader(file)
+	if fs.params.FsScanContext != nil {
+		reader = fs.params.FsScanContext.NewReader(file)
 	}
-	defer f.Close()
-	reader := io.Reader(f)
-	if fileSystem.fsScanContext != nil {
-		reader = fileSystem.fsScanContext.NewReader(f)
-	}
-	inode.Hash, err = fileSystem.hasher.Hash(reader, inode.Size)
+	var err error
+	inode.Hash, err = fs.params.Hasher.Hash(reader, inode.Size)
 	if err != nil {
-		return fmt.Errorf("scanRegularInode(%s): %s", myPathName, err)
+		return fmt.Errorf("scanRegularInode(%s): %s", file.Name(), err)
 	}
 	return nil
 }
 
-func scanSymlinkInode(inode *filesystem.SymlinkInode, fileSystem *FileSystem,
+func (fs *FileSystem) scanSymlinkInode(inode *filesystem.SymlinkInode,
 	myPathName string) error {
-	target, err := os.Readlink(path.Join(fileSystem.rootDirectoryName,
+	target, err := os.Readlink(path.Join(fs.params.RootDirectoryName,
 		myPathName))
 	if err != nil {
 		return err
@@ -362,3 +401,7 @@ func scanSymlinkInode(inode *filesystem.SymlinkInode, fileSystem *FileSystem,
 	inode.Symlink = target
 	return nil
 }
+
+func (l nilLocker) Lock() {}
+
+func (l nilLocker) Unlock() {}
