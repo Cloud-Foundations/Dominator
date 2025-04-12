@@ -9,10 +9,10 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	imageclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/expand"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -28,6 +28,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
@@ -64,11 +65,12 @@ func (h *hasher) Hash(reader io.Reader, length uint64) (
 	return hash, nil
 }
 
-func (h *hasher) OpenAndHash(inode *filesystem.RegularInode,
-	pathName string) (bool, error) {
+func (h *hasher) ReadAndHash(inode *filesystem.RegularInode, file *os.File,
+	stat *wsyscall.Stat_t) (bool, error) {
 	if len(h.cache.inodeTable) < 1 {
 		return false, nil
 	}
+	pathName := file.Name()
 	inum, ok := h.cache.pathToInode[pathName]
 	if !ok {
 		return false, nil
@@ -79,10 +81,6 @@ func (h *hasher) OpenAndHash(inode *filesystem.RegularInode,
 	}
 	if inode.Size != inodeData.size {
 		return false, nil
-	}
-	var stat syscall.Stat_t
-	if err := syscall.Stat(pathName, &stat); err != nil {
-		return false, err
 	}
 	if stat.Ino != inum {
 		return false, nil
@@ -135,7 +133,12 @@ func buildFileSystem(client srpc.ClientI, dirname string,
 func buildFileSystemWithHasher(dirname string, h *hasher,
 	scanFilter *filter.Filter) (
 	*filesystem.FileSystem, error) {
-	fs, err := scanner.ScanFileSystem(dirname, nil, scanFilter, nil, h, nil)
+	fs, err := scanner.ScanFileSystemWithParams(scanner.Params{
+		RootDirectoryName: dirname,
+		Runner:            concurrent.NewAutoScaler(0),
+		ScanFilter:        scanFilter,
+		Hasher:            h,
+	})
 	if err != nil {
 		return nil, err
 	}
