@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/untar"
@@ -105,8 +106,12 @@ func buildImageWithHasher(imageSClient *srpc.Client, filter *filter.Filter,
 	}
 	if fi.IsDir() {
 		startTime := time.Now()
-		sfs, err := scanner.ScanFileSystem(imageFilename, nil, filter, nil, h,
-			nil)
+		sfs, err := scanner.ScanFileSystemWithParams(scanner.Params{
+			RootDirectoryName: imageFilename,
+			Runner:            concurrent.NewAutoScaler(0),
+			ScanFilter:        filter,
+			Hasher:            h,
+		})
 		if err != nil {
 			return nil, err
 		}

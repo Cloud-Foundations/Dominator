@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -92,9 +93,15 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 		return fmt.Errorf("unable to bind mount %s to %s: %s",
 			dirName, rootDir, err)
 	}
-	logger.Debugf(0, "scanning directory: %s\n", dirName)
+	defer wsyscall.Unmount(rootDir, 0)
+	logger.Debugf(0, "scanning directory: %s (bind mounted from: %s)\n",
+		rootDir, dirName)
 	startTime := time.Now()
-	sfs, err := scanner.ScanFileSystem(rootDir, nil, img.Filter, nil, nil, nil)
+	sfs, err := scanner.ScanFileSystemWithParams(scanner.Params{
+		RootDirectoryName: rootDir,
+		Runner:            concurrent.NewAutoScaler(0),
+		ScanFilter:        img.Filter,
+	})
 	if err != nil {
 		return err
 	}
