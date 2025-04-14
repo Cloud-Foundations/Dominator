@@ -95,15 +95,18 @@ func (objQ *ObjectAdderQueue) consumeErrors(untilClose bool) error {
 				return err
 			}
 		}
-	} else {
-		for len(objQ.errorChan) > 0 {
-			err := <-objQ.errorChan
+		return nil
+	}
+	for {
+		select {
+		case err := <-objQ.errorChan:
 			if err != nil {
 				return err
 			}
+		default:
+			return nil
 		}
 	}
-	return nil
 }
 
 func readResponses(conn *srpc.Conn, getResponseChan <-chan struct{},
