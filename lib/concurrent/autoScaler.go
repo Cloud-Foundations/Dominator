@@ -40,9 +40,6 @@ func newAutoScaler(maxConcurrent uint) *AutoScaler {
 }
 
 func (state *AutoScaler) adjustConcurrency(workDone uint64) {
-	if state.blockedThreads < 1 { // Fast check to see if we're at full speed.
-		return
-	}
 	if state.forcedConcurrent {
 		return
 	}
@@ -54,13 +51,13 @@ func (state *AutoScaler) adjustConcurrency(workDone uint64) {
 			state.semaphore <- struct{}{}
 		}
 	}()
-	if state.blockedThreads < 1 { // Correctness check.
+	if state.blockedThreads < 1 {
 		return
 	}
 	now := time.Now()
 	interval := now.Sub(state.lastRecalculation)
+	state.accumulatingWork += workDone
 	if interval < recalculateInterval {
-		state.accumulatingWork += workDone
 		return
 	}
 	availableThreads := uint(cap(state.semaphore)) - state.blockedThreads
@@ -111,11 +108,11 @@ func (state *AutoScaler) goRun(doFunc func() (uint64, error)) error {
 			state.pending++
 			go func() {
 				workDone, err := doFunc()
-				state.errorChannel <- err
-				<-state.semaphore
 				if err == nil {
 					state.adjustConcurrency(workDone)
 				}
+				state.errorChannel <- err
+				<-state.semaphore
 			}()
 			return nil
 		}
@@ -130,7 +127,6 @@ func (state *AutoScaler) reap() error {
 	if state.semaphore == nil {
 		return state.error
 	}
-	close(state.semaphore)
 	err := state.error
 	for ; state.pending > 0; state.pending-- {
 		if e := <-state.errorChannel; err == nil && e != nil {
@@ -138,5 +134,6 @@ func (state *AutoScaler) reap() error {
 		}
 	}
 	close(state.errorChannel)
+	close(state.semaphore)
 	return err
 }
