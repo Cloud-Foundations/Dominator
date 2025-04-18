@@ -180,27 +180,27 @@ func (cache *objectsCache) getNextObject(hashVal hash.Hash,
 }
 
 func (cache *objectsCache) handleFile(scanState *scanStateType,
-	filename string) error {
+	filename string) (uint64, error) {
 	if hashVal, object, err := hashFile(filename); err != nil {
-		return err
+		return 0, err
 	} else if size := uint64(len(object)); size < 1 {
-		return nil
+		return 0, nil
 	} else {
 		scanState.mutex.Lock()
 		defer scanState.mutex.Unlock()
 		cache.bytesScanned += size
 		if _, ok := cache.objects[hashVal]; ok {
-			return nil
+			return size, nil
 		}
 		if _, ok := scanState.requiredObjects[hashVal]; !ok {
-			return nil
+			return size, nil
 		}
 		cache.objects[hashVal] = object
 		if scanState.foundObjects != nil {
 			scanState.foundObjects[hashVal] = size
 		}
+		return size, nil
 	}
-	return nil
 }
 
 func (cache *objectsCache) scanRoot(requiredObjects map[hash.Hash]uint64,
@@ -265,10 +265,10 @@ func (cache *objectsCache) walk(dirname string,
 			filesToScan = append(filesToScan, pathname)
 		}
 	}
-	concurrentState := concurrent.NewState(0)
+	concurrentState := concurrent.NewAutoScaler(0)
 	for _, pathname := range filesToScan {
 		pathname := pathname
-		err := concurrentState.GoRun(func() error {
+		err := concurrentState.GoRun(func() (uint64, error) {
 			return cache.handleFile(scanState, pathname)
 		})
 		if err != nil {
