@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -475,7 +476,11 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	}
 	if doChroot {
 		cmd.Dir = "/"
-		wsyscall.SetSysProcAttrChroot(cmd.SysProcAttr, chrootDir)
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		err := wsyscall.SetSysProcAttrChroot(cmd.SysProcAttr, chrootDir)
+		if err != nil {
+			return fmt.Errorf("error setting chroot: %s", err)
+		}
 		logger.Debugf(0, "running(chroot=%s): %s %s\n",
 			chrootDir, cmd.Path, strings.Join(cmd.Args[1:], " "))
 	} else {

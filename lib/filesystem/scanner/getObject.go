@@ -15,7 +15,7 @@ func (fs *FileSystem) getObject(hashVal hash.Hash) (
 	if !ok {
 		return 0, nil, fmt.Errorf("object not found: %v\n", hashVal)
 	}
-	filename := path.Join(fs.rootDirectoryName,
+	filename := path.Join(fs.params.RootDirectoryName,
 		fs.InodeToFilenamesTable()[inodes[0]][0])
 	file, err := os.Open(filename)
 	if err != nil {

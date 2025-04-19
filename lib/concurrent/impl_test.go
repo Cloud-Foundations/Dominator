@@ -43,6 +43,22 @@ func TestReapAllGood(t *testing.T) {
 	<-waitForReturn
 }
 
+func TestReapAndWaitState(t *testing.T) {
+	state := NewState(2)
+	var finished bool
+	state.GoRun(func() error {
+		time.Sleep(time.Millisecond)
+		finished = true
+		return nil
+	})
+	if err := state.Reap(); err != nil {
+		t.Fatalf("Error reaping: %s", err)
+	}
+	if !finished {
+		t.Fatal("goroutine not finished")
+	}
+}
+
 func TestReapGoodAndBad(t *testing.T) {
 	state := NewState(2)
 	state.GoRun(goodFunc)

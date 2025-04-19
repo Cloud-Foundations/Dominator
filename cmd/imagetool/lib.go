@@ -547,6 +547,11 @@ func getImage(client *srpc.Client, name string) (*image.Image, error) {
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
 		return nil, err
 	}
+	if img.Filter != nil {
+		if err := img.Filter.Compile(); err != nil {
+			return nil, err
+		}
+	}
 	return img, nil
 }
 
@@ -714,7 +719,7 @@ func readImage(name string) (*image.Image, error) {
 }
 
 func scanDirectory(name string) (*filesystem.FileSystem, error) {
-	fs, err := buildImageWithHasher(nil, nil, name, nil)
+	fs, err := buildImageWithHasher(nil, listFilter, name, nil)
 	if err != nil {
 		return nil, err
 	}

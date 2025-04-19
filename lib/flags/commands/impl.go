@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"runtime/pprof"
 	"sort"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -44,6 +46,20 @@ func runCommands(commands []Command, printUsage func(),
 					numCommandArgs > command.MaxArgs) {
 				printUsage()
 				return 2
+			}
+			if *cpuProfileFilename != "" {
+				file, err := os.Create(*cpuProfileFilename)
+				if err != nil {
+					fmt.Fprintln(flag.CommandLine.Output(), err)
+					return 2
+				}
+				defer file.Close()
+				if err := pprof.StartCPUProfile(file); err != nil {
+					fmt.Fprintf(flag.CommandLine.Output(),
+						"could not start CPU profile: %s\n", err)
+					return 2
+				}
+				defer pprof.StopCPUProfile()
 			}
 			if err := command.CmdFunc(flag.Args()[1:], logger); err != nil {
 				fmt.Fprintln(flag.CommandLine.Output(), err)

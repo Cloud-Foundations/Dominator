@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -92,11 +93,19 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 		return fmt.Errorf("unable to bind mount %s to %s: %s",
 			dirName, rootDir, err)
 	}
-	logger.Debugf(0, "scanning directory: %s\n", dirName)
-	sfs, err := scanner.ScanFileSystem(rootDir, nil, img.Filter, nil, nil, nil)
+	defer wsyscall.Unmount(rootDir, 0)
+	logger.Debugf(0, "scanning directory: %s (bind mounted from: %s)\n",
+		rootDir, dirName)
+	startTime := time.Now()
+	sfs, err := scanner.ScanFileSystemWithParams(scanner.Params{
+		RootDirectoryName: rootDir,
+		Runner:            concurrent.NewAutoScaler(0),
+		ScanFilter:        img.Filter,
+	})
 	if err != nil {
 		return err
 	}
+	logger.Debugf(0, "scanned in %s\n", format.Duration(time.Since(startTime)))
 	fs := &sfs.FileSystem
 	if err := fs.RebuildInodePointers(); err != nil {
 		return err
@@ -109,7 +118,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	subdDir := filepath.Join(rootDir, ".subd")
 	objectsDir := filepath.Join(subdDir, "objects")
 	defer os.RemoveAll(subdDir)
-	startTime := time.Now()
+	startTime = time.Now()
 	objectsReader, err := objectsGetter.GetObjects(objectsToFetch)
 	if err != nil {
 		return err
@@ -137,6 +146,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	}
 	subRequest.ImageName = imageName
 	logger.Debugln(0, "starting update")
+	startTime = time.Now()
 	_, _, err = sublib.UpdateWithOptions(subRequest, sublib.UpdateOptions{
 		Logger:            logger,
 		ObjectsDir:        objectsDir,
@@ -146,6 +156,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 	if err != nil {
 		return err
 	}
+	logger.Debugf(0, "updated in %s\n", format.Duration(time.Since(startTime)))
 	return nil
 }
 

@@ -1,6 +1,6 @@
 module github.com/Cloud-Foundations/Dominator
 
-go 1.19
+go 1.22
 
 require (
 	github.com/Cloud-Foundations/tricorder v0.0.0-20191102180116-cf6bbf6d0168

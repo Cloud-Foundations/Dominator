@@ -2,7 +2,10 @@ package scanner
 
 import (
 	"io"
+	"os"
+	"sync"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/cpulimiter"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -15,9 +18,11 @@ type Hasher interface {
 	Hash(reader io.Reader, length uint64) (hash.Hash, error)
 }
 
-type openingHasher interface {
+// Secret Imaginator business.
+type readingHasher interface {
 	Hasher
-	OpenAndHash(inode *filesystem.RegularInode, pathName string) (bool, error)
+	ReadAndHash(inode *filesystem.RegularInode, file *os.File,
+		stat *wsyscall.Stat_t) (bool, error)
 }
 
 type simpleHasher bool // If true, ignore short reads.
@@ -28,14 +33,22 @@ type cpuLimitedHasher struct {
 }
 
 type FileSystem struct {
-	rootDirectoryName       string
-	fsScanContext           *fsrateio.ReaderContext
-	scanFilter              *filter.Filter
-	checkScanDisableRequest func() bool
-	hasher                  Hasher
-	dev                     uint64
-	inodeNumber             uint64
+	params      Params
+	dev         uint64
+	inodeNumber uint64
+	fsLock      sync.Locker // Protect everything below.
 	filesystem.FileSystem
+	hashWaiters map[uint64]<-chan struct{} // Key: inode number.
+}
+
+type Params struct {
+	FsScanContext           *fsrateio.ReaderContext
+	RootDirectoryName       string
+	Runner                  concurrent.MeasuringRunner
+	ScanFilter              *filter.Filter
+	CheckScanDisableRequest func() bool
+	Hasher                  Hasher
+	OldFS                   *FileSystem
 }
 
 func MakeRegularInode(stat *wsyscall.Stat_t) *filesystem.RegularInode {
@@ -54,8 +67,18 @@ func ScanFileSystem(rootDirectoryName string,
 	fsScanContext *fsrateio.ReaderContext, scanFilter *filter.Filter,
 	checkScanDisableRequest func() bool, hasher Hasher, oldFS *FileSystem) (
 	*FileSystem, error) {
-	return scanFileSystem(rootDirectoryName, fsScanContext, scanFilter,
-		checkScanDisableRequest, hasher, oldFS)
+	return scanFileSystem(Params{
+		FsScanContext:           fsScanContext,
+		RootDirectoryName:       rootDirectoryName,
+		ScanFilter:              scanFilter,
+		CheckScanDisableRequest: checkScanDisableRequest,
+		Hasher:                  hasher,
+		OldFS:                   oldFS,
+	})
+}
+
+func ScanFileSystemWithParams(params Params) (*FileSystem, error) {
+	return scanFileSystem(params)
 }
 
 func (fs *FileSystem) GetObject(hashVal hash.Hash) (

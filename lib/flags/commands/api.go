@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"flag"
 	"io"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -15,6 +16,11 @@ type Command struct {
 	MaxArgs int
 	CmdFunc CommandFunc
 }
+
+var (
+	cpuProfileFilename = flag.String("cpuProfileFilename", "",
+		"Save a CPU profile of the subcommand to the specified file")
+)
 
 func PrintCommands(writer io.Writer, commands []Command) {
 	printCommands(writer, commands)

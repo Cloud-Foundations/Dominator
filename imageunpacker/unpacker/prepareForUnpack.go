@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -97,8 +98,10 @@ func (stream *streamManagerState) scan(skipIfPrepared bool) error {
 
 func (stream *streamManagerState) scanFS(mountPoint string) (
 	*filesystem.FileSystem, error) {
-	sfs, err := scanner.ScanFileSystem(mountPoint, nil, nil, nil,
-		scanner.GetSimpleHasher(false), nil)
+	sfs, err := scanner.ScanFileSystemWithParams(scanner.Params{
+		RootDirectoryName: mountPoint,
+		Runner:            concurrent.NewAutoScaler(0),
+	})
 	if err != nil {
 		return nil, err
 	}
