@@ -449,6 +449,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if left.SpreadVolumes != right.SpreadVolumes {
 		return false
 	}
+	if left.RootFileSystemLabel != right.RootFileSystemLabel {
+		return false
+	}
 	if left.State != right.State {
 		return false
 	}
