@@ -757,6 +757,103 @@ func (m *Manager) changeVmSize(authInfo *srpc.AuthInformation,
 	return err
 }
 
+func (m *Manager) changeVmSubnet(authInfo *srpc.AuthInformation,
+	req proto.ChangeVmSubnetRequest) (*proto.ChangeVmSubnetResponse, error) {
+	if req.SubnetId == "" {
+		return nil, fmt.Errorf("no subnet specified")
+	}
+	vm, err := m.getStoppedVmAndRemove(req.IpAddress, authInfo, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		m.mutex.Lock()
+		_, ok := m.vms[vm.ipAddress]
+		m.vms[vm.ipAddress] = vm
+		m.mutex.Unlock()
+		if ok {
+			panic(fmt.Sprintf("changeVmSubnet(%s): duplicate", vm.ipAddress))
+		}
+	}()
+	if req.SubnetId == vm.SubnetId {
+		return nil, errors.New("same subnet specified")
+	}
+	oldSubnetId := vm.SubnetId
+	address, subnetId, err := m.getFreeAddress(nil, req.SubnetId, authInfo)
+	if err != nil {
+		return nil, err
+	}
+	ipAddress := address.IpAddress.String()
+	addressToFree := address
+	defer func() {
+		err := m.releaseAddressInPool(addressToFree)
+		if err != nil {
+			vm.logger.Println(err)
+		}
+	}()
+	response := proto.ChangeVmSubnetResponse{
+		NewIpAddress:    address.IpAddress,
+		OldIdentityName: vm.IdentityName,
+	}
+	newDirname := filepath.Join(m.StateDir, "VMs", ipAddress)
+	renameMap := make(map[string]string) // Key: old, value: new.
+	renameMap[vm.dirname] = newDirname
+	for _, volume := range vm.VolumeLocations {
+		if _, ok := renameMap[volume.DirectoryToCleanup]; ok {
+			continue
+		}
+		renameMap[volume.DirectoryToCleanup] = filepath.Join(
+			filepath.Dir(volume.DirectoryToCleanup), ipAddress)
+	}
+	if err := multiRename(renameMap, true); err != nil {
+		return nil, err
+	} // Begin critical section: it's too late to back out now. Any error will
+	// result in a corrupted state.
+	// Clean up old state.
+	select {
+	case vm.accessTokenCleanupNotifier <- struct{}{}:
+	default:
+	}
+	for ch := range vm.metadataChannels {
+		close(ch)
+		delete(vm.metadataChannels, ch)
+	}
+	if vm.identityProviderNotifier != nil {
+		close(vm.identityProviderNotifier)
+		vm.identityProviderNotifier = nil
+		vm.IdentityName = ""
+	}
+	vm.manager.DhcpServer.RemoveLease(vm.Address.IpAddress)
+	vm.manager.sendVmInfo(vm.ipAddress, nil)
+	if vm.lockWatcher != nil {
+		vm.lockWatcher.Stop()
+	}
+	// Set up new state.
+	oldRootLabel := vm.rootLabelSaved(false)
+	addressToFree = vm.Address
+	vm.Address = address
+	vm.dirname = newDirname
+	vm.ipAddress = ipAddress
+	vm.logger = prefixlogger.New(ipAddress+": ", m.Logger)
+	vm.SubnetId = subnetId
+	if oldRootLabel == vm.rootLabel(false) {
+		vm.RootFileSystemLabel = "" // Restoring original (default) label.
+	} else {
+		vm.RootFileSystemLabel = oldRootLabel
+	}
+	for index := range vm.VolumeLocations {
+		volume := &vm.VolumeLocations[index]
+		volume.DirectoryToCleanup = renameMap[volume.DirectoryToCleanup]
+		volume.Filename = filepath.Join(volume.DirectoryToCleanup,
+			filepath.Base(volume.Filename))
+	}
+	vm.writeAndSendInfo()
+	vm.setupLockWatcher()
+	vm.logger.Printf("changed subnet: %s -> %s, original IP: %s\n",
+		oldSubnetId, subnetId, addressToFree.IpAddress)
+	return &response, nil
+}
+
 func (m *Manager) changeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	tgs tags.Tags) error {
 	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
@@ -995,6 +1092,8 @@ func (m *Manager) connectToVmSerialPort(ipAddr net.IP,
 
 func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	m.Logger.Debugf(1, "CopyVm(%s) starting\n", conn.Username())
+	// Need to shrink IP address for later generation of root file-system label.
+	request.IpAddress = proto.ShrinkIP(request.IpAddress)
 	hypervisor, err := srpc.DialHTTP("tcp", request.SourceHypervisor, 0)
 	if err != nil {
 		return err
@@ -1091,38 +1190,15 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 			return err
 		}
 	}
-	if vm.getActiveKernelPath() != "" {
-		device, err := fsutil.LoopbackSetupAndWaitForPartition(
-			vm.VolumeLocations[0].Filename, "p1", 5*time.Second, vm.logger)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if device != "" {
-				fsutil.LoopbackDeleteAndWaitForPartition(device, "p1",
-					5*time.Second, vm.logger)
-			}
-		}()
-		oldLabel, err := e2getLabel(device + "p1")
-		if err != nil {
-			return err
-		}
-		if strings.HasPrefix(oldLabel, "rootfs@") {
-			if err := e2setLabel(device+"p1", vm.rootLabel(false)); err != nil {
-				return err
-			}
-		}
-		err = fsutil.LoopbackDeleteAndWaitForPartition(device, "p1",
-			5*time.Second, vm.logger)
-		device = "" // Cancel deferred delete.
-		if err != nil {
-			return err
-		}
-		err = sendVmCopyMessage(conn,
-			"ToDo: edit /etc/fstab to use new root label: "+vm.rootLabel(false))
-		if err != nil {
-			return err
-		}
+	// Copy old root file-system label.
+	oldVm := &vmInfoType{}
+	oldVm.Address.IpAddress = request.IpAddress
+	oldVm.RootFileSystemLabel = getInfoReply.VmInfo.RootFileSystemLabel
+	oldRootLabel := oldVm.rootLabelSaved(false)
+	if oldRootLabel == vm.rootLabel(false) {
+		vm.RootFileSystemLabel = "" // Restoring original (default) label.
+	} else {
+		vm.RootFileSystemLabel = oldRootLabel
 	}
 	err = migratevmUserData(hypervisor,
 		filepath.Join(vm.dirname, UserDataFile),
@@ -1775,6 +1851,33 @@ func (m *Manager) getNumVMsWithLock() (uint, uint) {
 		}
 	}
 	return numRunning, numStopped
+}
+
+// getStoppedtVmAndRemove will get the specified VM and remove it from the
+// Manager. The VM must be stopped.
+// The Manager and VM locks are grabbed and released.
+func (m *Manager) getStoppedVmAndRemove(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte) (*vmInfoType, error) {
+	ipStr := ipAddr.String()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if vm := m.vms[ipStr]; vm == nil {
+		return nil, fmt.Errorf("no VM with IP address: %s found", ipStr)
+	} else {
+		vm.mutex.Lock()
+		defer vm.mutex.Unlock()
+		if vm.State != proto.StateStopped {
+			return nil, errors.New("VM is not stopped")
+		}
+		if err := vm.checkAuth(authInfo, accessToken); err != nil {
+			return nil, err
+		}
+		if vm.blockMutations {
+			return nil, errors.New("mutations blocked")
+		}
+		delete(m.vms, ipStr)
+		return vm, nil
+	}
 }
 
 func (m *Manager) getVmAccessToken(ipAddr net.IP,
@@ -3994,6 +4097,21 @@ func (vm *vmInfoType) rootLabel(debug bool) string {
 		prefix, ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }
 
+func (vm *vmInfoType) rootLabelSaved(debug bool) string {
+	ipAddr := vm.Address.IpAddress
+	var prefix string
+	if debug {
+		prefix = "debugfs" // 16 characters: the limit.
+	} else {
+		if vm.RootFileSystemLabel != "" {
+			return vm.RootFileSystemLabel
+		}
+		prefix = "rootfs"
+	}
+	return fmt.Sprintf("%s@%02x%02x%02x%02x",
+		prefix, ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
+}
+
 func (vm *vmInfoType) serialManager() {
 	bootlogFile, err := os.OpenFile(filepath.Join(vm.dirname, bootlogFilename),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, fsutil.PublicFilePerms)
@@ -4324,7 +4442,8 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if initrdPath := vm.getActiveInitrdPath(); initrdPath != "" {
 			cmd.Args = append(cmd.Args,
 				"-initrd", initrdPath,
-				"-append", util.MakeKernelOptions("LABEL="+vm.rootLabel(false),
+				"-append",
+				util.MakeKernelOptions("LABEL="+vm.rootLabelSaved(false),
 					kernelOptionsString),
 			)
 		} else {

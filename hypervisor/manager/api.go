@@ -201,6 +201,11 @@ func (m *Manager) ChangeVmSize(authInfo *srpc.AuthInformation,
 	return m.changeVmSize(authInfo, req)
 }
 
+func (m *Manager) ChangeVmSubnet(authInfo *srpc.AuthInformation,
+	req proto.ChangeVmSubnetRequest) (*proto.ChangeVmSubnetResponse, error) {
+	return m.changeVmSubnet(authInfo, req)
+}
+
 func (m *Manager) ChangeVmTags(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	tgs tags.Tags) error {
 	return m.changeVmTags(ipAddr, authInfo, tgs)
