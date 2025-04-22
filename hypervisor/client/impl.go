@@ -89,6 +89,19 @@ func changeVmSize(client *srpc.Client,
 	return errors.New(reply.Error)
 }
 
+func changeVmSubnet(client *srpc.Client,
+	request proto.ChangeVmSubnetRequest) (proto.ChangeVmSubnetResponse, error) {
+	var reply proto.ChangeVmSubnetResponse
+	err := client.RequestReply("Hypervisor.ChangeVmSubnet", request, &reply)
+	if err != nil {
+		return proto.ChangeVmSubnetResponse{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.ChangeVmSubnetResponse{}, err
+	}
+	return reply, nil
+}
+
 func changeVmVolumeInterfaces(client *srpc.Client, ipAddress net.IP,
 	volumeInterfaces []proto.VolumeInterface) error {
 	request := proto.ChangeVmVolumeInterfacesRequest{
