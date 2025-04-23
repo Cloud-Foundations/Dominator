@@ -33,6 +33,8 @@ Some of the sub-commands available are:
 - **change-vm-memory**: change the memory for a VM
 - **change-vm-owner-groups**: change the owner groups for a VM
 - **change-vm-owner-users**: change the extra owner users for a VM
+- **change-vm-subnet**: change the subnet ID for a VM. The primary IP address
+                        will change
 - **change-vm-tags**: change the tags for a VM
 - **change-vm-vcpus**: change the number of vCPUs for a VM
 - **change-vm-volume-interfaces**: change the volume interfaces (device types
