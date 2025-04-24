@@ -160,6 +160,17 @@ type ChangeVmSizeRequest struct {
 	VirtualCPUs uint
 }
 
+type ChangeVmSubnetRequest struct {
+	IpAddress net.IP
+	SubnetId  string
+}
+
+type ChangeVmSubnetResponse struct {
+	Error           string
+	NewIpAddress    net.IP
+	OldIdentityName string
+}
+
 type ChangeVmSizeResponse struct {
 	Error string
 }
@@ -828,36 +839,37 @@ type UpdateSubnetsResponse struct {
 }
 
 type VmInfo struct {
-	Address            Address
-	ChangedStateOn     time.Time   `json:",omitempty"`
-	ConsoleType        ConsoleType `json:",omitempty"`
-	CreatedOn          time.Time   `json:",omitempty"`
-	CpuPriority        int         `json:",omitempty"`
-	DestroyOnPowerdown bool        `json:",omitempty"`
-	DestroyProtection  bool        `json:",omitempty"`
-	DisableVirtIO      bool        `json:",omitempty"`
-	ExtraKernelOptions string      `json:",omitempty"`
-	Hostname           string      `json:",omitempty"`
-	IdentityExpires    time.Time   `json:",omitempty"`
-	IdentityName       string      `json:",omitempty"`
-	ImageName          string      `json:",omitempty"`
-	ImageURL           string      `json:",omitempty"`
-	MachineType        MachineType `json:",omitempty"`
-	MemoryInMiB        uint64
-	MilliCPUs          uint
-	OwnerGroups        []string `json:",omitempty"`
-	OwnerUsers         []string `json:",omitempty"`
-	SpreadVolumes      bool     `json:",omitempty"`
-	State              State
-	SecondaryAddresses []Address      `json:",omitempty"`
-	SecondarySubnetIDs []string       `json:",omitempty"`
-	SubnetId           string         `json:",omitempty"`
-	Tags               tags.Tags      `json:",omitempty"`
-	Uncommitted        bool           `json:",omitempty"`
-	VirtualCPUs        uint           `json:",omitempty"`
-	Volumes            []Volume       `json:",omitempty"`
-	WatchdogAction     WatchdogAction `json:",omitempty"`
-	WatchdogModel      WatchdogModel  `json:",omitempty"`
+	Address             Address
+	ChangedStateOn      time.Time   `json:",omitempty"`
+	ConsoleType         ConsoleType `json:",omitempty"`
+	CreatedOn           time.Time   `json:",omitempty"`
+	CpuPriority         int         `json:",omitempty"`
+	DestroyOnPowerdown  bool        `json:",omitempty"`
+	DestroyProtection   bool        `json:",omitempty"`
+	DisableVirtIO       bool        `json:",omitempty"`
+	ExtraKernelOptions  string      `json:",omitempty"`
+	Hostname            string      `json:",omitempty"`
+	IdentityExpires     time.Time   `json:",omitempty"`
+	IdentityName        string      `json:",omitempty"`
+	ImageName           string      `json:",omitempty"`
+	ImageURL            string      `json:",omitempty"`
+	MachineType         MachineType `json:",omitempty"`
+	MemoryInMiB         uint64
+	MilliCPUs           uint
+	OwnerGroups         []string `json:",omitempty"`
+	OwnerUsers          []string `json:",omitempty"`
+	RootFileSystemLabel string   `json:",omitempty"`
+	SpreadVolumes       bool     `json:",omitempty"`
+	State               State
+	SecondaryAddresses  []Address      `json:",omitempty"`
+	SecondarySubnetIDs  []string       `json:",omitempty"`
+	SubnetId            string         `json:",omitempty"`
+	Tags                tags.Tags      `json:",omitempty"`
+	Uncommitted         bool           `json:",omitempty"`
+	VirtualCPUs         uint           `json:",omitempty"`
+	Volumes             []Volume       `json:",omitempty"`
+	WatchdogAction      WatchdogAction `json:",omitempty"`
+	WatchdogModel       WatchdogModel  `json:",omitempty"`
 }
 
 type Volume struct {
