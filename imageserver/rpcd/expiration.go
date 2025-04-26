@@ -24,15 +24,17 @@ func (t *srpcType) ChangeImageExpiration(conn *srpc.Conn,
 		msg = fmt.Sprintf("expire in %s",
 			format.Duration(time.Until(request.ExpiresAt)))
 	}
-	if username := conn.Username(); username == "" {
-		t.logger.Printf("ChangeImageExpiration(%s) %s\n",
-			request.ImageName, msg)
-	} else {
-		t.logger.Printf("ChangeImageExpiration(%s) %s by %s\n",
-			request.ImageName, msg, username)
-	}
 	_, err := t.imageDataBase.ChangeImageExpiration(
 		request.ImageName, request.ExpiresAt, conn.GetAuthInformation())
+	if err == nil {
+		if username := conn.Username(); username == "" {
+			t.logger.Printf("ChangeImageExpiration(%s) %s\n",
+				request.ImageName, msg)
+		} else {
+			t.logger.Printf("ChangeImageExpiration(%s) %s by %s\n",
+				request.ImageName, msg, username)
+		}
+	}
 	reply.Error = errors.ErrorToString(err)
 	return nil
 }
