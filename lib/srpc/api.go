@@ -474,16 +474,17 @@ type Conn struct {
 	Decoder
 	Encoder
 	*bufio.ReadWriter
-	conn             net.Conn
-	groupList        map[string]struct{}
-	haveMethodAccess bool
-	isEncrypted      bool
-	localAddr        string
-	parent           *Client             // nil: server-side connection.
-	permittedMethods map[string]struct{} // nil: all, empty: none permitted.
-	releaseNotifier  func()
-	remoteAddr       string
-	username         string // Empty string for unauthenticated.
+	allowMethodPowers bool
+	conn              net.Conn
+	groupList         map[string]struct{}
+	haveMethodAccess  bool
+	isEncrypted       bool
+	localAddr         string
+	parent            *Client             // nil: server-side connection.
+	permittedMethods  map[string]struct{} // nil: all, empty: none permitted.
+	releaseNotifier   func()
+	remoteAddr        string
+	username          string // Empty string for unauthenticated.
 }
 
 // Close will close the connection to the Sevice.Method function, releasing the

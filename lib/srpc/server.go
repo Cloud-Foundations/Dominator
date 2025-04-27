@@ -401,9 +401,10 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		return
 	}
 	myConn := &Conn{
-		conn:       unsecuredConn,
-		localAddr:  unsecuredConn.LocalAddr().String(),
-		remoteAddr: unsecuredConn.RemoteAddr().String(),
+		allowMethodPowers: true,
+		conn:              unsecuredConn,
+		localAddr:         unsecuredConn.LocalAddr().String(),
+		remoteAddr:        unsecuredConn.RemoteAddr().String(),
 	}
 	connType := "unknown"
 	defer func() {
@@ -431,9 +432,8 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		logger.Printf("error writing connect message: %s\n", err)
 		return
 	}
-	allowMethodPowers := true
 	if req.Form.Get(doNotUseMethodPowers) == "true" {
-		allowMethodPowers = false
+		myConn.allowMethodPowers = false
 	}
 	if doTls {
 		var tlsConn *tls.Conn
@@ -457,7 +457,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		}
 		myConn.isEncrypted = true
 		myConn.username, myConn.permittedMethods, myConn.groupList, err =
-			getAuth(tlsConn.ConnectionState(), allowMethodPowers)
+			getAuth(tlsConn.ConnectionState())
 		if err != nil {
 			logger.Println(err)
 			return
@@ -465,9 +465,6 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		myConn.ReadWriter = bufio.NewReadWriter(bufio.NewReader(tlsConn),
 			bufio.NewWriter(tlsConn))
 	} else {
-		if !allowMethodPowers {
-			myConn.permittedMethods = make(map[string]struct{})
-		}
 		myConn.ReadWriter = bufrw
 	}
 	logger.Debugf(0, "accepted %s connection\n", connType)
@@ -493,8 +490,7 @@ func checkVerifiedChains(verifiedChains [][]*x509.Certificate,
 	return false
 }
 
-func getAuth(state tls.ConnectionState, allowMethodPowers bool) (
-	string, map[string]struct{},
+func getAuth(state tls.ConnectionState) (string, map[string]struct{},
 	map[string]struct{}, error) {
 	var username string
 	permittedMethods := make(map[string]struct{})
@@ -519,7 +515,7 @@ func getAuth(state tls.ConnectionState, allowMethodPowers bool) (
 					return "", nil, nil, err
 				}
 			}
-			if allowMethodPowers && trustCertMethods {
+			if trustCertMethods {
 				pms, err := x509util.GetPermittedMethods(cert)
 				if err != nil {
 					return "", nil, nil, err
@@ -607,9 +603,11 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	if !ok {
 		return nil, errors.New(serviceName + ": unknown method: " + methodName)
 	}
-	if conn.checkMethodAccess(serviceMethod) {
+	if conn.allowMethodPowers &&
+		conn.checkMethodAccess(serviceMethod) {
 		conn.haveMethodAccess = true
-	} else if receiver.grantMethod(serviceName, conn.GetAuthInformation()) {
+	} else if conn.allowMethodPowers &&
+		receiver.grantMethod(serviceName, conn.GetAuthInformation()) {
 		conn.haveMethodAccess = true
 	} else {
 		conn.haveMethodAccess = false

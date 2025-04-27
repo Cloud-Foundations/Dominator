@@ -57,13 +57,26 @@ func (sub *Sub) address() string {
 }
 
 // Returns true if the principal described by authInfo has administrative access
-// to the sub.
+// to the sub. It checks for method access, then ownership listed in the MDB
+// data and then the sub configuration.
 func (sub *Sub) checkAdminAccess(authInfo *srpc.AuthInformation) bool {
 	if authInfo == nil {
 		return false
 	}
 	if authInfo.HaveMethodAccess {
 		return true
+	}
+	for _, group := range sub.mdb.OwnerGroups {
+		if _, ok := authInfo.GroupList[group]; ok {
+			return true
+		}
+	}
+	if authInfo.Username != "" {
+		for _, user := range sub.mdb.OwnerUsers {
+			if user == authInfo.Username {
+				return true
+			}
+		}
 	}
 	if sub.clientResource == nil {
 		return false

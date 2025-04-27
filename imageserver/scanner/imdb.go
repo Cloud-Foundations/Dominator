@@ -210,7 +210,11 @@ func (imdb *ImageDataBase) checkDirectory(name string) bool {
 func (imdb *ImageDataBase) checkExpiration(expiresAt time.Time,
 	authInfo *srpc.AuthInformation) error {
 	if expiresAt.IsZero() {
-		return nil
+		if authInfo.HaveMethodAccess ||
+			authInfo.Username == "" { // Internal call.
+			return nil
+		}
+		return errors.New("not permitted to make image non-expiring")
 	}
 	expiresIn := time.Until(expiresAt)
 	if authInfo != nil && authInfo.HaveMethodAccess {
