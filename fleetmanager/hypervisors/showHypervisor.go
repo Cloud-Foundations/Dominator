@@ -51,7 +51,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "Machine info:<br>")
 	fmt.Fprintln(writer, `<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
-	json.WriteWithIndent(writer, "    ", h.machine)
+	json.WriteWithIndent(writer, "    ", h.Machine)
 	fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 	subnets, err := topology.GetSubnetsForMachine(hostname)
 	if err != nil {
@@ -95,7 +95,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, "<br>")
 	m.showVMsForHypervisor(writer, h)
 	fmt.Fprintln(writer, "<br>")
-	m.showIPsForHypervisor(writer, h.machine.HostIpAddress)
+	m.showIPsForHypervisor(writer, h.Machine.HostIpAddress)
 	fmt.Fprintln(writer, "</body>")
 }
 
@@ -123,9 +123,9 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
 	capacity := hyper_proto.GetCapacityResponse{
-		MemoryInMiB:      h.memoryInMiB,
-		NumCPUs:          h.numCPUs,
-		TotalVolumeBytes: h.totalVolumeBytes,
+		MemoryInMiB:      h.MemoryInMiB,
+		NumCPUs:          h.NumCPUs,
+		TotalVolumeBytes: h.TotalVolumeBytes,
 	}
 	vms := getVmListFromMap(h.vms, true)
 	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)

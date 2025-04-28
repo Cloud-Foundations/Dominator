@@ -78,9 +78,9 @@ func testInLocation(location, enclosingLocation string) bool {
 }
 
 func (h *hypervisorType) address() string {
-	hostname := h.machine.Hostname
-	if len(h.machine.HostIpAddress) > 0 {
-		hostname = h.machine.HostIpAddress.String()
+	hostname := h.Machine.Hostname
+	if len(h.Machine.HostIpAddress) > 0 {
+		hostname = h.Machine.HostIpAddress.String()
 	}
 	return fmt.Sprintf("%s:%d", hostname, constants.HypervisorPortNumber)
 }
@@ -98,8 +98,8 @@ func (h *hypervisorType) changeOwners(client *srpc.Client) error {
 		defer client.Close()
 	}
 	request := hyper_proto.ChangeOwnersRequest{
-		OwnerGroups: h.machine.OwnerGroups,
-		OwnerUsers:  h.machine.OwnerUsers,
+		OwnerGroups: h.Machine.OwnerGroups,
+		OwnerUsers:  h.Machine.OwnerUsers,
 	}
 	var reply hyper_proto.ChangeOwnersResponse
 	err := client.RequestReply("Hypervisor.ChangeOwners", request, &reply)
@@ -116,7 +116,7 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 	if _, ok := h.ownerUsers[authInfo.Username]; ok {
 		return nil
 	}
-	for _, ownerGroup := range h.machine.OwnerGroups {
+	for _, ownerGroup := range h.Machine.OwnerGroups {
 		if _, ok := authInfo.GroupList[ownerGroup]; ok {
 			return nil
 		}
@@ -125,14 +125,11 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 }
 
 func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
-	machine := *h.machine
-	machine.MemoryInMiB = h.memoryInMiB
-	machine.NumCPUs = h.numCPUs
-	machine.TotalVolumeBytes = h.totalVolumeBytes
+	machine := h.Machine
 	if len(h.localTags) < 1 {
 		return &machine
 	}
-	machine.Tags = h.machine.Tags.Copy()
+	machine.Tags = h.Machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
 	return &machine
 }
@@ -149,11 +146,11 @@ func (m *Manager) changeMachineTags(hostname string,
 		return err
 	} else {
 		for key, localVal := range tgs { // Delete duplicates.
-			if machineVal := h.machine.Tags[key]; localVal == machineVal {
+			if machineVal := h.Machine.Tags[key]; localVal == machineVal {
 				delete(tgs, key)
 			}
 		}
-		err := m.storer.WriteMachineTags(h.machine.HostIpAddress, tgs)
+		err := m.storer.WriteMachineTags(h.Machine.HostIpAddress, tgs)
 		if err != nil {
 			h.mutex.Unlock()
 			return err
@@ -224,7 +221,7 @@ func (m *Manager) makeUpdateChannel(
 		machines = append(machines, h.getMachine())
 		for addr, vm := range h.vms {
 			vms[addr] = &vm.VmInfo
-			vmToHypervisor[addr] = h.machine.Hostname
+			vmToHypervisor[addr] = h.Machine.Hostname
 		}
 	}
 	channel <- fm_proto.Update{
@@ -241,17 +238,17 @@ func (m *Manager) updateHypervisor(h *hypervisorType, machine *fm_proto.Machine,
 	var numTagsToDelete uint
 	h.mutex.Lock()
 	h.location = location
-	h.machine = machine
+	h.Machine = *machine
 	h.ownerUsers = stringutil.ConvertListToMap(machine.OwnerUsers, false)
 	subnets := h.subnets
 	for key, localVal := range h.localTags {
-		if machineVal, ok := h.machine.Tags[key]; ok && localVal == machineVal {
+		if machineVal, ok := h.Machine.Tags[key]; ok && localVal == machineVal {
 			delete(h.localTags, key)
 			numTagsToDelete++
 		}
 	}
 	if numTagsToDelete > 0 {
-		err := m.storer.WriteMachineTags(h.machine.HostIpAddress, h.localTags)
+		err := m.storer.WriteMachineTags(h.Machine.HostIpAddress, h.localTags)
 		if err != nil {
 			h.logger.Printf("error writing tags: %s\n", err)
 		} else {
@@ -276,7 +273,7 @@ func (m *Manager) updateTopology(t *topology.Topology) {
 	}
 	deleteList := m.updateTopologyLocked(t, machines)
 	for _, hypervisor := range deleteList {
-		m.storer.UnregisterHypervisor(hypervisor.machine.HostIpAddress)
+		m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
 		hypervisor.delete()
 	}
 }
@@ -294,7 +291,7 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 	for _, machine := range machines {
 		delete(hypervisorsToDelete, machine.Hostname)
 		if hypervisor, ok := m.hypervisors[machine.Hostname]; ok {
-			equal := hypervisor.machine.Equal(machine)
+			equal := hypervisor.Machine.Equal(machine)
 			if !equal {
 				hypersToChange = append(hypersToChange, hypervisor)
 			}
@@ -304,7 +301,7 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 			hypervisor := &hypervisorType{
 				logger:       prefixlogger.New(machine.Hostname+": ", m.logger),
 				location:     location,
-				machine:      machine,
+				Hypervisor:   fm_proto.Hypervisor{Machine: *machine},
 				migratingVms: make(map[string]*vmInfoType),
 				ownerUsers: stringutil.ConvertListToMap(machine.OwnerUsers,
 					false),
@@ -373,13 +370,13 @@ func (h *hypervisorType) isDeleteScheduled() bool {
 }
 
 func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
-	vmList, err := m.storer.ListVMs(h.machine.HostIpAddress)
+	vmList, err := m.storer.ListVMs(h.Machine.HostIpAddress)
 	if err != nil {
 		h.logger.Printf("error reading VMs, not managing hypervisor: %s", err)
 		return
 	}
 	h.cachedSerialNumber, err = m.storer.ReadMachineSerialNumber(
-		h.machine.HostIpAddress)
+		h.Machine.HostIpAddress)
 	if err != nil {
 		h.logger.Printf(
 			"error reading serial number, not managing hypervisor: %s", err)
@@ -387,13 +384,13 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
 	}
 	h.serialNumber = h.cachedSerialNumber
 	m.probeSerialNumber(h)
-	h.localTags, err = m.storer.ReadMachineTags(h.machine.HostIpAddress)
+	h.localTags, err = m.storer.ReadMachineTags(h.Machine.HostIpAddress)
 	if err != nil {
 		h.logger.Printf("error reading tags, not managing hypervisor: %s", err)
 		return
 	}
 	for _, vmIpAddr := range vmList {
-		pVmInfo, err := m.storer.ReadVm(h.machine.HostIpAddress, vmIpAddr)
+		pVmInfo, err := m.storer.ReadVm(h.Machine.HostIpAddress, vmIpAddr)
 		if err != nil {
 			h.logger.Printf("error reading VM: %s: %s", vmIpAddr, err)
 			continue
@@ -486,7 +483,7 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 func (m *Manager) getSubnetsForMachine(h *hypervisorType) (
 	map[string]*topology.Subnet, error) {
 	m.mutex.Lock()
-	subnetsSlice, err := m.topology.GetSubnetsForMachine(h.machine.Hostname)
+	subnetsSlice, err := m.topology.GetSubnetsForMachine(h.Machine.Hostname)
 	m.mutex.Unlock()
 	if err != nil {
 		return nil, err
@@ -507,7 +504,7 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		for _, address := range update.AddressPool {
 			addresses = append(addresses, address.IpAddress)
 		}
-		err := m.storer.SetIPsForHypervisor(h.machine.HostIpAddress,
+		err := m.storer.SetIPsForHypervisor(h.Machine.HostIpAddress,
 			addresses)
 		if err != nil {
 			h.logger.Println(err)
@@ -595,7 +592,7 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		h.logger.Println(err)
 		return
 	}
-	m.storer.AddIPsForHypervisor(h.machine.HostIpAddress, ipsToAdd)
+	m.storer.AddIPsForHypervisor(h.Machine.HostIpAddress, ipsToAdd)
 	if len(addressesToAdd) > 0 {
 		h.logger.Debugf(0, "replenished pool with %d addresses\n",
 			len(addressesToAdd))
@@ -613,13 +610,13 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 		h.disabled = update.Disabled
 	}
 	if update.MemoryInMiB != nil {
-		h.memoryInMiB = *update.MemoryInMiB
+		h.MemoryInMiB = *update.MemoryInMiB
 	}
 	if update.NumCPUs != nil {
-		h.numCPUs = *update.NumCPUs
+		h.NumCPUs = *update.NumCPUs
 	}
 	if update.TotalVolumeBytes != nil {
-		h.totalVolumeBytes = *update.TotalVolumeBytes
+		h.TotalVolumeBytes = *update.TotalVolumeBytes
 	}
 	oldHealthStatus := h.healthStatus
 	h.healthStatus = update.HealthStatus
@@ -643,7 +640,7 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	}
 	if update.HaveSerialNumber && update.SerialNumber != "" &&
 		update.SerialNumber != oldSerialNumber {
-		err := m.storer.WriteMachineSerialNumber(h.machine.HostIpAddress,
+		err := m.storer.WriteMachineSerialNumber(h.Machine.HostIpAddress,
 			update.SerialNumber)
 		if err != nil {
 			h.logger.Println(err)
@@ -690,7 +687,7 @@ func (m *Manager) processSubnetsUpdates(h *hypervisorType,
 		h.logger.Println(err)
 		return
 	}
-	needSubnets, err := t.GetSubnetsForMachine(h.machine.Hostname)
+	needSubnets, err := t.GetSubnetsForMachine(h.Machine.Hostname)
 	if err != nil {
 		h.logger.Println(err)
 		return
@@ -775,7 +772,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				m.migratingIPs[ipAddr] = struct{}{}
 			} else if vm, ok := h.vms[ipAddr]; ok {
 				if !vm.VmInfo.Equal(protoVm) {
-					err := m.storer.WriteVm(h.machine.HostIpAddress, ipAddr,
+					err := m.storer.WriteVm(h.Machine.HostIpAddress, ipAddr,
 						*protoVm)
 					if err != nil {
 						h.logger.Printf("error writing VM: %s: %s\n",
@@ -786,7 +783,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				}
 				vm.VmInfo = *protoVm
 				update.ChangedVMs[ipAddr] = protoVm
-				update.VmToHypervisor[ipAddr] = h.machine.Hostname
+				update.VmToHypervisor[ipAddr] = h.Machine.Hostname
 			} else {
 				if _, ok := h.migratingVms[ipAddr]; ok {
 					delete(h.migratingVms, ipAddr)
@@ -795,7 +792,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				vm := &vmInfoType{ipAddr, *protoVm, h.location, h}
 				h.vms[ipAddr] = vm
 				m.vms[ipAddr] = vm
-				err := m.storer.WriteVm(h.machine.HostIpAddress, ipAddr,
+				err := m.storer.WriteVm(h.Machine.HostIpAddress, ipAddr,
 					*protoVm)
 				if err != nil {
 					h.logger.Printf("error writing VM: %s: %s\n", ipAddr, err)
@@ -809,7 +806,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 	for ipAddr := range vmsToDelete {
 		delete(h.vms, ipAddr)
 		delete(m.vms, ipAddr)
-		err := m.storer.DeleteVm(h.machine.HostIpAddress, ipAddr)
+		err := m.storer.DeleteVm(h.Machine.HostIpAddress, ipAddr)
 		if err != nil {
 			h.logger.Printf("error deleting VM: %s: %s\n", ipAddr, err)
 		} else {
@@ -817,13 +814,13 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 		}
 		update.DeletedVMs = append(update.DeletedVMs, ipAddr)
 	}
-	h.allocatedMilliCPUs = 0
-	h.allocatedMemory = 0
-	h.allocatedVolumeBytes = 0
+	h.AllocatedMilliCPUs = 0
+	h.AllocatedMemory = 0
+	h.AllocatedVolumeBytes = 0
 	for _, vm := range h.vms {
-		h.allocatedMilliCPUs += uint64(vm.MilliCPUs)
-		h.allocatedMemory += vm.MemoryInMiB
-		h.allocatedVolumeBytes += vm.TotalStorage()
+		h.AllocatedMilliCPUs += uint64(vm.MilliCPUs)
+		h.AllocatedMemory += vm.MemoryInMiB
+		h.AllocatedVolumeBytes += vm.TotalStorage()
 	}
 	m.sendUpdate(h.location, &update)
 }
@@ -844,11 +841,11 @@ func (m *Manager) splitChanges(hypersToChange []*hypervisorType,
 	for _, h := range hypersToDelete {
 		if locationUpdate, ok := updates[h.location]; !ok {
 			updates[h.location] = &fm_proto.Update{
-				DeletedMachines: []string{h.machine.Hostname},
+				DeletedMachines: []string{h.Machine.Hostname},
 			}
 		} else {
 			locationUpdate.DeletedMachines = append(
-				locationUpdate.DeletedMachines, h.machine.Hostname)
+				locationUpdate.DeletedMachines, h.Machine.Hostname)
 		}
 	}
 	return updates

@@ -46,10 +46,10 @@ func (m *Manager) getHealthyHypervisorAddr(hostname string) (net.IP, error) {
 		hypervisor.healthStatus == "at risk" {
 		return nil, errors.New("cannot move IPs to unhealthy hypervisor")
 	}
-	if len(hypervisor.machine.HostIpAddress) < 1 {
+	if len(hypervisor.Machine.HostIpAddress) < 1 {
 		return nil, fmt.Errorf("IP address for: %s not known", hostname)
 	}
-	return hypervisor.machine.HostIpAddress, nil
+	return hypervisor.Machine.HostIpAddress, nil
 }
 
 func (m *Manager) markIPsForMigration(ipAddresses []net.IP) error {

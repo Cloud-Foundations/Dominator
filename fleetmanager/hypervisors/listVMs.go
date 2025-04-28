@@ -184,9 +184,9 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 				vm.storageTotalTableEntry(),
 				vm.OwnerUsers[0],
 				fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
-					vm.hypervisor.machine.Hostname,
+					vm.hypervisor.Machine.Hostname,
 					constants.HypervisorPortNumber,
-					vm.hypervisor.machine.Hostname),
+					vm.hypervisor.Machine.Hostname),
 				vm.hypervisor.location,
 			)
 		}

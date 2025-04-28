@@ -48,12 +48,12 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 	var cpusTotal uint
 	var volumeBytesAllocated, volumeBytesTotal uint64
 	for _, h := range hypervisors {
-		memoryInMiBAllocated += h.allocatedMemory
-		memoryInMiBTotal += roundUpMemoryInMiB(h.memoryInMiB)
-		milliCPUsAllocated += h.allocatedMilliCPUs
-		cpusTotal += h.numCPUs
-		volumeBytesAllocated += h.allocatedVolumeBytes
-		volumeBytesTotal += h.totalVolumeBytes
+		memoryInMiBAllocated += h.AllocatedMemory
+		memoryInMiBTotal += roundUpMemoryInMiB(h.MemoryInMiB)
+		milliCPUsAllocated += h.AllocatedMilliCPUs
+		cpusTotal += h.NumCPUs
+		volumeBytesAllocated += h.AllocatedVolumeBytes
+		volumeBytesTotal += h.TotalVolumeBytes
 	}
 	memoryShift, memoryMultiplier := format.GetMiltiplier(
 		memoryInMiBAllocated << 20)
@@ -126,16 +126,16 @@ func (h *hypervisorType) getNumVMs() uint {
 }
 
 func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
-	machine := h.machine
+	machine := &h.Machine
 	machineType := machine.Tags["Type"]
 	if machineTypeURL := machine.Tags["TypeURL"]; machineTypeURL != "" {
 		machineType = `<a href="` + machineTypeURL + `">` + machineType +
 			`</a>`
 	}
-	memoryInMiB := roundUpMemoryInMiB(h.memoryInMiB)
+	memoryInMiB := roundUpMemoryInMiB(h.MemoryInMiB)
 	memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
 	volumeShift, volumeMultiplier := format.GetMiltiplier(
-		h.totalVolumeBytes)
+		h.TotalVolumeBytes)
 	numVMs := h.getNumVMs()
 	tw.WriteRow("", "",
 		fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
@@ -148,14 +148,14 @@ func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
 		h.location,
 		machineType,
 		fmt.Sprintf("%s/%d",
-			format.FormatMilli(h.allocatedMilliCPUs), h.numCPUs),
+			format.FormatMilli(h.AllocatedMilliCPUs), h.NumCPUs),
 		fmt.Sprintf("%d/%d %sB",
-			h.allocatedMemory<<20>>memoryShift,
+			h.AllocatedMemory<<20>>memoryShift,
 			memoryInMiB<<20>>memoryShift,
 			memoryMultiplier),
 		fmt.Sprintf("%d/%d %sB",
-			h.allocatedVolumeBytes>>volumeShift,
-			h.totalVolumeBytes>>volumeShift,
+			h.AllocatedVolumeBytes>>volumeShift,
+			h.TotalVolumeBytes>>volumeShift,
 			volumeMultiplier),
 		fmt.Sprintf("<a href=\"http://%s:%d/listVMs\">%d</a>",
 			machine.Hostname, constants.HypervisorPortNumber,
@@ -246,7 +246,7 @@ func (m *Manager) listHypervisorsHandler(w http.ResponseWriter,
 	sort.Sort(hypervisors)
 	if parsedQuery.OutputType() == url.OutputTypeText {
 		for _, hypervisor := range hypervisors {
-			fmt.Fprintln(writer, hypervisor.machine.Hostname)
+			fmt.Fprintln(writer, hypervisor.Machine.Hostname)
 		}
 		return
 	}
@@ -287,11 +287,11 @@ func (m *Manager) listHypervisorsInLocation(
 	for _, hypervisor := range hypervisors {
 		addresses = append(addresses,
 			fmt.Sprintf("%s:%d",
-				hypervisor.machine.Hostname, constants.HypervisorPortNumber))
+				hypervisor.Machine.Hostname, constants.HypervisorPortNumber))
 		if len(request.TagsToInclude) > 0 {
 			hypervisorTags := make(tags.Tags)
 			for _, key := range request.TagsToInclude {
-				if value, ok := hypervisor.machine.Tags[key]; ok {
+				if value, ok := hypervisor.Machine.Tags[key]; ok {
 					hypervisorTags[key] = value
 				}
 				if value, ok := hypervisor.localTags[key]; ok {
@@ -317,7 +317,7 @@ func (list hypervisorList) Less(i, j int) bool {
 	} else if list[i].location > list[j].location {
 		return false
 	} else {
-		return list[i].machine.Hostname < list[j].machine.Hostname
+		return list[i].Machine.Hostname < list[j].Machine.Hostname
 	}
 }
 

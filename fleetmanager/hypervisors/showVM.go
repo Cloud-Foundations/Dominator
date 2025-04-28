@@ -23,7 +23,7 @@ func (m *Manager) getVmInfoAndHypervisor(vmIpAddr string) (
 		return nil, ""
 	}
 	if vm.hypervisor.probeStatus == probeStatusConnected {
-		return &vm.VmInfo, vm.hypervisor.machine.Hostname
+		return &vm.VmInfo, vm.hypervisor.Machine.Hostname
 	}
 	return &vm.VmInfo, ""
 }

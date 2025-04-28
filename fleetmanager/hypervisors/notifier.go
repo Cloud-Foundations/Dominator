@@ -32,7 +32,7 @@ func sendEmail(user string, vms []*vmInfoType) error {
 	for _, vm := range vms {
 		fmt.Fprintf(buffer, "IP: %s  name: %s  Hypervisor: %s  status: %s\n",
 			vm.Address.IpAddress, vm.Tags["Name"],
-			vm.hypervisor.machine.Hostname, vm.hypervisor.getHealthStatus())
+			vm.hypervisor.Machine.Hostname, vm.hypervisor.getHealthStatus())
 	}
 	return smtp.SendMailPlain(*smtpServer, *emailDomain, fromAddress,
 		[]string{toAddress}, buffer.Bytes())
