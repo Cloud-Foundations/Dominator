@@ -3,6 +3,7 @@ package hypervisors
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 func (m *Manager) writeHtml(writer io.Writer) {
@@ -70,9 +71,17 @@ func writeCountLinksHT(writer io.Writer, text, path string, count uint) {
 	if count < 1 {
 		return
 	}
-	fmt.Fprintf(writer,
-		"%s: <a href=\"%s\">%d</a> (<a href=\"%s&output=text\">text</a>)<br>\n",
-		text, path, count, path)
+	var separator string
+	if strings.Contains(path, "?") {
+		separator = "&"
+	} else {
+		separator = "?"
+	}
+	fmt.Fprintf(writer, "%s: <a href=\"%s\">%d</a>", text, path, count)
+	fmt.Fprintf(writer, " (<a href=\"%s%soutput=text\">text</a>)",
+		path, separator)
+	fmt.Fprintf(writer, " (<a href=\"%s%soutput=json\">JSON</a>)<br>\n",
+		path, separator)
 }
 
 func writeCountLinksHTJ(writer io.Writer, text, path string, count uint) {
