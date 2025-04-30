@@ -107,7 +107,7 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 		"")
 }
 
-func (h *hypervisorType) getHealthStatus() string {
+func (h *hypervisorType) getHealthStatus(url bool) string {
 	healthStatus := h.probeStatus.String()
 	if h.probeStatus == probeStatusConnected {
 		if h.healthStatus != "" {
@@ -115,6 +115,10 @@ func (h *hypervisorType) getHealthStatus() string {
 		} else if h.disabled {
 			healthStatus = "disabled"
 		}
+	}
+	if url {
+		return fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+			h.Hostname, constants.HypervisorPortNumber, healthStatus)
 	}
 	return healthStatus
 }
@@ -140,9 +144,7 @@ func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
 	tw.WriteRow("", "",
 		fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 			machine.Hostname, machine.Hostname),
-		fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
-			machine.Hostname, constants.HypervisorPortNumber,
-			h.getHealthStatus()),
+		h.getHealthStatus(true),
 		machine.HostIpAddress.String(),
 		h.serialNumber,
 		h.location,

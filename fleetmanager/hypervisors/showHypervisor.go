@@ -78,7 +78,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		}
 		tw.Close()
 	}
-	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus())
+	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus(true))
 	h.mutex.RLock()
 	lastConnectedTime := h.lastConnectedTime
 	h.mutex.RUnlock()
