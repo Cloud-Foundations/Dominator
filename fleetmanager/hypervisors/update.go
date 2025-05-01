@@ -232,13 +232,16 @@ func (m *Manager) makeUpdateChannel(
 	return channel
 }
 
-func (m *Manager) updateHypervisor(h *hypervisorType, machine *fm_proto.Machine,
+func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 	machineChanged bool) {
 	location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 	var numTagsToDelete uint
 	h.mutex.Lock()
 	h.location = location
-	h.Machine = *machine
+	machine.MemoryInMiB = h.Machine.MemoryInMiB
+	machine.NumCPUs = h.Machine.NumCPUs
+	machine.TotalVolumeBytes = h.Machine.TotalVolumeBytes
+	h.Machine = machine
 	h.ownerUsers = stringutil.ConvertListToMap(machine.OwnerUsers, false)
 	subnets := h.subnets
 	for key, localVal := range h.localTags {
@@ -295,7 +298,7 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 			if !equal {
 				hypersToChange = append(hypersToChange, hypervisor)
 			}
-			m.updateHypervisor(hypervisor, machine, !equal)
+			m.updateHypervisor(hypervisor, *machine, !equal)
 		} else {
 			location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 			hypervisor := &hypervisorType{
