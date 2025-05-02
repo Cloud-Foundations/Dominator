@@ -10,14 +10,21 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+type hypervisorSubnetsType struct {
+	Hypervisor *fm_proto.Hypervisor
+	Subnets    []*topology.Subnet
+}
 
 func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	req *http.Request) {
@@ -43,6 +50,14 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	topology, err := m.getTopology()
 	if err != nil {
 		fmt.Fprintln(writer, err)
+		return
+	}
+	if parsedQuery.OutputType() == url.OutputTypeJson {
+		subnets, _ := topology.GetSubnetsForMachine(hostname)
+		json.WriteWithIndent(writer, "    ", hypervisorSubnetsType{
+			Hypervisor: &h.Hypervisor,
+			Subnets:    subnets,
+		})
 		return
 	}
 	fmt.Fprintf(writer, "<title>Information for Hypervisor %s</title>\n",
