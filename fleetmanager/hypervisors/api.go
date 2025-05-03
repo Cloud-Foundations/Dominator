@@ -30,31 +30,25 @@ const (
 )
 
 type hypervisorType struct {
-	logger               log.DebugLogger
-	receiveChannel       chan struct{}
-	mutex                sync.RWMutex // Lock everything below.
-	allocatedMilliCPUs   uint64
-	allocatedMemory      uint64
-	allocatedVolumeBytes uint64
-	cachedSerialNumber   string
-	closeClientChannel   chan<- struct{}
-	deleteScheduled      bool
-	disabled             bool
-	healthStatus         string
-	lastConnectedTime    time.Time
-	lastIpmiProbe        time.Time
-	localTags            tags.Tags
-	location             string
-	machine              *fm_proto.Machine
-	memoryInMiB          uint64
-	migratingVms         map[string]*vmInfoType // Key: VM IP address.
-	numCPUs              uint
-	ownerUsers           map[string]struct{}
-	probeStatus          probeStatus
-	serialNumber         string
-	subnets              []hyper_proto.Subnet
-	totalVolumeBytes     uint64
-	vms                  map[string]*vmInfoType // Key: VM IP address.
+	logger         log.DebugLogger
+	receiveChannel chan struct{}
+	mutex          sync.RWMutex // Lock everything below.
+	fm_proto.Hypervisor
+	cachedSerialNumber string
+	closeClientChannel chan<- struct{}
+	deleteScheduled    bool
+	disabled           bool
+	healthStatus       string
+	lastConnectedTime  time.Time
+	lastIpmiProbe      time.Time
+	localTags          tags.Tags
+	location           string
+	migratingVms       map[string]*vmInfoType // Key: VM IP address.
+	ownerUsers         map[string]struct{}
+	probeStatus        probeStatus
+	serialNumber       string
+	subnets            []hyper_proto.Subnet
+	vms                map[string]*vmInfoType // Key: VM IP address.
 }
 
 type ipStorer interface {

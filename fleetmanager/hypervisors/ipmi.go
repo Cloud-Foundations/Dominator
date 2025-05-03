@@ -52,10 +52,10 @@ func (m *Manager) powerOnMachine(hostname string,
 		return err
 	}
 	var ipmiHostname string
-	if len(h.machine.IPMI.HostIpAddress) > 0 {
-		ipmiHostname = h.machine.IPMI.HostIpAddress.String()
-	} else if h.machine.IPMI.Hostname != "" {
-		ipmiHostname = h.machine.IPMI.Hostname
+	if len(h.Machine.IPMI.HostIpAddress) > 0 {
+		ipmiHostname = h.Machine.IPMI.HostIpAddress.String()
+	} else if h.Machine.IPMI.Hostname != "" {
+		ipmiHostname = h.Machine.IPMI.Hostname
 	} else if sentWakeOnLan, err := m.wakeOnLan(h); err != nil {
 		return err
 	} else if sentWakeOnLan {
@@ -82,10 +82,10 @@ func (m *Manager) probeSerialNumber(h *hypervisorType) {
 		return
 	}
 	var ipmiHostname string
-	if len(h.machine.IPMI.HostIpAddress) > 0 {
-		ipmiHostname = h.machine.IPMI.HostIpAddress.String()
-	} else if h.machine.IPMI.Hostname != "" {
-		ipmiHostname = h.machine.IPMI.Hostname
+	if len(h.Machine.IPMI.HostIpAddress) > 0 {
+		ipmiHostname = h.Machine.IPMI.HostIpAddress.String()
+	} else if h.Machine.IPMI.Hostname != "" {
+		ipmiHostname = h.Machine.IPMI.Hostname
 	} else {
 		return
 	}
@@ -115,7 +115,7 @@ func (m *Manager) probeSerialNumber(h *hypervisorType) {
 		}
 		h.serialNumber = serialNumber
 		h.mutex.Unlock()
-		err := m.storer.WriteMachineSerialNumber(h.machine.HostIpAddress,
+		err := m.storer.WriteMachineSerialNumber(h.Machine.HostIpAddress,
 			serialNumber)
 		if err != nil {
 			h.logger.Println(err)
@@ -132,10 +132,10 @@ func (m *Manager) probeUnreachable(h *hypervisorType) probeStatus {
 		return probeStatusUnreachable
 	}
 	var ipmiHostname string
-	if len(h.machine.IPMI.HostIpAddress) > 0 {
-		ipmiHostname = h.machine.IPMI.HostIpAddress.String()
-	} else if h.machine.IPMI.Hostname != "" {
-		ipmiHostname = h.machine.IPMI.Hostname
+	if len(h.Machine.IPMI.HostIpAddress) > 0 {
+		ipmiHostname = h.Machine.IPMI.HostIpAddress.String()
+	} else if h.Machine.IPMI.Hostname != "" {
+		ipmiHostname = h.Machine.IPMI.Hostname
 	} else {
 		return probeStatusUnreachable
 	}
@@ -193,7 +193,7 @@ func (m *Manager) readSerialNumber(ipmiHostname string) string {
 }
 
 func (m *Manager) wakeOnLan(h *hypervisorType) (bool, error) {
-	if len(h.machine.HostMacAddress) < 1 {
+	if len(h.Machine.HostMacAddress) < 1 {
 		return false, nil
 	}
 	routeTable, err := util.GetRouteTable()
@@ -208,7 +208,7 @@ func (m *Manager) wakeOnLan(h *hypervisorType) (bool, error) {
 		if route.Flags&util.RouteFlagGateway != 0 {
 			continue
 		}
-		if h.machine.HostIpAddress.Mask(route.Mask).Equal(route.BaseAddr) {
+		if h.Machine.HostIpAddress.Mask(route.Mask).Equal(route.BaseAddr) {
 			routeEntry = route
 			break
 		}
@@ -228,7 +228,7 @@ func (m *Manager) wakeOnLan(h *hypervisorType) (bool, error) {
 	}
 	packet := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	for count := 0; count < 16; count++ {
-		packet = append(packet, h.machine.HostMacAddress...)
+		packet = append(packet, h.Machine.HostMacAddress...)
 	}
 	remoteAddr := &net.UDPAddr{IP: routeEntry.BroadcastAddr, Port: 9}
 	if _, err := wolConn.WriteToUDP(packet, remoteAddr); err != nil {

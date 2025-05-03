@@ -10,14 +10,21 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+type hypervisorSubnetsType struct {
+	Hypervisor *fm_proto.Hypervisor
+	Subnets    []*topology.Subnet
+}
 
 func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	req *http.Request) {
@@ -45,13 +52,21 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, err)
 		return
 	}
+	if parsedQuery.OutputType() == url.OutputTypeJson {
+		subnets, _ := topology.GetSubnetsForMachine(hostname)
+		json.WriteWithIndent(writer, "    ", hypervisorSubnetsType{
+			Hypervisor: &h.Hypervisor,
+			Subnets:    subnets,
+		})
+		return
+	}
 	fmt.Fprintf(writer, "<title>Information for Hypervisor %s</title>\n",
 		hostname)
 	writer.WriteString(commonStyleSheet)
 	fmt.Fprintln(writer, "<body>")
 	fmt.Fprintln(writer, "Machine info:<br>")
 	fmt.Fprintln(writer, `<pre style="background-color: #eee; border: 1px solid #999; display: block; float: left;">`)
-	json.WriteWithIndent(writer, "    ", h.machine)
+	json.WriteWithIndent(writer, "    ", h.Machine)
 	fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 	subnets, err := topology.GetSubnetsForMachine(hostname)
 	if err != nil {
@@ -78,7 +93,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		}
 		tw.Close()
 	}
-	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus())
+	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus(true))
 	h.mutex.RLock()
 	lastConnectedTime := h.lastConnectedTime
 	h.mutex.RUnlock()
@@ -89,13 +104,17 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 			lastConnectedTime.Format(format.TimeFormatSeconds),
 			format.Duration(time.Since(lastConnectedTime)))
 	}
+	if h.IPMI.Hostname != "" {
+		fmt.Fprintf(writer, "<a href=\"https://%s/\">IPMI</a><br>\n",
+			h.IPMI.Hostname)
+	}
 	fmt.Fprintf(writer,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
 		len(h.vms), hostname, constants.HypervisorPortNumber)
 	fmt.Fprintln(writer, "<br>")
 	m.showVMsForHypervisor(writer, h)
 	fmt.Fprintln(writer, "<br>")
-	m.showIPsForHypervisor(writer, h.machine.HostIpAddress)
+	m.showIPsForHypervisor(writer, h.Machine.HostIpAddress)
 	fmt.Fprintln(writer, "</body>")
 }
 
@@ -123,9 +142,9 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 	h *hypervisorType) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
 	capacity := hyper_proto.GetCapacityResponse{
-		MemoryInMiB:      h.memoryInMiB,
-		NumCPUs:          h.numCPUs,
-		TotalVolumeBytes: h.totalVolumeBytes,
+		MemoryInMiB:      h.MemoryInMiB,
+		NumCPUs:          h.NumCPUs,
+		TotalVolumeBytes: h.TotalVolumeBytes,
 	}
 	vms := getVmListFromMap(h.vms, true)
 	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)

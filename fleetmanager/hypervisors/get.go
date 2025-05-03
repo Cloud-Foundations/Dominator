@@ -14,15 +14,7 @@ func (h *hypervisorType) makeProtoHypervisor(
 	includeVMs bool) fm_proto.Hypervisor {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	protoHypervisor := fm_proto.Hypervisor{
-		Machine: *h.machine,
-	}
-	protoHypervisor.AllocatedMilliCPUs = h.allocatedMilliCPUs
-	protoHypervisor.AllocatedMemory = h.allocatedMemory
-	protoHypervisor.AllocatedVolumeBytes = h.allocatedVolumeBytes
-	protoHypervisor.Machine.MemoryInMiB = h.memoryInMiB
-	protoHypervisor.NumCPUs = h.numCPUs
-	protoHypervisor.TotalVolumeBytes = h.totalVolumeBytes
+	protoHypervisor := h.Hypervisor
 	if includeVMs {
 		protoHypervisor.VMs = make([]hyper_proto.VmInfo, 0, len(h.vms))
 		for _, vm := range h.vms {
@@ -61,7 +53,7 @@ func (m *Manager) getHypervisorForVm(ipAddr net.IP) (string, error) {
 	if vm, ok := m.vms[addr]; !ok {
 		return "", errors.New("VM not found")
 	} else {
-		return vm.hypervisor.machine.Hostname, nil
+		return vm.hypervisor.Machine.Hostname, nil
 	}
 }
 
