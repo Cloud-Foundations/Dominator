@@ -104,6 +104,10 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 			lastConnectedTime.Format(format.TimeFormatSeconds),
 			format.Duration(time.Since(lastConnectedTime)))
 	}
+	if h.IPMI.Hostname != "" {
+		fmt.Fprintf(writer, "<a href=\"https://%s/\">IPMI</a><br>\n",
+			h.IPMI.Hostname)
+	}
 	fmt.Fprintf(writer,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
 		len(h.vms), hostname, constants.HypervisorPortNumber)

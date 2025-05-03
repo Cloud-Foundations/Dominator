@@ -141,12 +141,23 @@ func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
 	volumeShift, volumeMultiplier := format.GetMiltiplier(
 		h.TotalVolumeBytes)
 	numVMs := h.getNumVMs()
+	var serialNumber string
+	if h.IPMI.Hostname == "" {
+		serialNumber = h.serialNumber
+	} else if h.serialNumber == "" {
+		serialNumber = fmt.Sprintf(
+			"<a href=\"https://%s/\">&nbsp;&nbsp;&nbsp;&nbsp;</a>",
+			h.IPMI.Hostname)
+	} else {
+		serialNumber = fmt.Sprintf("<a href=\"https://%s/\">%s</a>",
+			h.IPMI.Hostname, h.serialNumber)
+	}
 	tw.WriteRow("", "",
 		fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 			machine.Hostname, machine.Hostname),
 		h.getHealthStatus(true),
 		machine.HostIpAddress.String(),
-		h.serialNumber,
+		serialNumber,
 		h.location,
 		machineType,
 		fmt.Sprintf("%s/%d",
