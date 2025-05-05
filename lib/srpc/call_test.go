@@ -22,6 +22,7 @@ func init() {
 func makeClientServer(makeCoder coderMaker) (*Client, error) {
 	serverPipe, clientPipe := net.Pipe()
 	go handleConnection(&Conn{
+		allowMethodPowers: true,
 		ReadWriter: bufio.NewReadWriter(bufio.NewReader(serverPipe),
 			bufio.NewWriter(serverPipe)),
 	},
@@ -77,6 +78,7 @@ func testCallPlain(t *testing.T, makeCoder coderMaker) {
 func testCallRequestReply(t *testing.T, makeCoder coderMaker) {
 	serverPipe, clientPipe := net.Pipe()
 	go handleConnection(&Conn{
+		allowMethodPowers: true,
 		ReadWriter: bufio.NewReadWriter(bufio.NewReader(serverPipe),
 			bufio.NewWriter(serverPipe)),
 	},
