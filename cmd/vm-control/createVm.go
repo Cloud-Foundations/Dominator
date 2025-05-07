@@ -42,8 +42,8 @@ func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
 }
 
-func approximateVolumesForCreateRequest() hyper_proto.VmInfo {
-	vmInfo := hyper_proto.VmInfo{}
+func approximateVolumesForCreateRequest(
+	vmInfo hyper_proto.VmInfo) hyper_proto.VmInfo {
 	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
 	vmInfo.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
 	for _, size := range secondaryVolumeSizes {
@@ -189,7 +189,7 @@ func createVm(logger log.DebugLogger) error {
 				IpAddress: ipAddr}
 		}
 	}
-	tmpVmInfo := approximateVolumesForCreateRequest()
+	tmpVmInfo := approximateVolumesForCreateRequest(request.VmInfo)
 	if hypervisor, err := getHypervisorAddress(tmpVmInfo); err != nil {
 		return err
 	} else {
