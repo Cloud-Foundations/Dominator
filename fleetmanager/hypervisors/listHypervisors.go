@@ -26,6 +26,14 @@ const (
 
 type hypervisorList []*hypervisorType
 
+func getMiltiplier(low, high uint64) (uint, string) {
+	shift, miltiplier := format.GetMiltiplier(high)
+	if low == 0 || low>>shift > 0 {
+		return shift, miltiplier
+	}
+	return format.GetMiltiplier(low)
+}
+
 func roundUpMemoryInMiB(input uint64) uint64 {
 	numShift := 0
 	memoryInMiB := input
@@ -137,9 +145,10 @@ func (h *hypervisorType) writeStats(tw *html.TableWriter) uint {
 			`</a>`
 	}
 	memoryInMiB := roundUpMemoryInMiB(h.MemoryInMiB)
-	memoryShift, memoryMultiplier := format.GetMiltiplier(memoryInMiB << 20)
-	volumeShift, volumeMultiplier := format.GetMiltiplier(
-		h.TotalVolumeBytes)
+	memoryShift, memoryMultiplier := getMiltiplier(h.AllocatedMemory<<20,
+		memoryInMiB<<20)
+	volumeShift, volumeMultiplier := getMiltiplier(
+		h.AllocatedVolumeBytes, h.TotalVolumeBytes)
 	numVMs := h.getNumVMs()
 	var serialNumber string
 	if h.IPMI.Hostname == "" {
