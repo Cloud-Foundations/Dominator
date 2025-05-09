@@ -21,9 +21,7 @@ func changeTags(logger log.DebugLogger) error {
 	if *hypervisorHostname == "" {
 		return errors.New("no hypervisorHostname specified")
 	}
-	clientName := fmt.Sprintf("%s:%d", *fleetManagerHostname,
-		*fleetManagerPortNum)
-	client, err := srpc.DialHTTPWithDialer("tcp", clientName, rrDialer)
+	client, err := dialFleetManager()
 	if err != nil {
 		return err
 	}

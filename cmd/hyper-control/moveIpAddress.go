@@ -6,7 +6,6 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
@@ -27,9 +26,7 @@ func moveIpAddress(addr string, logger log.DebugLogger) error {
 		IpAddresses:        []net.IP{ipAddr},
 	}
 	var reply proto.MoveIpAddressesResponse
-	clientName := fmt.Sprintf("%s:%d",
-		*fleetManagerHostname, *fleetManagerPortNum)
-	client, err := srpc.DialHTTPWithDialer("tcp", clientName, rrDialer)
+	client, err := dialFleetManager()
 	if err != nil {
 		return err
 	}
