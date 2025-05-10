@@ -55,6 +55,15 @@ func findHypervisorClient(client *srpc.Client,
 	return reply.HypervisorAddress, nil
 }
 
+func getFleetManagerClientResource() (*srpc.ClientResource, error) {
+	if *fleetManagerHostname == "" {
+		return nil, fmt.Errorf("no Fleet Manager specified")
+	}
+	return srpc.NewClientResource("tcp",
+			fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum)),
+		nil
+}
+
 func lookupIP(vmHostname string) (net.IP, error) {
 	if ips, err := net.LookupIP(vmHostname); err != nil {
 		return nil, err

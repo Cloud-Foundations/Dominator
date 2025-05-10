@@ -116,8 +116,10 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	fleetManagerClientResource := srpc.NewClientResource("tcp",
-		fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum))
+	fleetManagerClientResource, err := getFleetManagerClientResource()
+	if err != nil {
+		return err
+	}
 	defer fleetManagerClientResource.ScheduleClose()
 	logger.Debugln(0, "finding good Hypervisors")
 	hypervisorAddresses, err := listConnectedHypervisors(
