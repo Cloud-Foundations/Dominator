@@ -49,12 +49,7 @@ func powerOn(logger log.DebugLogger) error {
 	if *hypervisorHostname == "" {
 		return errors.New("unspecified Hypervisor")
 	}
-	if *fleetManagerHostname == "" {
-		return errors.New("unspecified Fleet Manager")
-	}
-	clientName := fmt.Sprintf("%s:%d", *fleetManagerHostname,
-		*fleetManagerPortNum)
-	client, err := srpc.DialHTTP("tcp", clientName, 0)
+	client, err := dialFleetManager()
 	if err != nil {
 		return err
 	}

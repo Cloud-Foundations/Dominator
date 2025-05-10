@@ -10,8 +10,13 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
-func dialFleetManager(address string) (*srpc.Client, error) {
-	return srpc.DialHTTPWithDialer("tcp", address, rrDialer)
+func dialFleetManager() (*srpc.Client, error) {
+	if *fleetManagerHostname == "" {
+		return nil, fmt.Errorf("no Fleet Manager specified")
+	}
+	clientName := fmt.Sprintf("%s:%d", *fleetManagerHostname,
+		*fleetManagerPortNum)
+	return srpc.DialHTTPWithDialer("tcp", clientName, rrDialer)
 }
 
 func dialHypervisor(address string) (*srpc.Client, error) {
@@ -24,7 +29,7 @@ func findHypervisor(vmIpAddr net.IP) (string, error) {
 			nil
 	} else if *fleetManagerHostname != "" {
 		cm := fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum)
-		client, err := dialFleetManager(cm)
+		client, err := srpc.DialHTTPWithDialer("tcp", cm, rrDialer)
 		if err != nil {
 			return "", err
 		}
@@ -48,6 +53,15 @@ func findHypervisorClient(client *srpc.Client,
 		return "", err
 	}
 	return reply.HypervisorAddress, nil
+}
+
+func getFleetManagerClientResource() (*srpc.ClientResource, error) {
+	if *fleetManagerHostname == "" {
+		return nil, fmt.Errorf("no Fleet Manager specified")
+	}
+	return srpc.NewClientResource("tcp",
+			fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum)),
+		nil
 }
 
 func lookupIP(vmHostname string) (net.IP, error) {
