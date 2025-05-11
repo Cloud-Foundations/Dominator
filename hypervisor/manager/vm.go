@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -71,6 +72,9 @@ var (
 	errorNoAccessToResource = errors.New("no access to resource")
 	newlineLiteral          = []byte{'\n'}
 	newlineReplacement      = []byte{'\\', 'n'}
+
+	qemuCommand = flag.String("qemuCommand", "qemu-system-x86_64",
+		"QEMU command")
 )
 
 func checkCpuPriority(authInfo *srpc.AuthInformation, cpuPriority int) error {
@@ -4410,12 +4414,13 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		tapFiles = append(tapFiles, tapFile)
 	}
 	pidfile := filepath.Join(vm.dirname, "pidfile")
-	cmd := exec.Command("qemu-system-x86_64",
+	cmd := exec.Command(*qemuCommand,
 		"-machine", fmt.Sprintf("%s,accel=kvm", vm.MachineType),
 		"-cpu", "host", // Allow the VM to take full advantage of host CPU.
 		"-nodefaults",
 		"-name", vm.ipAddress,
 		"-m", fmt.Sprintf("%dM", vm.MemoryInMiB),
+		"-smbios", "type=1,product=SmallStack",
 		"-smp", fmt.Sprintf("cpus=%d", nCpus),
 		"-serial",
 		"unix:"+filepath.Join(vm.dirname, serialSockFilename)+",server,nowait",
@@ -4528,6 +4533,7 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			"-watchdog", vm.WatchdogModel.String())
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
+	cmd.Env = append(os.Environ(), "VM_HOSTNAME="+vm.Hostname)
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error starting QEMU: %s: %s", err, output)
