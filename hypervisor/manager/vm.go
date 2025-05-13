@@ -4533,9 +4533,15 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 			"-watchdog", vm.WatchdogModel.String())
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
-	cmd.Env = append(os.Environ(),
-		"VM_HOSTNAME="+vm.Hostname,
-		"VM_PRIMARY_IP_ADDRESS="+vm.ipAddress)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "VM_HOSTNAME="+vm.Hostname)
+	if len(vm.OwnerGroups) > 0 {
+		cmd.Env = append(cmd.Env,
+			"VM_OWNER_GROUPS="+strings.Join(vm.OwnerGroups, ","))
+	}
+	cmd.Env = append(cmd.Env,
+		"VM_OWNER_USERS="+strings.Join(vm.OwnerUsers, ","))
+	cmd.Env = append(cmd.Env, "VM_PRIMARY_IP_ADDRESS="+vm.ipAddress)
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error starting QEMU: %s: %s", err, output)
