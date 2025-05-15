@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,12 +13,52 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+func getQemuCpuModelFlags() (map[string]struct{}, error) {
+	cmd := exec.Command(*qemuCommand, "-cpu", "help")
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(stdout))
+	var modelFlags map[string]struct{} // nil means header not yet found.
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) < 2 {
+			continue
+		}
+		if modelFlags == nil {
+			if line == "Recognized CPUID flags:" {
+				modelFlags = make(map[string]struct{})
+			}
+			continue
+		}
+		if !strings.HasPrefix(line, "  ") {
+			break
+		}
+		for _, field := range strings.Fields(line[2:]) {
+			modelFlags[field] = struct{}{}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return modelFlags, nil
+}
+
 func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	pidfile string, nCpus uint, netOptions []string,
 	tapFiles []*os.File) error {
+	cpuModelFlags, err := getQemuCpuModelFlags()
+	if err != nil {
+		return err
+	}
+	cpuModel := "host" // Allow the VM to take full advantage of host CPU.
+	if _, ok := cpuModelFlags["invtsc"]; ok {
+		cpuModel += ",+invtsc,migratable=no" // Try hard to provide TSC.
+	}
 	cmd := exec.Command(*qemuCommand,
 		"-machine", fmt.Sprintf("%s,accel=kvm", vm.MachineType),
-		"-cpu", "host", // Allow the VM to take full advantage of host CPU.
+		"-cpu", cpuModel,
 		"-nodefaults",
 		"-name", vm.ipAddress,
 		"-m", fmt.Sprintf("%dM", vm.MemoryInMiB),
