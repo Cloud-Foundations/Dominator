@@ -55,6 +55,8 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	cpuModel := "host" // Allow the VM to take full advantage of host CPU.
 	if _, ok := cpuModelFlags["invtsc"]; ok {
 		cpuModel += ",+invtsc,migratable=no" // Try hard to provide TSC.
+	} else if _, ok := cpuModelFlags["kvmclock"]; ok {
+		cpuModel += ",+kvmclock" // Fall back to something faster than HPET.
 	}
 	cmd := exec.Command(*qemuCommand,
 		"-machine", fmt.Sprintf("%s,accel=kvm", vm.MachineType),
