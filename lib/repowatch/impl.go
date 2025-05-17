@@ -116,6 +116,10 @@ func watch(config Config, metricDirectory string,
 		return watchLocal(config.LocalRepositoryDirectory, config.CheckInterval,
 			metricDirectory, logger)
 	}
+	if config.RepositoryURL[0] == '/' {
+		return watchLocal(config.RepositoryURL, config.CheckInterval,
+			metricDirectory, logger)
+	}
 	return watchGit(config.RepositoryURL, config.LocalRepositoryDirectory,
 		config.AwsSecretId, config.CheckInterval, metricDirectory, logger)
 }
