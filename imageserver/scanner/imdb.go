@@ -574,6 +574,9 @@ func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 
 func (imdb *ImageDataBase) makeDirectoryAll(dirname string,
 	authInfo *srpc.AuthInformation) error {
+	if dirname == "." {
+		return errors.New("cannot create root directory")
+	}
 	imdb.Lock()
 	defer imdb.Unlock()
 	return imdb.makeDirectoryAllRecurse(dirname, authInfo)
@@ -582,7 +585,7 @@ func (imdb *ImageDataBase) makeDirectoryAll(dirname string,
 func (imdb *ImageDataBase) makeDirectoryAllRecurse(dirname string,
 	authInfo *srpc.AuthInformation) error {
 	if dirname == "." {
-		return errors.New("cannot create root directory")
+		return nil
 	}
 	if _, ok := imdb.directoryMap[dirname]; ok {
 		return nil
