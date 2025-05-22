@@ -187,7 +187,8 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 					vm.hypervisor.Machine.Hostname,
 					constants.HypervisorPortNumber,
 					vm.hypervisor.Machine.Hostname),
-				vm.hypervisor.location,
+				fmt.Sprintf("<a href=\"listHypervisors?location=%s\">%s</a>",
+					vm.hypervisor.location, vm.hypervisor.location),
 			)
 		}
 	}

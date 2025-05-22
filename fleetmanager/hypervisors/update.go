@@ -234,10 +234,10 @@ func (m *Manager) makeUpdateChannel(
 
 func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 	machineChanged bool) {
-	location, _ := m.topology.GetLocationOfMachine(machine.Hostname)
 	var numTagsToDelete uint
 	h.mutex.Lock()
-	h.location = location
+	locationChanged := h.location != machine.Location
+	h.location = machine.Location
 	machine.MemoryInMiB = h.Machine.MemoryInMiB
 	machine.NumCPUs = h.Machine.NumCPUs
 	machine.TotalVolumeBytes = h.Machine.TotalVolumeBytes
@@ -257,6 +257,11 @@ func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 		} else {
 			h.logger.Debugf(0, "Deleted %d obsolete local tags\n",
 				numTagsToDelete)
+		}
+	}
+	if locationChanged {
+		for _, vm := range h.vms {
+			vm.Location = h.location
 		}
 	}
 	h.mutex.Unlock()

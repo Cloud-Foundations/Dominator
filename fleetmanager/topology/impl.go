@@ -11,8 +11,12 @@ func watch(params WatchParams) (<-chan *Topology, error) {
 	if params.MetricsDirectory == "" {
 		params.MetricsDirectory = "fleet-manager/topology-watcher"
 	}
-	directoryChannel, err := repowatch.Watch(params.TopologyRepository,
-		params.LocalRepositoryDir, params.CheckInterval,
+	directoryChannel, err := repowatch.WatchWithConfig(
+		repowatch.Config{
+			CheckInterval:            params.CheckInterval,
+			LocalRepositoryDirectory: params.LocalRepositoryDir,
+			RepositoryURL:            params.TopologyRepository,
+		},
 		params.MetricsDirectory, params.Logger)
 	if err != nil {
 		return nil, err

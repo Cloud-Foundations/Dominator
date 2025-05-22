@@ -48,10 +48,22 @@ func parseMAC(text []byte) (HardwareAddr, error) {
 }
 
 func (left *Machine) Equal(right *Machine) bool {
+	if left.GatewaySubnetId != right.GatewaySubnetId {
+		return false
+	}
 	if !left.IPMI.Equal(&right.IPMI) {
 		return false
 	}
+	if left.Location != right.Location {
+		return false
+	}
+	if left.MemoryInMiB != right.MemoryInMiB {
+		return false
+	}
 	if !left.NetworkEntry.Equal(&right.NetworkEntry) {
+		return false
+	}
+	if left.NumCPUs != right.NumCPUs {
 		return false
 	}
 	if !listsEqual(left.OwnerGroups, right.OwnerGroups) {
@@ -69,6 +81,9 @@ func (left *Machine) Equal(right *Machine) bool {
 		}
 	}
 	if !left.Tags.Equal(right.Tags) {
+		return false
+	}
+	if left.TotalVolumeBytes != right.TotalVolumeBytes {
 		return false
 	}
 	return true

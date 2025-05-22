@@ -96,6 +96,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	fmt.Fprintf(writer, "Status: %s", h.getHealthStatus(true))
 	h.mutex.RLock()
 	lastConnectedTime := h.lastConnectedTime
+	numVMs := len(h.vms)
 	h.mutex.RUnlock()
 	if lastConnectedTime.IsZero() {
 		fmt.Fprintln(writer, "<br>")
@@ -110,7 +111,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintf(writer,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
-		len(h.vms), hostname, constants.HypervisorPortNumber)
+		numVMs, hostname, constants.HypervisorPortNumber)
 	fmt.Fprintln(writer, "<br>")
 	m.showVMsForHypervisor(writer, h)
 	fmt.Fprintln(writer, "<br>")
@@ -146,7 +147,9 @@ func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
 		NumCPUs:          h.NumCPUs,
 		TotalVolumeBytes: h.TotalVolumeBytes,
 	}
+	h.mutex.RLock()
 	vms := getVmListFromMap(h.vms, true)
+	h.mutex.RUnlock()
 	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)
 	if err != nil {
 		fmt.Fprintln(writer, err)
