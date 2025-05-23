@@ -90,6 +90,7 @@ type SetDefaultImageResponse struct{}
 
 type SubInfo struct {
 	mdb.Machine
+	LastAddress         string              `json:",omitempty"`
 	LastNote            string              `json:",omitempty"`
 	LastDisruptionState sub.DisruptionState `json:",omitempty"`
 	LastScanDuration    time.Duration       `json:",omitempty"`
