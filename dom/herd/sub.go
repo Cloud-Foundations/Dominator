@@ -250,6 +250,7 @@ func (sub *Sub) connectAndPoll(
 	} else {
 		sub.isInsecure = true
 	}
+	sub.lastAddress = srpcClient.RemoteAddr()
 	sub.lastReachableTime = dialReturnedTime
 	sub.lastConnectionSucceededTime = dialReturnedTime
 	sub.lastConnectDuration =

@@ -111,6 +111,7 @@ type Sub struct {
 	publishedStatus              subStatus
 	pendingForceDisruptiveUpdate bool
 	pendingSafetyClear           bool
+	lastAddress                  string
 	lastConnectionStartTime      time.Time
 	lastReachableTime            time.Time
 	lastConnectionSucceededTime  time.Time
