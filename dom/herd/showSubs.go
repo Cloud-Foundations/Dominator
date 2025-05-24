@@ -209,6 +209,7 @@ func (herd *Herd) showSubsText(writer io.Writer,
 func (sub *Sub) makeInfo() proto.SubInfo {
 	return proto.SubInfo{
 		Machine:             sub.mdb,
+		LastAddress:         sub.lastAddress,
 		LastDisruptionState: sub.lastDisruptionState,
 		LastNote:            sub.lastNote,
 		LastScanDuration:    sub.lastScanDuration,
@@ -357,6 +358,8 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 		newRow(w, "System uptime", false)
 		showDuration(tw, *sub.systemUptime, false)
 	}
+	newRow(w, "Last address", false)
+	tw.WriteData("", sub.lastAddress)
 	fmt.Fprint(w, "  </tr>\n")
 	tw.Close()
 	fmt.Fprintln(w, "<br>")

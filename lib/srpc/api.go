@@ -444,6 +444,11 @@ func (client *Client) Put() {
 	client.put()
 }
 
+// RemoteAddr returns the remote network address.
+func (client *Client) RemoteAddr() string {
+	return client.remoteAddr
+}
+
 // SetKeepAlive sets whether the operating system should send keepalive messages
 // on the connection.
 func (client *Client) SetKeepAlive(keepalive bool) error {
