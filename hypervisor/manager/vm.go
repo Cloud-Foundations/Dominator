@@ -3205,7 +3205,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
 			OverlayFiles:       request.OverlayFiles,
-			RootLabel:          vm.rootLabel(false),
+			RootLabel:          vm.rootLabelSaved(false),
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
