@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,8 +110,16 @@ func logDhcpPacket(ifName string, packet dhcp4.Packet,
 		}
 		break
 	}
-	err := os.WriteFile(filepath.Join(logdir, "interface"), []byte(ifName),
-		fsutil.PublicFilePerms)
+	err := writeData(filepath.Join(logdir, "interface"), []byte(ifName))
+	if err != nil {
+		return "", err
+	}
+	err = writeIP(filepath.Join(logdir, "ipaddr"), packet.YIAddr())
+	if err != nil {
+		return "", err
+	}
+	err = writeIP(filepath.Join(logdir, "netmask"),
+		options[dhcp4.OptionSubnetMask])
 	if err != nil {
 		return "", err
 	}
@@ -119,6 +128,10 @@ func logDhcpPacket(ifName string, packet dhcp4.Packet,
 	} else {
 		file.Write(packet)
 		file.Close()
+	}
+	err = writeIP(filepath.Join(logdir, "router"), options[dhcp4.OptionRouter])
+	if err != nil {
+		return "", err
 	}
 	optionsFile, err := os.Create(filepath.Join(logdir, "options"))
 	if err != nil {
@@ -278,6 +291,22 @@ func unpackAndMount(rootDir string, fileSystem *filesystem.FileSystem,
 		}
 	}
 	return nil
+}
+
+// writeData will create a file named filename and will write the data followed
+// by a newline.
+func writeData(filename string, data []byte) error {
+	buffer := make([]byte, 0, len(data)+1)
+	buffer = append(buffer, data...)
+	buffer = append(buffer, '\n')
+	return os.WriteFile(filename, buffer, fsutil.PublicFilePerms)
+}
+
+func writeIP(filename string, ip net.IP) error {
+	if len(ip) < 4 {
+		return nil
+	}
+	return writeData(filename, []byte(ip.String()))
 }
 
 func (wc *writeCloser) Close() error {
