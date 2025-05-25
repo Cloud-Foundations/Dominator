@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/configurator"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -72,7 +73,8 @@ func dhcpRequest(interfaces map[string]net.Interface,
 	logger.Println("waiting for carrier and DHCP response for each interface")
 	cancelChannel := make(chan struct{})
 	for _, iface := range interfaces {
-		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel, logger)
+		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel,
+			prefixlogger.New(iface.Name+": ", logger))
 	}
 	timer := time.NewTimer(time.Minute * 5)
 	for range interfaces {
@@ -108,7 +110,7 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 		dhcp4client.Timeout(time.Second*5))
 	if err != nil {
 		responseChannel <- dhcpResponse{
-			error: fmt.Errorf("%s: failed to create DHCP client: %s\n",
+			error: fmt.Errorf("%s: failed to create DHCP client: %s",
 				iface.Name, err)}
 		return
 	}
@@ -116,7 +118,7 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 	for ; ; time.Sleep(100 * time.Millisecond) {
 		select {
 		case <-cancelChannel:
-			logger.Debugf(1, "%s: cancelling carrier tests\n", iface.Name)
+			logger.Debugln(1, "cancelling carrier tests")
 			return
 		default:
 		}
@@ -124,21 +126,30 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 			break
 		}
 	}
-	logger.Debugf(1, "%s: carrier detected\n", iface.Name)
+	logger.Debugln(1, "carrier detected")
 	for ; ; time.Sleep(100 * time.Millisecond) {
 		select {
 		case <-cancelChannel:
-			logger.Debugf(1, "%s: cancelling DHCP attempts\n", iface.Name)
+			logger.Debugln(1, "cancelling DHCP attempts")
 			return
 		default:
 		}
-		logger.Debugf(1, "%s: DHCP attempt\n", iface.Name)
-		if ok, packet, err := client.Request(); err != nil {
-			logger.Debugf(1, "%s: DHCP failed: %s\n", iface.Name, err)
-		} else if ok {
-			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+		logger.Debugln(1, "DHCP attempt")
+		ok, packet, err := client.Request()
+		if err != nil {
+			logger.Debugf(1, "DHCP failed: %s\n", err)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if err := processDhcpPacket(packet); err != nil {
+			responseChannel <- dhcpResponse{
+				error: fmt.Errorf("%s: %s", iface.Name, err)}
 			return
 		}
+		responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+		return
 	}
 }
 
@@ -272,6 +283,14 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 	return injectRandomSeed(client, logger)
 }
 
+func processDhcpPacket(packet dhcp4.Packet) error {
+	options := packet.ParseOptions()
+	if len(options[dhcp4.OptionRouter]) < 4 {
+		return errors.New("ignoring response with no valid router address")
+	}
+	return nil
+}
+
 func raiseInterfaces(interfaces map[string]net.Interface,
 	logger log.DebugLogger) error {
 	for name := range interfaces {
@@ -363,6 +382,7 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
+	logger.Printf("%s: using DHCP response with address: %s\n", ifName, ipAddr)
 	if logdir, err := logDhcpPacket(ifName, packet, options); err != nil {
 		logger.Printf("error logging DHCP packet: %w", err)
 	} else {
