@@ -1,12 +1,18 @@
 package rpcd
 
 import (
+	"flag"
 	"io"
 
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/builder"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
+)
+
+var (
+	maximumConcurrentBuildsPerUser = flag.Uint("maximumConcurrentBuildsPerUser",
+		1, "Maximum number of concurrent builds per unprivileged user")
 )
 
 type srpcType struct {
@@ -27,7 +33,7 @@ func Setup(builder *builder.Builder, logger log.Logger) (*htmlWriter, error) {
 		logger:  logger,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
-				"BuildImage": 1,
+				"BuildImage": *maximumConcurrentBuildsPerUser,
 			}),
 	}
 	srpc.RegisterNameWithOptions("Imaginator", srpcObj,
