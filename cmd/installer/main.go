@@ -248,7 +248,9 @@ func runDaemon() error {
 	}
 	rebooter, err := install(updateHwClock, logBuffer, logger)
 	if *dryRun {
-		logger.Println(err)
+		if err != nil {
+			logger.Printf("error installing: %s\n", err)
+		}
 		logger.Println("dry run: sleeping indefinitely instead of rebooting")
 		select {}
 	}
@@ -257,11 +259,12 @@ func runDaemon() error {
 		rebooterName = rebooter.String()
 	}
 	if err != nil {
-		logger.Println(err)
+		logger.Printf("error installing: %s\n", err)
 		printAndWait("5m", "1h", waitGroup, rebooterName, logger)
 	} else {
 		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
 	}
+	logger.Println("installation completed")
 	syscall.Sync()
 	if rebooter != nil {
 		if err := rebooter.Reboot(); err != nil {
