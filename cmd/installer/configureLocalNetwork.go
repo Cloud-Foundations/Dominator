@@ -265,9 +265,10 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 		logger.Debugf(1, "downloading: %s\n", name)
 		if wt, err := client.Receive(name, "octet"); err != nil {
 			if strings.Contains(err.Error(), "does not exist") && !required {
+				logger.Debugf(2, "error receiving: %s: %s\n", name, err)
 				continue
 			}
-			return err
+			return fmt.Errorf("error receiving: %s: %s", name, err)
 		} else {
 			filename := filepath.Join(*tftpDirectory, name)
 			if file, err := create(filename); err != nil {
@@ -275,8 +276,9 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 			} else {
 				defer file.Close()
 				if _, err := wt.WriteTo(file); err != nil {
-					return err
+					return fmt.Errorf("error downloading: %s: %s", name, err)
 				}
+				logger.Debugf(2, "downloaded: %s\n", name)
 			}
 		}
 	}

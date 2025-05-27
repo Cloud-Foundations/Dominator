@@ -221,6 +221,11 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 			name, strings.Join(args, " "))
 		return nil
 	}
+	return runAlways(name, chroot, logger, args...)
+}
+
+func runAlways(name, chroot string, logger log.DebugLogger,
+	args ...string) error {
 	path, err := lookPath(chroot, name)
 	if err != nil {
 		return err
@@ -260,6 +265,8 @@ func run(name, chroot string, logger log.DebugLogger, args ...string) error {
 		logger.Debugf(3, "%s succeeded, stdout: %s, stderr: %s\n",
 			name, strings.TrimSpace(stdout.String()),
 			strings.TrimSpace(stderr.String()))
+	} else {
+		logger.Debugf(3, "%s succeeded\n", name)
 	}
 	return nil
 }
