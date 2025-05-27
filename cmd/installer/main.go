@@ -53,6 +53,11 @@ var (
 		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
+	imageServerHostname = flag.String("imageServerHostname", "",
+		"Hostname of image server (overrides TFTP data)")
+	imageServerPortNum = flag.Uint("imageServerPortNum",
+		constants.ImageServerPortNumber,
+		"Port number of image server (overrides TFTP data)")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
 	mountPoint    = flag.String("mountPoint", "/mnt",
 		"Mount point for new root file-system")
@@ -71,6 +76,8 @@ var (
 		"Directory where sysfs is mounted")
 	tftpDirectory = flag.String("tftpDirectory", "/tftpdata",
 		"Directory containing (possibly injected) TFTP data")
+	tftpServerHostname = flag.String("tftpServerHostname", "",
+		"Hostname of TFTP server (overrides DHCP response)")
 	tmpRoot = flag.String("tmpRoot", "/tmproot",
 		"Mount point for temporary (tmpfs) root file-system")
 

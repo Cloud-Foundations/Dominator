@@ -219,7 +219,7 @@ func getConfiguration(interfaces map[string]net.Interface,
 		logger.Printf("loaded configuration using: %s\n", *configurationLoader)
 		return &machineInfo, activeInterface, nil
 	}
-	if tftpServer.Equal(zeroIP) {
+	if tftpServer == "" {
 		return nil, "", errors.New("no TFTP server given")
 	}
 	if err := loadTftpFiles(tftpServer, logger); err != nil {
@@ -231,6 +231,26 @@ func getConfiguration(interfaces map[string]net.Interface,
 		return nil, "", err
 	}
 	return &machineInfo, activeInterface, nil
+}
+
+func getTftpServer(packet dhcp4.Packet, options dhcp4.Options,
+	logger log.DebugLogger) string {
+	if *tftpServerHostname != "" {
+		logger.Printf("tftpServer from command-line: %s\n",
+			*tftpServerHostname)
+		return *tftpServerHostname
+	}
+	tftpServer := packet.SIAddr()
+	if tftpServer.Equal(zeroIP) {
+		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
+		if tftpServer.Equal(zeroIP) {
+			return ""
+		}
+		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
+	} else {
+		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
+	}
+	return tftpServer.String()
 }
 
 func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
@@ -256,8 +276,8 @@ func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
 	return nil
 }
 
-func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
-	client, err := tftp.NewClient(tftpServer.String() + ":69")
+func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
+	client, err := tftp.NewClient(tftpServer + ":69")
 	if err != nil {
 		return err
 	}
@@ -377,10 +397,10 @@ func setupNetworkFromConfig(interfaces map[string]net.Interface,
 }
 
 func setupNetworkFromDhcp(interfaces map[string]net.Interface,
-	logger log.DebugLogger) (net.IP, string, error) {
+	logger log.DebugLogger) (string, string, error) {
 	ifName, packet, err := dhcpRequest(interfaces, logger)
 	if err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
@@ -391,7 +411,7 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 		logger.Printf("logged DHCP response in: %s\n", logdir)
 	}
 	if err := setHostname(options[dhcp4.OptionHostName], logger); err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	subnet := hyper_proto.Subnet{
 		IpGateway: net.IP(options[dhcp4.OptionRouter]),
@@ -404,24 +424,15 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 				net.IP(dnsServersBuffer[:4]))
 			dnsServersBuffer = dnsServersBuffer[4:]
 		} else {
-			return nil, "", errors.New("truncated DNS server address")
+			return "", "", errors.New("truncated DNS server address")
 		}
 	}
 	if domainName := options[dhcp4.OptionDomainName]; len(domainName) > 0 {
 		subnet.DomainName = string(domainName)
 	}
 	if err := setupNetwork(ifName, ipAddr, &subnet, logger); err != nil {
-		return nil, "", err
+		return "", "", err
 	}
-	tftpServer := packet.SIAddr()
-	if tftpServer.Equal(zeroIP) {
-		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
-		if tftpServer.Equal(zeroIP) {
-			return nil, "", nil
-		}
-		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
-	} else {
-		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
-	}
+	tftpServer := getTftpServer(packet, options, logger)
 	return tftpServer, ifName, nil
 }

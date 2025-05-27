@@ -493,13 +493,20 @@ func eraseStart(device string, logger log.DebugLogger) error {
 	return nil
 }
 
+func getImageserverAddress() (string, error) {
+	if *imageServerHostname != "" {
+		return fmt.Sprintf("%s:%d", *imageServerHostname, *imageServerPortNum),
+			nil
+	}
+	return readString(filepath.Join(*tftpDirectory, "imageserver"), false)
+}
+
 func getImage(imageName string, logger log.DebugLogger) (
 	string, *image.Image, *srpc.Client, error) {
 	if imageName == "" {
 		return "", nil, nil, nil
 	}
-	imageServerAddress, err := readString(
-		filepath.Join(*tftpDirectory, "imageserver"), false)
+	imageServerAddress, err := getImageserverAddress()
 	if err != nil {
 		return "", nil, nil, err
 	}
