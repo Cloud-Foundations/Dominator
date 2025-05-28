@@ -53,6 +53,9 @@ The sub-commands available are:
 - **generate-random**: generate pseudo-random data (NOT cryptographically
                        secure) and write to standard output
 - **list-images**: list the images available on the imageserver
+- **load-configuration-from-tftp**: load the configuration files from the
+                                    TFTP server specified by
+                                    `-tftpServerHostname`
 - **load-image**: load the specified image and unpack it into the specified
                   directory. The `/dev`, `/proc`, `/sys` and `/tmp` directories
 		  are bind-mounted in so that the image may be used in a chroot
