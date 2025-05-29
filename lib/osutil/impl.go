@@ -2,6 +2,7 @@ package osutil
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -14,9 +15,9 @@ type flusher interface {
 }
 
 func hardReboot(logger log.Logger) error {
-	syncAndWait(logger)
-	syncAndWait(logger)
-	syncAndWait(logger)
+	syncAndWait(5*time.Second, logger)
+	syncAndWait(5*time.Second, logger)
+	syncAndWait(5*time.Second, logger)
 	logger.Println("Calling reboot() system call and wait")
 	if logger, ok := logger.(flusher); ok {
 		logger.Flush()
@@ -67,24 +68,28 @@ func runCommandBackground(logger log.Logger, name string,
 	return failureChannel
 }
 
-// syncAndWait will try to sync file-system data and then waits up to 5 seconds
-// for it to complete.
-func syncAndWait(logger log.Logger) {
+func syncAndWait(timeout time.Duration, logger log.Logger) {
 	logger.Println("Calling sync() system call and wait")
-	timer := time.NewTimer(5 * time.Second)
+	if err := SyncTimeout(timeout); err != nil {
+		logger.Printf("Error syncing: %s\n", err)
+	}
+}
+
+func syncTimeout(timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
 	waitChannel := make(chan struct{}, 1)
+	var err error
 	go func() {
-		wsyscall.Sync()
+		err = wsyscall.Sync()
 		waitChannel <- struct{}{}
 	}()
 	select {
 	case <-timer.C:
-		logger.Println("Timed out waiting for sync() system call")
-		return
+		return fmt.Errorf("timed out waiting for sync() system call")
 	case <-waitChannel:
 		if !timer.Stop() {
 			<-timer.C
 		}
-		return
+		return err
 	}
 }
