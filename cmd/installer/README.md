@@ -52,6 +52,9 @@ The sub-commands available are:
                     be logged but no other action will be taken
 - **generate-random**: generate pseudo-random data (NOT cryptographically
                        secure) and write to standard output
+- **kexec-image**: kexec into the kernel and initrd in the specified installer
+                   image. If the `-tftpServerHostname` is specified it will
+                   override what the installer may receive from the DHCP server
 - **list-images**: list the images available on the imageserver
 - **load-configuration-from-tftp**: load the configuration files from the
                                     TFTP server specified by

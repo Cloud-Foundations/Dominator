@@ -103,6 +103,7 @@ var subcommands = []commands.Command{
 	{"decode-base64", "", 0, 0, decodeBase64Subcommand},
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
 	{"generate-random", "", 0, 0, generateRandomSubcommand},
+	{"kexec-image", "image-name", 1, 1, kexecImageSubcommand},
 	{"list-images", "", 0, 0, listImagesSubcommand},
 	{"load-configuration-from-tftp", "", 0, 0,
 		loadConfigurationFromTftpSubcommand},

@@ -240,6 +240,21 @@ func getTftpServer(packet dhcp4.Packet, options dhcp4.Options,
 			*tftpServerHostname)
 		return *tftpServerHostname
 	}
+	cmdline, err := os.ReadFile("/proc/cmdline")
+	if err == nil {
+		var tftpServer string
+		for _, field := range strings.Fields(string(cmdline)) {
+			splitField := strings.Split(field, "=")
+			if len(splitField) == 2 && splitField[0] == "tftpserver" {
+				tftpServer = splitField[1]
+			}
+		}
+		if tftpServer != "" {
+			logger.Printf("tftpServer from kernel command-line: %s\n",
+				tftpServer)
+			return tftpServer
+		}
+	}
 	tftpServer := packet.SIAddr()
 	if tftpServer.Equal(zeroIP) {
 		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
