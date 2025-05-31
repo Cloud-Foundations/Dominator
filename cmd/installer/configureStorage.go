@@ -46,11 +46,12 @@ const (
 )
 
 type driveType struct {
-	discarded bool
-	devpath   string
-	mbr       *mbr.Mbr
-	name      string
-	size      uint64 // Bytes
+	busLocation string
+	discarded   bool
+	devpath     string
+	mbr         *mbr.Mbr
+	name        string
+	size        uint64 // Bytes
 }
 
 type kexecRebooter struct {
@@ -682,17 +683,26 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 			logger.Debugf(2, "skipping removable device: %s\n", name)
 			continue
 		}
+		busLocation, err := os.Readlink(dirname)
+		if err != nil {
+			logger.Println(err)
+			continue
+		}
+		if splitLink := strings.Split(busLocation, "/"); len(splitLink) > 5 {
+			busLocation = filepath.Join(splitLink[3 : len(splitLink)-2]...)
+		}
 		drive := &driveType{
-			devpath: filepath.Join("/dev", name),
-			name:    name,
+			busLocation: busLocation,
+			devpath:     filepath.Join("/dev", name),
+			name:        name,
 		}
 		if val, err := readInt(filepath.Join(dirname, "size")); err != nil {
 			return nil, err
 		} else if drive.mbr, err = readMbr(drive.devpath); err != nil {
 			logger.Debugf(2, "skipping unreadable device: %s\n", name)
 		} else {
-			logger.Debugf(1, "found: %s %d GiB (%d GB)\n",
-				name, val>>21, val<<9/1000000000)
+			logger.Debugf(1, "found: %s %d GiB (%d GB) at %s\n",
+				name, val>>21, val<<9/1000000000, busLocation)
 			drive.size = val << 9
 			drives = append(drives, drive)
 		}
@@ -703,20 +713,9 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	// Sort drives based on their bus location. This is a cheap attempt at
 	// stable naming.
 	sort.SliceStable(drives, func(left, right int) bool {
-		leftName, err := os.Readlink(
-			filepath.Join(*sysfsDirectory, "class", "block",
-				drives[left].name))
-		if err != nil {
-			return false
-		}
-		rightName, err := os.Readlink(
-			filepath.Join(*sysfsDirectory, "class", "block",
-				drives[right].name))
-		if err != nil {
-			return false
-		}
-		return leftName < rightName
+		return drives[left].busLocation < drives[right].busLocation
 	})
+	logger.Debugf(0, "sorted drive list: %v\n", drives)
 	return drives, nil
 }
 
@@ -854,6 +853,10 @@ func unmountStorage(logger log.DebugLogger) error {
 	}
 	syscall.Sync()
 	return nil
+}
+
+func (drive driveType) String() string {
+	return drive.name
 }
 
 func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,

@@ -104,6 +104,7 @@ var subcommands = []commands.Command{
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
 	{"generate-random", "", 0, 0, generateRandomSubcommand},
 	{"kexec-image", "image-name", 1, 1, kexecImageSubcommand},
+	{"list-drives", "", 0, 0, listDrivesSubcommand},
 	{"list-images", "", 0, 0, listImagesSubcommand},
 	{"load-configuration-from-tftp", "", 0, 0,
 		loadConfigurationFromTftpSubcommand},
@@ -165,6 +166,7 @@ func install(updateHwClock bool, logFlusher flusher,
 			return nil, err
 		}
 	}
+	logger.Println("installation completed, copying logs and unmounting")
 	if err := copyLogs(logFlusher); err != nil {
 		return nil, fmt.Errorf("error copying logs: %s", err)
 	}
@@ -274,7 +276,6 @@ func runDaemon() error {
 	} else {
 		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
 	}
-	logger.Println("installation completed")
 	syscall.Sync()
 	if rebooter != nil {
 		if err := rebooter.Reboot(); err != nil {
