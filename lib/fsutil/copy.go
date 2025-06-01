@@ -75,7 +75,7 @@ func copyToWriter(writer io.Writer, filename string, reader io.Reader,
 	return nil
 }
 
-func copyTree(destDir, sourceDir string,
+func copyTree(destDir, sourceDir string, allTypes bool,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
 	file, err := os.Open(sourceDir)
@@ -104,7 +104,7 @@ func copyTree(destDir, sourceDir string,
 					return err
 				}
 			}
-			err := copyTree(destFilename, sourceFilename, copyFunc)
+			err := copyTree(destFilename, sourceFilename, allTypes, copyFunc)
 			if err != nil {
 				return err
 			}
@@ -115,6 +115,9 @@ func copyTree(destDir, sourceDir string,
 				return err
 			}
 		case wsyscall.S_IFLNK:
+			if !allTypes {
+				continue
+			}
 			sourceTarget, err := os.Readlink(sourceFilename)
 			if err != nil {
 				return errors.New(sourceFilename + ": " + err.Error())

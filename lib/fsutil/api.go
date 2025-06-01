@@ -76,7 +76,13 @@ func CopyToFileExclusive(destFilename string, perm os.FileMode,
 
 // CopyTree will copy a directory tree.
 func CopyTree(destDir, sourceDir string) error {
-	return copyTree(destDir, sourceDir, CopyFile)
+	return copyTree(destDir, sourceDir, true, CopyFile)
+}
+
+// CopyFilesTree will copy a directory tree of regular files. Other inode types
+// are ignored.
+func CopyFilesTree(destDir, sourceDir string) error {
+	return copyTree(destDir, sourceDir, false, CopyFile)
 }
 
 // CopyTreeWithCopyFunc is similar to CopyTree except it uses a specified copy
@@ -84,7 +90,7 @@ func CopyTree(destDir, sourceDir string) error {
 func CopyTreeWithCopyFunc(destDir, sourceDir string,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
-	return copyTree(destDir, sourceDir, copyFunc)
+	return copyTree(destDir, sourceDir, true, copyFunc)
 }
 
 // Fallocate will allocate blocks for the file named filename, up to size
