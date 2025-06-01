@@ -168,15 +168,16 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	if err := concurrentState.Reap(); err != nil {
 		return err
 	}
-	// Mount all file-systems, except the data file-system. First do the root
-	// partition, which might not be first in the list.
+	// Mount all file-systems, except the /boot and data file-systems, so that
+	// the image can create directories in them. First do the root partition,
+	// which might not be first in the list.
 	err := mount(partitionName(drive.devpath, rootPartition), *mountPoint,
 		layout.BootDriveLayout[rootPartition-1].FileSystemType.String(), logger)
 	if err != nil {
 		return err
 	}
 	for index, partition := range layout.BootDriveLayout {
-		if index+1 == rootPartition {
+		if index+1 == rootPartition || index+1 == bootPartition {
 			continue
 		}
 		device := partitionName(drive.devpath, index+1)
@@ -187,8 +188,12 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 			return err
 		}
 	}
+	var bootP int
+	if bootPartition != rootPartition {
+		bootP = bootPartition
+	}
 	return installRoot(drive.devpath, layout, img.FileSystem, objGetter,
-		bootInfo, logger)
+		bootInfo, bootP, logger)
 }
 
 func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
@@ -298,22 +303,6 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
 	if err != nil {
 		return nil, err
-	}
-	if layout.BootDriveLayout[bootPartition-1].FileSystemType ==
-		installer_proto.FileSystemTypeVfat {
-		// Only directories and regular files supported on VFAT, so strip
-		// everything else out.
-		var entryList []*filesystem.DirectoryEntry
-		for _, entry := range bootInfo.BootDirectory.EntryList {
-			switch entry.Inode().(type) {
-			case *filesystem.DirectoryInode, *filesystem.RegularInode:
-				entryList = append(entryList, entry)
-			}
-		}
-		if len(bootInfo.BootDirectory.EntryList) != len(entryList) {
-			bootInfo.BootDirectory.EntryList = entryList
-			bootInfo.BootDirectory.BuildEntryMap()
-		}
 	}
 	var rebooter Rebooter
 	if layout.UseKexec {
@@ -595,7 +584,8 @@ func getRandomKey(numBytes uint, logger log.DebugLogger) ([]byte, error) {
 
 func installRoot(device string, layout installer_proto.StorageLayout,
 	fileSystem *filesystem.FileSystem, objGetter objectserver.ObjectsGetter,
-	bootInfo *util.BootInfoType, logger log.DebugLogger) error {
+	bootInfo *util.BootInfoType, bootPartition int,
+	logger log.DebugLogger) error {
 	if *dryRun {
 		logger.Debugln(0, "dry run: skipping installing root")
 		return nil
@@ -604,6 +594,40 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 	err := unpackAndMount(*mountPoint, fileSystem, objGetter, false, logger)
 	if err != nil {
 		return err
+	}
+	if bootPartition > 0 {
+		// Mount the /boot partition and copy files into it, then unmount and
+		// mount under the root file-system.
+		// This ensures that the bootloader has the files it needs and that the
+		// root file-system is fully up-to-date with the image.
+		partition := layout.BootDriveLayout[bootPartition-1]
+		err := mount(partitionName(device, bootPartition), "/tmpboot",
+			partition.FileSystemType.String(), logger)
+		if err != nil {
+			return err
+		}
+		if partition.FileSystemType == installer_proto.FileSystemTypeVfat {
+			// Only directories and regular files supported on VFAT.
+			err = fsutil.CopyFilesTree("/tmpboot",
+				filepath.Join(*mountPoint, partition.MountPoint))
+		} else {
+			err = fsutil.CopyTree("/tmpboot",
+				filepath.Join(*mountPoint, partition.MountPoint))
+		}
+		if err != nil {
+			return err
+		}
+		logger.Debugln(0, "copied boot files into /tmpboot")
+		if err := syscall.Unmount("/tmpboot", 0); err != nil {
+			return fmt.Errorf("error unmounting: %s: %s", "/tmpboot", err)
+		}
+		logger.Debugln(0, "unmounted /tmpboot")
+		err = mount(partitionName(device, bootPartition),
+			filepath.Join(*mountPoint, partition.MountPoint),
+			partition.FileSystemType.String(), logger)
+		if err != nil {
+			return err
+		}
 	}
 	var waiter sync.Mutex
 	if layout.UseKexec { // Install target OS kernel while it's still mounted.
@@ -623,11 +647,12 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 			}
 		}()
 	}
-	err = util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
+	defer func() {
+		waiter.Lock()
+		waiter.Unlock()
+	}()
+	return util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
 		true, logger)
-	waiter.Lock()
-	waiter.Unlock()
-	return err
 }
 
 func installTmpRoot(fileSystem *filesystem.FileSystem,
