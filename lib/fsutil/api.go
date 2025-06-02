@@ -228,6 +228,18 @@ func WaitFile(pathname string, timeout time.Duration) (io.ReadCloser, error) {
 	return waitFile(pathname, timeout)
 }
 
+// WaitForBlockAvailable will wait for the specified block device node to
+// become available, or return an error on timeout. The timeout is limited to
+// one hour. The number of iterations and the number of successful Open(2) calls
+// is returned.
+// This is needed in enviroments where block devices such as partitions are
+// dynamically created and there is a delay from creation to actual
+// availability.
+func WaitForBlockAvailable(pathname string,
+	timeout time.Duration) (uint, uint, error) {
+	return waitForBlockAvailable(pathname, timeout)
+}
+
 // WatchFile watches the file given by pathname and yields a new io.ReadCloser
 // when a new inode is found and it is a regular file. The io.ReadCloser must
 // be closed after use.

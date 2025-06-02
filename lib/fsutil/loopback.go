@@ -73,9 +73,6 @@ func loopbackSetup(filename string, grabLock bool) (string, error) {
 
 func loopbackSetupAndWaitForPartition(filename, partition string,
 	timeout time.Duration, logger log.DebugLogger) (string, error) {
-	if timeout < 0 || timeout > time.Hour {
-		timeout = time.Hour
-	}
 	losetupMutex.Lock()
 	defer losetupMutex.Unlock()
 	loopDevice, err := loopbackSetup(filename, false)
@@ -89,42 +86,26 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 		}
 	}()
 	// Probe for partition device because it might not be immediately available.
-	// Need to open rather than just test for inode existance, because an
-	// Open(2) is what may be needed to trigger dynamic device node creation.
 	partitionDevice := loopDevice + partition
-	sleeper := backoffdelay.NewExponential(time.Millisecond,
-		100*time.Millisecond, 2)
 	startTime := time.Now()
-	stopTime := startTime.Add(timeout)
-	var numNonBlock, numOpened uint
-	for numIterations := 0; time.Until(stopTime) >= 0; numIterations++ {
-		if file, err := os.Open(partitionDevice); err == nil {
-			numOpened++
-			fi, err := file.Stat()
-			file.Close()
-			if err != nil {
-				return "", err
+	numIterations, numOpened, err := WaitForBlockAvailable(partitionDevice,
+		timeout)
+	if err == nil {
+		doDelete = false
+		if numIterations > 0 {
+			if time.Since(startTime) > time.Second {
+				logger.Printf(
+					"%s valid after: %d iterations, %d opens, %s\n",
+					partitionDevice, numIterations, numOpened,
+					format.Duration(time.Since(startTime)))
+			} else {
+				logger.Debugf(0,
+					"%s valid after: %d iterations, %d opens, %s\n",
+					partitionDevice, numIterations, numOpened,
+					format.Duration(time.Since(startTime)))
 			}
-			if fi.Mode()&os.ModeDevice != 0 {
-				if numIterations > 0 {
-					if time.Since(startTime) > time.Second {
-						logger.Printf(
-							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
-							partitionDevice, numIterations, numNonBlock,
-							numOpened, format.Duration(time.Since(startTime)))
-					} else {
-						logger.Debugf(0,
-							"%s valid after: %d iterations (%d/%d were not a block device), %s\n",
-							partitionDevice, numIterations, numNonBlock,
-							numOpened, format.Duration(time.Since(startTime)))
-					}
-				}
-				doDelete = false
-				return loopDevice, nil
-			}
-			numNonBlock++
 		}
-		sleeper.Sleep()
+		return loopDevice, nil
 	}
 	if numOpened > 0 {
 		if time.Since(startTime) > 15*time.Second {
@@ -137,6 +118,5 @@ func loopbackSetupAndWaitForPartition(filename, partition string,
 			}
 		}
 	}
-	return "", fmt.Errorf("timed out waiting for partition (%d non-block): %s",
-		numNonBlock, partitionDevice)
+	return "", err
 }
