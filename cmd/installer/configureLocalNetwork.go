@@ -393,6 +393,11 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 		if err := configurator.WriteResolvConf("", subnet); err != nil {
 			return err
 		}
+		// TODO(rgooch): a 200ms delay here usually avoids network heisenbugs.
+		//               Track down the root cause and hopefully come up with a
+		//               better solution.
+		logger.Println("waiting 200ms for network to stabilise")
+		time.Sleep(200 * time.Millisecond)
 	}
 	return nil
 }

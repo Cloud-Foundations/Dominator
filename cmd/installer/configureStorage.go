@@ -508,6 +508,9 @@ func getImage(imageName string, logger log.DebugLogger) (
 	}
 	logger.Printf("dialed imageserver after: %s\n",
 		format.Duration(time.Since(startTime)))
+	if err := client.SetKeepAlivePeriod(5 * time.Second); err != nil {
+		return "", nil, nil, err
+	}
 	imageName, img, err := getImageFromClient(client, imageName, false, logger)
 	if err != nil {
 		client.Close()
@@ -919,6 +922,17 @@ func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 	device, target string, fstype installer_proto.FileSystemType, encrypt bool,
 	mkfsMutex *sync.Mutex, bytesPerInode uint, logger log.DebugLogger) error {
+	startTime := time.Now()
+	numIterations, numOpened, err := fsutil.WaitForBlockAvailable(device,
+		5*time.Second)
+	if err != nil {
+		return err
+	}
+	if numIterations > 0 {
+		logger.Debugf(0, "%s available after %d iterations, %d opens, %s\n",
+			device, numIterations, numOpened,
+			format.Duration(time.Since(startTime)))
+	}
 	label := target
 	erase := !drive.discarded
 	if label == "/" {
@@ -937,11 +951,10 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 			return err
 		}
 	}
-	var err error
 	if mkfsMutex != nil {
 		mkfsMutex.Lock()
 	}
-	startTime := time.Now()
+	startTime = time.Now()
 	switch fstype {
 	case installer_proto.FileSystemTypeExt4:
 		if bytesPerInode > 0 {
