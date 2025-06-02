@@ -1,6 +1,8 @@
 package osutil
 
 import (
+	"time"
+
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -26,4 +28,10 @@ func RunCommand(logger log.Logger, name string, args ...string) bool {
 func RunCommandBackground(logger log.Logger, name string,
 	args ...string) <-chan struct{} {
 	return runCommandBackground(logger, name, args...)
+}
+
+// SyncTimeout will try to sync file-system data and then waits up to the
+// specified timeout for it to complete. It returns an error on failure/timeout.
+func SyncTimeout(timeout time.Duration) error {
+	return syncTimeout(timeout)
 }

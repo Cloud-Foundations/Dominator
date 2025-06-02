@@ -18,6 +18,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/net/configurator"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -72,7 +73,8 @@ func dhcpRequest(interfaces map[string]net.Interface,
 	logger.Println("waiting for carrier and DHCP response for each interface")
 	cancelChannel := make(chan struct{})
 	for _, iface := range interfaces {
-		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel, logger)
+		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel,
+			prefixlogger.New(iface.Name+": ", logger))
 	}
 	timer := time.NewTimer(time.Minute * 5)
 	for range interfaces {
@@ -108,7 +110,7 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 		dhcp4client.Timeout(time.Second*5))
 	if err != nil {
 		responseChannel <- dhcpResponse{
-			error: fmt.Errorf("%s: failed to create DHCP client: %s\n",
+			error: fmt.Errorf("%s: failed to create DHCP client: %s",
 				iface.Name, err)}
 		return
 	}
@@ -116,7 +118,7 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 	for ; ; time.Sleep(100 * time.Millisecond) {
 		select {
 		case <-cancelChannel:
-			logger.Debugf(1, "%s: cancelling carrier tests\n", iface.Name)
+			logger.Debugln(1, "cancelling carrier tests")
 			return
 		default:
 		}
@@ -124,21 +126,30 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 			break
 		}
 	}
-	logger.Debugf(1, "%s: carrier detected\n", iface.Name)
+	logger.Debugln(1, "carrier detected")
 	for ; ; time.Sleep(100 * time.Millisecond) {
 		select {
 		case <-cancelChannel:
-			logger.Debugf(1, "%s: cancelling DHCP attempts\n", iface.Name)
+			logger.Debugln(1, "cancelling DHCP attempts")
 			return
 		default:
 		}
-		logger.Debugf(1, "%s: DHCP attempt\n", iface.Name)
-		if ok, packet, err := client.Request(); err != nil {
-			logger.Debugf(1, "%s: DHCP failed: %s\n", iface.Name, err)
-		} else if ok {
-			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+		logger.Debugln(1, "DHCP attempt")
+		ok, packet, err := client.Request()
+		if err != nil {
+			logger.Debugf(1, "DHCP failed: %s\n", err)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if err := processDhcpPacket(packet); err != nil {
+			responseChannel <- dhcpResponse{
+				error: fmt.Errorf("%s: %s", iface.Name, err)}
 			return
 		}
+		responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+		return
 	}
 }
 
@@ -208,7 +219,7 @@ func getConfiguration(interfaces map[string]net.Interface,
 		logger.Printf("loaded configuration using: %s\n", *configurationLoader)
 		return &machineInfo, activeInterface, nil
 	}
-	if tftpServer.Equal(zeroIP) {
+	if tftpServer == "" {
 		return nil, "", errors.New("no TFTP server given")
 	}
 	if err := loadTftpFiles(tftpServer, logger); err != nil {
@@ -220,6 +231,41 @@ func getConfiguration(interfaces map[string]net.Interface,
 		return nil, "", err
 	}
 	return &machineInfo, activeInterface, nil
+}
+
+func getTftpServer(packet dhcp4.Packet, options dhcp4.Options,
+	logger log.DebugLogger) string {
+	if *tftpServerHostname != "" {
+		logger.Printf("tftpServer from command-line: %s\n",
+			*tftpServerHostname)
+		return *tftpServerHostname
+	}
+	cmdline, err := os.ReadFile("/proc/cmdline")
+	if err == nil {
+		var tftpServer string
+		for _, field := range strings.Fields(string(cmdline)) {
+			splitField := strings.Split(field, "=")
+			if len(splitField) == 2 && splitField[0] == "tftpserver" {
+				tftpServer = splitField[1]
+			}
+		}
+		if tftpServer != "" {
+			logger.Printf("tftpServer from kernel command-line: %s\n",
+				tftpServer)
+			return tftpServer
+		}
+	}
+	tftpServer := packet.SIAddr()
+	if tftpServer.Equal(zeroIP) {
+		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
+		if tftpServer.Equal(zeroIP) {
+			return ""
+		}
+		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
+	} else {
+		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
+	}
+	return tftpServer.String()
 }
 
 func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
@@ -245,8 +291,8 @@ func injectRandomSeed(client *tftp.Client, logger log.DebugLogger) error {
 	return nil
 }
 
-func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
-	client, err := tftp.NewClient(tftpServer.String() + ":69")
+func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
+	client, err := tftp.NewClient(tftpServer + ":69")
 	if err != nil {
 		return err
 	}
@@ -254,9 +300,10 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 		logger.Debugf(1, "downloading: %s\n", name)
 		if wt, err := client.Receive(name, "octet"); err != nil {
 			if strings.Contains(err.Error(), "does not exist") && !required {
+				logger.Debugf(2, "error receiving: %s: %s\n", name, err)
 				continue
 			}
-			return err
+			return fmt.Errorf("error receiving: %s: %s", name, err)
 		} else {
 			filename := filepath.Join(*tftpDirectory, name)
 			if file, err := create(filename); err != nil {
@@ -264,12 +311,21 @@ func loadTftpFiles(tftpServer net.IP, logger log.DebugLogger) error {
 			} else {
 				defer file.Close()
 				if _, err := wt.WriteTo(file); err != nil {
-					return err
+					return fmt.Errorf("error downloading: %s: %s", name, err)
 				}
+				logger.Debugf(2, "downloaded: %s\n", name)
 			}
 		}
 	}
 	return injectRandomSeed(client, logger)
+}
+
+func processDhcpPacket(packet dhcp4.Packet) error {
+	options := packet.ParseOptions()
+	if len(options[dhcp4.OptionRouter]) < 4 {
+		return errors.New("ignoring response with no valid router address")
+	}
+	return nil
 }
 
 func raiseInterfaces(interfaces map[string]net.Interface,
@@ -337,6 +393,11 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 		if err := configurator.WriteResolvConf("", subnet); err != nil {
 			return err
 		}
+		// TODO(rgooch): a 200ms delay here usually avoids network heisenbugs.
+		//               Track down the root cause and hopefully come up with a
+		//               better solution.
+		logger.Println("waiting 200ms for network to stabilise")
+		time.Sleep(200 * time.Millisecond)
 	}
 	return nil
 }
@@ -356,20 +417,21 @@ func setupNetworkFromConfig(interfaces map[string]net.Interface,
 }
 
 func setupNetworkFromDhcp(interfaces map[string]net.Interface,
-	logger log.DebugLogger) (net.IP, string, error) {
+	logger log.DebugLogger) (string, string, error) {
 	ifName, packet, err := dhcpRequest(interfaces, logger)
 	if err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	ipAddr := packet.YIAddr()
 	options := packet.ParseOptions()
+	logger.Printf("%s: using DHCP response with address: %s\n", ifName, ipAddr)
 	if logdir, err := logDhcpPacket(ifName, packet, options); err != nil {
 		logger.Printf("error logging DHCP packet: %w", err)
 	} else {
 		logger.Printf("logged DHCP response in: %s\n", logdir)
 	}
 	if err := setHostname(options[dhcp4.OptionHostName], logger); err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	subnet := hyper_proto.Subnet{
 		IpGateway: net.IP(options[dhcp4.OptionRouter]),
@@ -382,24 +444,15 @@ func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 				net.IP(dnsServersBuffer[:4]))
 			dnsServersBuffer = dnsServersBuffer[4:]
 		} else {
-			return nil, "", errors.New("truncated DNS server address")
+			return "", "", errors.New("truncated DNS server address")
 		}
 	}
 	if domainName := options[dhcp4.OptionDomainName]; len(domainName) > 0 {
 		subnet.DomainName = string(domainName)
 	}
 	if err := setupNetwork(ifName, ipAddr, &subnet, logger); err != nil {
-		return nil, "", err
+		return "", "", err
 	}
-	tftpServer := packet.SIAddr()
-	if tftpServer.Equal(zeroIP) {
-		tftpServer = net.IP(options[dhcp4.OptionTFTPServerName])
-		if tftpServer.Equal(zeroIP) {
-			return nil, "", nil
-		}
-		logger.Printf("tftpServer from OptionTFTPServerName: %s\n", tftpServer)
-	} else {
-		logger.Printf("tftpServer from SIAddr: %s\n", tftpServer)
-	}
+	tftpServer := getTftpServer(packet, options, logger)
 	return tftpServer, ifName, nil
 }

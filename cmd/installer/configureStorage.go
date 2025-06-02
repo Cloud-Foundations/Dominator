@@ -46,11 +46,12 @@ const (
 )
 
 type driveType struct {
-	discarded bool
-	devpath   string
-	mbr       *mbr.Mbr
-	name      string
-	size      uint64 // Bytes
+	busLocation string
+	discarded   bool
+	devpath     string
+	mbr         *mbr.Mbr
+	name        string
+	size        uint64 // Bytes
 }
 
 type kexecRebooter struct {
@@ -167,15 +168,16 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	if err := concurrentState.Reap(); err != nil {
 		return err
 	}
-	// Mount all file-systems, except the data file-system. First do the root
-	// partition, which might not be first in the list.
+	// Mount all file-systems, except the /boot and data file-systems, so that
+	// the image can create directories in them. First do the root partition,
+	// which might not be first in the list.
 	err := mount(partitionName(drive.devpath, rootPartition), *mountPoint,
 		layout.BootDriveLayout[rootPartition-1].FileSystemType.String(), logger)
 	if err != nil {
 		return err
 	}
 	for index, partition := range layout.BootDriveLayout {
-		if index+1 == rootPartition {
+		if index+1 == rootPartition || index+1 == bootPartition {
 			continue
 		}
 		device := partitionName(drive.devpath, index+1)
@@ -186,8 +188,12 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 			return err
 		}
 	}
+	var bootP int
+	if bootPartition != rootPartition {
+		bootP = bootPartition
+	}
 	return installRoot(drive.devpath, layout, img.FileSystem, objGetter,
-		bootInfo, logger)
+		bootInfo, bootP, logger)
 }
 
 func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
@@ -297,22 +303,6 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
 	if err != nil {
 		return nil, err
-	}
-	if layout.BootDriveLayout[bootPartition-1].FileSystemType ==
-		installer_proto.FileSystemTypeVfat {
-		// Only directories and regular files supported on VFAT, so strip
-		// everything else out.
-		var entryList []*filesystem.DirectoryEntry
-		for _, entry := range bootInfo.BootDirectory.EntryList {
-			switch entry.Inode().(type) {
-			case *filesystem.DirectoryInode, *filesystem.RegularInode:
-				entryList = append(entryList, entry)
-			}
-		}
-		if len(bootInfo.BootDirectory.EntryList) != len(entryList) {
-			bootInfo.BootDirectory.EntryList = entryList
-			bootInfo.BootDirectory.BuildEntryMap()
-		}
 	}
 	var rebooter Rebooter
 	if layout.UseKexec {
@@ -493,13 +483,20 @@ func eraseStart(device string, logger log.DebugLogger) error {
 	return nil
 }
 
+func getImageserverAddress() (string, error) {
+	if *imageServerHostname != "" {
+		return fmt.Sprintf("%s:%d", *imageServerHostname, *imageServerPortNum),
+			nil
+	}
+	return readString(filepath.Join(*tftpDirectory, "imageserver"), false)
+}
+
 func getImage(imageName string, logger log.DebugLogger) (
 	string, *image.Image, *srpc.Client, error) {
 	if imageName == "" {
 		return "", nil, nil, nil
 	}
-	imageServerAddress, err := readString(
-		filepath.Join(*tftpDirectory, "imageserver"), false)
+	imageServerAddress, err := getImageserverAddress()
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -511,6 +508,9 @@ func getImage(imageName string, logger log.DebugLogger) (
 	}
 	logger.Printf("dialed imageserver after: %s\n",
 		format.Duration(time.Since(startTime)))
+	if err := client.SetKeepAlivePeriod(5 * time.Second); err != nil {
+		return "", nil, nil, err
+	}
 	imageName, img, err := getImageFromClient(client, imageName, false, logger)
 	if err != nil {
 		client.Close()
@@ -587,7 +587,8 @@ func getRandomKey(numBytes uint, logger log.DebugLogger) ([]byte, error) {
 
 func installRoot(device string, layout installer_proto.StorageLayout,
 	fileSystem *filesystem.FileSystem, objGetter objectserver.ObjectsGetter,
-	bootInfo *util.BootInfoType, logger log.DebugLogger) error {
+	bootInfo *util.BootInfoType, bootPartition int,
+	logger log.DebugLogger) error {
 	if *dryRun {
 		logger.Debugln(0, "dry run: skipping installing root")
 		return nil
@@ -596,6 +597,40 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 	err := unpackAndMount(*mountPoint, fileSystem, objGetter, false, logger)
 	if err != nil {
 		return err
+	}
+	if bootPartition > 0 {
+		// Mount the /boot partition and copy files into it, then unmount and
+		// mount under the root file-system.
+		// This ensures that the bootloader has the files it needs and that the
+		// root file-system is fully up-to-date with the image.
+		partition := layout.BootDriveLayout[bootPartition-1]
+		err := mount(partitionName(device, bootPartition), "/tmpboot",
+			partition.FileSystemType.String(), logger)
+		if err != nil {
+			return err
+		}
+		if partition.FileSystemType == installer_proto.FileSystemTypeVfat {
+			// Only directories and regular files supported on VFAT.
+			err = fsutil.CopyFilesTree("/tmpboot",
+				filepath.Join(*mountPoint, partition.MountPoint))
+		} else {
+			err = fsutil.CopyTree("/tmpboot",
+				filepath.Join(*mountPoint, partition.MountPoint))
+		}
+		if err != nil {
+			return err
+		}
+		logger.Debugln(0, "copied boot files into /tmpboot")
+		if err := syscall.Unmount("/tmpboot", 0); err != nil {
+			return fmt.Errorf("error unmounting: %s: %s", "/tmpboot", err)
+		}
+		logger.Debugln(0, "unmounted /tmpboot")
+		err = mount(partitionName(device, bootPartition),
+			filepath.Join(*mountPoint, partition.MountPoint),
+			partition.FileSystemType.String(), logger)
+		if err != nil {
+			return err
+		}
 	}
 	var waiter sync.Mutex
 	if layout.UseKexec { // Install target OS kernel while it's still mounted.
@@ -615,11 +650,12 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 			}
 		}()
 	}
-	err = util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
+	defer func() {
+		waiter.Lock()
+		waiter.Unlock()
+	}()
+	return util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
 		true, logger)
-	waiter.Lock()
-	waiter.Unlock()
-	return err
 }
 
 func installTmpRoot(fileSystem *filesystem.FileSystem,
@@ -675,17 +711,26 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 			logger.Debugf(2, "skipping removable device: %s\n", name)
 			continue
 		}
+		busLocation, err := os.Readlink(dirname)
+		if err != nil {
+			logger.Println(err)
+			continue
+		}
+		if splitLink := strings.Split(busLocation, "/"); len(splitLink) > 5 {
+			busLocation = filepath.Join(splitLink[3 : len(splitLink)-2]...)
+		}
 		drive := &driveType{
-			devpath: filepath.Join("/dev", name),
-			name:    name,
+			busLocation: busLocation,
+			devpath:     filepath.Join("/dev", name),
+			name:        name,
 		}
 		if val, err := readInt(filepath.Join(dirname, "size")); err != nil {
 			return nil, err
 		} else if drive.mbr, err = readMbr(drive.devpath); err != nil {
 			logger.Debugf(2, "skipping unreadable device: %s\n", name)
 		} else {
-			logger.Debugf(1, "found: %s %d GiB (%d GB)\n",
-				name, val>>21, val<<9/1000000000)
+			logger.Debugf(1, "found: %s %d GiB (%d GB) at %s\n",
+				name, val>>21, val<<9/1000000000, busLocation)
 			drive.size = val << 9
 			drives = append(drives, drive)
 		}
@@ -696,20 +741,9 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	// Sort drives based on their bus location. This is a cheap attempt at
 	// stable naming.
 	sort.SliceStable(drives, func(left, right int) bool {
-		leftName, err := os.Readlink(
-			filepath.Join(*sysfsDirectory, "class", "block",
-				drives[left].name))
-		if err != nil {
-			return false
-		}
-		rightName, err := os.Readlink(
-			filepath.Join(*sysfsDirectory, "class", "block",
-				drives[right].name))
-		if err != nil {
-			return false
-		}
-		return leftName < rightName
+		return drives[left].busLocation < drives[right].busLocation
 	})
+	logger.Debugf(0, "sorted drive list: %v\n", drives)
 	return drives, nil
 }
 
@@ -849,6 +883,10 @@ func unmountStorage(logger log.DebugLogger) error {
 	return nil
 }
 
+func (drive driveType) String() string {
+	return drive.name
+}
+
 func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 	logger log.DebugLogger) error {
 	cpuSharer.GrabCpu()
@@ -884,6 +922,17 @@ func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 	device, target string, fstype installer_proto.FileSystemType, encrypt bool,
 	mkfsMutex *sync.Mutex, bytesPerInode uint, logger log.DebugLogger) error {
+	startTime := time.Now()
+	numIterations, numOpened, err := fsutil.WaitForBlockAvailable(device,
+		5*time.Second)
+	if err != nil {
+		return err
+	}
+	if numIterations > 0 {
+		logger.Debugf(0, "%s available after %d iterations, %d opens, %s\n",
+			device, numIterations, numOpened,
+			format.Duration(time.Since(startTime)))
+	}
 	label := target
 	erase := !drive.discarded
 	if label == "/" {
@@ -902,11 +951,10 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 			return err
 		}
 	}
-	var err error
 	if mkfsMutex != nil {
 		mkfsMutex.Lock()
 	}
-	startTime := time.Now()
+	startTime = time.Now()
 	switch fstype {
 	case installer_proto.FileSystemTypeExt4:
 		if bytesPerInode > 0 {

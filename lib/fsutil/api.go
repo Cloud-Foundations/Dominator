@@ -76,7 +76,13 @@ func CopyToFileExclusive(destFilename string, perm os.FileMode,
 
 // CopyTree will copy a directory tree.
 func CopyTree(destDir, sourceDir string) error {
-	return copyTree(destDir, sourceDir, CopyFile)
+	return copyTree(destDir, sourceDir, true, CopyFile)
+}
+
+// CopyFilesTree will copy a directory tree of regular files. Other inode types
+// are ignored.
+func CopyFilesTree(destDir, sourceDir string) error {
+	return copyTree(destDir, sourceDir, false, CopyFile)
 }
 
 // CopyTreeWithCopyFunc is similar to CopyTree except it uses a specified copy
@@ -84,7 +90,7 @@ func CopyTree(destDir, sourceDir string) error {
 func CopyTreeWithCopyFunc(destDir, sourceDir string,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
-	return copyTree(destDir, sourceDir, copyFunc)
+	return copyTree(destDir, sourceDir, true, copyFunc)
 }
 
 // Fallocate will allocate blocks for the file named filename, up to size
@@ -220,6 +226,18 @@ func UpdateFile(buffer []byte, filename string) (bool, error) {
 // after use.
 func WaitFile(pathname string, timeout time.Duration) (io.ReadCloser, error) {
 	return waitFile(pathname, timeout)
+}
+
+// WaitForBlockAvailable will wait for the specified block device node to
+// become available, or return an error on timeout. The timeout is limited to
+// one hour. The number of iterations and the number of successful Open(2) calls
+// is returned.
+// This is needed in enviroments where block devices such as partitions are
+// dynamically created and there is a delay from creation to actual
+// availability.
+func WaitForBlockAvailable(pathname string,
+	timeout time.Duration) (uint, uint, error) {
+	return waitForBlockAvailable(pathname, timeout)
 }
 
 // WatchFile watches the file given by pathname and yields a new io.ReadCloser

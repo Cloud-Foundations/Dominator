@@ -53,6 +53,11 @@ var (
 		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
+	imageServerHostname = flag.String("imageServerHostname", "",
+		"Hostname of image server (overrides TFTP data)")
+	imageServerPortNum = flag.Uint("imageServerPortNum",
+		constants.ImageServerPortNumber,
+		"Port number of image server (overrides TFTP data)")
 	logDebugLevel = flag.Int("logDebugLevel", -1, "Debug log level")
 	mountPoint    = flag.String("mountPoint", "/mnt",
 		"Mount point for new root file-system")
@@ -71,6 +76,8 @@ var (
 		"Directory where sysfs is mounted")
 	tftpDirectory = flag.String("tftpDirectory", "/tftpdata",
 		"Directory containing (possibly injected) TFTP data")
+	tftpServerHostname = flag.String("tftpServerHostname", "",
+		"Hostname of TFTP server (overrides DHCP response)")
 	tmpRoot = flag.String("tmpRoot", "/tmproot",
 		"Mount point for temporary (tmpfs) root file-system")
 
@@ -96,7 +103,11 @@ var subcommands = []commands.Command{
 	{"decode-base64", "", 0, 0, decodeBase64Subcommand},
 	{"dhcp-request", "", 0, 0, dhcpRequestSubcommand},
 	{"generate-random", "", 0, 0, generateRandomSubcommand},
+	{"kexec-image", "image-name", 1, 1, kexecImageSubcommand},
+	{"list-drives", "", 0, 0, listDrivesSubcommand},
 	{"list-images", "", 0, 0, listImagesSubcommand},
+	{"load-configuration-from-tftp", "", 0, 0,
+		loadConfigurationFromTftpSubcommand},
 	{"load-image", "image-name root-dir", 2, 2, loadImageSubcommand},
 }
 
@@ -155,6 +166,7 @@ func install(updateHwClock bool, logFlusher flusher,
 			return nil, err
 		}
 	}
+	logger.Println("installation completed, copying logs and unmounting")
 	if err := copyLogs(logFlusher); err != nil {
 		return nil, fmt.Errorf("error copying logs: %s", err)
 	}
@@ -248,7 +260,9 @@ func runDaemon() error {
 	}
 	rebooter, err := install(updateHwClock, logBuffer, logger)
 	if *dryRun {
-		logger.Println(err)
+		if err != nil {
+			logger.Printf("error installing: %s\n", err)
+		}
 		logger.Println("dry run: sleeping indefinitely instead of rebooting")
 		select {}
 	}
@@ -257,7 +271,7 @@ func runDaemon() error {
 		rebooterName = rebooter.String()
 	}
 	if err != nil {
-		logger.Println(err)
+		logger.Printf("error installing: %s\n", err)
 		printAndWait("5m", "1h", waitGroup, rebooterName, logger)
 	} else {
 		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
