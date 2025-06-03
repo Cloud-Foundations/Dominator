@@ -10,6 +10,7 @@ import (
 	"io"
 	stdlog "log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -222,6 +223,12 @@ func runDaemon() error {
 		return err
 	}
 	defer logBuffer.Flush()
+	sighupChannel := make(chan os.Signal, 1)
+	signal.Notify(sighupChannel, syscall.SIGHUP)
+	go func() {
+		<-sighupChannel
+		sighupHandler(logger)
+	}()
 	var sysinfo syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
 		logger.Printf("Error getting system info: %s\n", err)
@@ -318,6 +325,21 @@ func main() {
 
 func runSubcommand(args []string, logger log.DebugLogger) error {
 	return runDaemon()
+}
+
+func sighupHandler(logger log.Logger) {
+	logger.Printf("caught SIGHUP: re-execing with: %v\n", os.Args)
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err != nil {
+		logger.Printf("error getting open file limit: %s\n", err)
+		rlimit.Cur = 1024
+	}
+	for fd := 3; fd < int(rlimit.Cur); fd++ {
+		syscall.CloseOnExec(fd)
+	}
+	if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
+		logger.Printf("unable to Exec: %s: %s\n", os.Args[0], err)
+	}
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {
