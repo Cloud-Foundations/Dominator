@@ -174,7 +174,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	if vm.WatchdogModel != proto.WatchdogModelNone {
 		cmd.Args = append(cmd.Args,
 			"-watchdog-action", vm.WatchdogAction.String(),
-			"-watchdog", vm.WatchdogModel.String())
+			"-device", vm.WatchdogModel.String())
 	}
 	os.Remove(filepath.Join(vm.dirname, "bootlog"))
 	cmd.Env = os.Environ()
