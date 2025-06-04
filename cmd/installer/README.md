@@ -333,3 +333,11 @@ This will create:
 
 All the file-systems except for `/` will be encrypted. The `kexec` reboot method
 will not be used.
+
+## Signal handling
+When run in daemon (installer) mode, the following signals are caught and the
+specified actions are taken:
+- `SIGCONT`: rebooting is unpaused
+- `SIGHUP`:  the *installer* re-executes itself, running all the installation
+             steps again
+- `SIGTSTP`: rebooting is paused

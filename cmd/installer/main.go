@@ -223,12 +223,24 @@ func runDaemon() error {
 		return err
 	}
 	defer logBuffer.Flush()
-	sighupChannel := make(chan os.Signal, 1)
-	signal.Notify(sighupChannel, syscall.SIGHUP)
-	go func() {
-		<-sighupChannel
+	runOnSignal(syscall.SIGHUP, func() {
 		sighupHandler(logger)
-	}()
+	})
+	rebootSemaphore := make(chan struct{}, 1)
+	runOnSignal(syscall.SIGTSTP, func() {
+		logger.Println("caught SIGTSTP: reboot blocked until SIGCONT")
+		select {
+		case rebootSemaphore <- struct{}{}:
+		default:
+		}
+	})
+	runOnSignal(syscall.SIGCONT, func() {
+		logger.Println("caught SIGCONT: reboot unblocked")
+		select {
+		case <-rebootSemaphore:
+		default:
+		}
+	})
 	var sysinfo syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
 		logger.Printf("Error getting system info: %s\n", err)
@@ -283,6 +295,13 @@ func runDaemon() error {
 	} else {
 		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
 	}
+	select {
+	case rebootSemaphore <- struct{}{}:
+	default:
+		logger.Println("reboot blocked, waiting for SIGCONT")
+		rebootSemaphore <- struct{}{}
+	}
+	<-rebootSemaphore
 	syscall.Sync()
 	if rebooter != nil {
 		if err := rebooter.Reboot(); err != nil {
@@ -321,6 +340,15 @@ func main() {
 	flag.Usage = printUsage
 	flag.Parse()
 	processCommand(flag.Args())
+}
+
+func runOnSignal(signum os.Signal, fn func()) {
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, signum)
+	go func() {
+		<-signalChannel
+		fn()
+	}()
 }
 
 func runSubcommand(args []string, logger log.DebugLogger) error {
