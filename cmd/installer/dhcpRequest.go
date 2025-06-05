@@ -12,7 +12,7 @@ func dhcpRequestSubcommand(args []string, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	ifName, packet, err := dhcpRequest(interfaces, logger)
+	ifName, packet, err := dhcpRequest(interfaces, false, logger)
 	if err != nil {
 		return err
 	}
