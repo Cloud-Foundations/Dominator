@@ -676,6 +676,10 @@ func installTmpRoot(fileSystem *filesystem.FileSystem,
 		return err
 	}
 	os.Symlink("/proc/mounts", filepath.Join(*tmpRoot, "etc", "mtab"))
+	extraBindMounts := []string{*tftpDirectory}
+	if err := makeBindMounts(*tmpRoot, extraBindMounts); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -745,6 +749,20 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	})
 	logger.Debugf(0, "sorted drive list: %v\n", drives)
 	return drives, nil
+}
+
+func makeBindMounts(targetRoot string, bindMounts []string) error {
+	for _, bindMount := range bindMounts {
+		target := filepath.Join(targetRoot, bindMount)
+		if err := os.MkdirAll(target, fsutil.DirPerms); err != nil {
+			return err
+		}
+		err := syscall.Mount(bindMount, target, "", syscall.MS_BIND, "")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mount(source string, target string, fstype string,
