@@ -153,14 +153,7 @@ command-line arguments will be provided:
 1. The name of the directory where to write the configuration files
 2. The name of the active (configured) network interface
 
-### Load tools
-
-The [BusyBox](https://www.busybox.net/)-based image probably does not have all
-the tools necessary to configure the storage. By default, the target OS image is
-unpacked to the directory specified by the `-tmpRoot` option. If the
-`tools-imagename` file is present, the specified image is used instead.
-
-### Configure storage
+### Discover storage
 The storage devices are discovered and the image (without objects) is downloaded
 from the *[imageserver](../imageserver/README.md)*. An encryption key is
 generated.
@@ -169,22 +162,33 @@ The objects in the booted OS (typically netbooted) are scanned and checksummed
 and added to the object cache. The bulk of these will typically be the kernel
 image and modules.
 
-The boot device is scanned for an OS and if present is scanned and files are
-checksummed and added to the object cache.
-
-The OS image is unpacked into a tmpfs, downloading objects which are not in the
-cache. This ensures that all objects are available prior to modifying the
-storage devices. It also provides various utilities required for partitioning,
-encrypting and formatting storage devices.
-
 If the `-driveSelector` option is given then the specified programme is run to
 select the drives that should be configured. The list of discovered, usable
 drives is provided as command-line arguments. The list of selected drives must
 be written to the standard output, one per line.
 
+The boot device is scanned for an OS and if present is scanned and files are
+checksummed and added to the object cache. This can dramatically reduce the
+number of objects that need to be subsequently downloaded.
+
+Objects for the target OS image not already in the cache are downloaded. This
+ensures that all objects are available prior to modifying the storage devices.
+
+### Load tools
+The [BusyBox](https://www.busybox.net/)-based image probably does not have all
+the tools necessary to configure the storage. By default, the target OS image is
+unpacked to the tmpfs directory specified by the `-tmpRoot` option. It should
+provide various utilities required for partitioning, encrypting and formatting
+storage devices.
+
+If the `tools-imagename` file is present, the specified image is used instead.
+
+### Configure storage
 The storage devices are erased (either with `blkdiscard` or by writing 1 MiB of
-zeros at the beginning) and then partitioned. Except for the partition which
-will contain the new root file-system, they are by default encrypted.
+zeros at the beginning) and the boot device is partitioned. Except for the
+partition which will contain the new root file-system, they are by default
+encrypted.
+
 File-systems are created and the OS is installed on the root device. These
 operations are performed concurrently as these are typically I/O bound
 operations.
@@ -207,6 +211,7 @@ The following command-line arguments will be provided:
 1. The name of the directory containing the previously downloaded configuration files
 2. The root directory of the new OS file-system
 3. The name of the active (configured) network interface
+4. The root directory of the temporary target/tools OS environment
 
 ### Copy installation logs
 The installation logs are written to `/var/log/installer/log`.

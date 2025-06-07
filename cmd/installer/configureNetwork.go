@@ -34,7 +34,7 @@ func configureNetwork(machineInfo fm_proto.GetMachineInfoResponse,
 	logger log.DebugLogger) error {
 	if *networkConfigurator != "" {
 		return run(*networkConfigurator, "", logger, *tftpDirectory,
-			*mountPoint, activeInterface)
+			*mountPoint, activeInterface, *tmpRoot)
 	}
 	hostname := strings.Split(machineInfo.Machine.Hostname, ".")[0]
 	err := ioutil.WriteFile(filepath.Join(*mountPoint, "etc", "hostname"),

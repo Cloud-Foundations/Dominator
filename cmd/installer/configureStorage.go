@@ -598,6 +598,9 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 	if err != nil {
 		return err
 	}
+	if err := makeBindMount(*tmpRoot, *mountPoint); err != nil {
+		return err
+	}
 	if bootPartition > 0 {
 		// Mount the /boot partition and copy files into it, then unmount and
 		// mount under the root file-system.
@@ -751,14 +754,21 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	return drives, nil
 }
 
+func makeBindMount(targetRoot, bindMount string) error {
+	target := filepath.Join(targetRoot, bindMount)
+	if err := os.MkdirAll(target, fsutil.DirPerms); err != nil {
+		return err
+	}
+	err := syscall.Mount(bindMount, target, "", syscall.MS_BIND, "")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func makeBindMounts(targetRoot string, bindMounts []string) error {
 	for _, bindMount := range bindMounts {
-		target := filepath.Join(targetRoot, bindMount)
-		if err := os.MkdirAll(target, fsutil.DirPerms); err != nil {
-			return err
-		}
-		err := syscall.Mount(bindMount, target, "", syscall.MS_BIND, "")
-		if err != nil {
+		if err := makeBindMount(targetRoot, bindMount); err != nil {
 			return err
 		}
 	}
@@ -854,6 +864,10 @@ func unmountStorage(logger log.DebugLogger) error {
 	if *dryRun {
 		logger.Debugln(0, "dry run: skipping unmounting")
 		return nil
+	}
+	err := syscall.Unmount(filepath.Join(*tmpRoot, *mountPoint), 0)
+	if err != nil {
+		return err
 	}
 	syscall.Sync()
 	time.Sleep(time.Millisecond * 100)
