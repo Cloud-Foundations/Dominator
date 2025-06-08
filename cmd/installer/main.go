@@ -10,6 +10,7 @@ import (
 	"io"
 	stdlog "log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -29,7 +30,10 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
-const logfile = "/var/log/installer/latest"
+const (
+	etcFilename = "/var/log/installer/old-etc.tar.gz"
+	logfile     = "/var/log/installer/latest"
+)
 
 type flusher interface {
 	Flush() error
@@ -222,6 +226,24 @@ func runDaemon() error {
 		return err
 	}
 	defer logBuffer.Flush()
+	runOnSignal(syscall.SIGHUP, func() {
+		sighupHandler(logger)
+	})
+	rebootSemaphore := make(chan struct{}, 1)
+	runOnSignal(syscall.SIGTSTP, func() {
+		logger.Println("caught SIGTSTP: reboot blocked until SIGCONT")
+		select {
+		case rebootSemaphore <- struct{}{}:
+		default:
+		}
+	})
+	runOnSignal(syscall.SIGCONT, func() {
+		logger.Println("caught SIGCONT: reboot unblocked")
+		select {
+		case <-rebootSemaphore:
+		default:
+		}
+	})
 	var sysinfo syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
 		logger.Printf("Error getting system info: %s\n", err)
@@ -276,6 +298,13 @@ func runDaemon() error {
 	} else {
 		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
 	}
+	select {
+	case rebootSemaphore <- struct{}{}:
+	default:
+		logger.Println("reboot blocked, waiting for SIGCONT")
+		rebootSemaphore <- struct{}{}
+	}
+	<-rebootSemaphore
 	syscall.Sync()
 	if rebooter != nil {
 		if err := rebooter.Reboot(); err != nil {
@@ -316,8 +345,32 @@ func main() {
 	processCommand(flag.Args())
 }
 
+func runOnSignal(signum os.Signal, fn func()) {
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, signum)
+	go func() {
+		<-signalChannel
+		fn()
+	}()
+}
+
 func runSubcommand(args []string, logger log.DebugLogger) error {
 	return runDaemon()
+}
+
+func sighupHandler(logger log.Logger) {
+	logger.Printf("caught SIGHUP: re-execing with: %v\n", os.Args)
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err != nil {
+		logger.Printf("error getting open file limit: %s\n", err)
+		rlimit.Cur = 1024
+	}
+	for fd := 3; fd < int(rlimit.Cur); fd++ {
+		syscall.CloseOnExec(fd)
+	}
+	if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
+		logger.Printf("unable to Exec: %s: %s\n", os.Args[0], err)
+	}
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {

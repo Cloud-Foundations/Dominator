@@ -450,12 +450,30 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			}
 		}
 	}
+	// Copy configuration and log data.
 	logdir := filepath.Join(*mountPoint, "var", "log", "installer")
 	if err := os.MkdirAll(logdir, fsutil.DirPerms); err != nil {
 		return nil, err
 	}
 	if err := fsutil.CopyTree(logdir, *tftpDirectory); err != nil {
 		return nil, err
+	}
+	dhcpLogdir := "/var/log/installer/dhcp"
+	if _, err := os.Stat(dhcpLogdir); err == nil {
+		destdir := filepath.Join(*mountPoint, dhcpLogdir)
+		if err := os.Mkdir(destdir, fsutil.DirPerms); err != nil {
+			return nil, err
+		}
+		if err := fsutil.CopyTree(destdir, dhcpLogdir); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := os.Stat(etcFilename); err == nil {
+		destfile := filepath.Join(*mountPoint, etcFilename)
+		err := fsutil.CopyFile(destfile, etcFilename, fsutil.PublicFilePerms)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := util.WriteImageName(*mountPoint, imageName); err != nil {
 		return nil, err
@@ -598,6 +616,9 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 	if err != nil {
 		return err
 	}
+	if err := makeBindMount(*tmpRoot, *mountPoint); err != nil {
+		return err
+	}
 	if bootPartition > 0 {
 		// Mount the /boot partition and copy files into it, then unmount and
 		// mount under the root file-system.
@@ -676,6 +697,10 @@ func installTmpRoot(fileSystem *filesystem.FileSystem,
 		return err
 	}
 	os.Symlink("/proc/mounts", filepath.Join(*tmpRoot, "etc", "mtab"))
+	extraBindMounts := []string{*tftpDirectory}
+	if err := makeBindMounts(*tmpRoot, extraBindMounts); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -745,6 +770,27 @@ func listDrives(logger log.DebugLogger) ([]*driveType, error) {
 	})
 	logger.Debugf(0, "sorted drive list: %v\n", drives)
 	return drives, nil
+}
+
+func makeBindMount(targetRoot, bindMount string) error {
+	target := filepath.Join(targetRoot, bindMount)
+	if err := os.MkdirAll(target, fsutil.DirPerms); err != nil {
+		return err
+	}
+	err := syscall.Mount(bindMount, target, "", syscall.MS_BIND, "")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func makeBindMounts(targetRoot string, bindMounts []string) error {
+	for _, bindMount := range bindMounts {
+		if err := makeBindMount(targetRoot, bindMount); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mount(source string, target string, fstype string,
@@ -836,6 +882,10 @@ func unmountStorage(logger log.DebugLogger) error {
 	if *dryRun {
 		logger.Debugln(0, "dry run: skipping unmounting")
 		return nil
+	}
+	err := syscall.Unmount(filepath.Join(*tmpRoot, *mountPoint), 0)
+	if err != nil {
+		return err
 	}
 	syscall.Sync()
 	time.Sleep(time.Millisecond * 100)

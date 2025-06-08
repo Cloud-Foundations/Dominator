@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -55,11 +56,8 @@ func configureLocalNetwork(logger log.DebugLogger) (
 	if err != nil {
 		return nil, nil, "", err
 	}
-	// Raise interfaces so that by the time the OS is installed link status
-	// should be stable. This is how we discover connected interfaces.
-	if err := raiseInterfaces(interfaces, logger); err != nil {
-		return nil, nil, "", err
-	}
+	// This will raise interfaces so that by the time the OS is installed link
+	// status should be stable. This is how we discover connected interfaces.
 	machineInfo, activeInterface, err := getConfiguration(interfaces, logger)
 	if err != nil {
 		return nil, nil, "", err
@@ -67,13 +65,19 @@ func configureLocalNetwork(logger log.DebugLogger) (
 	return machineInfo, interfaces, activeInterface, nil
 }
 
-func dhcpRequest(interfaces map[string]net.Interface,
+func dhcpRequest(interfaces map[string]net.Interface, raise bool,
 	logger log.DebugLogger) (string, dhcp4.Packet, error) {
 	responseChannel := make(chan dhcpResponse, len(interfaces))
-	logger.Println("waiting for carrier and DHCP response for each interface")
+	if raise {
+		logger.Println(
+			"raising, waiting for carrier and DHCP response for each interface")
+	} else {
+		logger.Println(
+			"waiting for carrier and DHCP response for each interface")
+	}
 	cancelChannel := make(chan struct{})
 	for _, iface := range interfaces {
-		go dhcpRequestOnInterface(iface, cancelChannel, responseChannel,
+		go dhcpRequestOnInterface(iface, raise, cancelChannel, responseChannel,
 			prefixlogger.New(iface.Name+": ", logger))
 	}
 	timer := time.NewTimer(time.Minute * 5)
@@ -94,8 +98,30 @@ func dhcpRequest(interfaces map[string]net.Interface,
 	return "", nil, errors.New("unable to issue DHCP request on any interface")
 }
 
-func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
-	responseChannel chan<- dhcpResponse, logger log.DebugLogger) {
+func dhcpRequestOnInterface(iface net.Interface, raise bool,
+	cancelChannel <-chan struct{}, responseChannel chan<- dhcpResponse,
+	logger log.DebugLogger) {
+	if raise {
+		if err := run("ifconfig", "", logger, iface.Name, "up"); err != nil {
+			responseChannel <- dhcpResponse{
+				error: fmt.Errorf("%s: failed to raise interface: %s",
+					iface.Name, err)}
+			return
+		}
+	}
+	for !libnet.TestCarrier(iface.Name) {
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-cancelChannel:
+			logger.Debugln(1, "cancelling carrier tests")
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
+	}
+	logger.Debugln(1, "carrier detected")
 	packetSocket, err := dhcp4client.NewPacketSock(iface.Index)
 	if err != nil {
 		responseChannel <- dhcpResponse{
@@ -115,41 +141,30 @@ func dhcpRequestOnInterface(iface net.Interface, cancelChannel <-chan struct{},
 		return
 	}
 	defer client.Close()
-	for ; ; time.Sleep(100 * time.Millisecond) {
-		select {
-		case <-cancelChannel:
-			logger.Debugln(1, "cancelling carrier tests")
-			return
-		default:
-		}
-		if libnet.TestCarrier(iface.Name) {
-			break
-		}
-	}
-	logger.Debugln(1, "carrier detected")
-	for ; ; time.Sleep(100 * time.Millisecond) {
-		select {
-		case <-cancelChannel:
-			logger.Debugln(1, "cancelling DHCP attempts")
-			return
-		default:
-		}
+	for {
 		logger.Debugln(1, "DHCP attempt")
 		ok, packet, err := client.Request()
 		if err != nil {
 			logger.Debugf(1, "DHCP failed: %s\n", err)
-			continue
-		}
-		if !ok {
-			continue
-		}
-		if err := processDhcpPacket(packet); err != nil {
-			responseChannel <- dhcpResponse{
-				error: fmt.Errorf("%s: %s", iface.Name, err)}
+		} else if ok {
+			if err := processDhcpPacket(packet); err != nil {
+				responseChannel <- dhcpResponse{
+					error: fmt.Errorf("%s: %s", iface.Name, err)}
+				return
+			}
+			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
 			return
 		}
-		responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
-		return
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-cancelChannel:
+			logger.Debugln(1, "cancelling DHCP attempts")
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
 	}
 }
 
@@ -330,12 +345,17 @@ func processDhcpPacket(packet dhcp4.Packet) error {
 
 func raiseInterfaces(interfaces map[string]net.Interface,
 	logger log.DebugLogger) error {
+	logger.Println("raising interfaces")
+	cs := concurrent.NewState(0)
 	for name := range interfaces {
-		if err := run("ifconfig", "", logger, name, "up"); err != nil {
+		err := cs.GoRun(func() error {
+			return run("ifconfig", "", logger, name, "up")
+		})
+		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return cs.Reap()
 }
 
 func setHostname(optionHostName []byte, logger log.DebugLogger) error {
@@ -405,6 +425,9 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 func setupNetworkFromConfig(interfaces map[string]net.Interface,
 	machineInfo fm_proto.GetMachineInfoResponse, logger log.DebugLogger) (
 	string, error) {
+	if err := raiseInterfaces(interfaces, logger); err != nil {
+		return "", err
+	}
 	iface, ipAddr, subnet, err := findInterfaceToConfigure(interfaces,
 		machineInfo, logger)
 	if err != nil {
@@ -418,7 +441,7 @@ func setupNetworkFromConfig(interfaces map[string]net.Interface,
 
 func setupNetworkFromDhcp(interfaces map[string]net.Interface,
 	logger log.DebugLogger) (string, string, error) {
-	ifName, packet, err := dhcpRequest(interfaces, logger)
+	ifName, packet, err := dhcpRequest(interfaces, true, logger)
 	if err != nil {
 		return "", "", err
 	}

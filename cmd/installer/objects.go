@@ -52,20 +52,27 @@ func hashFile(filename string) (hash.Hash, []byte, error) {
 	return hashVal, object, nil
 }
 
-func (cache *objectsCache) computeMissing(
-	requiredObjects map[hash.Hash]uint64) (
-	map[hash.Hash]uint64, uint64, uint64) {
-	var requiredBytes, presentBytes uint64
-	missingObjects := make(map[hash.Hash]uint64, len(requiredObjects))
-	for hashVal, requiredSize := range requiredObjects {
-		requiredBytes += requiredSize
-		if object, ok := cache.objects[hashVal]; ok {
-			presentBytes += uint64(len(object))
-		} else {
-			missingObjects[hashVal] = requiredSize
-		}
+// saveOldEtc will save a copy of the old OS /etc, except files which appear to
+// be private keys. The saved copy will be in compressed tar format in
+// /var/log/installer/old-etc.tar.gz in the new OS file-system.
+func saveOldEtc(logger log.DebugLogger) error {
+	startTime := time.Now()
+	oldEtcPath := filepath.Join(*mountPoint, "etc")
+	if err := run("cp", "", logger, "-a", oldEtcPath, "/tmp/etc"); err != nil {
+		return err
 	}
-	return missingObjects, requiredBytes, presentBytes
+	err := run("find", "", logger, "/tmp/etc", "-depth", "-name", "*key*",
+		"-exec", "rm", "-r", "{}", ";")
+	if err != nil {
+		return err
+	}
+	err = run("tar", "", logger, "-czf", etcFilename, "-C", "/tmp", "etc")
+	if err != nil {
+		return err
+	}
+	logger.Debugf(0, "sanitised and archived old /etc in %s\n",
+		format.Duration(time.Since(startTime)))
+	return nil
 }
 
 func createObjectsCache(requiredObjects map[hash.Hash]uint64,
@@ -93,6 +100,22 @@ func createObjectsCache(requiredObjects map[hash.Hash]uint64,
 		return nil, err
 	}
 	return cache, nil
+}
+
+func (cache *objectsCache) computeMissing(
+	requiredObjects map[hash.Hash]uint64) (
+	map[hash.Hash]uint64, uint64, uint64) {
+	var requiredBytes, presentBytes uint64
+	missingObjects := make(map[hash.Hash]uint64, len(requiredObjects))
+	for hashVal, requiredSize := range requiredObjects {
+		requiredBytes += requiredSize
+		if object, ok := cache.objects[hashVal]; ok {
+			presentBytes += uint64(len(object))
+		} else {
+			missingObjects[hashVal] = requiredSize
+		}
+	}
+	return missingObjects, requiredBytes, presentBytes
 }
 
 func (cache *objectsCache) downloadMissing(requiredObjects map[hash.Hash]uint64,
@@ -157,6 +180,9 @@ func (cache *objectsCache) findAndScanUntrusted(
 		len(foundObjects), len(requiredObjects),
 		format.FormatBytes(foundBytes), format.FormatBytes(requiredBytes),
 		format.Duration(duration))
+	if err := saveOldEtc(logger); err != nil {
+		return err
+	}
 	return nil
 }
 
