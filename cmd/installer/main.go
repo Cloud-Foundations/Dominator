@@ -30,7 +30,10 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
-const logfile = "/var/log/installer/latest"
+const (
+	etcFilename = "/var/log/installer/old-etc.tar.gz"
+	logfile     = "/var/log/installer/latest"
+)
 
 type flusher interface {
 	Flush() error

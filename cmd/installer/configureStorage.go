@@ -450,12 +450,30 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			}
 		}
 	}
+	// Copy configuration and log data.
 	logdir := filepath.Join(*mountPoint, "var", "log", "installer")
 	if err := os.MkdirAll(logdir, fsutil.DirPerms); err != nil {
 		return nil, err
 	}
 	if err := fsutil.CopyTree(logdir, *tftpDirectory); err != nil {
 		return nil, err
+	}
+	dhcpLogdir := "/var/log/installer/dhcp"
+	if _, err := os.Stat(dhcpLogdir); err == nil {
+		destdir := filepath.Join(*mountPoint, dhcpLogdir)
+		if err := os.Mkdir(destdir, fsutil.DirPerms); err != nil {
+			return nil, err
+		}
+		if err := fsutil.CopyTree(destdir, dhcpLogdir); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := os.Stat(etcFilename); err == nil {
+		destfile := filepath.Join(*mountPoint, etcFilename)
+		err := fsutil.CopyFile(destfile, etcFilename, fsutil.PublicFilePerms)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := util.WriteImageName(*mountPoint, imageName); err != nil {
 		return nil, err
