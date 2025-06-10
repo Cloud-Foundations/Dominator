@@ -430,18 +430,26 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	if err != nil {
 		return err
 	}
-	var bootDir, chrootDir string
+	var bootDir, chrootDir, efiDir string
+	var efiEntry *mounts.MountEntry
 	if doChroot {
 		bootDir = "/boot"
 		chrootDir = rootDir
+		efiDir = "/mnt/efi"
+		efiEntry = mountTable.FindEntry(filepath.Join(rootDir, efiDir))
 	} else {
 		bootDir = filepath.Join(rootDir, "boot")
+		efiDir = filepath.Join(rootDir, "/mnt/efi")
+		efiEntry = mountTable.FindEntry(efiDir)
+	}
+	if efiEntry != nil && efiEntry.Type != "vfat" {
+		efiEntry = nil
 	}
 	grubConfigFile := filepath.Join(rootDir, "boot", "grub", "grub.cfg")
 	bootEntry := mountTable.FindEntry(grubConfigFile)
-	var isEfi bool
-	if bootEntry != nil && bootEntry.Type == "vfat" {
-		isEfi = true
+	if efiEntry == nil && bootEntry != nil && bootEntry.Type == "vfat" {
+		efiDir = bootDir
+		efiEntry = bootEntry
 	}
 	var isGrub2 bool
 	grubInstaller, err := lookPath(chrootDir, "grub-install")
@@ -456,9 +464,9 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	cmd := exec.Command(grubInstaller,
 		"--boot-directory="+bootDir,
 		deviceName)
-	if isEfi {
+	if efiEntry != nil {
 		cmd.Args = append(cmd.Args,
-			"--efi-directory="+bootDir,
+			"--efi-directory="+efiDir,
 			"--target=x86_64-efi",
 		)
 		if isGrub2 {
@@ -494,7 +502,7 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	logger.Printf("installed GRUB in %s\n",
 		format.Duration(time.Since(startTime)))
 	return bootInfo.writeGrubConfigAndTemplate(rootDir, grubConfigFile,
-		mountTable, isEfi)
+		mountTable, efiEntry != nil)
 }
 
 func (bootInfo *BootInfoType) writeGrubConfig(filename string,

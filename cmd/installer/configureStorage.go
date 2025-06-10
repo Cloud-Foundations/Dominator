@@ -41,6 +41,14 @@ import (
 )
 
 const (
+	bootMountPoint = "/boot"
+	efiMountPoint  = "/mnt/efi"
+	rootMountPoint = "/"
+
+	bootFsLabel = "bootfs"
+	efiFsLabel  = "EFI"
+	rootFsLabel = "rootfs"
+
 	keyFile        = "/etc/crypt.key"
 	sysFirmwareEfi = "/sys/firmware/efi"
 )
@@ -138,8 +146,12 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 	}
 	args = append(args, "mkpart", "primary", "ext2",
 		strconv.FormatUint(offsetInUnits, 10)+unitSuffix, "100%")
-	args = append(args,
-		"set", strconv.FormatInt(int64(bootPartition), 10), "boot", "on")
+	if isEfi { // EFI System Partition is always the first partition.
+		args = append(args, "set", "1", "esp", "on")
+	} else {
+		args = append(args,
+			"set", strconv.FormatInt(int64(bootPartition), 10), "boot", "on")
+	}
 	if err := run("parted", *tmpRoot, logger, args...); err != nil {
 		return err
 	}
@@ -228,11 +240,12 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			len(layout.BootDriveLayout)+1)
 		newPartitions[0] = installer_proto.Partition{
 			FileSystemType:   installer_proto.FileSystemTypeVfat,
-			MountPoint:       "/boot",
+			MountPoint:       efiMountPoint,
 			MinimumFreeBytes: 128 << 20,
 		}
 		for _, partition := range layout.BootDriveLayout {
-			if partition.MountPoint == "/boot" {
+			if partition.MountPoint == bootMountPoint {
+				newPartitions[0].MountPoint = bootMountPoint
 				if partition.MinimumFreeBytes >
 					newPartitions[0].MinimumFreeBytes {
 					newPartitions[0].MinimumFreeBytes =
@@ -247,9 +260,9 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	var bootPartition, rootPartition int
 	for index, partition := range layout.BootDriveLayout {
 		switch partition.MountPoint {
-		case "/":
+		case rootMountPoint:
 			rootPartition = index + 1
-		case "/boot":
+		case bootMountPoint:
 			bootPartition = index + 1
 		}
 	}
@@ -300,7 +313,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes = imageSize
 	}
 	layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes += imageSize
-	bootInfo, err := util.GetBootInfo(img.FileSystem, "rootfs", "")
+	bootInfo, err := util.GetBootInfo(img.FileSystem, rootFsLabel, "")
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +688,7 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 		waiter.Lock()
 		waiter.Unlock()
 	}()
-	return util.MakeBootable(fileSystem, device, "rootfs", *mountPoint, "",
+	return util.MakeBootable(fileSystem, device, rootFsLabel, *mountPoint, "",
 		true, logger)
 }
 
@@ -835,7 +848,7 @@ func readInt(filename string) (uint64, error) {
 }
 
 func remapDevice(device, target string, encrypt bool) string {
-	if !encrypt || target == "/" || target == "/boot" {
+	if !encrypt || target == rootMountPoint || target == bootMountPoint {
 		return device
 	} else {
 		return filepath.Join("/dev/mapper", filepath.Base(device))
@@ -985,10 +998,12 @@ func (drive driveType) makeFileSystem(cpuSharer cpusharer.CpuSharer,
 	}
 	label := target
 	erase := !drive.discarded
-	if label == "/" {
-		label = "rootfs"
-	} else if label == "/boot" {
-		label = "bootfs"
+	if label == rootMountPoint {
+		label = rootFsLabel
+	} else if label == bootMountPoint {
+		label = bootFsLabel
+	} else if label == efiMountPoint {
+		label = efiFsLabel
 	} else if encrypt {
 		if err := drive.cryptSetup(cpuSharer, device, logger); err != nil {
 			return err
@@ -1037,10 +1052,12 @@ func (drive driveType) writeDeviceEntries(device, target string,
 	fstype installer_proto.FileSystemType,
 	fsTab, cryptTab io.Writer, checkOrder uint) error {
 	label := target
-	if label == "/" {
-		label = "rootfs"
-	} else if label == "/boot" {
-		label = "bootfs"
+	if label == rootMountPoint {
+		label = rootFsLabel
+	} else if label == bootMountPoint {
+		label = bootFsLabel
+	} else if label == efiMountPoint {
+		label = efiFsLabel
 	} else {
 		var options string
 		if drive.discarded {
@@ -1055,6 +1072,9 @@ func (drive driveType) writeDeviceEntries(device, target string,
 	var fsFlags string
 	if drive.discarded {
 		fsFlags = "discard"
+	}
+	if label == "EFI" {
+		fsFlags = "noauto"
 	}
 	return util.WriteFstabEntry(fsTab, "LABEL="+label, target, fstype.String(),
 		fsFlags, 0, checkOrder)
