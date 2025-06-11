@@ -632,6 +632,10 @@ func installRoot(device string, layout installer_proto.StorageLayout,
 	if err := makeBindMount(*tmpRoot, *mountPoint); err != nil {
 		return err
 	}
+	extraBindMounts := []string{*tftpDirectory}
+	if err := makeBindMounts(*mountPoint, extraBindMounts); err != nil {
+		return err
+	}
 	if bootPartition > 0 {
 		// Mount the /boot partition and copy files into it, then unmount and
 		// mount under the root file-system.
@@ -927,6 +931,10 @@ func unmountStorage(logger log.DebugLogger) error {
 		mntPoint := mountPoints[index]
 		if mntPoint == *mountPoint {
 			if err := closeEncryptedVolumes(logger); err != nil {
+				return err
+			}
+			err := os.Remove(filepath.Join(*mountPoint, *tftpDirectory))
+			if err != nil {
 				return err
 			}
 		}
