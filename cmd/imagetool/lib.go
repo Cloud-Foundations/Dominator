@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
@@ -25,6 +26,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	filegen_proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
@@ -716,6 +718,27 @@ func readImage(name string) (*image.Image, error) {
 	}
 	img.FileSystem.RebuildInodePointers()
 	return &img, nil
+}
+
+func reExecAsRoot() error {
+	args := make([]string, 0, len(os.Args)+1)
+	if sudoPath, err := exec.LookPath("sudo"); err != nil {
+		return err
+	} else {
+		args = append(args, sudoPath)
+	}
+	if myPath, err := exec.LookPath(os.Args[0]); err != nil {
+		return err
+	} else {
+		args = append(args, myPath)
+	}
+	args = append(args, fmt.Sprintf("-certDirectory=%s",
+		setupclient.GetCertDirectory()))
+	args = append(args, os.Args[1:]...)
+	if err := syscall.Exec(args[0], args, os.Environ()); err != nil {
+		return errors.New("unable to Exec: " + err.Error())
+	}
+	return errors.New("return from exec")
 }
 
 func scanDirectory(name string) (*filesystem.FileSystem, error) {

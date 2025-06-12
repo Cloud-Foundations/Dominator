@@ -45,6 +45,9 @@ func loadOverlayFiles() (map[string][]byte, error) {
 
 func makeRawImage(objectClient *objectclient.ObjectClient, name,
 	rawFilename string) error {
+	if os.Geteuid() != 0 {
+		return reExecAsRoot()
+	}
 	fs, objectsGetter, err := getImageForUnpack(objectClient, name)
 	if err != nil {
 		return err
