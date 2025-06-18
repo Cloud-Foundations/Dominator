@@ -26,7 +26,7 @@ Built images are stored in an *[imageserver](../cmd/imageserver/README.md)*
 which de-duplicates common files and efficiently replicates the data to multiple
 regions if desired. Machines may be live-patched with these images using the
 *[dominator](../cmd/dominator/README.md)*, or tools such as the
-*[ami-publisher](http://bit.ly/2BgUW1C)* may be used to publish image artefacts
+*[ami-publisher](../cmd/ami-publisher/README.md)* may be used to publish image artefacts
 across multiple AWS accounts and regions in a couple of minutes to create new
 virtual machines.
 
