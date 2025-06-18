@@ -62,7 +62,7 @@ var (
 	sshKeyName  = flag.String("sshKeyName", "",
 		"Name of SSH key for instance")
 	subnetSearchTags    libtags.Tags = libtags.Tags{"Network": "Private"}
-	tags                libtags.Tags
+	tags                             = make(libtags.Tags)
 	targets             awsutil.TargetList
 	unusedImagesCsvFile = flag.String("unusedImagesCsvFile", "",
 		"File to write CSV listing unused images")
@@ -115,7 +115,7 @@ var subcommands = []commands.Command{
 	{"list-unused-images", "", 0, 0, listUnusedImagesSubcommand},
 	{"list-used-images", "", 0, 0, listUsedImagesSubcommand},
 	{"prepare-unpackers", "[stream-name]", 0, 1, prepareUnpackersSubcommand},
-	{"publish", "image-leaf-name", 2, 2, publishSubcommand},
+	{"publish", "image-stream leaf-name", 2, 2, publishSubcommand},
 	{"remove-unused-volumes", "", 0, 0, removeUnusedVolumesSubcommand},
 	{"set-exclusive-tags", "key value results-file...", 2, -1,
 		setExclusiveTagsSubcommand},
