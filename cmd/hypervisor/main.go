@@ -35,6 +35,8 @@ const (
 var (
 	dhcpServerOnBridgesOnly = flag.Bool("dhcpServerOnBridgesOnly", false,
 		"If true, run the DHCP server on bridge interfaces only")
+	disableFillZero = flag.Bool("disableFillZero", false,
+		"If true, skip operation to write zeroes to file when fallocate is not available")
 	identityProvider = flag.String("identityProvider", "",
 		"Base URL of identity provider which can issue role certificates")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
@@ -186,6 +188,7 @@ func run() {
 	managerObj, err := manager.New(manager.StartOptions{
 		BridgeMap:            bridgeMap,
 		DhcpServer:           dhcpServer,
+		DisableFillZero:      *disableFillZero,
 		IdentityProvider:     *identityProvider,
 		ImageServerAddress:   imageServerAddress,
 		LockCheckInterval:    *lockCheckInterval,
