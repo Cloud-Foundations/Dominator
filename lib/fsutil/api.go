@@ -103,8 +103,8 @@ func Fallocate(filename string, size uint64) error {
 // specified in bytes. If allocation is not supported/available, the file will
 // be filled with zeros (and a debug message will be logged).
 func FallocateOrFill(filename string, size uint64,
-	logger log.DebugLogger) error {
-	return fallocateOrFill(filename, size, logger)
+	disableFillZero bool, logger log.DebugLogger) error {
+	return fallocateOrFill(filename, size, disableFillZero, logger)
 }
 
 // ForceLink creates newname as a hard link to the oldname file. It first

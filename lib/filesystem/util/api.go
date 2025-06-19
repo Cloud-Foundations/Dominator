@@ -148,6 +148,7 @@ func WriteImageName(mountPoint, imageName string) error {
 type WriteRawOptions struct {
 	AllocateBlocks       bool
 	DoChroot             bool
+	DisableFillZero      bool
 	ExtraKernelOptions   string
 	InitialImageName     string
 	InstallBootloader    bool

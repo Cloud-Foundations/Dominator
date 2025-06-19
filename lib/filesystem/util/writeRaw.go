@@ -682,7 +682,7 @@ func writeToFile(fs *filesystem.FileSystem,
 		return err
 	}
 	if options.AllocateBlocks {
-		err := fsutil.FallocateOrFill(tmpFilename, imageSize, logger)
+		err := fsutil.FallocateOrFill(tmpFilename, imageSize, options.DisableFillZero, logger)
 		if err != nil {
 			return fmt.Errorf("error fallocating file: %s: %s",
 				tmpFilename, err)

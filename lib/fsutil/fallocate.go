@@ -27,7 +27,7 @@ func fallocate(filename string, size uint64) error {
 }
 
 func fallocateOrFill(filename string, size uint64,
-	logger log.DebugLogger) error {
+	disableFillZero bool, logger log.DebugLogger) error {
 	err := Fallocate(filename, size)
 	if err == nil {
 		return nil
@@ -42,6 +42,11 @@ func fallocateOrFill(filename string, size uint64,
 	}
 	if !errors.Is(err, syscall.ENOTSUP) {
 		return err
+	}
+	// File allocation is not supported and disableFillZero is set, then skip operation.
+	if disableFillZero {
+		logger.Printf("unable to fallocate, disableFillZero flag set, skipping operation")
+		return nil
 	}
 	// File allocation is not supported, and file isn't big enough. Fill it.
 	logger.Printf("unable to fallocate, writing zeros to: %s\n", filename)
