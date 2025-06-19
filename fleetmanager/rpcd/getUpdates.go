@@ -26,7 +26,8 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 		case update, ok := <-updateChannel:
 			if !ok {
 				err := errors.New("receiver not keeping up with updates")
-				t.logger.Printf("error sending update: %s\n", err)
+				t.logger.Printf("error sending update to: %s for: %s: %s\n",
+					conn.RemoteAddr(), conn.Username(), err)
 				return err
 			}
 			if err := conn.Encode(update); err != nil {
