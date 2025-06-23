@@ -37,7 +37,15 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 			}
 			count++
 			numToFlush++
-			flushTimer.Reset(flushDelay)
+			if !flushTimer.Stop() {
+				select {
+				case <-flushTimer.C:
+				default:
+				}
+			}
+			if len(updateChannel) < 1 {
+				flushTimer.Reset(flushDelay)
+			}
 		case <-flushTimer.C:
 			if numToFlush > 1 {
 				t.logger.Debugf(0, "flushing %d events\n", numToFlush)
