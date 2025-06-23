@@ -47,19 +47,20 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", hypervisor, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting to: %s: %s", hypervisor, err)
 	}
 	defer client.Close()
 	conn, err := client.Call("Hypervisor.GetUpdates")
 	if err != nil {
-		return err
+		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
 	}
 	defer conn.Close()
 	initialUpdate := true
 	for {
 		var update proto.Update
 		if err := conn.Decode(&update); err != nil {
-			return err
+			return fmt.Errorf("error decoding from: %s: %s",
+				conn.RemoteAddr(), err)
 		}
 		g.updateVMs(update.VMs, initialUpdate)
 		initialUpdate = false

@@ -57,26 +57,27 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
 	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", g.fleetManager, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting to: %s: %s", g.fleetManager, err)
 	}
 	defer client.Close()
 	conn, err := client.Call("FleetManager.GetUpdates")
 	if err != nil {
-		return err
+		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
 	}
 	defer conn.Close()
 	request := fm_proto.GetUpdatesRequest{Location: g.location}
 	if err := conn.Encode(request); err != nil {
-		return err
+		return fmt.Errorf("error encoding to: %s: %s", conn.RemoteAddr(), err)
 	}
 	if err := conn.Flush(); err != nil {
-		return err
+		return fmt.Errorf("error flushing to: %s: %s", conn.RemoteAddr(), err)
 	}
 	initialUpdate := true
 	for {
 		var update fm_proto.Update
 		if err := conn.Decode(&update); err != nil {
-			return err
+			return fmt.Errorf("error decoding from: %s: %s",
+				conn.RemoteAddr(), err)
 		}
 		g.update(update, initialUpdate)
 		initialUpdate = false
