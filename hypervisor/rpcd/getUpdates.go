@@ -34,7 +34,15 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 				return fmt.Errorf("error sending update: %s", err)
 			}
 			numToFlush++
-			flushTimer.Reset(flushDelay)
+			if !flushTimer.Stop() {
+				select {
+				case <-flushTimer.C:
+				default:
+				}
+			}
+			if len(updateChannel) < 1 && len(responseChannel) < 1 {
+				flushTimer.Reset(flushDelay)
+			}
 		case update, ok := <-responseChannel:
 			if !ok {
 				return fmt.Errorf(
@@ -45,7 +53,15 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 				return fmt.Errorf("error sending response: %s", err)
 			}
 			numToFlush++
-			flushTimer.Reset(flushDelay)
+			if !flushTimer.Stop() {
+				select {
+				case <-flushTimer.C:
+				default:
+				}
+			}
+			if len(updateChannel) < 1 && len(responseChannel) < 1 {
+				flushTimer.Reset(flushDelay)
+			}
 		case <-flushTimer.C:
 			if numToFlush > 1 {
 				t.logger.Debugf(0, "flushing %d events\n", numToFlush)
