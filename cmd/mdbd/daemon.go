@@ -347,7 +347,10 @@ func hostsFilterReader(dataChannel <-chan interface{},
 			waitGroup.Done()
 			waitGroup = nil
 		}
-		eventChannel <- struct{}{}
+		select {
+		case eventChannel <- struct{}{}:
+		default:
+		}
 	}
 }
 
