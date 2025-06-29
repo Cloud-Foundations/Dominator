@@ -44,12 +44,12 @@ func (summary *summaryData) writeHtml(writer io.Writer) {
 			"<font color=\"salmon\">Dashboard data are %s old</font><p>\n",
 			format.Duration(age))
 	}
-	writeCountLinks(writer, "Number of VMs known", "listVMs?state=",
-		summary.numRunning+summary.numStopped)
+	writeCountLinks(writer, "Number of VMs known", "listVMs",
+		'?', summary.numRunning+summary.numStopped)
 	writeCountLinks(writer, "Number of VMs running", "listVMs?state=running",
-		summary.numRunning)
+		'&', summary.numRunning)
 	writeCountLinks(writer, "Number of VMs stopped", "listVMs?state=stopped",
-		summary.numStopped)
+		'&', summary.numStopped)
 	fmt.Fprintln(writer, "<br>")
 	fmt.Fprintf(writer,
 		"Available addresses: <a href=\"listAvailableAddresses\">%d</a><br>\n",
@@ -81,8 +81,11 @@ func (summary *summaryData) writeHtml(writer io.Writer) {
 		summary.numSubnets)
 }
 
-func writeCountLinks(writer io.Writer, text, path string, count uint) {
-	fmt.Fprintf(writer,
-		"%s: <a href=\"%s\">%d</a> (<a href=\"%s&output=text\">text</a>)<br>\n",
-		text, path, count, path)
+func writeCountLinks(writer io.Writer, text, path string, separator rune,
+	count uint) {
+	fmt.Fprintf(writer, "%s: <a href=\"%s\">%d</a> (", text, path, count)
+	fmt.Fprintf(writer, "<a href=\"%s%coutput=json\">JSON</a>",
+		path, separator)
+	fmt.Fprintf(writer, ", <a href=\"%s%coutput=text\">text</a>)<br>\n",
+		path, separator)
 }
