@@ -4,8 +4,8 @@ daemon. It queries one or more Machine DataBases and provides the *dominator*
 with information about machines (*subs*) to manage.
 
 The daemon writes processed and filtered MDB data to a local file
-(`/var/lib/Dominator/mdb` by default) which the *dominator* can consume. Thus,
-both *mdbd* and *dominator* must run on the same machine.
+(`/var/lib/mdbd/mdb.json` by default) which the *[dominator](../dominator/README.md)* can consume. Thus,
+both *mdbd* and *[dominator](../dominator/README.md)* must run on the same machine.
 
 ## Startup
 *Mdbd* is started at boot time, usually by one of the provided

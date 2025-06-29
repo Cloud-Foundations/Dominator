@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -57,26 +58,27 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
 	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", g.fleetManager, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting to: %s: %s", g.fleetManager, err)
 	}
 	defer client.Close()
 	conn, err := client.Call("FleetManager.GetUpdates")
 	if err != nil {
-		return err
+		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
 	}
 	defer conn.Close()
 	request := fm_proto.GetUpdatesRequest{Location: g.location}
 	if err := conn.Encode(request); err != nil {
-		return err
+		return fmt.Errorf("error encoding to: %s: %s", conn.RemoteAddr(), err)
 	}
 	if err := conn.Flush(); err != nil {
-		return err
+		return fmt.Errorf("error flushing to: %s: %s", conn.RemoteAddr(), err)
 	}
 	initialUpdate := true
 	for {
 		var update fm_proto.Update
 		if err := conn.Decode(&update); err != nil {
-			return err
+			return fmt.Errorf("error decoding from: %s: %s",
+				conn.RemoteAddr(), err)
 		}
 		g.update(update, initialUpdate)
 		initialUpdate = false
@@ -93,6 +95,14 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
 
 func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 	logger log.DebugLogger) (*mdbType, error) {
+	startTime := time.Now()
+	newMdb := g.generate()
+	g.logger.Debugf(1, "FleetManager(%s) generate took: %s\n",
+		g.fleetManager, format.Duration(time.Since(startTime)))
+	return newMdb, nil
+}
+
+func (g *fleetManagerGeneratorType) generate() *mdbType {
 	var newMdb mdbType
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
@@ -145,7 +155,7 @@ func (g *fleetManagerGeneratorType) Generate(unused_datacentre string,
 			newMdb.Machines = append(newMdb.Machines, &machine)
 		}
 	}
-	return &newMdb, nil
+	return &newMdb
 }
 
 func (g *fleetManagerGeneratorType) update(update fm_proto.Update,
@@ -160,6 +170,14 @@ func (g *fleetManagerGeneratorType) update(update fm_proto.Update,
 			vmsToDelete[ipAddr] = struct{}{}
 		}
 	}
+	startTime := time.Now()
+	g.updateWithMaps(update, machinesToDelete, vmsToDelete)
+	g.logger.Debugf(1, "FleetManager(%s) update took: %s\n",
+		g.fleetManager, format.Duration(time.Since(startTime)))
+}
+
+func (g *fleetManagerGeneratorType) updateWithMaps(update fm_proto.Update,
+	machinesToDelete, vmsToDelete map[string]struct{}) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	for _, machine := range update.ChangedMachines {

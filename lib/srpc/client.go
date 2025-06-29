@@ -336,6 +336,7 @@ func (client *Client) callWithLock(serviceMethod string) (*Conn, error) {
 		parent:      client,
 		isEncrypted: client.isEncrypted,
 		ReadWriter:  client.bufrw,
+		remoteAddr:  client.remoteAddr,
 	}
 	return conn, nil
 }

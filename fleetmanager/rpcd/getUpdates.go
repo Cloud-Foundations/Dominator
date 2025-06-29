@@ -1,7 +1,7 @@
 package rpcd
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -25,28 +25,34 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 		select {
 		case update, ok := <-updateChannel:
 			if !ok {
-				err := errors.New("receiver not keeping up with updates")
-				t.logger.Printf("error sending update: %s\n", err)
-				return err
+				return fmt.Errorf(
+					"error sending update to: %s for: %s: receiver not keeping up with updates",
+					conn.RemoteAddr(), conn.Username())
 			}
 			if err := conn.Encode(update); err != nil {
-				t.logger.Printf("error sending update: %s\n", err)
-				return err
+				return fmt.Errorf("error sending update: %s", err)
 			}
 			if update.Error != "" {
 				return nil
 			}
 			count++
 			numToFlush++
-			flushTimer.Reset(flushDelay)
+			if !flushTimer.Stop() {
+				select {
+				case <-flushTimer.C:
+				default:
+				}
+			}
+			if len(updateChannel) < 1 {
+				flushTimer.Reset(flushDelay)
+			}
 		case <-flushTimer.C:
 			if numToFlush > 1 {
 				t.logger.Debugf(0, "flushing %d events\n", numToFlush)
 			}
 			numToFlush = 0
 			if err := conn.Flush(); err != nil {
-				t.logger.Printf("error flushing update(s): %s\n", err)
-				return err
+				return fmt.Errorf("error flushing update(s): %s", err)
 			}
 		case err := <-closeChannel:
 			if err == nil {
@@ -54,7 +60,6 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 					conn.RemoteAddr())
 				return nil
 			}
-			t.logger.Println(err)
 			return err
 		}
 	}

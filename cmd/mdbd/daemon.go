@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/configwatch"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -94,34 +95,54 @@ func runDaemon(generators *generatorList, eventChannel <-chan struct{},
 	fetchIntervalDuration := time.Duration(fetchInterval) * time.Second
 	intervalTimer := time.NewTimer(fetchIntervalDuration)
 	for ; ; sleepUntil(eventChannel, intervalTimer, cycleStopTime) {
-		cycleStopTime = time.Now().Add(fetchIntervalDuration)
+		startGenerate := time.Now()
+		cycleStopTime = startGenerate.Add(fetchIntervalDuration)
 		newMdb, err := loadFromAll(generators, datacentre, hostnameRE,
 			getHostsExcludes(), getHostsIncludes(), pauseTable, logger)
 		if err != nil {
 			logger.Println(err)
 			continue
 		}
+		startSort := time.Now()
 		sort.SliceStable(newMdb.Machines, func(i, j int) bool {
 			return verstr.Less(newMdb.Machines[i].Hostname,
 				newMdb.Machines[j].Hostname)
 		})
+		startCompare := time.Now()
 		stats := newMdbIsDifferent(prevMdb, newMdb)
 		if stats.added < 1 && stats.changed < 1 && stats.deleted < 1 {
-			logger.Debugf(1, "Refreshed MDB data, same %d machines\n",
-				len(newMdb.Machines))
+			logger.Debugf(1,
+				"Refreshed MDB data, same %d machines, generated in %s, sorted in: %s, compared in: %s\n",
+				len(newMdb.Machines),
+				format.Duration(startSort.Sub(startGenerate)),
+				format.Duration(startCompare.Sub(startSort)),
+				format.Duration(time.Since(startCompare)),
+			)
 			continue
 		}
 		updateFunc(prevMdb, newMdb)
+		startWrite := time.Now()
 		if err := writeMdb(newMdb, mdbFileName); err != nil {
 			logger.Println(err)
 		} else {
 			if prevMdb == nil {
-				logger.Printf("Wrote initial MDB data, %d machines\n",
-					len(newMdb.Machines))
+				logger.Printf(
+					"Wrote initial MDB data in %s, %d machines, generated in %s, sorted in: %s, compared in: %s\n",
+					format.Duration(time.Since(startWrite)),
+					len(newMdb.Machines),
+					format.Duration(startSort.Sub(startGenerate)),
+					format.Duration(startCompare.Sub(startSort)),
+					format.Duration(startWrite.Sub(startCompare)),
+				)
 			} else {
 				logger.Debugf(0,
-					"Wrote new MDB data, %d new machines, %d removed, %d changed\n",
-					stats.added, stats.deleted, stats.changed)
+					"Wrote new MDB data in %s, %d new machines, %d removed, %d changed, generated in %s, sorted in: %s, compared in: %s\n",
+					format.Duration(time.Since(startWrite)),
+					stats.added, stats.deleted, stats.changed,
+					format.Duration(startSort.Sub(startGenerate)),
+					format.Duration(startCompare.Sub(startSort)),
+					format.Duration(startWrite.Sub(startCompare)),
+				)
 			}
 		}
 		prevMdb = newMdb
@@ -347,7 +368,10 @@ func hostsFilterReader(dataChannel <-chan interface{},
 			waitGroup.Done()
 			waitGroup = nil
 		}
-		eventChannel <- struct{}{}
+		select {
+		case eventChannel <- struct{}{}:
+		default:
+		}
 	}
 }
 
