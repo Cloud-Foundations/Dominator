@@ -11,6 +11,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -122,6 +123,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 	var allocatedVolumeSize uint64
 	primaryOwner := parsedQuery.Table["primaryOwner"]
 	totalsByOwner := make(map[string]*ownerTotalsType)
+	var vms []*proto.VmInfo
 	for _, ipAddr := range ipAddrs {
 		vm, err := s.manager.GetVmInfo(net.ParseIP(ipAddr))
 		if err != nil {
@@ -134,8 +136,6 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		switch parsedQuery.OutputType() {
-		case url.OutputTypeText:
-			fmt.Fprintln(writer, ipAddr)
 		case url.OutputTypeHtml:
 			allocatedMemoryInMiB += vm.MemoryInMiB
 			allocatedMilliCPUs += vm.MilliCPUs
@@ -167,6 +167,10 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 				vm.OwnerUsers[0],
 			)
 			addVmToOwnersTotals(totalsByOwner, &vm)
+		case url.OutputTypeJson:
+			vms = append(vms, &vm)
+		case url.OutputTypeText:
+			fmt.Fprintln(writer, ipAddr)
 		}
 	}
 	switch parsedQuery.OutputType() {
@@ -216,6 +220,8 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			listVMsByPrimaryOwner(writer, totalsByOwner)
 		}
 		fmt.Fprintln(writer, "</body>")
+	case url.OutputTypeJson:
+		json.WriteWithIndent(writer, "    ", vms)
 	}
 }
 
