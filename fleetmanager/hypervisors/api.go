@@ -73,6 +73,7 @@ type Manager struct {
 	mutex            sync.RWMutex               // Protect everything below.
 	allocatingIPs    map[string]struct{}        // Key: VM IP address.
 	hypervisors      map[string]*hypervisorType // Key: hypervisor machine name.
+	hypervisorsByIP  map[string]*hypervisorType // Key: hypervisor IP.
 	locations        map[string]*locationType   // Key: location.
 	migratingIPs     map[string]struct{}        // Key: VM IP address.
 	notifiers        map[<-chan fm_proto.Update]*locationType

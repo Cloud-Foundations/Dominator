@@ -26,6 +26,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		storer:           startOptions.Storer,
 		allocatingIPs:    make(map[string]struct{}),
 		hypervisors:      make(map[string]*hypervisorType),
+		hypervisorsByIP:  make(map[string]*hypervisorType),
 		migratingIPs:     make(map[string]struct{}),
 		subnets:          make(map[string]*subnetType),
 		vms:              make(map[string]*vmInfoType),
@@ -37,6 +38,10 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.listVMsByPrimaryOwnerHandler)
 	html.HandleFunc("/showHypervisor", manager.showHypervisorHandler)
 	html.HandleFunc("/showVM", manager.showVmHandler)
+	html.HandleFunc("/tftpdata/config.json", manager.tftpdataConfigHandler)
+	if *manageHypervisors {
+		html.HandleFunc("/tftpdata/imagename", manager.tftpdataImageNameHandler)
+	}
 	go manager.notifierLoop()
 	return manager, nil
 }
