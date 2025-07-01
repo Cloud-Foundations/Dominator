@@ -60,7 +60,7 @@ func load(params Params) (*Topology, error) {
 		ipAddresses:  make(map[string]struct{}),
 		macAddresses: make(map[string]struct{}),
 	}
-	params.Logger.Debugf(0, "loading topology from: %s\n", params.TopologyDir)
+	params.Logger.Debugf(1, "loading topology from: %s\n", params.TopologyDir)
 	directory, err := topology.readDirectory(params.TopologyDir, "",
 		newInheritingState(), commonState)
 	if err != nil {
