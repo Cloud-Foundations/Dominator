@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,10 +235,13 @@ func getConfiguration(interfaces map[string]net.Interface,
 		logger.Printf("loaded configuration using: %s\n", *configurationLoader)
 		return &machineInfo, activeInterface, nil
 	}
-	if tftpServer == "" {
+	if *configurationBaseUrl != "" {
+		if err := loadUrls(*configurationBaseUrl, logger); err != nil {
+			return nil, "", err
+		}
+	} else if tftpServer == "" {
 		return nil, "", errors.New("no TFTP server given")
-	}
-	if err := loadTftpFiles(tftpServer, logger); err != nil {
+	} else if err := loadTftpFiles(tftpServer, logger); err != nil {
 		return nil, "", err
 	}
 	err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
@@ -333,6 +337,36 @@ func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
 		}
 	}
 	return injectRandomSeed(client, logger)
+}
+
+func loadUrls(baseUrl string, logger log.DebugLogger) error {
+	logger.Printf("configurationBaseUrl from command-line: %s\n", baseUrl)
+	configResp, err := http.DefaultClient.Get(baseUrl + "/config.json")
+	if err != nil {
+		return err
+	}
+	defer configResp.Body.Close()
+	if data, err := io.ReadAll(configResp.Body); err != nil {
+		return err
+	} else {
+		err := os.WriteFile(filepath.Join(*tftpDirectory, "config.json"), data,
+			fsutil.PublicFilePerms)
+		if err != nil {
+			return err
+		}
+	}
+	imagenameResp, err := http.DefaultClient.Get(baseUrl + "/imagename")
+	if err != nil {
+		return nil
+	}
+	defer configResp.Body.Close()
+	if data, err := io.ReadAll(imagenameResp.Body); err != nil {
+		return nil
+	} else {
+		os.WriteFile(filepath.Join(*tftpDirectory, "imagename"), data,
+			fsutil.PublicFilePerms)
+	}
+	return nil
 }
 
 func processDhcpPacket(packet dhcp4.Packet) error {

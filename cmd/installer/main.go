@@ -51,6 +51,8 @@ type Rebooter interface {
 var (
 	completionNotifier = flag.String("completionNotifier", "",
 		"Pathname of programme to run when installation is complete and reboot is imminent")
+	configurationBaseUrl = flag.String("configurationBaseUrl", "",
+		"Base URL of configuration server")
 	configurationLoader = flag.String("configurationLoader", "",
 		"Pathname of programme to run to load configuration data")
 	driveSelector = flag.String("driveSelector", "",
