@@ -38,6 +38,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/filelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/teelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
@@ -76,6 +77,73 @@ var (
 	qemuCommand = flag.String("qemuCommand", "qemu-system-x86_64",
 		"QEMU command")
 )
+
+// updateLogger is a logger that sends progress messages back to vm-control
+type updateLogger struct {
+	baseLogger log.DebugLogger
+	conn       *srpc.Conn
+	sendUpdate func(*srpc.Conn, string) error
+}
+
+func (ul *updateLogger) Debug(level uint8, v ...interface{}) {
+	ul.baseLogger.Debug(level, v...)
+}
+
+func (ul *updateLogger) Debugf(level uint8, format string, v ...interface{}) {
+	ul.baseLogger.Debugf(level, format, v...)
+}
+
+func (ul *updateLogger) Debugln(level uint8, v ...interface{}) {
+	ul.baseLogger.Debugln(level, v...)
+}
+
+func (ul *updateLogger) Fatal(v ...interface{}) {
+	ul.baseLogger.Fatal(v...)
+}
+
+func (ul *updateLogger) Fatalf(format string, v ...interface{}) {
+	ul.baseLogger.Fatalf(format, v...)
+}
+
+func (ul *updateLogger) Fatalln(v ...interface{}) {
+	ul.baseLogger.Fatalln(v...)
+}
+
+func (ul *updateLogger) Panic(v ...interface{}) {
+	ul.baseLogger.Panic(v...)
+}
+
+func (ul *updateLogger) Panicf(format string, v ...interface{}) {
+	ul.baseLogger.Panicf(format, v...)
+}
+
+func (ul *updateLogger) Panicln(v ...interface{}) {
+	ul.baseLogger.Panicln(v...)
+}
+
+func (ul *updateLogger) Print(v ...interface{}) {
+	ul.baseLogger.Print(v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprint(v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
+
+func (ul *updateLogger) Printf(format string, v ...interface{}) {
+	ul.baseLogger.Printf(format, v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprintf(format, v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
+
+func (ul *updateLogger) Println(v ...interface{}) {
+	ul.baseLogger.Println(v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprintln(v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
 
 func checkCpuPriority(authInfo *srpc.AuthInformation, cpuPriority int) error {
 	if cpuPriority < 0 && !authInfo.HaveMethodAccess {
@@ -1249,6 +1317,13 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+
+	// Create an update logger that sends progress messages back to vm-control
+	updateLog := &updateLogger{
+		baseLogger: m.Logger,
+		conn:       conn,
+		sendUpdate: sendUpdate,
+	}
 	if m.disabled {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
@@ -1402,7 +1477,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
-		err := copyData(filename, conn, request.UserDataSize, m.DisableFillZero, vm.logger)
+		// Create a teelogger so that we get progress messages back to vm-control
+		tlogger := teelogger.New(vm.logger, updateLog)
+		err := copyData(filename, conn, request.UserDataSize, m.DisableFillZero, tlogger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1418,7 +1495,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			err := copyData(fname, dataReader, volume.Size, m.DisableFillZero, vm.logger)
+			// Create a teelogger so that we get progress messages back to vm-control
+			tlogger := teelogger.New(vm.logger, updateLog)
+			err := copyData(fname, dataReader, volume.Size, m.DisableFillZero, tlogger)
 			if err != nil {
 				return sendError(conn, err)
 			}
