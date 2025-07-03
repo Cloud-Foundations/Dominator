@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -47,19 +48,20 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 	waitGroup *sync.WaitGroup) error {
 	client, err := srpc.DialHTTP("tcp", hypervisor, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting to: %s: %s", hypervisor, err)
 	}
 	defer client.Close()
 	conn, err := client.Call("Hypervisor.GetUpdates")
 	if err != nil {
-		return err
+		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
 	}
 	defer conn.Close()
 	initialUpdate := true
 	for {
 		var update proto.Update
 		if err := conn.Decode(&update); err != nil {
-			return err
+			return fmt.Errorf("error decoding from: %s: %s",
+				conn.RemoteAddr(), err)
 		}
 		g.updateVMs(update.VMs, initialUpdate)
 		initialUpdate = false
@@ -76,6 +78,14 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 
 func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 	logger log.DebugLogger) (*mdbType, error) {
+	startTime := time.Now()
+	newMdb := g.generate()
+	g.logger.Debugf(1, "Hypervisor generate took: %s\n",
+		format.Duration(time.Since(startTime)))
+	return newMdb, nil
+}
+
+func (g *hypervisorGeneratorType) generate() *mdbType {
 	var newMdb mdbType
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
@@ -102,7 +112,7 @@ func (g *hypervisorGeneratorType) Generate(unused_datacentre string,
 			})
 		}
 	}
-	return &newMdb, nil
+	return &newMdb
 }
 
 func (g *hypervisorGeneratorType) updateVMs(vms map[string]*proto.VmInfo,
@@ -113,6 +123,14 @@ func (g *hypervisorGeneratorType) updateVMs(vms map[string]*proto.VmInfo,
 			vmsToDelete[ipAddr] = struct{}{}
 		}
 	}
+	startTime := time.Now()
+	g.updateVMsWithMap(vms, vmsToDelete)
+	g.logger.Debugf(1, "Hypervisor update took: %s\n",
+		format.Duration(time.Since(startTime)))
+}
+
+func (g *hypervisorGeneratorType) updateVMsWithMap(vms map[string]*proto.VmInfo,
+	vmsToDelete map[string]struct{}) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	for ipAddr, vm := range vms {
