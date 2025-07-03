@@ -153,6 +153,13 @@ command-line arguments will be provided:
 1. The name of the directory where to write the configuration files
 2. The name of the active (configured) network interface
 
+If the `-configurationBaseUrl` option is given the the configuration is read
+from the specified server (typically a
+*[fleet-manager](../fleet-manager/README.md)*) instead of fetching the
+configuration files from the TFTP server. If the
+*[fleet-manager](../fleet-manager/README.md)* hostname is `fleet-manager.prod`
+then the base URL would be `http://fleet-manager.prod:6977/tftpdata`.
+
 ### Discover storage
 The storage devices are discovered and the image (without objects) is downloaded
 from the *[imageserver](../imageserver/README.md)*. An encryption key is
