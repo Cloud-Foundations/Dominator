@@ -13,13 +13,26 @@ import (
 
 func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 	req *http.Request) *hypervisorType {
-	remoteHost, _, err := net.SplitHostPort(req.RemoteAddr)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return nil
+	if hostname := req.FormValue("hostname"); hostname != "" {
+		h, err := m.getLockedHypervisor(hostname, false)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusNotFound)
+			return nil
+		}
+		return h
 	}
-	h, err := m.getLockedHypervisorByIP(remoteHost)
+	ipAddr := req.FormValue("ip")
+	if ipAddr == "" {
+		var err error
+		ipAddr, _, err = net.SplitHostPort(req.RemoteAddr)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return nil
+		}
+	}
+	h, err := m.getLockedHypervisorByIP(ipAddr)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
