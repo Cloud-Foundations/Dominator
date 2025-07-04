@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -56,21 +58,17 @@ func init() {
 
 // Returns true if [i] has less free CPU than [j].
 func compareCPU(hypervisors []fm_proto.Hypervisor, i, j int) bool {
-	return uint64(hypervisors[i].NumCPUs)*1000-
-		hypervisors[i].AllocatedMilliCPUs <
-		uint64(hypervisors[j].NumCPUs)*1000-hypervisors[j].AllocatedMilliCPUs
+	return freeCPU(hypervisors[i]) < freeCPU(hypervisors[j])
 }
 
 // Returns true if [i] has less free memory than [j].
 func compareMemory(hypervisors []fm_proto.Hypervisor, i, j int) bool {
-	return hypervisors[i].MemoryInMiB-hypervisors[i].AllocatedMemory <
-		hypervisors[j].MemoryInMiB-hypervisors[j].AllocatedMemory
+	return freeMemory(hypervisors[i]) < freeMemory(hypervisors[j])
 }
 
 // Returns true if [i] has less free storage space than [j].
 func compareStorage(hypervisors []fm_proto.Hypervisor, i, j int) bool {
-	return hypervisors[i].TotalVolumeBytes-hypervisors[i].AllocatedVolumeBytes <
-		hypervisors[j].TotalVolumeBytes-hypervisors[j].AllocatedVolumeBytes
+	return freeStorage(hypervisors[i]) < freeStorage(hypervisors[j])
 }
 
 func findHypervisorsWithCapacity(inputHypervisors []fm_proto.Hypervisor,
@@ -96,7 +94,23 @@ func findHypervisorsWithCapacity(inputHypervisors []fm_proto.Hypervisor,
 	return outputHypervisors
 }
 
-func getHypervisorAddress(vmInfo hyper_proto.VmInfo) (string, error) {
+// Returns the number of free milliCPUs on the Hypervisor.
+func freeCPU(hypervisor fm_proto.Hypervisor) uint64 {
+	return uint64(hypervisor.NumCPUs)*1000 - hypervisor.AllocatedMilliCPUs
+}
+
+// Returns the number of free MiB of memory on the Hypervisor.
+func freeMemory(hypervisor fm_proto.Hypervisor) uint64 {
+	return hypervisor.MemoryInMiB - hypervisor.AllocatedMemory
+}
+
+// Returns the number of free bytes of storage on the Hypervisor.
+func freeStorage(hypervisor fm_proto.Hypervisor) uint64 {
+	return hypervisor.TotalVolumeBytes - hypervisor.AllocatedVolumeBytes
+}
+
+func getHypervisorAddress(vmInfo hyper_proto.VmInfo,
+	logger log.DebugLogger) (string, error) {
 	if *hypervisorHostname != "" {
 		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
 			nil
@@ -133,7 +147,7 @@ func getHypervisorAddress(vmInfo hyper_proto.VmInfo) (string, error) {
 		return "", errors.New(reply.Error)
 	}
 	hypervisors := findHypervisorsWithCapacity(reply.Hypervisors, vmInfo)
-	hypervisor, err := selectHypervisor(client, hypervisors, vmInfo)
+	hypervisor, err := selectHypervisor(client, hypervisors, vmInfo, logger)
 	if err != nil {
 		return "", err
 	}
@@ -166,7 +180,8 @@ func selectAnyHypervisor(client *srpc.Client) (string, error) {
 }
 
 func selectHypervisor(client *srpc.Client, hypervisors []fm_proto.Hypervisor,
-	vmInfo hyper_proto.VmInfo) (*fm_proto.Hypervisor, error) {
+	vmInfo hyper_proto.VmInfo,
+	logger log.DebugLogger) (*fm_proto.Hypervisor, error) {
 	numHyper := len(hypervisors)
 	if numHyper < 1 {
 		return nil, errors.New("no Hypervisors in location with capacity")
@@ -177,10 +192,10 @@ func selectHypervisor(client *srpc.Client, hypervisors []fm_proto.Hypervisor,
 	case placementChoiceCommand:
 		return selectHypervisorUsingCommand(hypervisors, vmInfo)
 	case placementChoiceEmptiest:
-		sortHypervisors(hypervisors)
+		sortHypervisors(hypervisors, logger)
 		return &hypervisors[len(hypervisors)-1], nil
 	case placmentChoiceFullest:
-		sortHypervisors(hypervisors)
+		sortHypervisors(hypervisors, logger)
 		return &hypervisors[0], nil
 	case placementChoiceRandom:
 		return &hypervisors[rand.Intn(numHyper)], nil
@@ -223,7 +238,8 @@ func selectHypervisorUsingCommand(hypervisors []fm_proto.Hypervisor,
 }
 
 // Returns true if [i] has less free capacity than [j].
-func sortHypervisors(hypervisors []fm_proto.Hypervisor) {
+func sortHypervisors(hypervisors []fm_proto.Hypervisor,
+	logger log.DebugLogger) {
 	sort.SliceStable(hypervisors, func(i, j int) bool {
 		return compareStorage(hypervisors, i, j)
 	})
@@ -233,6 +249,15 @@ func sortHypervisors(hypervisors []fm_proto.Hypervisor) {
 	sort.SliceStable(hypervisors, func(i, j int) bool {
 		return compareCPU(hypervisors, i, j)
 	})
+	logger.Debugln(2, "Sorted Hypervisors (emptiest to fullest):")
+	for _, hypervisor := range hypervisors {
+		logger.Debugf(2, "  %s: free CPU: %d, memory: %d MiB, storage: %s\n",
+			hypervisor.Hostname,
+			freeCPU(hypervisor),
+			freeMemory(hypervisor),
+			format.FormatBytes(freeStorage(hypervisor)),
+		)
+	}
 }
 
 func (p *placementType) Set(value string) error {

@@ -190,7 +190,7 @@ func createVm(logger log.DebugLogger) error {
 		}
 	}
 	tmpVmInfo := approximateVolumesForCreateRequest(request.VmInfo)
-	if hypervisor, err := getHypervisorAddress(tmpVmInfo); err != nil {
+	if hypervisor, err := getHypervisorAddress(tmpVmInfo, logger); err != nil {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)
