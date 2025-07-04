@@ -101,7 +101,7 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		return err
 	}
 	defer discardAccessToken(sourceHypervisor, vmIP)
-	destHypervisorAddress, err := getHypervisorAddress(vmInfo)
+	destHypervisorAddress, err := getHypervisorAddress(vmInfo, logger)
 	if err != nil {
 		return err
 	}

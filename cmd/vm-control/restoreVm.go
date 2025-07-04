@@ -151,13 +151,13 @@ func restoreVm(source string, logger log.DebugLogger) error {
 		UserDataSize:         uint64(len(userData)),
 		VmInfo:               vmInfo,
 	}
-	if hypervisor, err := getHypervisorAddress(request.VmInfo); err != nil {
+	hypervisor, err := getHypervisorAddress(request.VmInfo, logger)
+	if err != nil {
 		return err
-	} else {
-		logger.Debugf(0, "restoring VM on %s\n", hypervisor)
-		return restoreVmOnHypervisor(hypervisor, request, restorer, userData,
-			source, logger)
 	}
+	logger.Debugf(0, "restoring VM on %s\n", hypervisor)
+	return restoreVmOnHypervisor(hypervisor, request, restorer, userData,
+		source, logger)
 }
 
 func restoreVmOnHypervisor(hypervisor string, request proto.CreateVmRequest,
