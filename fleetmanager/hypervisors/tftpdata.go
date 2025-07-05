@@ -18,24 +18,38 @@ func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 		if err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusNotFound)
+			m.logger.Debugf(0,
+				"/tftpdata handler: failed to find Hypervisor for hostname=%s (remote address=%s\n",
+				hostname, req.RemoteAddr)
 			return nil
 		}
 		return h
 	}
-	ipAddr := req.FormValue("ip")
-	if ipAddr == "" {
-		var err error
-		ipAddr, _, err = net.SplitHostPort(req.RemoteAddr)
+	if ipAddr := req.FormValue("ip"); ipAddr != "" {
+		h, err := m.getLockedHypervisorByIP(ipAddr)
 		if err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
+			m.logger.Debugf(0,
+				"/tftpdata handler: failed to find Hypervisor for IP=%s (remote address=%s\n",
+				ipAddr, req.RemoteAddr)
 			return nil
 		}
+		return h
+	}
+	ipAddr, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
 	}
 	h, err := m.getLockedHypervisorByIP(ipAddr)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
+		m.logger.Debugf(0,
+			"/tftpdata handler: failed to find Hypervisor for IP=%s\n",
+			ipAddr)
 		return nil
 	}
 	return h
