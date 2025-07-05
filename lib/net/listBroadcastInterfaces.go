@@ -36,13 +36,17 @@ func listBroadcastInterfaces(interfaceType uint, logger log.DebugLogger) (
 						addrStrings = append(addrStrings, addrString)
 					}
 				}
+				var hwSuffix string
+				if hwAddr := iface.HardwareAddr.String(); hwAddr != "" {
+					hwSuffix = " (" + hwAddr + ")"
+				}
 				if len(addrStrings) < 1 {
-					logger.Debugf(1, "found broadcast interface: %s\n",
-						iface.Name)
+					logger.Debugf(1, "found broadcast interface: %s%s\n",
+						iface.Name, hwSuffix)
 				} else {
 					logger.Debugf(1,
-						"found broadcast interface: %s, addrs: %s\n",
-						iface.Name, strings.Join(addrStrings, " "))
+						"found broadcast interface: %s%s, IPs: %s\n",
+						iface.Name, hwSuffix, strings.Join(addrStrings, " "))
 				}
 				interfaceList = append(interfaceList, iface)
 				interfaceMap[iface.Name] = iface
