@@ -247,7 +247,7 @@ func getConfiguration(interfaces map[string]net.Interface,
 	err = json.ReadFromFile(filepath.Join(*tftpDirectory, "config.json"),
 		&machineInfo)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("error reading config.json: %s", err)
 	}
 	return &machineInfo, activeInterface, nil
 }
@@ -343,16 +343,19 @@ func loadUrls(baseUrl string, logger log.DebugLogger) error {
 	logger.Printf("configurationBaseUrl from command-line: %s\n", baseUrl)
 	configResp, err := http.DefaultClient.Get(baseUrl + "/config.json")
 	if err != nil {
-		return err
+		return fmt.Errorf("error getting config.json: %s", err)
 	}
 	defer configResp.Body.Close()
+	if configResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error getting config.json: %s", configResp.Status)
+	}
 	if data, err := io.ReadAll(configResp.Body); err != nil {
-		return err
+		return fmt.Errorf("error reading config.json: %s", err)
 	} else {
 		err := os.WriteFile(filepath.Join(*tftpDirectory, "config.json"), data,
 			fsutil.PublicFilePerms)
 		if err != nil {
-			return err
+			return fmt.Errorf("error writing config.json: %s", err)
 		}
 	}
 	imagenameResp, err := http.DefaultClient.Get(baseUrl + "/imagename")
@@ -360,6 +363,9 @@ func loadUrls(baseUrl string, logger log.DebugLogger) error {
 		return nil
 	}
 	defer configResp.Body.Close()
+	if imagenameResp.StatusCode != http.StatusOK {
+		return nil
+	}
 	if data, err := io.ReadAll(imagenameResp.Body); err != nil {
 		return nil
 	} else {
@@ -371,8 +377,10 @@ func loadUrls(baseUrl string, logger log.DebugLogger) error {
 
 func processDhcpPacket(packet dhcp4.Packet) error {
 	options := packet.ParseOptions()
+	ipAddr := packet.YIAddr()
 	if len(options[dhcp4.OptionRouter]) < 4 {
-		return errors.New("ignoring response with no valid router address")
+		return fmt.Errorf("ignoring response: %s with no valid router address",
+			ipAddr)
 	}
 	return nil
 }
@@ -444,6 +452,8 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 		}
 	}
 	if !*dryRun {
+		logger.Printf("Writing /etc/resolv.conf with nameservers: %v\n",
+			subnet.DomainNameServers)
 		if err := configurator.WriteResolvConf("", subnet); err != nil {
 			return err
 		}
