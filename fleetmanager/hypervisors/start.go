@@ -26,6 +26,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		storer:           startOptions.Storer,
 		allocatingIPs:    make(map[string]struct{}),
 		hypervisors:      make(map[string]*hypervisorType),
+		hypervisorsByHW:  make(map[string]*hypervisorType),
 		hypervisorsByIP:  make(map[string]*hypervisorType),
 		migratingIPs:     make(map[string]struct{}),
 		subnets:          make(map[string]*subnetType),

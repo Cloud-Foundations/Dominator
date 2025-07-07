@@ -316,6 +316,9 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 				vms: make(map[string]*vmInfoType),
 			}
 			m.hypervisors[machine.Hostname] = hypervisor
+			if hostMac := machine.HostMacAddress.String(); hostMac != "" {
+				m.hypervisorsByHW[hostMac] = hypervisor
+			}
 			m.hypervisorsByIP[machine.HostIpAddress.String()] = hypervisor
 			hypersToChange = append(hypersToChange, hypervisor)
 			go m.manageHypervisorLoop(hypervisor)
@@ -326,6 +329,7 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 		hypervisor := m.hypervisors[hypervisorName]
 		deleteList = append(deleteList, hypervisor)
 		delete(m.hypervisors, hypervisorName)
+		delete(m.hypervisorsByHW, hypervisor.HostMacAddress.String())
 		delete(m.hypervisorsByIP, hypervisor.HostIpAddress.String())
 		hypersToDelete = append(hypersToDelete, hypervisor)
 		for vmIP := range hypervisor.migratingVms {
