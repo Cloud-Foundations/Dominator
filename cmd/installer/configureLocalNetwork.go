@@ -236,7 +236,8 @@ func getConfiguration(interfaces map[string]net.Interface,
 		return &machineInfo, activeInterface, nil
 	}
 	if *configurationBaseUrl != "" {
-		if err := loadUrls(*configurationBaseUrl, logger); err != nil {
+		err := loadUrls(*configurationBaseUrl, interfaces, logger)
+		if err != nil {
 			return nil, "", err
 		}
 	} else if tftpServer == "" {
@@ -339,39 +340,49 @@ func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
 	return injectRandomSeed(client, logger)
 }
 
-func loadUrls(baseUrl string, logger log.DebugLogger) error {
-	logger.Printf("configurationBaseUrl from command-line: %s\n", baseUrl)
-	configResp, err := http.DefaultClient.Get(baseUrl + "/config.json")
-	if err != nil {
-		return fmt.Errorf("error getting config.json: %s", err)
-	}
-	defer configResp.Body.Close()
-	if configResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("error getting config.json: %s", configResp.Status)
-	}
-	if data, err := io.ReadAll(configResp.Body); err != nil {
-		return fmt.Errorf("error reading config.json: %s", err)
-	} else {
-		err := os.WriteFile(filepath.Join(*tftpDirectory, "config.json"), data,
-			fsutil.PublicFilePerms)
-		if err != nil {
-			return fmt.Errorf("error writing config.json: %s", err)
+func loadUrl(baseUrl, filename string,
+	interfaces map[string]net.Interface) error {
+	fullUrl := &strings.Builder{}
+	fullUrl.WriteString(baseUrl)
+	fullUrl.WriteRune('/')
+	fullUrl.WriteString(filename)
+	partialUrl := fullUrl.String()
+	separator := '?'
+	for _, iface := range interfaces {
+		fullUrl.WriteRune(separator)
+		fullUrl.WriteString("mac=")
+		fullUrl.WriteString(iface.HardwareAddr.String())
+		if separator == '?' {
+			separator = '&'
 		}
 	}
-	imagenameResp, err := http.DefaultClient.Get(baseUrl + "/imagename")
+	resp, err := http.DefaultClient.Get(fullUrl.String())
 	if err != nil {
-		return nil
+		return fmt.Errorf("error getting %s: %s", partialUrl, err)
 	}
-	defer configResp.Body.Close()
-	if imagenameResp.StatusCode != http.StatusOK {
-		return nil
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error getting %s: %s", partialUrl, resp.Status)
 	}
-	if data, err := io.ReadAll(imagenameResp.Body); err != nil {
-		return nil
+	if data, err := io.ReadAll(resp.Body); err != nil {
+		return fmt.Errorf("error reading %s: %s", filename, err)
 	} else {
-		os.WriteFile(filepath.Join(*tftpDirectory, "imagename"), data,
+		err := os.WriteFile(filepath.Join(*tftpDirectory, filename), data,
 			fsutil.PublicFilePerms)
+		if err != nil {
+			return fmt.Errorf("error writing %s: %s", filename, err)
+		}
 	}
+	return nil
+}
+
+func loadUrls(baseUrl string, interfaces map[string]net.Interface,
+	logger log.DebugLogger) error {
+	logger.Printf("configurationBaseUrl from command-line: %s\n", baseUrl)
+	if err := loadUrl(baseUrl, "config.json", interfaces); err != nil {
+		return err
+	}
+	loadUrl(baseUrl, "imagename", interfaces)
 	return nil
 }
 
