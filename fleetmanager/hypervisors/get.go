@@ -54,6 +54,18 @@ func (m *Manager) getLockedHypervisorByIP(ipAddr string) (
 	}
 }
 
+func (m *Manager) getLockedHypervisorBySN(serialNumber string) (
+	*hypervisorType, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	if hypervisor := m.hypervisorsBySN[serialNumber]; hypervisor == nil {
+		return nil, errors.New("Hypervisor not found")
+	} else {
+		hypervisor.mutex.RLock()
+		return hypervisor, nil
+	}
+}
+
 func (m *Manager) getLockedHypervisor(name string,
 	writeLock bool) (*hypervisorType, error) {
 	m.mutex.RLock()

@@ -75,6 +75,7 @@ type Manager struct {
 	hypervisors      map[string]*hypervisorType // Key: hypervisor machine name.
 	hypervisorsByHW  map[string]*hypervisorType // Key: hypervisor HW addr.
 	hypervisorsByIP  map[string]*hypervisorType // Key: hypervisor IP.
+	hypervisorsBySN  map[string]*hypervisorType // Key: serial number, nil: dup
 	locations        map[string]*locationType   // Key: location.
 	migratingIPs     map[string]struct{}        // Key: VM IP address.
 	notifiers        map[<-chan fm_proto.Update]*locationType

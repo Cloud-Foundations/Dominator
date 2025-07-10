@@ -6,10 +6,19 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+func getFormSerialNumber(req *http.Request) string {
+	serialNumber := req.FormValue("serial_number")
+	if serialNumber == "" {
+		return ""
+	}
+	return firmware.ExtractSerialNumber(serialNumber)
+}
 
 func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 	req *http.Request) *hypervisorType {
@@ -59,6 +68,14 @@ func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 			"/tftpdata handler(%s): got Hypervisor by IP (host: %s)\n",
 			req.RemoteAddr, h.Hostname)
 		return h
+	}
+	if serialNumber := getFormSerialNumber(req); serialNumber != "" {
+		if h, err := m.getLockedHypervisorBySN(serialNumber); err == nil {
+			m.logger.Debugf(0,
+				"/tftpdata handler(%s): got Hypervisor for SN=%s (host: %s)\n",
+				req.RemoteAddr, serialNumber, h.Hostname)
+			return h
+		}
 	}
 	for _, macAddr := range req.Form["mac"] {
 		if h, err := m.getLockedHypervisorByHW(macAddr); err == nil {

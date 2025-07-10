@@ -28,6 +28,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		hypervisors:      make(map[string]*hypervisorType),
 		hypervisorsByHW:  make(map[string]*hypervisorType),
 		hypervisorsByIP:  make(map[string]*hypervisorType),
+		hypervisorsBySN:  make(map[string]*hypervisorType),
 		migratingIPs:     make(map[string]struct{}),
 		subnets:          make(map[string]*subnetType),
 		vms:              make(map[string]*vmInfoType),

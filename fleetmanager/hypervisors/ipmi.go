@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
@@ -18,20 +19,6 @@ var (
 	myIP    net.IP
 	wolConn *net.UDPConn
 )
-
-func extractSerialNumber(input string) string {
-	serial := strings.TrimSpace(input)
-	// Ignore some common bogus serial numbers.
-	switch serial {
-	case "0123456789":
-		serial = ""
-	case "System Serial Number":
-		serial = ""
-	case "To be filled by O.E.M.":
-		serial = ""
-	}
-	return serial
-}
 
 func (m *Manager) ipmiGetSlot() {
 	m.ipmiLimiter <- struct{}{}
@@ -115,6 +102,7 @@ func (m *Manager) probeSerialNumber(h *hypervisorType) {
 		}
 		h.serialNumber = serialNumber
 		h.mutex.Unlock()
+		m.updateSerialNumberMap(h, serialNumber)
 		err := m.storer.WriteMachineSerialNumber(h.Machine.HostIpAddress,
 			serialNumber)
 		if err != nil {
@@ -181,9 +169,9 @@ func (m *Manager) readSerialNumber(ipmiHostname string) string {
 		}
 		switch strings.TrimSpace(splitLine[0]) {
 		case "Board Serial":
-			boardSerial = extractSerialNumber(splitLine[1])
+			boardSerial = firmware.ExtractSerialNumber(splitLine[1])
 		case "Product Serial":
-			productSerial = extractSerialNumber(splitLine[1])
+			productSerial = firmware.ExtractSerialNumber(splitLine[1])
 		}
 	}
 	if productSerial != "" {
