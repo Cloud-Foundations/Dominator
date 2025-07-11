@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -340,7 +341,7 @@ func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
 	return injectRandomSeed(client, logger)
 }
 
-func loadUrl(baseUrl, filename string,
+func loadUrl(baseUrl, filename, serialNumber string,
 	interfaces map[string]net.Interface) error {
 	fullUrl := &strings.Builder{}
 	fullUrl.WriteString(baseUrl)
@@ -355,6 +356,12 @@ func loadUrl(baseUrl, filename string,
 		if separator == '?' {
 			separator = '&'
 		}
+	}
+	if serialNumber != "" {
+		fullUrl.WriteRune(separator)
+		fullUrl.WriteString("serial_number=")
+		fullUrl.WriteString(serialNumber)
+		separator = '&'
 	}
 	resp, err := http.DefaultClient.Get(fullUrl.String())
 	if err != nil {
@@ -379,10 +386,16 @@ func loadUrl(baseUrl, filename string,
 func loadUrls(baseUrl string, interfaces map[string]net.Interface,
 	logger log.DebugLogger) error {
 	logger.Printf("configurationBaseUrl from command-line: %s\n", baseUrl)
-	if err := loadUrl(baseUrl, "config.json", interfaces); err != nil {
+	serialN := firmware.ReadSystemSerial()
+	if serialN == "" {
+		logger.Println("no valid system serial number found")
+	} else {
+		logger.Printf("system serial number: \"%s\"\n", serialN)
+	}
+	if err := loadUrl(baseUrl, "config.json", serialN, interfaces); err != nil {
 		return err
 	}
-	loadUrl(baseUrl, "imagename", interfaces)
+	loadUrl(baseUrl, "imagename", serialN, interfaces)
 	return nil
 }
 
