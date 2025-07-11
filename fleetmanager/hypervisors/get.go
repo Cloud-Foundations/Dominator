@@ -30,11 +30,35 @@ func (h *hypervisorType) getSerialNumber() string {
 	return h.serialNumber
 }
 
+func (m *Manager) getLockedHypervisorByHW(macAddr string) (
+	*hypervisorType, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	if hypervisor, ok := m.hypervisorsByHW[macAddr]; !ok {
+		return nil, errors.New("Hypervisor not found")
+	} else {
+		hypervisor.mutex.RLock()
+		return hypervisor, nil
+	}
+}
+
 func (m *Manager) getLockedHypervisorByIP(ipAddr string) (
 	*hypervisorType, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	if hypervisor, ok := m.hypervisorsByIP[ipAddr]; !ok {
+		return nil, errors.New("Hypervisor not found")
+	} else {
+		hypervisor.mutex.RLock()
+		return hypervisor, nil
+	}
+}
+
+func (m *Manager) getLockedHypervisorBySN(serialNumber string) (
+	*hypervisorType, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	if hypervisor := m.hypervisorsBySN[serialNumber]; hypervisor == nil {
 		return nil, errors.New("Hypervisor not found")
 	} else {
 		hypervisor.mutex.RLock()

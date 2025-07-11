@@ -6,10 +6,19 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+func getFormSerialNumber(req *http.Request) string {
+	serialNumber := req.FormValue("serial_number")
+	if serialNumber == "" {
+		return ""
+	}
+	return firmware.ExtractSerialNumber(serialNumber)
+}
 
 func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 	req *http.Request) *hypervisorType {
@@ -18,27 +27,69 @@ func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 		if err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusNotFound)
+			m.logger.Debugf(0,
+				"/tftpdata handler(%s): failed to find Hypervisor for hostname=%s\n",
+				req.RemoteAddr, hostname)
 			return nil
 		}
+		m.logger.Debugf(0,
+			"/tftpdata handler(%s): got Hypervisor for hostname=%s\n",
+			req.RemoteAddr, hostname)
 		return h
 	}
-	ipAddr := req.FormValue("ip")
-	if ipAddr == "" {
-		var err error
-		ipAddr, _, err = net.SplitHostPort(req.RemoteAddr)
+	if ipAddr := req.FormValue("ip"); ipAddr != "" {
+		h, err := m.getLockedHypervisorByIP(ipAddr)
 		if err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
+			m.logger.Debugf(0,
+				"/tftpdata handler(%s): failed to find Hypervisor for IP=%s\n",
+				req.RemoteAddr, ipAddr)
 			return nil
 		}
+		m.logger.Debugf(0,
+			"/tftpdata handler(%s): got Hypervisor for IP=%s (host: %s)\n",
+			req.RemoteAddr, ipAddr, h.Hostname)
+		return h
 	}
-	h, err := m.getLockedHypervisorByIP(ipAddr)
+	ipAddr, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return nil
 	}
-	return h
+	if err := req.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return nil
+	}
+	if h, err := m.getLockedHypervisorByIP(ipAddr); err == nil {
+		m.logger.Debugf(0,
+			"/tftpdata handler(%s): got Hypervisor by IP (host: %s)\n",
+			req.RemoteAddr, h.Hostname)
+		return h
+	}
+	if serialNumber := getFormSerialNumber(req); serialNumber != "" {
+		if h, err := m.getLockedHypervisorBySN(serialNumber); err == nil {
+			m.logger.Debugf(0,
+				"/tftpdata handler(%s): got Hypervisor for SN=%s (host: %s)\n",
+				req.RemoteAddr, serialNumber, h.Hostname)
+			return h
+		}
+	}
+	for _, macAddr := range req.Form["mac"] {
+		if h, err := m.getLockedHypervisorByHW(macAddr); err == nil {
+			m.logger.Debugf(0,
+				"/tftpdata handler(%s): got Hypervisor for MAC=%s (host: %s)\n",
+				req.RemoteAddr, macAddr, h.Hostname)
+			return h
+		}
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	m.logger.Debugf(0, "/tftpdata handler(%s): failed to find Hypervisor\n",
+		req.RemoteAddr)
+	return nil
 }
 
 func (m *Manager) tftpdataConfigHandler(w http.ResponseWriter,

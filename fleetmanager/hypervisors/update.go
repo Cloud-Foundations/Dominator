@@ -11,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
@@ -316,6 +317,9 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 				vms: make(map[string]*vmInfoType),
 			}
 			m.hypervisors[machine.Hostname] = hypervisor
+			if hostMac := machine.HostMacAddress.String(); hostMac != "" {
+				m.hypervisorsByHW[hostMac] = hypervisor
+			}
 			m.hypervisorsByIP[machine.HostIpAddress.String()] = hypervisor
 			hypersToChange = append(hypersToChange, hypervisor)
 			go m.manageHypervisorLoop(hypervisor)
@@ -326,7 +330,12 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 		hypervisor := m.hypervisors[hypervisorName]
 		deleteList = append(deleteList, hypervisor)
 		delete(m.hypervisors, hypervisorName)
+		delete(m.hypervisorsByHW, hypervisor.HostMacAddress.String())
 		delete(m.hypervisorsByIP, hypervisor.HostIpAddress.String())
+		if hypervisor.serialNumber != "" &&
+			m.hypervisorsBySN[hypervisor.serialNumber] == hypervisor {
+			delete(m.hypervisorsBySN, hypervisor.serialNumber)
+		}
 		hypersToDelete = append(hypersToDelete, hypervisor)
 		for vmIP := range hypervisor.migratingVms {
 			delete(m.vms, vmIP)
@@ -631,10 +640,12 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	oldHealthStatus := h.healthStatus
 	h.healthStatus = update.HealthStatus
 	oldSerialNumber := h.serialNumber
+	update.SerialNumber = firmware.ExtractSerialNumber(update.SerialNumber)
 	if update.HaveSerialNumber && update.SerialNumber != "" {
 		h.serialNumber = update.SerialNumber
 	}
 	h.mutex.Unlock()
+	m.updateSerialNumberMap(h, update.SerialNumber)
 	if !firstUpdate && update.HealthStatus != oldHealthStatus {
 		h.logger.Printf("health status changed from: \"%s\" to: \"%s\"\n",
 			oldHealthStatus, update.HealthStatus)
@@ -878,6 +889,34 @@ func (m *Manager) sendUpdate(hyperLocation string, update *fm_proto.Update) {
 				delete(m.notifiers, rChannel)
 				close(sChannel)
 			}
+		}
+	}
+}
+
+// updateSerialNumberMap will update the serial number map. The Manager lock
+// will be grabbed and released.
+func (m *Manager) updateSerialNumberMap(h *hypervisorType,
+	serialNumber string) {
+	if serialNumber == "" {
+		return
+	}
+	m.mutex.Lock()
+	oldHypervisor, ok := m.hypervisorsBySN[serialNumber]
+	if !ok {
+		m.hypervisorsBySN[serialNumber] = h
+		oldHypervisor = h
+	} else if h != oldHypervisor {
+		m.hypervisorsBySN[serialNumber] = nil // Mark duplicate.
+	}
+	m.mutex.Unlock()
+	if h != oldHypervisor {
+		if oldHypervisor == nil {
+			m.logger.Printf("duplicate serial number: %s found for: %s\n",
+				serialNumber, h.Hostname)
+		} else {
+			m.logger.Printf(
+				"duplicate serial number: %s found for: %s and %s\n",
+				serialNumber, h.Hostname, oldHypervisor.Hostname)
 		}
 	}
 }

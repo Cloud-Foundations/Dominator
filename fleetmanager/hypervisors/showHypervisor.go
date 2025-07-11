@@ -109,6 +109,9 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		fmt.Fprintf(writer, "<a href=\"https://%s/\">IPMI</a><br>\n",
 			h.IPMI.Hostname)
 	}
+	if h.serialNumber != "" {
+		fmt.Fprintf(writer, "Serial Number: %s<br>\n", h.serialNumber)
+	}
 	fmt.Fprintf(writer,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
 		numVMs, hostname, constants.HypervisorPortNumber)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
@@ -24,9 +25,6 @@ import (
 )
 
 const (
-	boardSerialFile   = "/sys/class/dmi/id/board_serial"
-	productSerialFile = "/sys/class/dmi/id/product_serial"
-
 	uuidLength = 16
 )
 
@@ -78,7 +76,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		memTotalInMiB: memInfo.Total >> 20,
 		notifiers:     make(map[<-chan proto.Update]chan<- proto.Update),
 		numCPUs:       uint(runtime.NumCPU()),
-		serialNumber:  readSystemSerial(),
+		serialNumber:  firmware.ReadSystemSerial(),
 		vms:           make(map[string]*vmInfoType),
 		uuid:          uuid,
 	}
@@ -246,41 +244,6 @@ func randString(length uint) (string, error) {
 	} else {
 		return fmt.Sprintf("%x", buffer), nil
 	}
-}
-
-func readSerialFile(filename string) string {
-	if file, err := os.Open(filename); err != nil {
-		return ""
-	} else {
-		defer file.Close()
-		buffer := make([]byte, 256)
-		if nRead, err := file.Read(buffer); err != nil {
-			return ""
-		} else if nRead < 1 {
-			return ""
-		} else {
-			serial := strings.TrimSpace(string(buffer[:nRead]))
-			// Ignore some common bogus serial numbers.
-			switch serial {
-			case "0123456789":
-				serial = ""
-			case "System Serial Number":
-				serial = ""
-			case "To be filled by O.E.M.":
-				serial = ""
-			}
-			return serial
-		}
-	}
-}
-
-// readSystemSerial will read the product serial number and if not valid/found
-// will fall back to reading the board serial number.
-func readSystemSerial() string {
-	if serial := readSerialFile(productSerialFile); serial != "" {
-		return serial
-	}
-	return readSerialFile(boardSerialFile)
 }
 
 func (m *Manager) loopCheckHealthStatus() {
