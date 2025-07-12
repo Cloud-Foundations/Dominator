@@ -56,8 +56,14 @@ func hashFile(filename string) (hash.Hash, []byte, error) {
 // be private keys. The saved copy will be in compressed tar format in
 // /var/log/installer/old-etc.tar.gz in the new OS file-system.
 func saveOldEtc(logger log.DebugLogger) error {
-	startTime := time.Now()
 	oldEtcPath := filepath.Join(*mountPoint, "etc")
+	startTime := time.Now()
+	if _, err := os.Stat(oldEtcPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("error stating: %s: %s", oldEtcPath, err)
+	}
 	if err := run("cp", "", logger, "-a", oldEtcPath, "/tmp/etc"); err != nil {
 		return err
 	}
