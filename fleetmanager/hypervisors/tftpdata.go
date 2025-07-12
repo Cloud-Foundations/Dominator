@@ -22,6 +22,11 @@ func getFormSerialNumber(req *http.Request) string {
 
 func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 	req *http.Request) *hypervisorType {
+	if err := req.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return nil
+	}
 	if hostname := req.FormValue("hostname"); hostname != "" {
 		h, err := m.getLockedHypervisor(hostname, false)
 		if err != nil {
@@ -52,23 +57,6 @@ func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 			req.RemoteAddr, ipAddr, h.Hostname)
 		return h
 	}
-	ipAddr, _, err := net.SplitHostPort(req.RemoteAddr)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return nil
-	}
-	if err := req.ParseForm(); err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return nil
-	}
-	if h, err := m.getLockedHypervisorByIP(ipAddr); err == nil {
-		m.logger.Debugf(0,
-			"/tftpdata handler(%s): got Hypervisor by IP (host: %s)\n",
-			req.RemoteAddr, h.Hostname)
-		return h
-	}
 	if serialNumber := getFormSerialNumber(req); serialNumber != "" {
 		if h, err := m.getLockedHypervisorBySN(serialNumber); err == nil {
 			m.logger.Debugf(0,
@@ -76,6 +64,18 @@ func (m *Manager) getHypervisorForRequest(w http.ResponseWriter,
 				req.RemoteAddr, serialNumber, h.Hostname)
 			return h
 		}
+	}
+	ipAddr, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+	if h, err := m.getLockedHypervisorByIP(ipAddr); err == nil {
+		m.logger.Debugf(0,
+			"/tftpdata handler(%s): got Hypervisor by IP (host: %s)\n",
+			req.RemoteAddr, h.Hostname)
+		return h
 	}
 	for _, macAddr := range req.Form["mac"] {
 		if h, err := m.getLockedHypervisorByHW(macAddr); err == nil {
