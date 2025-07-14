@@ -8,11 +8,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	installer_proto "github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 type Directory struct {
 	Name             string
 	Directories      []*Directory        `json:",omitempty"`
+	InstallConfig    *InstallConfig      `json:",omitempty"`
 	Machines         []*fm_proto.Machine `json:",omitempty"`
 	Subnets          []*Subnet           `json:",omitempty"`
 	Tags             tags.Tags           `json:",omitempty"`
@@ -30,6 +32,10 @@ func (directory *Directory) GetPath() string {
 
 func (directory *Directory) Walk(fn func(*Directory) error) error {
 	return directory.walk(fn)
+}
+
+type InstallConfig struct {
+	StorageLayout *installer_proto.StorageLayout
 }
 
 type ownersType struct {
@@ -120,6 +126,11 @@ func (t *Topology) CheckIfMachineHasSubnet(name, subnetId string) (
 
 func (t *Topology) FindDirectory(dirname string) (*Directory, error) {
 	return t.findDirectory(dirname)
+}
+
+func (t *Topology) GetInstallConfigForMachine(name string) (
+	*InstallConfig, error) {
+	return t.getInstallConfigForMachine(name)
 }
 
 func (t *Topology) GetLocationOfMachine(name string) (string, error) {

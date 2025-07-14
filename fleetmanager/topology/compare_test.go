@@ -4,6 +4,8 @@ import (
 	"net"
 	"reflect"
 	"testing"
+
+	installer_proto "github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 var (
@@ -36,6 +38,9 @@ func testNonzero(t *testing.T, valueValue reflect.Value, equalTest func(),
 			notEqualTest()
 			fieldValue.Set(reflect.MakeMap(fieldValue.Type()))
 			equalTest()
+		case reflect.Ptr:
+			testNonzero(t, reflect.Indirect(fieldValue), equalTest,
+				notEqualTest)
 		case reflect.Slice:
 			for index := 0; index < fieldValue.Len(); index++ {
 				testNonzero(t, fieldValue.Index(index), equalTest, notEqualTest)
@@ -61,8 +66,16 @@ func testNonzero(t *testing.T, valueValue reflect.Value, equalTest func(),
 }
 
 func TestCompareAllDirectoryFields(t *testing.T) {
-	left := &Directory{}
-	right := &Directory{}
+	left := &Directory{
+		InstallConfig: &InstallConfig{
+			StorageLayout: &installer_proto.StorageLayout{},
+		},
+	}
+	right := &Directory{
+		InstallConfig: &InstallConfig{
+			StorageLayout: &installer_proto.StorageLayout{},
+		},
+	}
 	if got := left.equal(right); got != true {
 		t.Errorf("equal(%v, %v) = %v", left, right, got)
 	}

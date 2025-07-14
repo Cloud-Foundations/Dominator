@@ -4,6 +4,15 @@ import (
 	"fmt"
 )
 
+func (t *Topology) getInstallConfigForMachine(name string) (
+	*InstallConfig, error) {
+	if directory, ok := t.machineParents[name]; !ok {
+		return nil, fmt.Errorf("unknown machine: %s", name)
+	} else {
+		return directory.InstallConfig, nil
+	}
+}
+
 func (t *Topology) getLocationOfMachine(name string) (string, error) {
 	if directory, ok := t.machineParents[name]; !ok {
 		return "", fmt.Errorf("unknown machine: %s", name)
