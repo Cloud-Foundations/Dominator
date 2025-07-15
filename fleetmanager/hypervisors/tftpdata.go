@@ -138,3 +138,28 @@ func (m *Manager) tftpdataImageNameHandler(w http.ResponseWriter,
 	}
 	fmt.Fprintln(w, imageName)
 }
+
+func (m *Manager) tftpdataStorageLayoutHandler(w http.ResponseWriter,
+	req *http.Request) {
+	topo, err := m.getTopology()
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h := m.getHypervisorForRequest(w, req)
+	if h == nil {
+		return
+	}
+	defer h.mutex.RUnlock()
+	installConfig, _ := topo.GetInstallConfigForMachine(h.Hostname)
+	if installConfig == nil || installConfig.StorageLayout == nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	writer := bufio.NewWriter(w)
+	defer writer.Flush()
+	w.Header().Set("Content-Type", "application/json")
+	json.WriteWithIndent(writer, "    ", installConfig.StorageLayout)
+}
