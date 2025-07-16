@@ -44,6 +44,8 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if *manageHypervisors {
 		html.HandleFunc("/tftpdata/imagename", manager.tftpdataImageNameHandler)
 	}
+	html.HandleFunc("/tftpdata/storage-layout.json",
+		manager.tftpdataStorageLayoutHandler)
 	go manager.notifierLoop()
 	return manager, nil
 }

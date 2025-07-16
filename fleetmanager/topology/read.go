@@ -24,9 +24,10 @@ type commonStateType struct {
 }
 
 type inheritingState struct {
-	owners    *ownersType
-	subnetIds map[string]struct{}
-	tags      tags.Tags
+	installConfig *InstallConfig      // Replace semantics.
+	owners        *ownersType         // Merge semantics.
+	subnetIds     map[string]struct{} // Merge semantics.
+	tags          tags.Tags           // Merge semantics.
 }
 
 func checkMacAddressIsZero(macAddr proto.HardwareAddr) bool {
@@ -72,6 +73,17 @@ func load(params Params) (*Topology, error) {
 		return nil, err
 	}
 	return topology, nil
+}
+
+func loadInstallConfig(filename string) (*InstallConfig, error) {
+	var installConfig InstallConfig
+	if err := json.ReadFromFile(filename, &installConfig); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error reading: %s: %s", filename, err)
+	}
+	return &installConfig, nil
 }
 
 func loadMachines(filename string, logger log.DebugLogger) (
@@ -265,9 +277,10 @@ func newInheritingState() *inheritingState {
 
 func (iState *inheritingState) copy() *inheritingState {
 	return &inheritingState{
-		owners:    iState.owners.copy(),
-		subnetIds: cloneSet(iState.subnetIds),
-		tags:      iState.tags.Copy(),
+		installConfig: iState.installConfig,
+		owners:        iState.owners.copy(),
+		subnetIds:     cloneSet(iState.subnetIds),
+		tags:          iState.tags.Copy(),
 	}
 }
 
@@ -295,6 +308,9 @@ func (t *Topology) readDirectory(topDir, dirname string,
 	}
 	dirpath := filepath.Join(topDir, dirname)
 	t.logger.Debugf(1, "T.readDirectory(%s)\n", dirpath)
+	if err := directory.loadInstallConfig(dirpath, iState); err != nil {
+		return nil, err
+	}
 	if err := directory.loadOwners(dirpath, iState.owners); err != nil {
 		return nil, err
 	}
@@ -335,6 +351,20 @@ func (t *Topology) readDirectory(topDir, dirname string,
 		}
 	}
 	return directory, nil
+}
+
+func (directory *Directory) loadInstallConfig(dirname string,
+	iState *inheritingState) error {
+	installConfig, err := loadInstallConfig(filepath.Join(dirname,
+		"install-config.json"))
+	if err != nil {
+		return err
+	}
+	if installConfig != nil {
+		iState.installConfig = installConfig
+	}
+	directory.InstallConfig = iState.installConfig
+	return nil
 }
 
 func (directory *Directory) loadMachines(dirname string) error {

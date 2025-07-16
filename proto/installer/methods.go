@@ -52,3 +52,34 @@ func (fileSystemType FileSystemType) String() string {
 func (fileSystemType *FileSystemType) UnmarshalText(text []byte) error {
 	return fileSystemType.Set(string(text))
 }
+
+func (left *Partition) Equal(right *Partition) bool {
+	return *left == *right
+}
+
+func (left *StorageLayout) Equal(right *StorageLayout) bool {
+	if left == right {
+		return true
+	}
+	if left == nil || right == nil {
+		return false
+	}
+	if len(left.BootDriveLayout) != len(right.BootDriveLayout) {
+		return false
+	}
+	for index, leftPartition := range left.BootDriveLayout {
+		if !leftPartition.Equal(&right.BootDriveLayout[index]) {
+			return false
+		}
+	}
+	if left.ExtraMountPointsBasename != right.ExtraMountPointsBasename {
+		return false
+	}
+	if left.Encrypt != right.Encrypt {
+		return false
+	}
+	if left.UseKexec != right.UseKexec {
+		return false
+	}
+	return true
+}

@@ -13,30 +13,14 @@ func compareMaps(left, right map[string]string) bool {
 	return true
 }
 
-func (left *Topology) equal(right *Topology) bool {
-	if left == nil || right == nil {
-		return false
-	}
-	if len(left.machineParents) != len(right.machineParents) {
-		return false
-	}
-	if len(left.Variables) != len(right.Variables) {
-		return false
-	}
-	if !left.Root.equal(right.Root) {
-		return false
-	}
-	if !compareMaps(left.Variables, right.Variables) {
-		return false
-	}
-	return true
-}
-
 func (left *Directory) equal(right *Directory) bool {
 	if left.Name != right.Name {
 		return false
 	}
 	if len(left.Directories) != len(right.Directories) {
+		return false
+	}
+	if !left.InstallConfig.equal(right.InstallConfig) {
 		return false
 	}
 	if len(left.Machines) != len(right.Machines) {
@@ -66,6 +50,19 @@ func (left *Directory) equal(right *Directory) bool {
 	return true
 }
 
+func (left *InstallConfig) equal(right *InstallConfig) bool {
+	if left == right {
+		return true
+	}
+	if left == nil || right == nil {
+		return false
+	}
+	if !left.StorageLayout.Equal(right.StorageLayout) {
+		return false
+	}
+	return true
+}
+
 func (left *Subnet) equal(right *Subnet) bool {
 	if !left.Subnet.Equal(&right.Subnet) {
 		return false
@@ -77,4 +74,23 @@ func (left *Subnet) equal(right *Subnet) bool {
 		return false
 	}
 	return hypervisor.IpListsEqual(left.ReservedIPs, right.ReservedIPs)
+}
+
+func (left *Topology) equal(right *Topology) bool {
+	if left == nil || right == nil {
+		return false
+	}
+	if len(left.machineParents) != len(right.machineParents) {
+		return false
+	}
+	if len(left.Variables) != len(right.Variables) {
+		return false
+	}
+	if !left.Root.equal(right.Root) {
+		return false
+	}
+	if !compareMaps(left.Variables, right.Variables) {
+		return false
+	}
+	return true
 }
