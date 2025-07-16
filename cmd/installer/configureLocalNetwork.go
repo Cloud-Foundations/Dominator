@@ -396,6 +396,7 @@ func loadUrls(baseUrl string, interfaces map[string]net.Interface,
 		return err
 	}
 	loadUrl(baseUrl, "imagename", serialN, interfaces)
+	loadUrl(baseUrl, "storage-layout.json", serialN, interfaces)
 	return nil
 }
 

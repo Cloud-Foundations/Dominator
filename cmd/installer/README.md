@@ -153,7 +153,7 @@ command-line arguments will be provided:
 1. The name of the directory where to write the configuration files
 2. The name of the active (configured) network interface
 
-If the `-configurationBaseUrl` option is given the the configuration is read
+If the `-configurationBaseUrl` option is given then the configuration is read
 from the specified server (typically a
 *[fleet-manager](../fleet-manager/README.md)*) instead of fetching the
 configuration files from the TFTP server. If the
