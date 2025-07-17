@@ -346,6 +346,14 @@ This will create:
 All the file-systems except for `/` will be encrypted. The `kexec` reboot method
 will not be used.
 
+For each partition, the file-system label will be set to the value of
+`MountPoint` except for the following mount points:
+- `/`: label will be `rootfs`
+- `/boot`: label will be `bootfs`
+- EFI system (`/mnt/efi`): label will be `EFI`
+
+The label can be overridden by the `FileSystemLabel` field.
+
 ## Signal handling
 When run in daemon (installer) mode, the following signals are caught and the
 specified actions are taken:
