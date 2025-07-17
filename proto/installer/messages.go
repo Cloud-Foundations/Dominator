@@ -8,8 +8,10 @@ const (
 type FileSystemType uint
 
 type Partition struct {
+	FileSystemLabel  string         `json:",omitempty"`
 	FileSystemType   FileSystemType `json:",omitempty"`
 	MountPoint       string         `json:",omitempty"`
+	MinimumBytes     uint64         `json:",omitempty"`
 	MinimumFreeBytes uint64         `json:",omitempty"`
 }
 
