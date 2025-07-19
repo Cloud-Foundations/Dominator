@@ -66,6 +66,12 @@ type kexecRebooter struct {
 	logger log.DebugLogger
 }
 
+type partitionIndicesType struct {
+	boot  int
+	extra int
+	root  int
+}
+
 func init() {
 	gob.Register(&filesystem.RegularInode{})
 	gob.Register(&filesystem.SymlinkInode{})
@@ -104,7 +110,7 @@ func closeEncryptedVolumes(logger log.DebugLogger) error {
 }
 
 func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
-	layout installer_proto.StorageLayout, rootPartition, bootPartition int,
+	layout installer_proto.StorageLayout, partitionIndices partitionIndicesType,
 	img *image.Image, objGetter objectserver.ObjectsGetter,
 	bootInfo *util.BootInfoType, logger log.DebugLogger) error {
 	startTime := time.Now()
@@ -143,18 +149,23 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 		default:
 			partType = partition.FileSystemType.String()
 		}
-		args = append(args, "mkpart", "primary", partType,
-			strconv.FormatUint(offsetInUnits, 10)+unitSuffix,
-			strconv.FormatUint(offsetInUnits+sizeInUnits, 10)+unitSuffix)
-		offsetInUnits += sizeInUnits
+		args = append(args, "mkpart", "primary", partType)
+		if minimumSize > 0 {
+			args = append(args,
+				strconv.FormatUint(offsetInUnits, 10)+unitSuffix,
+				strconv.FormatUint(offsetInUnits+sizeInUnits, 10)+unitSuffix)
+			offsetInUnits += sizeInUnits
+		} else {
+			args = append(args,
+				strconv.FormatUint(offsetInUnits, 10)+unitSuffix, "100%")
+		}
 	}
-	args = append(args, "mkpart", "primary", "ext2",
-		strconv.FormatUint(offsetInUnits, 10)+unitSuffix, "100%")
 	if isEfi { // EFI System Partition is always the first partition.
 		args = append(args, "set", "1", "esp", "on")
 	} else {
 		args = append(args,
-			"set", strconv.FormatInt(int64(bootPartition), 10), "boot", "on")
+			"set", strconv.FormatInt(int64(partitionIndices.boot), 10), "boot",
+			"on")
 	}
 	if err := run("parted", *tmpRoot, logger, args...); err != nil {
 		return err
@@ -174,35 +185,37 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 		default:
 			encrypt = layout.Encrypt
 		}
+		var bytesPerInode uint
+		if partition.MinimumBytes < 1 && partition.MinimumFreeBytes < 1 {
+			bytesPerInode = 65536
+		}
 		err := concurrentState.GoRun(func() error {
 			return drive.makeFileSystem(cpuSharer, device,
 				partition.FileSystemLabel, partition.FileSystemType, encrypt,
-				&mkfsMutex, 0, logger)
+				&mkfsMutex, bytesPerInode, logger)
 		})
 		if err != nil {
 			return err
 		}
 	}
-	concurrentState.GoRun(func() error {
-		device := partitionName(drive.devpath, len(layout.BootDriveLayout)+1)
-		return drive.makeFileSystem(cpuSharer, device,
-			layout.ExtraMountPointsBasename+"0",
-			installer_proto.FileSystemTypeExt4, layout.Encrypt, &mkfsMutex,
-			65536, logger)
-	})
 	if err := concurrentState.Reap(); err != nil {
 		return err
 	}
 	// Mount all file-systems, except the /boot and data file-systems, so that
 	// the image can create directories in them. First do the root partition,
 	// which might not be first in the list.
-	err := mount(partitionName(drive.devpath, rootPartition), *mountPoint,
-		layout.BootDriveLayout[rootPartition-1].FileSystemType.String(), logger)
+	err := mount(partitionName(drive.devpath, partitionIndices.root),
+		*mountPoint,
+		layout.BootDriveLayout[partitionIndices.root-1].FileSystemType.String(),
+		logger)
 	if err != nil {
 		return err
 	}
 	for index, partition := range layout.BootDriveLayout {
-		if index+1 == rootPartition || index+1 == bootPartition {
+		switch index + 1 {
+		case partitionIndices.boot,
+			partitionIndices.extra,
+			partitionIndices.root:
 			continue
 		}
 		device := partitionName(drive.devpath, index+1)
@@ -214,11 +227,11 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 		}
 	}
 	var bootP int
-	if bootPartition != rootPartition {
-		bootP = bootPartition
+	if partitionIndices.boot != partitionIndices.root {
+		bootP = partitionIndices.boot
 	}
 	return installRoot(drive.devpath, layout, img.FileSystem, objGetter,
-		bootInfo, bootP, rootPartition, logger)
+		bootInfo, bootP, partitionIndices.root, logger)
 }
 
 func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
@@ -247,6 +260,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err != nil {
 		return nil, err
 	}
+	// Add an EFI partition if needed and not already defined.
 	isEfi := checkIsEfi()
 	if isEfi {
 		newPartitions := make([]installer_proto.Partition, 1,
@@ -270,14 +284,18 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		}
 		layout.BootDriveLayout = newPartitions
 	}
-	var bootPartition, rootPartition int
+	// Find boot and root partitions and extra partition.
+	var partitionIndices partitionIndicesType
+	extraPartitionMountPoint := layout.ExtraMountPointsBasename + "0"
 	for index := range layout.BootDriveLayout {
 		partition := &layout.BootDriveLayout[index]
 		switch partition.MountPoint {
-		case rootMountPoint:
-			rootPartition = index + 1
 		case bootMountPoint:
-			bootPartition = index + 1
+			partitionIndices.boot = index + 1
+		case extraPartitionMountPoint:
+			partitionIndices.extra = index + 1
+		case rootMountPoint:
+			partitionIndices.root = index + 1
 		}
 		if partition.FileSystemLabel == "" {
 			switch partition.MountPoint {
@@ -292,11 +310,34 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			}
 		}
 	}
-	if rootPartition < 1 {
+	if partitionIndices.root < 1 {
 		return nil, fmt.Errorf("no root partition specified in layout")
 	}
-	if bootPartition < 1 {
-		bootPartition = rootPartition
+	if partitionIndices.boot < 1 {
+		partitionIndices.boot = partitionIndices.root
+	}
+	if partitionIndices.extra < 1 {
+		logger.Printf("adding implied last partition: %s\n",
+			extraPartitionMountPoint)
+		layout.BootDriveLayout = append(layout.BootDriveLayout,
+			installer_proto.Partition{
+				FileSystemLabel: extraPartitionMountPoint,
+				MountPoint:      extraPartitionMountPoint,
+			})
+		partitionIndices.extra = len(layout.BootDriveLayout)
+	} else {
+		partition := layout.BootDriveLayout[len(layout.BootDriveLayout)-1]
+		if partition.MinimumBytes > 0 {
+			return nil, fmt.Errorf("last partition: %s has MinimumBytes=%s\n",
+				partition.MountPoint,
+				format.FormatBytes(partition.MinimumBytes))
+		}
+		if partition.MinimumFreeBytes > 0 {
+			return nil, fmt.Errorf(
+				"last partition: %s has MinimumFreeBytes=%s\n",
+				partition.MountPoint,
+				format.FormatBytes(partition.MinimumFreeBytes))
+		}
 	}
 	drives, err := listDrives(logger)
 	if err != nil {
@@ -306,7 +347,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err != nil {
 		return nil, err
 	}
-	rootDevice := partitionName(drives[0].devpath, rootPartition)
+	rootDevice := partitionName(drives[0].devpath, partitionIndices.root)
 	var randomKey []byte
 	if layout.Encrypt {
 		randomKey, err = getRandomKey(16, logger)
@@ -334,13 +375,15 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		return nil, err
 	}
 	imageSize := img.FileSystem.EstimateUsage(0)
-	if layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes <
+	if layout.BootDriveLayout[partitionIndices.root-1].MinimumFreeBytes <
 		imageSize {
-		layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes = imageSize
+		layout.BootDriveLayout[partitionIndices.root-1].MinimumFreeBytes =
+			imageSize
 	}
-	layout.BootDriveLayout[rootPartition-1].MinimumFreeBytes += imageSize
+	layout.BootDriveLayout[partitionIndices.root-1].MinimumFreeBytes +=
+		imageSize
 	bootInfo, err := util.GetBootInfo(img.FileSystem,
-		layout.BootDriveLayout[rootPartition-1].FileSystemLabel, "")
+		layout.BootDriveLayout[partitionIndices.root-1].FileSystemLabel, "")
 	if err != nil {
 		return nil, err
 	}
@@ -397,8 +440,8 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	concurrentState := concurrent.NewState(uint(len(drives)))
 	cpuSharer := cpusharer.NewFifoCpuSharer()
 	err = concurrentState.GoRun(func() error {
-		return configureBootDrive(cpuSharer, drives[0], layout, rootPartition,
-			bootPartition, img, objGetter, bootInfo, logger)
+		return configureBootDrive(cpuSharer, drives[0], layout,
+			partitionIndices, img, objGetter, bootInfo, logger)
 	})
 	if err != nil {
 		return nil, concurrentState.Reap()
@@ -416,14 +459,14 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 	if err := concurrentState.Reap(); err != nil {
 		return nil, err
 	}
-	// Make table entries for the boot device file-systems, except data FS.
+	// Make table entries for the boot device file-systems.
 	fsTab := &bytes.Buffer{}
 	cryptTab := &bytes.Buffer{}
 	// Write the root file-system entry first.
 	bootCheckCount := uint(1)
 	{
-		device := partitionName(drives[0].devpath, rootPartition)
-		partition := layout.BootDriveLayout[rootPartition-1]
+		device := partitionName(drives[0].devpath, partitionIndices.root)
+		partition := layout.BootDriveLayout[partitionIndices.root-1]
 		err = drives[0].writeDeviceEntries(device, partition, fsTab, cryptTab,
 			bootCheckCount)
 		if err != nil {
@@ -431,7 +474,7 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 		}
 	}
 	for index, partition := range layout.BootDriveLayout {
-		if index+1 == rootPartition {
+		if index+1 == partitionIndices.root {
 			continue
 		}
 		bootCheckCount++
@@ -442,24 +485,18 @@ func configureStorage(config fm_proto.GetMachineInfoResponse,
 			return nil, err
 		}
 	}
-	// Make table entries for data file-systems.
+	// Make table entries for data file-systems on secondary drives.
 	for index, drive := range drives {
-		checkCount := uint(2)
-		var device string
 		if index == 0 { // The boot device is partitioned.
-			checkCount = uint(len(layout.BootDriveLayout) + 1)
-			device = partitionName(drives[0].devpath,
-				len(layout.BootDriveLayout)+1)
-		} else { // Extra drives are used whole.
-			device = drive.devpath
+			continue
 		}
 		dataMountPoint := layout.ExtraMountPointsBasename + strconv.FormatInt(
 			int64(index), 10)
-		err = drive.writeDeviceEntries(device, installer_proto.Partition{
+		err = drive.writeDeviceEntries(drive.devpath, installer_proto.Partition{
 			FileSystemLabel: dataMountPoint,
 			MountPoint:      dataMountPoint,
 		},
-			fsTab, cryptTab, checkCount)
+			fsTab, cryptTab, 2)
 		if err != nil {
 			return nil, err
 		}
