@@ -9,6 +9,7 @@ import (
 
 const (
 	consoleTypeUnknown     = "UNKNOWN ConsoleType"
+	firmwareTypeUnknown    = "UNKNOWN FirmwareType"
 	machineTypeUnknown     = "UNKNOWN MachineType"
 	stateUnknown           = "UNKNOWN State"
 	volumeFormatUnknown    = "UNKNOWN VolumeFormat"
@@ -25,6 +26,13 @@ var (
 		ConsoleVNC:   "vnc",
 	}
 	textToConsoleType map[string]ConsoleType
+
+	firmwareTypeToText = map[FirmwareType]string{
+		FirmwareDefault: "default",
+		FirmwareBIOS:    "bios",
+		FirmwareUEFI:    "uefi",
+	}
+	textToFirmwareType map[string]FirmwareType
 
 	machineTypeToText = map[MachineType]string{
 		MachineTypeGenericPC: "pc",
@@ -85,6 +93,10 @@ func init() {
 	textToConsoleType = make(map[string]ConsoleType, len(consoleTypeToText))
 	for consoleType, text := range consoleTypeToText {
 		textToConsoleType[text] = consoleType
+	}
+	textToFirmwareType = make(map[string]FirmwareType, len(firmwareTypeToText))
+	for firmwareType, text := range firmwareTypeToText {
+		textToFirmwareType[text] = firmwareType
 	}
 	textToMachineType = make(map[string]MachineType, len(machineTypeToText))
 	for format, text := range machineTypeToText {
@@ -262,6 +274,49 @@ func (consoleType *ConsoleType) UnmarshalText(text []byte) error {
 	}
 }
 
+func (firmwareType *FirmwareType) CheckValid() error {
+	if _, ok := firmwareTypeToText[*firmwareType]; !ok {
+		return errors.New(firmwareTypeUnknown)
+	} else {
+		return nil
+	}
+}
+
+func (firmwareType FirmwareType) MarshalText() ([]byte, error) {
+	if text := firmwareType.String(); text == firmwareTypeUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (firmwareType *FirmwareType) Set(value string) error {
+	if val, ok := textToFirmwareType[value]; !ok {
+		return errors.New(firmwareTypeUnknown)
+	} else {
+		*firmwareType = val
+		return nil
+	}
+}
+
+func (firmwareType FirmwareType) String() string {
+	if str, ok := firmwareTypeToText[firmwareType]; !ok {
+		return firmwareTypeUnknown
+	} else {
+		return str
+	}
+}
+
+func (firmwareType *FirmwareType) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToFirmwareType[txt]; ok {
+		*firmwareType = val
+		return nil
+	} else {
+		return errors.New("unknown FirmwareType: " + txt)
+	}
+}
+
 func (machineType *MachineType) CheckValid() error {
 	if _, ok := machineTypeToText[*machineType]; !ok {
 		return errors.New(machineTypeUnknown)
@@ -414,6 +469,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 		return false
 	}
 	if left.ExtraKernelOptions != right.ExtraKernelOptions {
+		return false
+	}
+	if left.FirmwareType != right.FirmwareType {
 		return false
 	}
 	if left.Hostname != right.Hostname {
