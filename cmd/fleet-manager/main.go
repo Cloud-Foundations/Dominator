@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/httpd"
@@ -15,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
@@ -22,11 +22,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/proxy"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
-)
-
-const (
-	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
-		syscall.S_IROTH | syscall.S_IXOTH
 )
 
 var (
@@ -86,7 +81,7 @@ func main() {
 	if err := proxy.New(logger); err != nil {
 		logger.Fatalln(err)
 	}
-	if err := os.MkdirAll(*stateDir, dirPerms); err != nil {
+	if err := os.MkdirAll(*stateDir, fsutil.DirPerms); err != nil {
 		logger.Fatalf("Cannot create state directory: %s\n", err)
 	}
 	topologyChannel, err := topology.WatchWithParams(topology.WatchParams{
