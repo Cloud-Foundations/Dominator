@@ -73,6 +73,12 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		"-qmp", "unix:"+vm.monitorSockname+",server,nowait",
 		"-pidfile", pidfile,
 		"-daemonize")
+	switch vm.FirmwareType {
+	case proto.FirmwareUEFI:
+		cmd.Args = append(cmd.Args,
+			"-drive",
+			"if=pflash,format=raw,file=/usr/share/ovmf/OVMF.fd,readonly=on")
+	}
 	var interfaceDriver string
 	if !vm.DisableVirtIO {
 		interfaceDriver = ",if=virtio"

@@ -502,6 +502,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				DestroyProtection:  req.DestroyProtection,
 				DisableVirtIO:      req.DisableVirtIO,
 				ExtraKernelOptions: req.ExtraKernelOptions,
+				FirmwareType:       req.FirmwareType,
 				Hostname:           req.Hostname,
 				ImageName:          req.ImageName,
 				ImageURL:           req.ImageURL,
@@ -1349,8 +1350,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			RootLabel:          vm.rootLabel(false),
 			RoundupPower:       request.RoundupPower,
 		}
-		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs, writeRawOptions,
-			request.SkipBootloader)
+		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs,
+			request.FirmwareType, writeRawOptions, request.SkipBootloader)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1566,7 +1567,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			RoundupPower:     request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".debug", client, fs,
-			writeRawOptions, false)
+			vm.FirmwareType, writeRawOptions, false)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3209,7 +3210,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
-			writeRawOptions, request.SkipBootloader)
+			vm.FirmwareType, writeRawOptions, request.SkipBootloader)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3760,7 +3761,8 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	client *srpc.Client, fs *filesystem.FileSystem,
-	writeRawOptions util.WriteRawOptions, skipBootloader bool) error {
+	firmwareType proto.FirmwareType, writeRawOptions util.WriteRawOptions,
+	skipBootloader bool) error {
 	startTime := time.Now()
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
@@ -3784,9 +3786,15 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 		writeRawOptions.InstallBootloader = true
 	}
 	writeRawOptions.WriteFstab = true
+	tableType := mbr.TABLE_TYPE_MSDOS
+	switch firmwareType {
+	case proto.FirmwareUEFI:
+		tableType = mbr.TABLE_TYPE_GPT
+		return fmt.Errorf("EFI partitioning not yet supported")
+	}
 	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, fsutil.PrivateFilePerms,
-		mbr.TABLE_TYPE_MSDOS, writeRawOptions, m.Logger)
+		tableType, writeRawOptions, m.Logger)
 	if err != nil {
 		return err
 	}
