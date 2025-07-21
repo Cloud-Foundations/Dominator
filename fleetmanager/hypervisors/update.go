@@ -784,6 +784,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				h.logger.Debugf(0, "forgot migrating VM: %s\n", ipAddr)
 			}
 		} else {
+			protoVm.HypervisorHostname = h.Machine.Hostname
 			if protoVm.State == hyper_proto.StateMigrating {
 				if _, ok := h.vms[ipAddr]; ok {
 					vmsToDelete[ipAddr] = struct{}{}
