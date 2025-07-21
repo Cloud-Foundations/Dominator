@@ -225,6 +225,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		DestroyProtection:  *destroyProtection,
 		DisableVirtIO:      *disableVirtIO,
 		ExtraKernelOptions: *extraKernelOptions,
+		FirmwareType:       firmwareType,
 		Hostname:           *vmHostname,
 		MachineType:        machineType,
 		MemoryInMiB:        uint64(memory >> 20),
