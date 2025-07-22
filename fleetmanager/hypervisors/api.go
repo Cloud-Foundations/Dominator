@@ -118,10 +118,11 @@ type tagsStorer interface {
 }
 
 type vmInfoType struct {
-	ipAddr string
+	ipAddr 			string
 	hyper_proto.VmInfo
-	Location   string // Used by dashboards.
-	hypervisor *hypervisorType
+	Location   		string // Used by dashboards.
+	hypervisor 		*hypervisorType
+	HypervisorHostname	string
 }
 
 type vmStorer interface {
