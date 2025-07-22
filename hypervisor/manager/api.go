@@ -81,6 +81,7 @@ type Manager struct {
 type StartOptions struct {
 	BridgeMap            map[string]net.Interface // Key: interface name.
 	DhcpServer           DhcpServer
+	DisableFillZero      bool
 	IdentityProvider     string
 	ImageServerAddress   string
 	LockCheckInterval    time.Duration

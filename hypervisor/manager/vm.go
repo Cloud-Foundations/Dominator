@@ -38,6 +38,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/filelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/teelogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
@@ -77,6 +78,73 @@ var (
 		"QEMU command")
 )
 
+// updateLogger is a logger that sends progress messages back to vm-control
+type updateLogger struct {
+	baseLogger log.DebugLogger
+	conn       *srpc.Conn
+	sendUpdate func(*srpc.Conn, string) error
+}
+
+func (ul *updateLogger) Debug(level uint8, v ...interface{}) {
+	ul.baseLogger.Debug(level, v...)
+}
+
+func (ul *updateLogger) Debugf(level uint8, format string, v ...interface{}) {
+	ul.baseLogger.Debugf(level, format, v...)
+}
+
+func (ul *updateLogger) Debugln(level uint8, v ...interface{}) {
+	ul.baseLogger.Debugln(level, v...)
+}
+
+func (ul *updateLogger) Fatal(v ...interface{}) {
+	ul.baseLogger.Fatal(v...)
+}
+
+func (ul *updateLogger) Fatalf(format string, v ...interface{}) {
+	ul.baseLogger.Fatalf(format, v...)
+}
+
+func (ul *updateLogger) Fatalln(v ...interface{}) {
+	ul.baseLogger.Fatalln(v...)
+}
+
+func (ul *updateLogger) Panic(v ...interface{}) {
+	ul.baseLogger.Panic(v...)
+}
+
+func (ul *updateLogger) Panicf(format string, v ...interface{}) {
+	ul.baseLogger.Panicf(format, v...)
+}
+
+func (ul *updateLogger) Panicln(v ...interface{}) {
+	ul.baseLogger.Panicln(v...)
+}
+
+func (ul *updateLogger) Print(v ...interface{}) {
+	ul.baseLogger.Print(v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprint(v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
+
+func (ul *updateLogger) Printf(format string, v ...interface{}) {
+	ul.baseLogger.Printf(format, v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprintf(format, v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
+
+func (ul *updateLogger) Println(v ...interface{}) {
+	ul.baseLogger.Println(v...)
+	if ul.sendUpdate != nil && ul.conn != nil {
+		message := fmt.Sprintln(v...)
+		ul.sendUpdate(ul.conn, message)
+	}
+}
+
 func checkCpuPriority(authInfo *srpc.AuthInformation, cpuPriority int) error {
 	if cpuPriority < 0 && !authInfo.HaveMethodAccess {
 		return fmt.Errorf("insufficient privilege to set CpuPriority=%d",
@@ -101,7 +169,7 @@ func computeSize(minimumFreeBytes, roundupPower, size uint64) uint64 {
 // copyData will create and truncate the specified file and will copy data to
 // the file. If reader is nil, the file is fallocated or zero-filled.
 func copyData(filename string, reader io.Reader, length uint64,
-	logger log.DebugLogger) error {
+	disableFillZero bool, logger log.DebugLogger) error {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY,
 		fsutil.PrivateFilePerms)
 	if err != nil {
@@ -112,7 +180,7 @@ func copyData(filename string, reader io.Reader, length uint64,
 		return err
 	}
 	if reader == nil {
-		return fsutil.FallocateOrFill(filename, length, logger)
+		return fsutil.FallocateOrFill(filename, length, disableFillZero, logger)
 	}
 	_, err = io.CopyN(file, reader, int64(length))
 	return err
@@ -1250,6 +1318,13 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+
+	// Create an update logger that sends progress messages back to vm-control
+	updateLog := &updateLogger{
+		baseLogger: m.Logger,
+		conn:       conn,
+		sendUpdate: sendUpdate,
+	}
 	if m.disabled {
 		if err := maybeDrainAll(conn, request); err != nil {
 			return err
@@ -1342,6 +1417,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
+			DisableFillZero:    m.DisableFillZero,
 			ExtraKernelOptions: request.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
@@ -1402,7 +1478,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
-		err := copyData(filename, conn, request.UserDataSize, vm.logger)
+		// Create a teelogger so that we get progress messages back to vm-control
+		tlogger := teelogger.New(vm.logger, updateLog)
+		err := copyData(filename, conn, request.UserDataSize, m.DisableFillZero, tlogger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1418,7 +1496,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			err := copyData(fname, dataReader, volume.Size, vm.logger)
+			// Create a teelogger so that we get progress messages back to vm-control
+			tlogger := teelogger.New(vm.logger, updateLog)
+			err := copyData(fname, dataReader, volume.Size, m.DisableFillZero, tlogger)
 			if err != nil {
 				return sendError(conn, err)
 			}
@@ -1572,7 +1652,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(rootFilename, conn, request.ImageDataSize, vm.logger)
+		err := copyData(rootFilename, conn, request.ImageDataSize, m.DisableFillZero, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1593,7 +1673,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(rootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength), vm.logger)
+			uint64(httpResponse.ContentLength), m.DisableFillZero, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3220,7 +3300,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			newSize = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(tmpRootFilename, conn, request.ImageDataSize, vm.logger)
+		err := copyData(tmpRootFilename, conn, request.ImageDataSize, m.DisableFillZero, vm.logger)
 		if err != nil {
 			return err
 		}
@@ -3246,7 +3326,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = copyData(tmpRootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength), vm.logger)
+			uint64(httpResponse.ContentLength), m.DisableFillZero, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3902,7 +3982,7 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize, vm.logger)
+	err = copyData(vm.VolumeLocations[0].Filename, reader, dataSize, false, vm.logger)
 	if err != nil {
 		return err
 	}
