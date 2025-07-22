@@ -40,6 +40,7 @@ var (
 		"If true, enable boot from network for first boot")
 	extraKernelOptions = flag.String("extraKernelOptions", "",
 		"Extra options to pass to kernel")
+	firmwareType         hyper_proto.FirmwareType
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
 		"Hostname of Fleet Manager")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
@@ -154,6 +155,8 @@ var (
 func init() {
 	flag.Var(&consoleType, "consoleType",
 		"type of graphical console (default none)")
+	flag.Var(&firmwareType, "firmwareType",
+		"type of firmware (default bios on i386/amd64)")
 	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
 		"Tags to match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&machineType, "machineType",

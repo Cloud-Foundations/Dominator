@@ -14,6 +14,10 @@ const (
 	ConsoleDummy = 1
 	ConsoleVNC   = 2
 
+	FirmwareDefault = 0
+	FirmwareBIOS    = 1
+	FirmwareUEFI    = 2
+
 	MachineTypeGenericPC = 0
 	MachineTypeQ35       = 1
 
@@ -382,6 +386,8 @@ type ExportLocalVmResponse struct {
 	Error  string
 	VmInfo ExportLocalVmInfo
 }
+
+type FirmwareType uint
 
 type GetCapacityRequest struct{}
 
@@ -840,20 +846,21 @@ type UpdateSubnetsResponse struct {
 
 type VmInfo struct {
 	Address             Address
-	ChangedStateOn      time.Time   `json:",omitempty"`
-	ConsoleType         ConsoleType `json:",omitempty"`
-	CreatedOn           time.Time   `json:",omitempty"`
-	CpuPriority         int         `json:",omitempty"`
-	DestroyOnPowerdown  bool        `json:",omitempty"`
-	DestroyProtection   bool        `json:",omitempty"`
-	DisableVirtIO       bool        `json:",omitempty"`
-	ExtraKernelOptions  string      `json:",omitempty"`
-	Hostname            string      `json:",omitempty"`
-	IdentityExpires     time.Time   `json:",omitempty"`
-	IdentityName        string      `json:",omitempty"`
-	ImageName           string      `json:",omitempty"`
-	ImageURL            string      `json:",omitempty"`
-	MachineType         MachineType `json:",omitempty"`
+	ChangedStateOn      time.Time    `json:",omitempty"`
+	ConsoleType         ConsoleType  `json:",omitempty"`
+	CreatedOn           time.Time    `json:",omitempty"`
+	CpuPriority         int          `json:",omitempty"`
+	DestroyOnPowerdown  bool         `json:",omitempty"`
+	DestroyProtection   bool         `json:",omitempty"`
+	DisableVirtIO       bool         `json:",omitempty"`
+	ExtraKernelOptions  string       `json:",omitempty"`
+	FirmwareType        FirmwareType `json:",omitempty"`
+	Hostname            string       `json:",omitempty"`
+	IdentityExpires     time.Time    `json:",omitempty"`
+	IdentityName        string       `json:",omitempty"`
+	ImageName           string       `json:",omitempty"`
+	ImageURL            string       `json:",omitempty"`
+	MachineType         MachineType  `json:",omitempty"`
 	MemoryInMiB         uint64
 	MilliCPUs           uint
 	OwnerGroups         []string `json:",omitempty"`
