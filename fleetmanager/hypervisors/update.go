@@ -414,7 +414,7 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
 			h.logger.Printf("error reading VM: %s: %s", vmIpAddr, err)
 			continue
 		}
-		vmInfo := &vmInfoType{vmIpAddr, *pVmInfo, h.location, h}
+		vmInfo := &vmInfoType{vmIpAddr, *pVmInfo, h.location, h, h.Machine.Hostname}
 		h.vms[vmIpAddr] = vmInfo
 		m.mutex.Lock()
 		m.vms[vmIpAddr] = vmInfo
@@ -784,13 +784,12 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				h.logger.Debugf(0, "forgot migrating VM: %s\n", ipAddr)
 			}
 		} else {
-			protoVm.HypervisorHostname = h.Machine.Hostname
 			if protoVm.State == hyper_proto.StateMigrating {
 				if _, ok := h.vms[ipAddr]; ok {
 					vmsToDelete[ipAddr] = struct{}{}
 				}
 				h.migratingVms[ipAddr] = &vmInfoType{ipAddr, *protoVm,
-					h.location, h}
+					h.location, h, h.Machine.Hostname}
 				m.migratingIPs[ipAddr] = struct{}{}
 			} else if vm, ok := h.vms[ipAddr]; ok {
 				if !vm.VmInfo.Equal(protoVm) {
@@ -811,7 +810,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 					delete(h.migratingVms, ipAddr)
 					delete(m.migratingIPs, ipAddr)
 				}
-				vm := &vmInfoType{ipAddr, *protoVm, h.location, h}
+				vm := &vmInfoType{ipAddr, *protoVm, h.location, h, h.Machine.Hostname}
 				h.vms[ipAddr] = vm
 				m.vms[ipAddr] = vm
 				err := m.storer.WriteVm(h.Machine.HostIpAddress, ipAddr,
