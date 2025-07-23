@@ -184,18 +184,20 @@ func getUnsupportedOptions(fs *filesystem.FileSystem,
 	return unsupportedOptions, nil
 }
 
-func getRootPartition(bootDevice string) (string, error) {
-	if isPartition, err := checkIfPartition(bootDevice + "p1"); err != nil {
+func getRootPartition(bootDevice, index string) (string, error) {
+	rootPartition := bootDevice + "p" + index
+	if isPartition, err := checkIfPartition(rootPartition); err != nil {
 		return "", err
 	} else if isPartition {
-		return bootDevice + "p1", nil
+		return rootPartition, nil
 	}
-	if isPartition, err := checkIfPartition(bootDevice + "1"); err != nil {
+	rootPartition = bootDevice + index
+	if isPartition, err := checkIfPartition(rootPartition); err != nil {
 		return "", err
 	} else if !isPartition {
 		return "", errors.New("no root partition found")
 	} else {
-		return bootDevice + "1", nil
+		return rootPartition, nil
 	}
 }
 
@@ -221,10 +223,19 @@ func lookPath(rootDir, file string) (string, error) {
 
 func makeAndWriteRoot(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice, rootDevice string,
-	options WriteRawOptions, logger log.DebugLogger) error {
+	makeEfi bool, options WriteRawOptions, logger log.DebugLogger) error {
 	unsupportedOptions, err := getUnsupportedOptions(fs, objectsGetter)
 	if err != nil {
 		return err
+	}
+	var efiDevice string
+	if options.InstallBootloader {
+		if makeEfi {
+			efiDevice = string([]byte(rootDevice[:len(rootDevice)-1])) + "1"
+			if err := makeEfiFs(efiDevice, "EFI", logger); err != nil {
+				return err
+			}
+		}
 	}
 	var bootInfo *BootInfoType
 	if options.RootLabel == "" {
@@ -252,58 +263,77 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
-	mountPoint, err := ioutil.TempDir("", "write-raw-image")
+	rootMount, err := ioutil.TempDir("", "write-raw-image")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(mountPoint)
-	err = wsyscall.Mount(rootDevice, mountPoint, "ext4", 0, "")
+	defer os.RemoveAll(rootMount)
+	err = wsyscall.Mount(rootDevice, rootMount, "ext4", 0, "")
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
 	doUnmount := true
 	defer func() {
 		if doUnmount {
-			wsyscall.Unmount(mountPoint, 0)
+			wsyscall.Unmount(rootMount, 0)
 		}
 	}()
-	os.RemoveAll(filepath.Join(mountPoint, "lost+found"))
-	if err := Unpack(fs, objectsGetter, mountPoint, logger); err != nil {
+	os.RemoveAll(filepath.Join(rootMount, "lost+found"))
+	if err := Unpack(fs, objectsGetter, rootMount, logger); err != nil {
 		return err
 	}
 	for _, dirname := range options.OverlayDirectories {
 		dirname := filepath.Clean(dirname) // Stop funny business.
-		err := os.MkdirAll(filepath.Join(mountPoint, dirname), fsutil.DirPerms)
+		err := os.MkdirAll(filepath.Join(rootMount, dirname), fsutil.DirPerms)
 		if err != nil {
 			return err
 		}
 	}
 	for filename, data := range options.OverlayFiles {
 		filename := filepath.Clean(filename) // Stop funny business.
-		err := writeFile(filepath.Join(mountPoint, filename), data)
+		err := writeFile(filepath.Join(rootMount, filename), data)
 		if err != nil {
 			return err
 		}
 	}
-	if err := writeImageName(mountPoint, options.InitialImageName); err != nil {
+	if err := writeImageName(rootMount, options.InitialImageName); err != nil {
 		return err
 	}
 	if options.WriteFstab {
-		err := writeRootFstabEntry(mountPoint, options.RootLabel)
+		err := writeRootFstabEntry(rootMount, options.RootLabel)
 		if err != nil {
 			return err
 		}
 	}
 	if options.InstallBootloader {
-		err := bootInfo.installBootloader(bootDevice, mountPoint,
+		var efiMount string
+		if efiDevice != "" {
+			efiMount = filepath.Join(rootMount, "/mnt/efi")
+			if err := os.MkdirAll(efiMount, fsutil.DirPerms); err != nil {
+				return err
+			}
+			err := wsyscall.Mount(efiDevice, efiMount, "vfat", 0, "")
+			if err != nil {
+				return err
+			}
+		}
+		err := bootInfo.installBootloader(bootDevice, rootMount,
 			options.RootLabel, options.DoChroot, logger)
 		if err != nil {
+			if efiMount != "" {
+				wsyscall.Unmount(efiMount, 0)
+			}
 			return err
+		}
+		if efiMount != "" {
+			if err := wsyscall.Unmount(efiMount, 0); err != nil {
+				return err
+			}
 		}
 	}
 	doUnmount = false
 	startTime := time.Now()
-	if err := wsyscall.Unmount(mountPoint, 0); err != nil {
+	if err := wsyscall.Unmount(rootMount, 0); err != nil {
 		return err
 	}
 	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
@@ -325,6 +355,19 @@ func makeBootable(fs *filesystem.FileSystem,
 		return bootInfo.installBootloader(deviceName, rootDir, rootLabel,
 			doChroot, logger)
 	}
+}
+
+func makeEfiFs(deviceName, label string, logger log.Logger) error {
+	cmd := exec.Command("mkfs.vfat", "--codepage=437",
+		"-F", "32", "-n", label, deviceName)
+	startTime := time.Now()
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error making file-system on: %s: %s: %s",
+			deviceName, err, output)
+	}
+	logger.Printf("Made VFAT file-system on: %s in %s\n",
+		deviceName, format.Duration(time.Since(startTime)))
+	return nil
 }
 
 func makeExt4fs(deviceName string, params MakeExt4fsParams,
@@ -374,7 +417,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		return fmt.Errorf("error making file-system on: %s: %s: %s",
 			deviceName, err, output)
 	}
-	logger.Printf("Made %s file-system on: %s in %s\n",
+	logger.Printf("Made %s Ext4 file-system on: %s in %s\n",
 		format.FormatBytes(params.Size), deviceName,
 		format.Duration(time.Since(startTime)))
 	return nil
@@ -467,13 +510,13 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 	if efiEntry != nil {
 		cmd.Args = append(cmd.Args,
 			"--efi-directory="+efiDir,
+			"--removable", // Needed for loop devices.
 			"--target=x86_64-efi",
 		)
 		if isGrub2 {
 			// Likely RedHat or derivative: work around their controlling
 			// behaviour.
 			cmd.Args = append(cmd.Args,
-				"--removable",
 				"--force",
 			)
 		}
@@ -583,13 +626,13 @@ func (bootInfo *BootInfoType) writeBootloaderConfig(rootDir string,
 		mountTable, isEfi)
 }
 
-func waitForRootPartition(bootDevice string, timeout time.Duration) (
+func waitForRootPartition(bootDevice, index string, timeout time.Duration) (
 	string, error) {
 	sleeper := backoffdelay.NewExponential(time.Millisecond,
 		100*time.Millisecond, 2)
 	stopTime := time.Now().Add(timeout)
 	for time.Until(stopTime) >= 0 {
-		if partition, err := getRootPartition(bootDevice); err == nil {
+		if partition, err := getRootPartition(bootDevice, index); err == nil {
 			return partition, nil
 		}
 		sleeper.Sleep()
@@ -646,13 +689,19 @@ func writeToBlock(fs *filesystem.FileSystem,
 	if err := mbr.WriteDefault(bootDevice, tableType); err != nil {
 		return err
 	}
-	rootDevice, err := waitForRootPartition(bootDevice,
+	index := "1"
+	var makeEfi bool
+	if tableType == mbr.TABLE_TYPE_GPT {
+		index = "2"
+		makeEfi = true
+	}
+	rootDevice, err := waitForRootPartition(bootDevice, index,
 		options.PartitionWaitTimeout)
 	if err != nil {
 		return err
 	} else {
 		return makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice,
-			options, logger)
+			makeEfi, options, logger)
 	}
 }
 
@@ -670,6 +719,9 @@ func writeToFile(fs *filesystem.FileSystem,
 	usageEstimate := fs.EstimateUsage(0)
 	minBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
 	minBytes += options.MinimumFreeBytes
+	if tableType == mbr.TABLE_TYPE_GPT {
+		minBytes += 130 << 20 // Leave space for the EFI partition.
+	}
 	if options.RoundupPower < 24 {
 		options.RoundupPower = 24 // 16 MiB.
 	}
@@ -692,6 +744,11 @@ func writeToFile(fs *filesystem.FileSystem,
 		return err
 	}
 	partition := "p1"
+	var makeEfi bool
+	if tableType == mbr.TABLE_TYPE_GPT {
+		makeEfi = true
+		partition = "p2"
+	}
 	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
 		partition, time.Minute, logger)
 	if err != nil {
@@ -700,8 +757,8 @@ func writeToFile(fs *filesystem.FileSystem,
 	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
 		time.Minute, logger)
 	rootDevice := loopDevice + partition
-	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, options,
-		logger)
+	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
+		options, logger)
 	if err != nil {
 		return err
 	}
