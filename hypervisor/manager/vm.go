@@ -3790,7 +3790,6 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	switch firmwareType {
 	case proto.FirmwareUEFI:
 		tableType = mbr.TABLE_TYPE_GPT
-		return fmt.Errorf("EFI partitioning not yet supported")
 	}
 	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, fsutil.PrivateFilePerms,

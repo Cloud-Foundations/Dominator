@@ -37,11 +37,22 @@ func writeDefault(filename string, tableType TableType) error {
 		return err
 	}
 	fmt.Printf("making table type: %d (%s)\n", tableType, label)
-	cmd := exec.Command("parted", "-s", "-a", "optimal", filename,
-		"mklabel", label,
-		"mkpart", "primary", "ext2", "1", "100%",
-		"set", "1", "boot", "on",
-	)
+	var cmd *exec.Cmd
+	switch tableType {
+	case TABLE_TYPE_GPT:
+		cmd = exec.Command("parted", "-s", "-a", "optimal", filename,
+			"mklabel", label,
+			"mkpart", "fat32", "1MiB", "129MiB",
+			"mkpart", "primary", "ext2", "129MiB", "100%",
+			"set", "1", "esp", "on",
+		)
+	default:
+		cmd = exec.Command("parted", "-s", "-a", "optimal", filename,
+			"mklabel", label,
+			"mkpart", "primary", "ext2", "1", "100%",
+			"set", "1", "boot", "on",
+		)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error partitioning: %s: %s: %s",

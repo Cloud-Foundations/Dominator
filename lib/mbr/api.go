@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	_ = iota
+	_ = TableType(iota)
 	TABLE_TYPE_AIX
 	TABLE_TYPE_AMIGA
 	TABLE_TYPE_BSD
@@ -60,6 +60,11 @@ func (tt TableType) String() string {
 	return tt.string()
 }
 
+// WriteDefault will write a default partition table for the specified partition
+// table type.
+// DOS: a single ext2 Linux partition is created.
+// GPT: a UEFI partition followed by an ext2 partition are created.
+// Other partition types have unspecified behaviour.
 func WriteDefault(filename string, tableType TableType) error {
 	return writeDefault(filename, tableType)
 }
