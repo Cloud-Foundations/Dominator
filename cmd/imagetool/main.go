@@ -71,9 +71,8 @@ var (
 	mdbServerPortNum = flag.Uint("mdbServerPortNum",
 		constants.SimpleMdbServerPortNumber,
 		"Port number of MDB server")
-	minFreeBytes = flag.Uint64("minFreeBytes", 4<<20,
-		"minimum number of free bytes in raw image")
-	objectAddInterval = flag.Duration("objectAddInterval", 0,
+	minFreeBytes      flagutil.Size = 4 << 20
+	objectAddInterval               = flag.Duration("objectAddInterval", 0,
 		"Interval between object uploads (for debugging)")
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image when making raw image")
@@ -100,6 +99,8 @@ var (
 )
 
 func init() {
+	flag.Var(&minFreeBytes, "minFreeBytes",
+		"minimum number of free bytes in raw image")
 	flag.Var(&requiredPaths, "requiredPaths",
 		"Comma separated list of required path:type entries")
 	flag.Var(&scanExcludeList, "scanExcludeList",
