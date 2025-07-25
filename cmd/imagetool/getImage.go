@@ -25,7 +25,7 @@ func getImageSubcommand(args []string, logger log.DebugLogger) error {
 func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
 	dirname string, logger log.DebugLogger) error {
 	startTime := time.Now()
-	fs, objectsGetter, err := getImageForUnpack(objectClient, name)
+	fs, objectsGetter, _, err := getImageForUnpack(objectClient, name)
 	if err != nil {
 		return err
 	}
@@ -45,19 +45,19 @@ func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
 }
 
 func getImageForUnpack(objectClient *objectclient.ObjectClient, name string) (
-	*filesystem.FileSystem, objectserver.ObjectsGetter, error) {
-	fs, err := getTypedFileSystem(name)
+	*filesystem.FileSystem, objectserver.ObjectsGetter, string, error) {
+	fs, name, err := getTypedFileSystemAndName(name)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if *computedFilesRoot == "" {
-		return fs, objectClient, nil
+		return fs, objectClient, name, nil
 	}
 	objectsGetter, err := util.ReplaceComputedFiles(fs,
 		&util.ComputedFilesData{RootDirectory: *computedFilesRoot},
 		objectClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	return fs, objectsGetter, nil
+	return fs, objectsGetter, name, nil
 }

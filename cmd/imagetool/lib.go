@@ -107,6 +107,22 @@ func getTypedFileSystemAndFilter(typedName string) (
 	return fs, ti.filter, nil
 }
 
+func getTypedFileSystemAndName(typedName string) (
+	*filesystem.FileSystem, string, error) {
+	ti, err := getTypedImageType(typedName)
+	if err != nil {
+		return nil, "", err
+	}
+	fs, err := ti.getFileSystem()
+	if err != nil {
+		return nil, "", err
+	}
+	if ti.imageName == "" {
+		return fs, typedName, nil
+	}
+	return fs, ti.imageName, nil
+}
+
 func getTypedImage(typedName string) (*image.Image, error) {
 	ti, err := getTypedImageType(typedName)
 	if err != nil {

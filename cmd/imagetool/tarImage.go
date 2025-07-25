@@ -29,7 +29,7 @@ func tarImageSubcommand(args []string, logger log.DebugLogger) error {
 
 func tarImageAndWrite(objectClient *objectclient.ObjectClient, imageName,
 	outputFilename string) error {
-	fs, objectsGetter, err := getImageForUnpack(objectClient, imageName)
+	fs, objectsGetter, _, err := getImageForUnpack(objectClient, imageName)
 	if err != nil {
 		return err
 	}

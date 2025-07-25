@@ -48,13 +48,13 @@ func makeRawImage(objectClient *objectclient.ObjectClient, name,
 	if os.Geteuid() != 0 {
 		return reExecAsRoot()
 	}
-	fs, objectsGetter, err := getImageForUnpack(objectClient, name)
+	fs, objectsGetter, imageName, err := getImageForUnpack(objectClient, name)
 	if err != nil {
 		return err
 	}
 	options := util.WriteRawOptions{
 		AllocateBlocks:    *allocateBlocks,
-		InitialImageName:  name,
+		InitialImageName:  imageName,
 		InstallBootloader: *makeBootable,
 		MinimumFreeBytes:  *minFreeBytes,
 		WriteFstab:        *makeBootable,
