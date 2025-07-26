@@ -72,6 +72,15 @@ func dialMdbd() (*srpc.Client, error) {
 	return mdbdClient, err
 }
 
+func diffFiles(tool, leftFile, rightFile string) error {
+	cmd := exec.Command(tool, diffArgs...)
+	cmd.Args = append(cmd.Args, leftFile)
+	cmd.Args = append(cmd.Args, rightFile)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // getTypedFileReader returns a file reader. The reader must be closed before
 // the next call to getTypedFileReader.
 func getTypedFileReader(typedName, filename string) (io.ReadCloser, error) {

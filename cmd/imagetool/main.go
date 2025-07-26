@@ -49,6 +49,7 @@ var (
 		"Hostname of Fleet Manager (to find VM to scan)")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
 		constants.FleetManagerPortNumber, "Port number of Fleet Manager")
+	diffArgs           flagutil.StringList
 	hypervisorHostname = flag.String("hypervisorHostname", "",
 		"Hostname of hypervisor (for VM to scan)")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
@@ -99,6 +100,8 @@ var (
 )
 
 func init() {
+	flag.Var(&diffArgs, "diffArgs",
+		"Comma separated list of optional arguments to pass to diffing tool")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in raw image")
 	flag.Var(&requiredPaths, "requiredPaths",
