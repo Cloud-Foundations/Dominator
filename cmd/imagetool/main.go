@@ -148,6 +148,7 @@ var subcommands = []commands.Command{
 		addReplaceImageSubcommand},
 	{"adds", "                   name subname filterfile triggerfile", 4, 4,
 		addImagesubSubcommand},
+	{"analyse-file-system", "    directory", 1, 1, analyseFileSystemSubcommand},
 	{"bulk-addrep", "            layerimage...", 1, -1,
 		bulkAddReplaceImagesSubcommand},
 	{"change-image-expiration", "name", 1, 1, changeImageExpirationSubcommand},
