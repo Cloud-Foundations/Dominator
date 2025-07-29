@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -93,9 +92,7 @@ func diffImages(tool string, lfs, rfs *filesystem.FileSystem) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(tool, lname, rname)
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	return diffFiles(tool, lname, rname)
 }
 
 func writeImage(fs *filesystem.FileSystem) (string, error) {

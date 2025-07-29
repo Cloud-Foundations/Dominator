@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -51,9 +50,7 @@ func diffImagePackageLists(tool, leftName, rightName string) error {
 		return err
 	}
 	defer os.Remove(rightFile)
-	cmd := exec.Command(tool, leftFile, rightFile)
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	return diffFiles(tool, leftFile, rightFile)
 }
 
 func writePackageListToTempfile(packages []image.Package,

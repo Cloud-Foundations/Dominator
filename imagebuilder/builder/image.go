@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -23,7 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/gitutil"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
-	libjson "github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -209,7 +209,7 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 		return "", "", nil, nil, nil, err
 	}
 	var manifest manifestConfigType
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+	if err := json.Read(bytes.NewReader(manifestBytes), &manifest); err != nil {
 		return "", "", nil, nil, nil, err
 	}
 	sourceImageName := expand.Expression(manifest.SourceImage,
@@ -527,7 +527,7 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 
 func loadTags(manifestDir string) (tags.Tags, error) {
 	var tgs tags.Tags
-	err := libjson.ReadFromFile(filepath.Join(manifestDir, "tags.json"), &tgs)
+	err := json.ReadFromFile(filepath.Join(manifestDir, "tags.json"), &tgs)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

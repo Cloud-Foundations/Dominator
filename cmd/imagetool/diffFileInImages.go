@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -40,9 +39,7 @@ func diffFileInImages(tool, leftName, rightName, filename string) error {
 		return err
 	}
 	defer os.Remove(rightFile)
-	cmd := exec.Command(tool, leftFile, rightFile)
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	return diffFiles(tool, leftFile, rightFile)
 }
 
 func copyToTempfile(reader io.Reader) (string, error) {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -39,9 +38,7 @@ func diffTriggersInImages(tool, leftName, rightName string) error {
 		return err
 	}
 	defer os.Remove(rightFile)
-	cmd := exec.Command(tool, leftFile, rightFile)
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	return diffFiles(tool, leftFile, rightFile)
 }
 
 func writeTriggersToTempfile(trig *triggers.Triggers) (string, error) {

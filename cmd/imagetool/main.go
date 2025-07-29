@@ -49,6 +49,7 @@ var (
 		"Hostname of Fleet Manager (to find VM to scan)")
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
 		constants.FleetManagerPortNumber, "Port number of Fleet Manager")
+	diffArgs           flagutil.StringList
 	hypervisorHostname = flag.String("hypervisorHostname", "",
 		"Hostname of hypervisor (for VM to scan)")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
@@ -71,9 +72,8 @@ var (
 	mdbServerPortNum = flag.Uint("mdbServerPortNum",
 		constants.SimpleMdbServerPortNumber,
 		"Port number of MDB server")
-	minFreeBytes = flag.Uint64("minFreeBytes", 4<<20,
-		"minimum number of free bytes in raw image")
-	objectAddInterval = flag.Duration("objectAddInterval", 0,
+	minFreeBytes      flagutil.Size = 4 << 20
+	objectAddInterval               = flag.Duration("objectAddInterval", 0,
 		"Interval between object uploads (for debugging)")
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image when making raw image")
@@ -100,6 +100,10 @@ var (
 )
 
 func init() {
+	flag.Var(&diffArgs, "diffArgs",
+		"Comma separated list of optional arguments to pass to diffing tool")
+	flag.Var(&minFreeBytes, "minFreeBytes",
+		"minimum number of free bytes in raw image")
 	flag.Var(&requiredPaths, "requiredPaths",
 		"Comma separated list of required path:type entries")
 	flag.Var(&scanExcludeList, "scanExcludeList",
@@ -144,6 +148,7 @@ var subcommands = []commands.Command{
 		addReplaceImageSubcommand},
 	{"adds", "                   name subname filterfile triggerfile", 4, 4,
 		addImagesubSubcommand},
+	{"analyse-file-system", "    directory", 1, 1, analyseFileSystemSubcommand},
 	{"bulk-addrep", "            layerimage...", 1, -1,
 		bulkAddReplaceImagesSubcommand},
 	{"change-image-expiration", "name", 1, 1, changeImageExpirationSubcommand},
