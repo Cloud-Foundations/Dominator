@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	"github.com/Cloud-Foundations/Dominator/lib/resourcepool"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/client"
 )
@@ -106,7 +107,8 @@ func (sub *Sub) checkAdminAccess(authInfo *srpc.AuthInformation) bool {
 	return false
 }
 
-func (sub *Sub) getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
+// TODO(rgooch): move this into the image manager.
+func getComputedFiles(im *image.Image) []filegenclient.ComputedFile {
 	if im == nil {
 		return nil
 	}
@@ -162,11 +164,20 @@ func (sub *Sub) makeUnbusy() {
 
 // Returns true if a client connection was open but the Poll failed due to an
 // I/O error, indicating a retry is reasonable.
+func (sub *Sub) connectAndPoll() bool {
+	return sub.connectAndPoll2(false, nil)
+}
+
+// Returns true if a client connection was open but the Poll failed due to an
+// I/O error, indicating a retry is reasonable.
+// If swapImages is true, the required and planned images are swapped.
 // If fastMessageChannel is not nil, fast updates are requested and relevant
 // messages are sent to the channel.
-func (sub *Sub) connectAndPoll(
+func (sub *Sub) connectAndPoll2(swapImages bool,
 	fastMessageChannel chan<- FastUpdateMessage) bool {
-	sub.loadConfiguration()
+	if sub.loadConfiguration(swapImages) {
+		sub.generationCount = 0 // Force a full poll.
+	}
 	if sub.processFileUpdates() {
 		sub.generationCount = 0 // Force a full poll.
 	}
@@ -334,21 +345,36 @@ func (sub *Sub) restoreScanSpeed(fastMessageChannel chan<- FastUpdateMessage) {
 	sub.configToRestore = nil
 }
 
-func (sub *Sub) loadConfiguration() {
-	// Get a stable copy of the configuration.
-	newRequiredImageName := sub.mdb.RequiredImage
-	if newRequiredImageName == "" {
-		newRequiredImageName = sub.herd.defaultImageName
+// getImageNames returns the required and planned image names from the MDB data.
+// If swapImages is true, the image names are swapped.
+func (sub *Sub) getImageNames(swapImages bool) (string, string) {
+	if swapImages {
+		return sub.mdb.PlannedImage, sub.mdb.RequiredImage
+	} else {
+		return sub.mdb.RequiredImage, sub.mdb.PlannedImage
 	}
-	if newRequiredImageName != sub.requiredImageName {
-		sub.computedInodes = nil
+}
+
+// Returns true if the images changed.
+func (sub *Sub) loadConfiguration(swapImages bool) bool {
+	// Get a stable copy of the configuration.
+	requiredImageName, plannedImageName := sub.getImageNames(swapImages)
+	if requiredImageName == "" {
+		requiredImageName = sub.herd.defaultImageName
 	}
 	sub.herd.cpuSharer.ReleaseCpu()
-	defer sub.herd.cpuSharer.GrabCpu()
-	sub.requiredImageName = newRequiredImageName
-	sub.requiredImage = sub.herd.imageManager.GetNoError(sub.requiredImageName)
-	sub.plannedImageName = sub.mdb.PlannedImage
-	sub.plannedImage = sub.herd.imageManager.GetNoError(sub.plannedImageName)
+	requiredImage := sub.herd.imageManager.GetNoError(sub.requiredImageName)
+	plannedImage := sub.herd.imageManager.GetNoError(sub.plannedImageName)
+	sub.herd.cpuSharer.GrabCpu()
+	var changed bool
+	if sub.requiredImage != requiredImage || sub.plannedImage != plannedImage {
+		changed = true
+	}
+	sub.requiredImageName = requiredImageName
+	sub.requiredImage = requiredImage
+	sub.plannedImageName = plannedImageName
+	sub.plannedImage = plannedImage
+	return changed
 }
 
 func (sub *Sub) processFileUpdates() bool {
@@ -361,7 +387,7 @@ func (sub *Sub) processFileUpdates() bool {
 			sub.deletingFlagMutex.Unlock()
 			return false
 		}
-		computedFiles := sub.getComputedFiles(image)
+		computedFiles := getComputedFiles(image)
 		sub.herd.cpuSharer.ReleaseCpu()
 		sub.herd.logger.Debugf(0,
 			"processFileUpdates(%s): updating filegen manager\n", sub)
@@ -958,21 +984,31 @@ func (sub *Sub) checkCancel() bool {
 	}
 }
 
-func (sub *Sub) fastUpdate(timeout time.Duration,
+func (sub *Sub) fastUpdate(request domproto.FastUpdateRequest,
 	authInfo *srpc.AuthInformation) (
 	<-chan FastUpdateMessage, error) {
 	if !sub.checkAdminAccess(authInfo) {
 		return nil, errors.New("no access to sub")
 	}
-	if sub.requiredImageName == "" {
-		return nil, errors.New("no RequiredImage specified")
-	}
-	if sub.requiredImage == nil {
-		return nil, fmt.Errorf("image: %s does not exist yet",
-			sub.requiredImageName)
+	if request.UsePlannedImage {
+		if sub.plannedImageName == "" {
+			return nil, errors.New("no PlannedImage specified")
+		}
+		if sub.plannedImage == nil {
+			return nil, fmt.Errorf("image: %s does not exist yet",
+				sub.plannedImageName)
+		}
+	} else {
+		if sub.requiredImageName == "" {
+			return nil, errors.New("no RequiredImage specified")
+		}
+		if sub.requiredImage == nil {
+			return nil, fmt.Errorf("image: %s does not exist yet",
+				sub.requiredImageName)
+		}
 	}
 	progressChannel := make(chan FastUpdateMessage, 16)
-	go sub.processFastUpdate(progressChannel, timeout)
+	go sub.processFastUpdate(progressChannel, request)
 	return progressChannel, nil
 }
 
@@ -998,7 +1034,7 @@ func (sub *Sub) sendCancel() {
 }
 
 func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
-	timeout time.Duration) {
+	request domproto.FastUpdateRequest) {
 	defer close(progressChannel)
 	select {
 	case sub.herd.fastUpdateSemaphore <- struct{}{}:
@@ -1022,11 +1058,22 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	sub.sendFastUpdateMessage(progressChannel, "made sub busy")
 	sub.herd.cpuSharer.GrabCpu()
 	defer sub.herd.cpuSharer.ReleaseCpu()
+	defer func() {
+		sub.pendingForceDisruptiveUpdate = false
+		sub.pendingSafetyClear = false
+	}()
+	if request.UsePlannedImage && sub.plannedImage != nil {
+		sub.herd.computedFilesManager.Update(
+			filegenclient.Machine{sub.mdb, getComputedFiles(sub.plannedImage)})
+	}
 	sleeper := backoffdelay.NewExponential(10*time.Millisecond, time.Second, 2)
 	sleeper.SetSleepFunc(sub.herd.cpuSharer.Sleep)
 	var prevStatus subStatus
-	timeoutTime := time.Now().Add(timeout)
+	timeoutTime := time.Now().Add(request.Timeout)
 	defer sub.restoreScanSpeed(progressChannel)
+	if sub.status == statusSynced {
+		sub.status = statusWaitingToPoll
+	}
 	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
 		if sub.deleting {
 			sub.sendFastUpdateMessage(progressChannel, "deleting")
@@ -1042,7 +1089,9 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 			return
 		default:
 		}
-		sub.connectAndPoll(progressChannel)
+		sub.pendingForceDisruptiveUpdate = request.ForceDisruptiveUpdate
+		sub.pendingSafetyClear = request.DisableSafetyCheck
+		sub.connectAndPoll2(request.UsePlannedImage, progressChannel)
 	}
 	sub.sendFastUpdateMessage(progressChannel, "timed out")
 }
