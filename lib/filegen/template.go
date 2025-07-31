@@ -17,6 +17,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 )
 
+var funcMap = template.FuncMap{
+	"GetSplitPart": getSplitPart,
+	"ToUpper": strings.ToUpper,
+	"ToLower": strings.ToLower,
+}
+
 type templateGenerator struct {
 	objectServer    *memory.ObjectServer
 	logger          log.Logger
@@ -45,30 +51,6 @@ func (m *Manager) registerTemplateFileForPath(pathname string,
 	return nil
 }
 
-func createFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"GetSplitPart": func(s string, sep string, index int) string {
-			parts := strings.Split(s, sep)
-			if index >= 0 && index < len(parts) {
-				return parts[index]
-			}
-			return ""
-		},
-		"ToLower": func(s string) string {
-			if len(s) > 0 {
-				return strings.ToLower(s)
-			}
-			return ""
-		},
-		"ToUpper": func(s string) string {
-			if len(s) > 0 {
-				return strings.ToUpper(s)
-			}
-			return ""
-		},
-	}
-}
-
 func (tgen *templateGenerator) generate(machine mdb.Machine,
 	logger log.Logger) (
 	hash.Hash, uint64, time.Time, error) {
@@ -82,6 +64,14 @@ func (tgen *templateGenerator) generate(machine mdb.Machine,
 	length := uint64(buffer.Len())
 	hashVal, _, err := tgen.objectServer.AddObject(buffer, length, nil)
 	return hashVal, length, time.Time{}, err
+}
+
+func getSplitPart(s string, sep string, index int) string {
+	parts := strings.Split(s, sep)
+	if index >= 0 && index < len(parts) {
+		return parts[index]
+	}
+	return ""
 }
 
 func (tgen *templateGenerator) handleReadClosers(
@@ -100,7 +90,7 @@ func (tgen *templateGenerator) handleReadCloser(
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("generatorTemplate").Funcs(createFuncMap()).Parse(string(data))
+	tmpl, err := template.New("generatorTemplate").Funcs(funcMap).Parse(string(data))
 	if err != nil {
 		return err
 	}
