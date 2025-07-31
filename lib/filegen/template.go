@@ -45,6 +45,30 @@ func (m *Manager) registerTemplateFileForPath(pathname string,
 	return nil
 }
 
+func createFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"GetSplitPart": func(s string, sep string, index int) string {
+			parts := strings.Split(s, sep)
+			if index >= 0 && index < len(parts) {
+				return parts[index]
+			}
+			return ""
+		},
+		"ToLower": func(s string) string {
+			if len(s) > 0 {
+				return strings.ToLower(s)
+			}
+			return ""
+		},
+		"ToUpper": func(s string) string {
+			if len(s) > 0 {
+				return strings.ToUpper(s)
+			}
+			return ""
+		},
+	}
+}
+
 func (tgen *templateGenerator) generate(machine mdb.Machine,
 	logger log.Logger) (
 	hash.Hash, uint64, time.Time, error) {
@@ -76,28 +100,7 @@ func (tgen *templateGenerator) handleReadCloser(
 	if err != nil {
 		return err
 	}
-	funcMap := template.FuncMap{
-		"GetSplitPart": func(s string, sep string, index int) string {
-			parts := strings.Split(s, sep)
-			if index >= 0 && index < len(parts) {
-				return parts[index]
-			}
-			return ""
-		},
-		"ToLower": func(s string) string {
-			if len(s) > 0 {
-				return strings.ToLower(s)
-			}
-			return ""
-		},
-		"ToUpper": func(s string) string {
-			if len(s) > 0 {
-				return strings.ToUpper(s)
-			}
-			return ""
-		},
-	}
-	tmpl, err := template.New("generatorTemplate").Funcs(funcMap).Parse(string(data))
+	tmpl, err := template.New("generatorTemplate").Funcs(createFuncMap()).Parse(string(data))
 	if err != nil {
 		return err
 	}
