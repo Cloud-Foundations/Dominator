@@ -1058,14 +1058,20 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	sub.sendFastUpdateMessage(progressChannel, "made sub busy")
 	sub.herd.cpuSharer.GrabCpu()
 	defer sub.herd.cpuSharer.ReleaseCpu()
-	defer func() {
-		sub.pendingForceDisruptiveUpdate = false
-		sub.pendingSafetyClear = false
-	}()
 	if request.UsePlannedImage && sub.plannedImage != nil {
 		sub.herd.computedFilesManager.Update(
 			filegenclient.Machine{sub.mdb, getComputedFiles(sub.plannedImage)})
 	}
+	origRequiredImage := sub.requiredImage
+	defer func() {
+		if request.UsePlannedImage && origRequiredImage != nil {
+			sub.herd.computedFilesManager.Update(
+				filegenclient.Machine{sub.mdb,
+					getComputedFiles(origRequiredImage)})
+		}
+		sub.pendingForceDisruptiveUpdate = false
+		sub.pendingSafetyClear = false
+	}()
 	sleeper := backoffdelay.NewExponential(10*time.Millisecond, time.Second, 2)
 	sleeper.SetSleepFunc(sub.herd.cpuSharer.Sleep)
 	var prevStatus subStatus
