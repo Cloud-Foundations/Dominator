@@ -19,8 +19,8 @@ import (
 
 var funcMap = template.FuncMap{
 	"GetSplitPart": getSplitPart,
-	"ToUpper": strings.ToUpper,
 	"ToLower": strings.ToLower,
+	"ToUpper": strings.ToUpper,
 }
 
 type templateGenerator struct {
