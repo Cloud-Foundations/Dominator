@@ -111,7 +111,7 @@ func (herd *Herd) fastUpdate(request domproto.FastUpdateRequest,
 	if !ok {
 		return nil, errors.New("unknown sub: " + request.Hostname)
 	}
-	return sub.fastUpdate(request.Timeout, authInfo)
+	return sub.fastUpdate(request, authInfo)
 }
 
 func (herd *Herd) forceDisruptiveUpdate(hostname string,
@@ -157,8 +157,8 @@ func (herd *Herd) pollNextSub() bool {
 		if !sub.tryMakeBusy() {
 			return
 		}
-		if sub.connectAndPoll(nil) { // Returns true if a retry is reasonable
-			sub.connectAndPoll(nil)
+		if sub.connectAndPoll() { // Returns true if a retry is reasonable
+			sub.connectAndPoll()
 		}
 		sub.makeUnbusy()
 	})

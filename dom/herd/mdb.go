@@ -78,7 +78,7 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 			herd.subsByName[machine.Hostname] = sub
 			sub.fileUpdateReceiver =
 				herd.computedFilesManager.AddAndGetReceiver(
-					filegenclient.Machine{machine, sub.getComputedFiles(img)})
+					filegenclient.Machine{machine, getComputedFiles(img)})
 			numNew++
 		} else {
 			if sub.mdb.RequiredImage != machine.RequiredImage {
@@ -90,7 +90,7 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 				sub.mdb = machine
 				sub.generationCount = 0 // Force a full poll.
 				herd.computedFilesManager.Update(
-					filegenclient.Machine{machine, sub.getComputedFiles(img)})
+					filegenclient.Machine{machine, getComputedFiles(img)})
 				sub.sendCancel()
 				numChanged++
 			}

@@ -31,8 +31,11 @@ type EnableUpdatesRequest struct {
 type EnableUpdatesResponse struct{}
 
 type FastUpdateRequest struct {
-	Hostname string
-	Timeout  time.Duration // Default: 15 minutes.
+	DisableSafetyCheck    bool
+	ForceDisruptiveUpdate bool
+	Hostname              string
+	Timeout               time.Duration // Default: 15 minutes.
+	UsePlannedImage       bool
 }
 
 type FastUpdateResponse struct { // Multiple responses are sent.

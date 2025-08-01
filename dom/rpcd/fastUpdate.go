@@ -11,11 +11,18 @@ func (t *rpcType) FastUpdate(conn *srpc.Conn,
 	if err := decoder.Decode(&request); err != nil {
 		return err
 	}
-	if conn.Username() == "" {
-		t.logger.Printf("FastUpdate(%s)\n", request.Hostname)
+	var imageType string
+	if request.UsePlannedImage {
+		imageType = "Planned"
 	} else {
-		t.logger.Printf("FastUpdate(%s): by %s\n",
-			request.Hostname, conn.Username())
+		imageType = "Required"
+	}
+	if conn.Username() == "" {
+		t.logger.Printf("FastUpdate(%s) with %sImage\n",
+			request.Hostname, imageType)
+	} else {
+		t.logger.Printf("FastUpdate(%s) with %sImage: by %s\n",
+			request.Hostname, imageType, conn.Username())
 	}
 	progressChannel, err := t.herd.FastUpdate(request,
 		conn.GetAuthInformation())
