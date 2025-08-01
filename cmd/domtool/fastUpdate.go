@@ -25,8 +25,11 @@ func fastUpdate(client *srpc.Client, subHostname string,
 	startTime := time.Now()
 	logger = prefixlogger.New(subHostname+": ", logger)
 	synced, err := domclient.FastUpdate(client, domproto.FastUpdateRequest{
-		Hostname: subHostname,
-		Timeout:  *timeout,
+		DisableSafetyCheck:    *disableSafetyCheck,
+		ForceDisruptiveUpdate: *forceDisruptiveUpdate,
+		Hostname:              subHostname,
+		Timeout:               *timeout,
+		UsePlannedImage:       *usePlannedImage,
 	},
 		logger)
 	if err != nil {

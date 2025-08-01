@@ -19,12 +19,16 @@ import (
 var (
 	cpuPercent = flag.Uint("cpuPercent", 0,
 		"CPU speed as percentage of capacity (default 50)")
+	disableSafetyCheck = flag.Bool("disableSafetyCheck", false,
+		"If true, disable the safety check during a fast-update")
 	disruptionManagerUrl = flag.String("disruptionManagerUrl", "",
 		"URL of Disruption Manager endpoint")
 	domHostname = flag.String("domHostname", "localhost",
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
+	forceDisruptiveUpdate = flag.Bool("forceDisruptiveUpdate", false,
+		"If true, force a disruptive update during a fast-update")
 	locationsToMatch  flagutil.StringList
 	mdbServerHostname = flag.String("mdbServerHostname", "",
 		"Hostname of MDB server (default same as domHostname)")
@@ -46,6 +50,8 @@ var (
 	tagsToMatch tags.MatchTags
 	timeout     = flag.Duration("timeout", 15*time.Minute,
 		"Timeout for long operations")
+	usePlannedImage = flag.Bool("usePlannedImage", false,
+		"If true, use the PlannedImage during a fast-update")
 
 	dominatorSrpcClient *srpc.Client
 )
