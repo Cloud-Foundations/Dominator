@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 	"text/template"
 	"time"
 
@@ -15,6 +16,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/memory"
 )
+
+var funcMap = template.FuncMap{
+	"GetSplitPart": getSplitPart,
+	"ToLower": strings.ToLower,
+	"ToUpper": strings.ToUpper,
+}
 
 type templateGenerator struct {
 	objectServer    *memory.ObjectServer
@@ -59,6 +66,14 @@ func (tgen *templateGenerator) generate(machine mdb.Machine,
 	return hashVal, length, time.Time{}, err
 }
 
+func getSplitPart(s string, sep string, index int) string {
+	parts := strings.Split(s, sep)
+	if index >= 0 && index < len(parts) {
+		return parts[index]
+	}
+	return ""
+}
+
 func (tgen *templateGenerator) handleReadClosers(
 	readCloserChannel <-chan io.ReadCloser) {
 	for readCloser := range readCloserChannel {
@@ -75,7 +90,7 @@ func (tgen *templateGenerator) handleReadCloser(
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("generatorTemplate").Parse(string(data))
+	tmpl, err := template.New("generatorTemplate").Funcs(funcMap).Parse(string(data))
 	if err != nil {
 		return err
 	}

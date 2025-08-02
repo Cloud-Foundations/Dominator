@@ -215,3 +215,16 @@ A HTTP POST query will be sent to the specified URL for each machine, and the
 data returned from the query will be pushed to `/etc/myapp/server-list`.
 The data must be returned in JSON encoding. See the `Programme` generator for an
 example.
+
+## Template file format
+The file `lib/filegen/template.go` loads template files and watches for updates.
+These template files use the go [text/template](https://pkg.go.dev/text/template@go1.24.5)
+standard package. Template functions can be defined and added to the funcMap to process
+MDB fields in the template. The following template functions are available:
+
+* `GetSplitPart`: splits a string based on the given separator, then returns a
+                substring given the index of the split array
+* `ToLower`: returns the lowercase version of a string
+* `ToUpper`: returns the uppercase version of a string
+
+More info on template functions: https://pkg.go.dev/text/template@go1.24.5#Template.Funcs
