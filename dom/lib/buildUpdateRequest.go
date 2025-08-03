@@ -21,6 +21,7 @@ func (sub *Sub) buildUpdateRequest(img *image.Image,
 	logger := debuglogger.Upgrade(slogger)
 	sub.requiredFS = img.FileSystem
 	sub.filter = img.Filter
+	request.SparseImage = img.Filter == nil
 	request.Triggers = img.Triggers
 	sub.requiredInodeToSubInode = make(map[uint64]uint64)
 	sub.inodesMapped = make(map[uint64]struct{})
