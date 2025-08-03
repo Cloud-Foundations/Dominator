@@ -41,7 +41,8 @@ func (sub *Sub) buildUpdateRequest(request *subproto.UpdateRequest) (
 		len(request.PathsToDelete) > 0 ||
 		len(request.DirectoriesToMake) > 0 ||
 		len(request.InodesToChange) > 0 ||
-		sub.lastSuccessfulImageName != sub.requiredImageName {
+		(sub.requiredImage.Filter != nil &&
+			sub.lastSuccessfulImageName != sub.requiredImageName) {
 		sub.herd.logger.Debugf(0,
 			"buildUpdateRequest(%s) took: %s user CPU time in %s\n",
 			sub, sub.lastComputeUpdateCpuDuration, format.Duration(timeTaken))
