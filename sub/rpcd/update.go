@@ -138,7 +138,9 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 			t.params.Logger.Println(err)
 		}
 		t.rwLock.Lock()
-		t.lastSuccessfulImageName = request.ImageName
+		if !request.SparseImage {
+			t.lastSuccessfulImageName = request.ImageName
+		}
 		if err == nil {
 			t.lastNote = note
 		}
