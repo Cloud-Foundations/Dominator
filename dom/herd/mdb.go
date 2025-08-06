@@ -13,7 +13,19 @@ import (
 func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
 	herd.logger.Printf("MDB data received: %d subs\n", len(mdb.Machines))
 	startTime := time.Now()
-	numNew, numDeleted, numChanged, wantedImages, clientResourcesToDelete :=
+	// Update the list of images that are needed, clean up unreferenced images.
+	// This must be done before filegen updates are sent, to ensure the lists
+	// of computed files are populated.
+	wantedImages := make(map[string]struct{})
+	wantedImages[herd.defaultImageName] = struct{}{}
+	wantedImages[herd.nextDefaultImageName] = struct{}{}
+	for _, machine := range mdb.Machines { // Sorted by Hostname.
+		wantedImages[machine.RequiredImage] = struct{}{}
+		wantedImages[machine.PlannedImage] = struct{}{}
+	}
+	delete(wantedImages, "")
+	herd.imageManager.SetImageInterestList(wantedImages, true)
+	numNew, numDeleted, numChanged, clientResourcesToDelete :=
 		herd.mdbUpdateGetLock(mdb)
 	// Closing resources can lead to a release/grab cycle, so need to grab the
 	// CPU to ensure we don't trigger the release leakage detector and panic.
@@ -22,8 +34,6 @@ func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
 		clientResource.ScheduleClose()
 	}
 	herd.cpuSharer.ReleaseCpu()
-	// Clean up unreferenced images.
-	herd.imageManager.SetImageInterestList(wantedImages, true)
 	pluralNew := "s"
 	if numNew == 1 {
 		pluralNew = ""
@@ -43,7 +53,7 @@ func (herd *Herd) mdbUpdate(mdb *mdb.Mdb) {
 }
 
 func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
-	int, int, int, map[string]struct{}, []*srpc.ClientResource) {
+	int, int, int, []*srpc.ClientResource) {
 	herd.LockWithTimeout(time.Minute)
 	defer herd.Unlock()
 	startTime := time.Now()
@@ -56,9 +66,6 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 	for _, sub := range herd.subsByName {
 		subsToDelete[sub.mdb.Hostname] = struct{}{}
 	}
-	wantedImages := make(map[string]struct{})
-	wantedImages[herd.defaultImageName] = struct{}{}
-	wantedImages[herd.nextDefaultImageName] = struct{}{}
 	for _, machine := range mdb.Machines { // Sorted by Hostname.
 		if machine.Hostname == "" {
 			herd.logger.Printf("Empty Hostname field, ignoring \"%s\"\n",
@@ -66,8 +73,6 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 			continue
 		}
 		sub := herd.subsByName[machine.Hostname]
-		wantedImages[machine.RequiredImage] = struct{}{}
-		wantedImages[machine.PlannedImage] = struct{}{}
 		img := herd.imageManager.GetNoError(machine.RequiredImage)
 		if sub == nil {
 			sub = &Sub{
@@ -104,7 +109,6 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 			sub.havePlannedImage = true
 		}
 	}
-	delete(wantedImages, "")
 	// Delete flagged subs (those not in the new MDB).
 	clientResourcesToDelete := make([]*srpc.ClientResource, 0)
 	for subHostname := range subsToDelete {
@@ -122,5 +126,5 @@ func (herd *Herd) mdbUpdateGetLock(mdb *mdb.Mdb) (
 		numDeleted++
 	}
 	mdbUpdateTimeDistribution.Add(time.Since(startTime))
-	return numNew, numDeleted, numChanged, wantedImages, clientResourcesToDelete
+	return numNew, numDeleted, numChanged, clientResourcesToDelete
 }
