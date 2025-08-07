@@ -57,8 +57,10 @@ func (t *uType) update(request sub.UpdateRequest) error {
 	t.makeHardlinks(request.HardlinksToMake, request.Triggers, true)
 	t.doDeletes(request.PathsToDelete, request.Triggers, true)
 	t.changeInodes(request.InodesToChange, request.Triggers, true)
-	if err := t.writePatchedImageName(request.ImageName); err != nil {
-		t.Logger.Println(err)
+	if !request.SparseImage {
+		if err := t.writePatchedImageName(request.ImageName); err != nil {
+			t.Logger.Println(err)
+		}
 	}
 	t.fsChangeDuration = time.Since(fsChangeStartTime)
 	matchedNewTriggers := request.Triggers.GetMatchedTriggers()

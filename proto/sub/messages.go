@@ -108,6 +108,7 @@ type SetConfigurationResponse struct{}
 type UpdateRequest struct {
 	ForceDisruption bool
 	ImageName       string
+	SparseImage     bool
 	Wait            bool
 	// The ordering here reflects the ordering that the sub is expected to use.
 	FilesToCopyToCache  []FileToCopyToCache

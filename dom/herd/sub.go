@@ -363,8 +363,8 @@ func (sub *Sub) loadConfiguration(swapImages bool) bool {
 		requiredImageName = sub.herd.defaultImageName
 	}
 	sub.herd.cpuSharer.ReleaseCpu()
-	requiredImage := sub.herd.imageManager.GetNoError(sub.requiredImageName)
-	plannedImage := sub.herd.imageManager.GetNoError(sub.plannedImageName)
+	requiredImage := sub.herd.imageManager.GetNoError(requiredImageName)
+	plannedImage := sub.herd.imageManager.GetNoError(plannedImageName)
 	sub.herd.cpuSharer.GrabCpu()
 	var changed bool
 	if sub.requiredImage != requiredImage || sub.plannedImage != plannedImage {
@@ -398,6 +398,11 @@ func (sub *Sub) processFileUpdates() bool {
 	}
 	for _, fileInfos := range sub.fileUpdateReceiver.ReceiveAll() {
 		if image == nil {
+			for _, fileInfo := range fileInfos {
+				sub.herd.logger.Printf(
+					"processFileUpdates(%s): no image, discarding: %s: %x\n",
+					sub, fileInfo.Pathname, fileInfo.Hash)
+			}
 			continue
 		}
 		filenameToInodeTable := image.FileSystem.FilenameToInodeTable()
