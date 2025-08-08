@@ -109,9 +109,10 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 		totalRawMachines)
 	tw.WriteRow("", "", columns...)
 	tw.Close()
-	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a>",
+	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a> (",
 		len(s.mdb.Machines))
-	fmt.Fprintln(writer, " <a href=\"showMdb?output=text\">(text)</a><br>")
+	fmt.Fprint(writer, "<a href=\"showMdb?output=json\">JSON</a>")
+	fmt.Fprintln(writer, ", <a href=\"showMdb?output=text\">text)</a><br>")
 	if pauseTableLength := s.pauseTable.len(); pauseTableLength > 0 {
 		fmt.Fprintf(writer,
 			"Number of paused machines: <a href=\"showPaused\">%d</a> (",
@@ -173,12 +174,42 @@ func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	switch parsedQuery.OutputType() {
+	case url.OutputTypeHtml:
+		fieldArgs := []string{
+			"Hostname",
+			"IP Address",
+			"Data Source Type",
+			"Required Image",
+			"Planned Image",
+		}
+		fmt.Fprintln(writer, "<title>MDB Machines</title>")
+		fmt.Fprintln(writer, `<style>
+	                          table, th, td {
+	                          border-collapse: collapse;
+	                          }
+	                          </style>`)
+		fmt.Fprintln(writer, "<body>")
+		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
+		tw, _ := html.NewTableWriter(writer, true, fieldArgs...)
+		for _, machine := range s.mdb.Machines {
+			columns := []string{
+				fmt.Sprintf("<a href=\"showMachine?%s\">%s</a>",
+					machine.Hostname, machine.Hostname),
+				machine.IpAddress,
+				machine.DataSourceType,
+				machine.RequiredImage,
+				machine.PlannedImage,
+			}
+			tw.WriteRow("", "", columns...)
+		}
+		tw.Close()
+		fmt.Fprintln(writer, "</body>")
+	case url.OutputTypeJson:
+		json.WriteWithIndent(writer, "    ", s.mdb)
 	case url.OutputTypeText:
 		for _, machine := range s.mdb.Machines {
 			fmt.Fprintln(writer, machine.Hostname)
 		}
-	case url.OutputTypeHtml, url.OutputTypeJson:
-		json.WriteWithIndent(writer, "    ", s.mdb)
 	}
 }
 
