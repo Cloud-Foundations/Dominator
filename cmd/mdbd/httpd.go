@@ -13,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
 )
 
@@ -100,13 +101,15 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 		totalFilteredMachines += numFilteredMachines
 		totalRawMachines += numRawMachines
 		columns = append(columns,
-			makeNumMachinesText(numFilteredMachines, numRawMachines))
+			fmt.Sprintf("<a href=\"showMdb?dataSourceType=%s\">%s</a>",
+				genInfo.driverName,
+				makeNumMachinesText(numFilteredMachines, numRawMachines)))
 		tw.WriteRow("", "", columns...)
 	}
 	columns := make([]string, s.generators.maxArgs+2)
 	columns[0] = "<b>TOTAL</b>"
-	columns[s.generators.maxArgs+1] = makeNumMachinesText(totalFilteredMachines,
-		totalRawMachines)
+	columns[s.generators.maxArgs+1] = fmt.Sprintf("<a href=\"showMdb\">%s</a>",
+		makeNumMachinesText(totalFilteredMachines, totalRawMachines))
 	tw.WriteRow("", "", columns...)
 	tw.Close()
 	fmt.Fprintf(writer, "Number of machines: <a href=\"showMdb\">%d</a> (",
@@ -170,9 +173,26 @@ func (s *httpServer) showMachineHandler(w http.ResponseWriter,
 }
 
 func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	parsedQuery := url.ParseQuery(req.URL)
+	selectedDataSourceType := req.FormValue("dataSourceType")
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
+	var machines []*mdb.Machine
+	if selectedDataSourceType == "" {
+		machines = s.mdb.Machines
+	} else {
+		machines = make([]*mdb.Machine, 0, len(s.mdb.Machines))
+		for _, machine := range s.mdb.Machines {
+			if selectedDataSourceType == machine.DataSourceType {
+				machines = append(machines, machine)
+			}
+		}
+	}
 	switch parsedQuery.OutputType() {
 	case url.OutputTypeHtml:
 		fieldArgs := []string{
@@ -191,12 +211,13 @@ func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, "<body>")
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ := html.NewTableWriter(writer, true, fieldArgs...)
-		for _, machine := range s.mdb.Machines {
+		for _, machine := range machines {
 			columns := []string{
 				fmt.Sprintf("<a href=\"showMachine?%s\">%s</a>",
 					machine.Hostname, machine.Hostname),
 				machine.IpAddress,
-				machine.DataSourceType,
+				fmt.Sprintf("<a href=\"showMdb?dataSourceType=%s\">%s</a>",
+					machine.DataSourceType, machine.DataSourceType),
 				machine.RequiredImage,
 				machine.PlannedImage,
 			}
@@ -205,9 +226,11 @@ func (s *httpServer) showMdbHandler(w http.ResponseWriter, req *http.Request) {
 		tw.Close()
 		fmt.Fprintln(writer, "</body>")
 	case url.OutputTypeJson:
-		json.WriteWithIndent(writer, "    ", s.mdb)
+		mdbData := *s.mdb
+		mdbData.Machines = machines
+		json.WriteWithIndent(writer, "    ", mdbData)
 	case url.OutputTypeText:
-		for _, machine := range s.mdb.Machines {
+		for _, machine := range machines {
 			fmt.Fprintln(writer, machine.Hostname)
 		}
 	}
