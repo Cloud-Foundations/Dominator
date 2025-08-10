@@ -128,8 +128,21 @@ func (m *Manager) RegisterProgrammeForPath(pathname, programmePath string) {
 // The template file syntax is defined by the text/template standard package.
 func (m *Manager) RegisterTemplateFileForPath(pathname string,
 	templateFile string, watchForUpdates bool) error {
-	return m.registerTemplateFileForPath(pathname, templateFile,
-		watchForUpdates)
+	return m.registerTemplateFileForPath(pathname, TemplateFileConfig{
+		TemplateFile:    templateFile,
+		WatchForUpdates: watchForUpdates,
+	})
+}
+
+// RegisterTemplateFileForPathWithConfig registers a template file for a
+// specific pathname.
+// The template file is used to generate the data, modified by the machine data.
+// If the template file changes and WatchForUpdates is true, the template file
+// is re-read and the data are regenerated.
+// The template file syntax is defined by the text/template standard package.
+func (m *Manager) RegisterTemplateFileForPathWithConfig(pathname string,
+	config TemplateFileConfig) error {
+	return m.registerTemplateFileForPath(pathname, config)
 }
 
 // RegisterUrlForPath registers a URL where a HTTP POST request may be sent to
@@ -148,4 +161,10 @@ func (m *Manager) RegisterUrlForPath(pathname, URL string) {
 // appropriate HTML markups.
 func (m *Manager) WriteHtml(writer io.Writer) {
 	m.writeHtml(writer)
+}
+
+type TemplateFileConfig struct {
+	TemplateFile    string
+	VariablesFile   string
+	WatchForUpdates bool
 }
