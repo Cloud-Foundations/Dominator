@@ -18,12 +18,12 @@ type configType struct {
 }
 
 var configs = map[string]configType{
-	"DynamicTemplateFile": {1, 1, dynamicTemplateFileGenerator},
+	"DynamicTemplateFile": {1, 2, dynamicTemplateFileGenerator},
 	"File":                {1, 1, fileGenerator},
 	"MdbFieldDirectory":   {2, 3, mdbFieldDirectoryGenerator},
 	"MDB":                 {0, 0, mdbGenerator},
 	"Programme":           {1, 1, programmeGenerator},
-	"StaticTemplateFile":  {1, 1, staticTemplateFileGenerator},
+	"StaticTemplateFile":  {1, 2, staticTemplateFileGenerator},
 	"URL":                 {1, 1, urlGenerator},
 }
 
@@ -58,7 +58,14 @@ func loadConfiguration(manager *filegen.Manager, filename string) error {
 
 func dynamicTemplateFileGenerator(manager *filegen.Manager, pathname string,
 	params []string) error {
-	return manager.RegisterTemplateFileForPath(pathname, params[0], true)
+	config := filegen.TemplateFileConfig{
+		TemplateFile:    params[0],
+		WatchForUpdates: true,
+	}
+	if len(params) > 1 {
+		config.VariablesFile = params[1]
+	}
+	return manager.RegisterTemplateFileForPathWithConfig(pathname, config)
 }
 
 func fileGenerator(manager *filegen.Manager, pathname string,
@@ -98,7 +105,13 @@ func programmeGenerator(manager *filegen.Manager, pathname string,
 
 func staticTemplateFileGenerator(manager *filegen.Manager, pathname string,
 	params []string) error {
-	return manager.RegisterTemplateFileForPath(pathname, params[0], false)
+	config := filegen.TemplateFileConfig{
+		TemplateFile: params[0],
+	}
+	if len(params) > 1 {
+		config.VariablesFile = params[1]
+	}
+	return manager.RegisterTemplateFileForPathWithConfig(pathname, config)
 }
 
 func urlGenerator(manager *filegen.Manager, pathname string,
