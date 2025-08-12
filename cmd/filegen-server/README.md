@@ -77,12 +77,13 @@ The configuration file contains zero or more lines of the form:
 use to generate data for the specified *pathname*. The following generator types
 are supported:
 
-- **DynamicTemplateFile** pathname *filename*: the contents of *filename* are
-  used as a template to generate the file data. If the file contains sections of
-  the form `{{.MyVar}}` then the value of the `MyVar` variable from the MDB for
-  the host are used to replace the section. If *filename* changes (replaced with
-  a different inode), then the data are regenerated and distributed to all
-  machines
+- **DynamicTemplateFile** pathname *filename* [*variablesFile*]: the contents of
+  *filename* are used as a template to generate the file data. If the file
+  contains sections of the form `{{.MyVar}}` then the value of the `MyVar`
+  variable from the MDB for the host are used to replace the section. If
+  *filename* changes (replaced with a different inode), then the data are
+  regenerated and distributed to all machines. If specified, optional key:value
+  pairs are loaded from the *variablesFile* in JSON format
 
 - **File** pathname *filename*: the contents of *filename* are used to provide
   the file data. If *filename* changes (replaced with a different inode), then
@@ -108,10 +109,12 @@ are supported:
   be written to the standard output in JSON format, stored in the `Data` and
   `SecondsValid` fields.
 
-- **StaticTemplateFile** pathname *filename*: the contents of *filename* are
-  used as a template to generate the file data. If the file contains sections of
-  the form `{{.MyVar}}` then the value of the `MyVar` variable from the MDB for
-  the host are used to replace the section
+- **StaticTemplateFile** pathname *filename* [*variablesFile*]: the contents of
+  *filename* are used as a template to generate the file data. If the file
+  contains sections of the form `{{.MyVar}}` then the value of the `MyVar`
+  variable from the MDB for the host are used to replace the section. If
+  specified, optional key:value pairs are loaded from the *variablesFile* in
+  JSON format
 
 - **URL** pathname *url*: a HTTP POST request will be sent to the URL specified
   by *url* containing JSON-encoded MDB data in the request body. The *pathname*
@@ -223,7 +226,8 @@ standard package. Template functions can be defined and added to the funcMap to 
 MDB fields in the template. The following template functions are available:
 
 * `GetSplitPart`: splits a string based on the given separator, then returns a
-                substring given the index of the split array
+                  substring given the index of the split array
+* `LookupGeneratorVariable`: lookup value in the generator variables map
 * `ToLower`: returns the lowercase version of a string
 * `ToUpper`: returns the uppercase version of a string
 
