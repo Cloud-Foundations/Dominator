@@ -225,6 +225,7 @@ These template files use the go [text/template](https://pkg.go.dev/text/template
 standard package. Template functions can be defined and added to the funcMap to process
 MDB fields in the template. The following template functions are available:
 
+* `Contains`: returns `true` if the second string is contained in the first
 * `GetSplitPart`: splits a string based on the given separator, then returns a
                   substring given the index of the split array
 * `LookupGeneratorVariable`: lookup value in the generator variables map
