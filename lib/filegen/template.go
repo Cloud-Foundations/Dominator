@@ -19,6 +19,7 @@ import (
 )
 
 var funcMap = template.FuncMap{
+	"Contains":     strings.Contains,
 	"GetSplitPart": getSplitPart,
 	"ToLower":      strings.ToLower,
 	"ToUpper":      strings.ToUpper,
