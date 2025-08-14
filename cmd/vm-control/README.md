@@ -2,7 +2,12 @@
 A utility to manage Virtual Machines (VMs).
 
 The *vm-control* utility creates and manages VMs by communicating with a
-*[Hypervisor](../hypervisor/README.md)*. It is typically run on a desktop, bastion or build machine.
+*[Hypervisor](../hypervisor/README.md)* and optionally a
+*[fleet-manager](../fleet-manager/README.md)*. Please read the
+[SmallStack design document](../../design-docs/SmallStack/README.md) to
+understand the architecture.
+
+It is typically run on a desktop, bastion or build machine.
 
 ## Usage
 *vm-control* supports several sub-commands. There are many command-line flags
