@@ -420,6 +420,9 @@ func (left *Subnet) Equal(right *Subnet) bool {
 	if !CompareIPs(left.FirstDynamicIP, right.FirstDynamicIP) {
 		return false
 	}
+	if !left.Tags.Equal(right.Tags) {
+		return false
+	}
 	return true
 }
 

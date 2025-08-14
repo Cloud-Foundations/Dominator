@@ -6,7 +6,9 @@ Richard Gooch
 Abstract
 ========
 
-This paper describes a VM management system for a Private Cloud environment which is simple to configure and deploy, has few dependencies, scales to many thousand physical machines (nodes) with hundreds of VMs per node, is highly reliable and has dynamic IP address allocation. VM create time is as low as one second, which is best in class and approaches container platform performance. This system can integrate closely with the [**Dominator**](https://github.com/Cloud-Foundations/Dominator) ecosystem which provides [manifest driven image generation](../../user-guide/image-manifest.md) with the [Imaginator](../../cmd/imaginator/README.md), high performance image distribution and image-based patching. While you can easily create pets, you also get the tools to farm cattle. By leveraging [Keymaster](https://github.com/Cloud-Foundations/keymaster), existing organisation/corporate identities may be used for strong authentication (2FA, ephemeral credentials).
+This paper describes a VM management system for a Private Cloud environment which is simple to configure and deploy, has few dependencies, scales to many thousand physical machines (Hypervisor nodes) with hundreds of VMs per node, is highly reliable and has dynamic IP address allocation. VM create time is as low as one second, which is best in class and approaches container platform performance. This system can integrate closely with the [**Dominator**](https://github.com/Cloud-Foundations/Dominator) ecosystem which provides [manifest driven image generation](../../user-guide/image-manifest.md) with the [Imaginator](../../cmd/imaginator/README.md), high performance image distribution and image-based patching. While you can easily create pets, you also get the tools to farm cattle. By leveraging [Keymaster](https://github.com/Cloud-Foundations/keymaster), existing organisation/corporate identities may be used for strong authentication (2FA, ephemeral credentials).
+
+The architecture is simple, flexible, does not require deploying Hypervisors in "clusters" and has a lightweight, losely-coupled "control plane" (Fleet Manager).
 
 Background
 ==========
