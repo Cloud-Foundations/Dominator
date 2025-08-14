@@ -3,6 +3,12 @@
 set -eu
 set -o pipefail
 
+rewrite_index_html=true
+if [ "$1" = '-local' ]; then
+    shift
+    rewrite_index_html=
+fi
+
 readonly target_dir="$1"
 
 rm -rf "$target_dir"
@@ -42,6 +48,9 @@ for infile in $(find . -type f -name '*.md' -printf '%P\n'); do
             [ -r "cmd/$cmddir/README.md" ] || continue
             echo "- [$cmddir](../cmd/$cmddir/index.html)" >> "$tmpfile"
         done
+    fi
+    if [ -n "$rewrite_index_html" ]; then
+        sed -i -r -e 's@/index[.]html@/@g' "$tmpfile"
     fi
     pandoc -f gfm -o "$outfile" -s --css "$css_url" "$tmpfile"
     rm "$tmpfile"
