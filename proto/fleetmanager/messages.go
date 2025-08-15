@@ -46,6 +46,16 @@ type Hypervisor struct {
 	VMs []proto.VmInfo `json:",omitempty"`
 }
 
+type GetIpInfoRequest struct {
+	IpAddress net.IP
+}
+
+type GetIpInfoResponse struct {
+	HypervisorAddress string // host:port
+	Error             string
+	VM                *proto.VmInfo `json:",omitempty"`
+}
+
 type GetMachineInfoRequest struct {
 	Hostname               string
 	IgnoreMissingLocalTags bool
