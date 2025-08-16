@@ -65,6 +65,8 @@ Some of the sub-commands available are:
                        must first be stopped. The exported virsh VM is started
 - **get-hypervisors**: get details of healthy Hypervisors in the specified
                        location
+- **get-ip-info**: get and show the *Hypervisor* that an IP address is
+                   registered to and whether it's used (allocated to VM)
 - **get-vm-hypervisor**: get and show the *Hypervisor* for a VM
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
