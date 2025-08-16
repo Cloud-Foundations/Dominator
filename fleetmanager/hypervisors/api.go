@@ -118,11 +118,11 @@ type tagsStorer interface {
 }
 
 type vmInfoType struct {
-	ipAddr 			string
+	ipAddr string
 	hyper_proto.VmInfo
-	Location   		string // Used by dashboards.
-	hypervisor 		*hypervisorType
-	HypervisorHostname	string
+	Location           string // Used by dashboards.
+	hypervisor         *hypervisorType
+	HypervisorHostname string
 }
 
 type vmStorer interface {
@@ -153,6 +153,10 @@ func (m *Manager) GetHypervisorsInLocation(
 	request fm_proto.GetHypervisorsInLocationRequest) (
 	fm_proto.GetHypervisorsInLocationResponse, error) {
 	return m.getHypervisorsInLocation(request)
+}
+
+func (m *Manager) GetIpInfo(ipAddr net.IP) (fm_proto.GetIpInfoResponse, error) {
+	return m.getIpInfo(ipAddr)
 }
 
 func (m *Manager) GetMachineInfo(request fm_proto.GetMachineInfoRequest) (

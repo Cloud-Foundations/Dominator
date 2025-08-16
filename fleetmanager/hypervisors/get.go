@@ -2,9 +2,11 @@ package hypervisors
 
 import (
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -112,6 +114,53 @@ func (m *Manager) getHypervisorsInLocation(
 	}
 	return fm_proto.GetHypervisorsInLocationResponse{
 		Hypervisors: protoHypervisors,
+	}, nil
+}
+
+func (m *Manager) getIpInfo(ipAddr net.IP) (fm_proto.GetIpInfoResponse, error) {
+	// TODO(rgooch): remove this once replicas have IP registration data.
+	if !*manageHypervisors {
+		return fm_proto.GetIpInfoResponse{}, errors.New(
+			"this is a read-only Fleet Manager: IP locations not available")
+	}
+	addr := ipAddr.String()
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	if vm, ok := m.vms[addr]; ok {
+		return fm_proto.GetIpInfoResponse{
+			HypervisorAddress: vm.hypervisor.Machine.Hostname,
+			VM:                &vm.VmInfo,
+		}, nil
+	}
+	hyperIP, err := m.storer.GetHypervisorForIp(ipAddr)
+	if err != nil {
+		return fm_proto.GetIpInfoResponse{}, err
+	}
+	if len(hyperIP) < 1 {
+		return fm_proto.GetIpInfoResponse{}, nil
+	}
+	hypervisor, ok := m.hypervisorsByIP[hyperIP.String()]
+	if !ok {
+		return fm_proto.GetIpInfoResponse{},
+			fmt.Errorf("hypervisor IP=%s unknown", hyperIP)
+	}
+	// TODO(rgooch): replace loop with map lookup.
+	var protoVM *hyper_proto.VmInfo
+	for _, vm := range hypervisor.vms {
+		if protoVM != nil {
+			break
+		}
+		for _, address := range vm.SecondaryAddresses {
+			if ipAddr.Equal(address.IpAddress) {
+				protoVM = &vm.VmInfo
+				break
+			}
+		}
+	}
+	return fm_proto.GetIpInfoResponse{
+		HypervisorAddress: fmt.Sprintf("%s:%d",
+			hypervisor.Machine.Hostname, constants.HypervisorPortNumber),
+		VM: protoVM,
 	}, nil
 }
 
