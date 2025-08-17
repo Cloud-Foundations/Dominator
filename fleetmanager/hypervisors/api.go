@@ -47,7 +47,7 @@ type hypervisorType struct {
 	ownerUsers         map[string]struct{}
 	probeStatus        probeStatus
 	serialNumber       string
-	subnets            []hyper_proto.Subnet
+	subnets            []hyper_proto.Subnet   // nil on replica.
 	vms                map[string]*vmInfoType // Key: VM IP address.
 }
 

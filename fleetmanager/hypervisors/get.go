@@ -118,11 +118,6 @@ func (m *Manager) getHypervisorsInLocation(
 }
 
 func (m *Manager) getIpInfo(ipAddr net.IP) (fm_proto.GetIpInfoResponse, error) {
-	// TODO(rgooch): remove this once replicas have IP registration data.
-	if !*manageHypervisors {
-		return fm_proto.GetIpInfoResponse{}, errors.New(
-			"this is a read-only Fleet Manager: IP locations not available")
-	}
 	addr := ipAddr.String()
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
