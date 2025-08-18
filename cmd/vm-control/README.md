@@ -182,6 +182,30 @@ name*.
   - `abandon`: the new libvirt VM is deleted from the libvirt database and the
                original VM will be started
 
+## Initialising Secondary File-Systems
+When creating VMs with secondary volumes when the `-secondaryVolumeSizes` option
+is given, the `-initialiseSecondaryVolumes` option enables their initialisation:
+an `ext4fs` file-system is created and `/etc/fstab` entries are created. The
+`-secondaryVolumesInitParams` option may be used to specify the schema. The
+default schema is show below, for the case where two secondary volumes are
+requested.
+```
+[
+    {
+        "BytesPerInode":            0,
+        "Label":                    "/data/0",
+        "MountPoint":               "/data/0"
+        "ReservedBlocksPercentage": 5,
+    },
+    {
+        "BytesPerInode":            0,
+        "Label":                    "/data/1",
+        "MountPoint":               "/data/1"
+        "ReservedBlocksPercentage": 5,
+    }
+]
+```
+
 ## VM Placement Command
 An optional local command to be used when making VM placement decisions (when
 creating, copying, migrating or restoring VMs) may be specified using the
