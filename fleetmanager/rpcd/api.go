@@ -38,6 +38,7 @@ func Setup(hypervisorsManager *hypervisors.Manager, logger log.DebugLogger) (
 				"ChangeMachineTags",
 				"GetHypervisorForVM",
 				"GetHypervisorsInLocation",
+				"GetIpInfo",
 				"GetMachineInfo",
 				"GetUpdates",
 				"ListHypervisorLocations",

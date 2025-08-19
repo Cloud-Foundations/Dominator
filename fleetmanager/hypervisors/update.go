@@ -517,6 +517,7 @@ func (m *Manager) getSubnetsForMachine(h *hypervisorType) (
 
 func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 	update hyper_proto.Update) {
+	// First record what IPs the Hypervisor currently has.
 	if update.HaveAddressPool {
 		h.logger.Debugf(1, "registered address pool size: %d\n",
 			len(update.AddressPool))
@@ -530,6 +531,10 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 			h.logger.Println(err)
 		}
 	}
+	if !*manageHypervisors {
+		return
+	}
+	// Compute adjustments needed to Hypervisor address pool.
 	ipsToAdd := make([]net.IP, 0)
 	addressesToAdd := make([]hyper_proto.Address, 0)
 	maxFreeAddresses := make(map[string]uint)
@@ -592,6 +597,7 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 	if len(addressesToAdd) < 1 && len(maxFreeAddresses) < 1 {
 		return
 	}
+	// Send change command to Hypervisor.
 	client, err := srpc.DialHTTP("tcp", h.address(), time.Minute)
 	if err != nil {
 		h.logger.Println(err)
@@ -612,6 +618,8 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		h.logger.Println(err)
 		return
 	}
+	// Record changes made. If the Hypervisor can't make the change, that will
+	// be recorded in the next update.
 	m.storer.AddIPsForHypervisor(h.Machine.HostIpAddress, ipsToAdd)
 	if len(addressesToAdd) > 0 {
 		h.logger.Debugf(0, "replenished pool with %d addresses\n",
@@ -658,8 +666,8 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 			h.mutex.Unlock()
 			m.processSubnetsUpdates(h, update.Subnets)
 		}
-		m.processAddressPoolUpdates(h, update)
 	}
+	m.processAddressPoolUpdates(h, update)
 	if update.HaveSerialNumber && update.SerialNumber != "" &&
 		update.SerialNumber != oldSerialNumber {
 		err := m.storer.WriteMachineSerialNumber(h.Machine.HostIpAddress,

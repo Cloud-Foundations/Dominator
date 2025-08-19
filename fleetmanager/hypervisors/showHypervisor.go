@@ -123,9 +123,7 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 }
 
 func (m *Manager) showIPsForHypervisor(writer io.Writer, hIP net.IP) {
-	if !*manageHypervisors {
-		fmt.Fprintln(writer, "No visibility into registered addresses<br>")
-	} else if ips, err := m.storer.GetIPsForHypervisor(hIP); err != nil {
+	if ips, err := m.storer.GetIPsForHypervisor(hIP); err != nil {
 		fmt.Fprintf(writer, "Error getting IPs for Hypervisor: %s: %s<br>\n",
 			hIP, err)
 		return

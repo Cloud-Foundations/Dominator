@@ -65,6 +65,8 @@ Some of the sub-commands available are:
                        must first be stopped. The exported virsh VM is started
 - **get-hypervisors**: get details of healthy Hypervisors in the specified
                        location
+- **get-ip-info**: get and show the *Hypervisor* that an IP address is
+                   registered to and whether it's used (allocated to VM)
 - **get-vm-hypervisor**: get and show the *Hypervisor* for a VM
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
@@ -179,6 +181,30 @@ name*.
              recommended
   - `abandon`: the new libvirt VM is deleted from the libvirt database and the
                original VM will be started
+
+## Initialising Secondary File-Systems
+When creating VMs with secondary volumes when the `-secondaryVolumeSizes` option
+is given, the `-initialiseSecondaryVolumes` option enables their initialisation:
+an `ext4fs` file-system is created and `/etc/fstab` entries are created. The
+`-secondaryVolumesInitParams` option may be used to specify the schema. The
+default schema is show below, for the case where two secondary volumes are
+requested.
+```
+[
+    {
+        "BytesPerInode":            0,
+        "Label":                    "/data/0",
+        "MountPoint":               "/data/0"
+        "ReservedBlocksPercentage": 5,
+    },
+    {
+        "BytesPerInode":            0,
+        "Label":                    "/data/1",
+        "MountPoint":               "/data/1"
+        "ReservedBlocksPercentage": 5,
+    }
+]
+```
 
 ## VM Placement Command
 An optional local command to be used when making VM placement decisions (when
