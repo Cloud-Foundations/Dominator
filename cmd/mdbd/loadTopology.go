@@ -135,5 +135,8 @@ func (g *topologyGeneratorType) GetVariables() (map[string]string, error) {
 	g.mutex.Lock()
 	topo := g.topology
 	g.mutex.Unlock()
+	if topo == nil {
+		return nil, errors.New("cannot get variables: no Topology loaded")
+	}
 	return topo.Variables, nil
 }
