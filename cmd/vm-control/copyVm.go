@@ -68,7 +68,10 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	if err != nil {
 		return err
 	}
-	vmInfo := createVmInfoFromFlags()
+	vmInfo, err := createVmInfoFromFlags()
+	if err != nil {
+		return err
+	}
 	vmInfo.ConsoleType = sourceVmInfo.ConsoleType
 	vmInfo.DestroyProtection = vmInfo.DestroyProtection ||
 		sourceVmInfo.DestroyProtection
@@ -101,7 +104,7 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		return err
 	}
 	defer discardAccessToken(sourceHypervisor, vmIP)
-	destHypervisorAddress, err := getHypervisorAddress(vmInfo, logger)
+	destHypervisorAddress, err := getHypervisorAddress(*vmInfo, logger)
 	if err != nil {
 		return err
 	}
@@ -115,7 +118,7 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		IpAddress:        vmIP,
 		SkipMemoryCheck:  *skipMemoryCheck,
 		SourceHypervisor: sourceHypervisorAddress,
-		VmInfo:           vmInfo,
+		VmInfo:           *vmInfo,
 	}
 	var reply hyper_proto.CopyVmResponse
 	logger.Debugf(0, "copying VM to %s\n", destHypervisorAddress)
