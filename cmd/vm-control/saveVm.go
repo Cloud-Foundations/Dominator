@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -165,7 +166,7 @@ func saveVmOnHypervisor(hypervisor string, ipAddr net.IP, destination string,
 		return err
 	}
 	defer client.Close()
-	vmInfo, err := getVmInfoClient(client, ipAddr)
+	vmInfo, err := hyperclient.GetVmInfo(client, ipAddr)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
@@ -29,7 +30,7 @@ func getVmVolumeOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	vmInfo, err := getVmInfoClient(client, ipAddr)
+	vmInfo, err := hyperclient.GetVmInfo(client, ipAddr)
 	if err != nil {
 		return err
 	}
