@@ -5,12 +5,16 @@ import (
 	"net"
 	"os"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+type localVmInfo struct {
+	Hypervisor string
+	proto.VmInfo
+}
 
 func getVmInfoSubcommand(args []string, logger log.DebugLogger) error {
 	if err := getVmInfo(args[0], logger); err != nil {
@@ -34,22 +38,12 @@ func getVmInfoOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	if vmInfo, err := getVmInfoClient(client, ipAddr); err != nil {
+	if vmInfo, err := hyperclient.GetVmInfo(client, ipAddr); err != nil {
 		return err
 	} else {
-		return json.WriteWithIndent(os.Stdout, "    ", vmInfo)
+		return json.WriteWithIndent(os.Stdout, "    ", localVmInfo{
+			Hypervisor: hypervisor,
+			VmInfo:     vmInfo,
+		})
 	}
-}
-
-func getVmInfoClient(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
-	request := proto.GetVmInfoRequest{ipAddr}
-	var reply proto.GetVmInfoResponse
-	err := client.RequestReply("Hypervisor.GetVmInfo", request, &reply)
-	if err != nil {
-		return proto.VmInfo{}, err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return proto.VmInfo{}, err
-	}
-	return reply.VmInfo, nil
 }

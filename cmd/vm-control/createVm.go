@@ -146,6 +146,10 @@ func createVm(logger log.DebugLogger) error {
 		}
 	}
 	checkTags(logger)
+	vmInfo, err := createVmInfoFromFlags()
+	if err != nil {
+		return err
+	}
 	request := hyper_proto.CreateVmRequest{
 		DhcpTimeout:      *dhcpTimeout,
 		DoNotStart:       *doNotStart,
@@ -154,7 +158,7 @@ func createVm(logger log.DebugLogger) error {
 		RoundupPower:     *roundupPower,
 		SkipMemoryCheck:  *skipMemoryCheck,
 		StorageIndices:   storageIndices,
-		VmInfo:           createVmInfoFromFlags(),
+		VmInfo:           *vmInfo,
 	}
 	if request.VmInfo.MemoryInMiB < 1 {
 		request.VmInfo.MemoryInMiB = 1024
@@ -167,28 +171,6 @@ func createVm(logger log.DebugLogger) error {
 		request.VmInfo.VirtualCPUs < minimumCPUs {
 		return fmt.Errorf("vCPUs must be at least %d", minimumCPUs)
 	}
-	if len(requestIPs) > 0 && requestIPs[0] != "" {
-		ipAddr := net.ParseIP(requestIPs[0])
-		if ipAddr == nil {
-			return fmt.Errorf("invalid IP address: %s", requestIPs[0])
-		}
-		request.Address.IpAddress = ipAddr
-	}
-	if len(requestIPs) > 1 && len(secondarySubnetIDs) > 0 {
-		request.SecondaryAddresses = make([]hyper_proto.Address,
-			len(secondarySubnetIDs))
-		for index, addr := range requestIPs[1:] {
-			if addr == "" {
-				continue
-			}
-			ipAddr := net.ParseIP(addr)
-			if ipAddr == nil {
-				return fmt.Errorf("invalid IP address: %s", requestIPs[0])
-			}
-			request.SecondaryAddresses[index] = hyper_proto.Address{
-				IpAddress: ipAddr}
-		}
-	}
 	tmpVmInfo := approximateVolumesForCreateRequest(request.VmInfo)
 	if hypervisor, err := getHypervisorAddress(tmpVmInfo, logger); err != nil {
 		return err
@@ -198,7 +180,7 @@ func createVm(logger log.DebugLogger) error {
 	}
 }
 
-func createVmInfoFromFlags() hyper_proto.VmInfo {
+func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 	var volumes []hyper_proto.Volume
 	var volumeInterface hyper_proto.VolumeInterface
 	if len(volumeInterfaces) > 0 {
@@ -218,7 +200,7 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 			Type:      volumeType,
 		})
 	}
-	return hyper_proto.VmInfo{
+	vmInfo := hyper_proto.VmInfo{
 		ConsoleType:        consoleType,
 		CpuPriority:        *cpuPriority,
 		DestroyOnPowerdown: *destroyOnPowerdown,
@@ -241,6 +223,29 @@ func createVmInfoFromFlags() hyper_proto.VmInfo {
 		WatchdogAction:     watchdogAction,
 		WatchdogModel:      watchdogModel,
 	}
+	if len(requestIPs) > 0 && requestIPs[0] != "" {
+		ipAddr := net.ParseIP(requestIPs[0])
+		if ipAddr == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", requestIPs[0])
+		}
+		vmInfo.Address.IpAddress = ipAddr
+	}
+	if len(requestIPs) > 1 && len(secondarySubnetIDs) > 0 {
+		vmInfo.SecondaryAddresses = make([]hyper_proto.Address,
+			len(secondarySubnetIDs))
+		for index, addr := range requestIPs[1:] {
+			if addr == "" {
+				continue
+			}
+			ipAddr := net.ParseIP(addr)
+			if ipAddr == nil {
+				return nil, fmt.Errorf("invalid IP address: %s", requestIPs[0])
+			}
+			vmInfo.SecondaryAddresses[index] = hyper_proto.Address{
+				IpAddress: ipAddr}
+		}
+	}
+	return &vmInfo, nil
 }
 
 func createVmOnHypervisor(hypervisor string,

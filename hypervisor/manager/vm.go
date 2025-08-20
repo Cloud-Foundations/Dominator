@@ -1132,8 +1132,6 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 	}
 	ownerUsers = append(ownerUsers, request.OwnerUsers...)
 	vmInfo := request.VmInfo
-	vmInfo.Address = proto.Address{}
-	vmInfo.SecondaryAddresses = nil
 	vmInfo.Uncommitted = false
 	vmInfo.Volumes = getInfoReply.VmInfo.Volumes
 	vm, err := m.allocateVm(proto.CreateVmRequest{VmInfo: vmInfo},
