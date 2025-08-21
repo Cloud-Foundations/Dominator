@@ -84,7 +84,7 @@ func requestCertificate(httpClient *http.Client, pubkey []byte,
 	case "SSH":
 		requestUrl.RawQuery = "type=ssh"
 	case "X.509":
-		requestUrl.RawQuery = "type=x509"
+		requestUrl.RawQuery = "type=x509&addGroups=true"
 	}
 	buffer := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(buffer)
