@@ -169,6 +169,12 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 			logger)
 	}
 	if len(hypervisors) < 1 {
+		if numAlreadyUpdated > 0 {
+			logger.Debugf(0,
+				"no more Hypervisors to update, %d up to date\n",
+				numAlreadyUpdated)
+			return nil
+		}
 		return errors.New("no hypervisors to update")
 	}
 	logger.Debugln(0, "splitting unused/used Hypervisors")
