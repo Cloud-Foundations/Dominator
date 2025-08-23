@@ -67,6 +67,7 @@ Some of the sub-commands available are:
                        location
 - **get-ip-info**: get and show the *Hypervisor* that an IP address is
                    registered to and whether it's used (allocated to VM)
+- **get-vm-create-request**: get create request used when a VM was created
 - **get-vm-hypervisor**: get and show the *Hypervisor* for a VM
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
