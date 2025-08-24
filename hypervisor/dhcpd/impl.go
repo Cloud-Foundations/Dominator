@@ -195,6 +195,11 @@ func (s *DhcpServer) addLease(address proto.Address, doNetboot bool,
 		return errors.New("no IP address")
 	}
 	ipAddr := address.IpAddress.String()
+	if doNetboot {
+		s.logger.Debugf(0, "adding netboot lease for: %s\n", ipAddr)
+	} else {
+		s.logger.Debugf(0, "adding lease for: %s\n", ipAddr)
+	}
 	var subnet *subnetType
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -614,6 +619,7 @@ func (s *DhcpServer) removeLease(ipAddr net.IP) {
 		return
 	}
 	ipStr := ipAddr.String()
+	s.logger.Debugf(0, "removing lease for: %s\n", ipStr)
 	s.mutex.Lock()
 	delete(s.staticLeases, s.ipAddrToMacAddr[ipStr])
 	delete(s.ipAddrToMacAddr, ipStr)
