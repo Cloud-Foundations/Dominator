@@ -55,7 +55,7 @@ func newServer(imageServerAddress, imageStreamName string,
 		filesForIPs:        make(map[string]map[string][]byte),
 		imageServerAddress: imageServerAddress,
 		imageStreamName:    imageStreamName,
-		logger:             logger,
+		logger:             prefixlogger.New("tftpd: ", logger),
 		closeClientTimer:   time.NewTimer(time.Minute),
 	}
 	s.tftpdServer = tftp.NewServer(s.readHandler, nil)
@@ -215,9 +215,13 @@ func (s *TftpbootServer) readHandlerInternal(filename string, rf io.ReaderFrom,
 func (s *TftpbootServer) registerFiles(ipAddr net.IP, files map[string][]byte) {
 	address := ipAddr.String()
 	cleanedFiles := make(map[string][]byte, len(files))
+	var totalSize uint64
 	for filename, data := range files {
 		cleanedFiles[cleanPath(filename)] = data
+		totalSize += uint64(len(data))
 	}
+	s.logger.Debugf(0, "registering %d files for: %s, %s\n",
+		len(cleanedFiles), address, format.FormatBytes(totalSize))
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if len(files) < 1 {
@@ -243,6 +247,7 @@ func (s *TftpbootServer) setImageStreamName(name string) {
 
 func (s *TftpbootServer) unregisterFiles(ipAddr net.IP) {
 	address := ipAddr.String()
+	s.logger.Debugf(0, "unregistering files for: %s\n", address)
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	delete(s.filesForIPs, address)

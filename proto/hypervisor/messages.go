@@ -267,24 +267,24 @@ type CopyVmResponse struct { // Multiple responses are sent.
 }
 
 type CreateVmRequest struct {
-	DhcpTimeout          time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
-	DoNotStart           bool
-	EnableNetboot        bool
-	IdentityCertificate  []byte // PEM encoded.
-	IdentityKey          []byte // PEM encoded.
-	ImageDataSize        uint64
-	ImageTimeout         time.Duration
-	MinimumFreeBytes     uint64
-	OverlayDirectories   []string
-	OverlayFiles         map[string][]byte
-	RoundupPower         uint64
-	SecondaryVolumes     []Volume
-	SecondaryVolumesData bool // Exclusive of SecondaryVolumesInit.
-	SecondaryVolumesInit []VolumeInitialisationInfo
-	SkipBootloader       bool
-	SkipMemoryCheck      bool
-	StorageIndices       []uint
-	UserDataSize         uint64
+	DhcpTimeout          time.Duration              `json:",omitempty"` // <0: no DHCP; 0: no wait; >0 DHPC wait.
+	DoNotStart           bool                       `json:",omitempty"`
+	EnableNetboot        bool                       `json:",omitempty"`
+	IdentityCertificate  []byte                     `json:",omitempty"` // PEM encoded.
+	IdentityKey          []byte                     `json:",omitempty"` // PEM encoded.
+	ImageDataSize        uint64                     `json:",omitempty"`
+	ImageTimeout         time.Duration              `json:",omitempty"`
+	MinimumFreeBytes     uint64                     `json:",omitempty"`
+	OverlayDirectories   []string                   `json:",omitempty"`
+	OverlayFiles         map[string][]byte          `json:",omitempty"`
+	RoundupPower         uint64                     `json:",omitempty"`
+	SecondaryVolumes     []Volume                   `json:",omitempty"`
+	SecondaryVolumesData bool                       `json:",omitempty"` // Exclusive of SecondaryVolumesInit.
+	SecondaryVolumesInit []VolumeInitialisationInfo `json:",omitempty"`
+	SkipBootloader       bool                       `json:",omitempty"`
+	SkipMemoryCheck      bool                       `json:",omitempty"`
+	StorageIndices       []uint                     `json:",omitempty"`
+	UserDataSize         uint64                     `json:",omitempty"`
 	VmInfo
 } // The following data are streamed afterwards in the following order:
 //     RAW image data (length=ImageDataSize)
@@ -452,6 +452,15 @@ type GetVmAccessTokenRequest struct {
 type GetVmAccessTokenResponse struct {
 	Token []byte `json:",omitempty"`
 	Error string
+}
+
+type GetVmCreateRequestRequest struct {
+	IpAddress net.IP
+}
+
+type GetVmCreateRequestResponse struct {
+	Error           string
+	CreateVmRequest CreateVmRequest
 }
 
 type GetVmInfoRequest struct {

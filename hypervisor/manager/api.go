@@ -358,6 +358,11 @@ func (m *Manager) GetVmCID(ipAddr net.IP) (uint32, error) {
 	return m.getVmCID(ipAddr)
 }
 
+func (m *Manager) GetVmCreateRequest(ipAddr net.IP,
+	authInfo *srpc.AuthInformation) (*proto.CreateVmRequest, error) {
+	return m.getVmCreateRequest(ipAddr, authInfo)
+}
+
 func (m *Manager) GetVmFileData(ipAddr net.IP, filename string) (
 	io.ReadCloser, error) {
 	rc, _, err := m.getVmFileReader(ipAddr,

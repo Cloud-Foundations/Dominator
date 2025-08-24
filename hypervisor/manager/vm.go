@@ -1477,6 +1477,12 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Encode(response); err != nil {
 		return err
 	}
+	request.IdentityKey = nil
+	err = json.WriteToFile(filepath.Join(vm.dirname, "create-request.json"),
+		fsutil.PublicFilePerms, "    ", request)
+	if err != nil {
+		vm.logger.Println(err)
+	}
 	vm.setupLockWatcher()
 	m.Logger.Debugf(1, "CreateVm(%s) finished, IP=%s\n",
 		conn.Username(), vm.ipAddress)
@@ -1971,6 +1977,22 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	filename := filepath.Join(vm.dirname, "bootlog")
 	vm.mutex.RUnlock()
 	return os.Open(filename)
+}
+
+func (m *Manager) getVmCreateRequest(ipAddr net.IP,
+	authInfo *srpc.AuthInformation) (*proto.CreateVmRequest, error) {
+	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer vm.mutex.RUnlock()
+	var createRequest proto.CreateVmRequest
+	err = json.ReadFromFile(filepath.Join(vm.dirname, "create-request.json"),
+		&createRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &createRequest, nil
 }
 
 func (m *Manager) getVmFileReader(ipAddr net.IP, authInfo *srpc.AuthInformation,

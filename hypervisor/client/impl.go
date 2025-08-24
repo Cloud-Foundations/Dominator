@@ -317,6 +317,20 @@ func getRootCookiePath(client *srpc.Client) (string, error) {
 	return reply.Path, nil
 }
 
+func getVmCreateRequest(client *srpc.Client, ipAddr net.IP) (
+	proto.CreateVmRequest, error) {
+	request := proto.GetVmCreateRequestRequest{IpAddress: ipAddr}
+	var reply proto.GetVmCreateRequestResponse
+	err := client.RequestReply("Hypervisor.GetVmCreateRequest", request, &reply)
+	if err != nil {
+		return proto.CreateVmRequest{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.CreateVmRequest{}, err
+	}
+	return reply.CreateVmRequest, nil
+}
+
 func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	request := proto.GetVmInfoRequest{IpAddress: ipAddr}
 	var reply proto.GetVmInfoResponse

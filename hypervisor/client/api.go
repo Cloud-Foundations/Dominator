@@ -96,6 +96,11 @@ func GetRootCookiePath(client *srpc.Client) (string, error) {
 	return getRootCookiePath(client)
 }
 
+func GetVmCreateRequest(client *srpc.Client, ipAddr net.IP) (
+	proto.CreateVmRequest, error) {
+	return getVmCreateRequest(client, ipAddr)
+}
+
 func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
 }
