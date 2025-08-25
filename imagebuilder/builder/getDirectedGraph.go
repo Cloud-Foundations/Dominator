@@ -216,12 +216,12 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 		if _, ok := urlToDirectory[manifestLocation.url]; ok {
 			continue // Git fetch has started.
 		} else if rootDir, err := urlToLocal(manifestLocation.url); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("stream: %s: %s", streamName, err)
 		} else if rootDir != "" {
 			manifestConfig, err := readManifestFile(
 				filepath.Join(rootDir, manifestLocation.directory), stream)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("stream: %s: %s", streamName, err)
 			}
 			streamToSource[streamName] = manifestConfig.SourceImage
 			delete(streams, streamName) // Mark as completed.
@@ -229,7 +229,7 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 			gitRoot, err := makeTempDirectory("",
 				strings.Replace(streamName, "/", "_", -1)+".manifest")
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("stream: %s: %s", streamName, err)
 			}
 			directoriesToRemove = append(directoriesToRemove, gitRoot)
 			state.GoRun(func() error {
@@ -261,7 +261,7 @@ func (b *Builder) generateDependencyData() (*dependencyResultType, error) {
 			filepath.Join(urlToDirectory[manifestLocation.url],
 				manifestLocation.directory), stream)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("stream: %s: %s", streamName, err)
 		}
 		streamToSource[streamName] = manifestConfig.SourceImage
 	}

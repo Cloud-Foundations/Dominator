@@ -117,6 +117,10 @@ func (b *Builder) build(client srpc.ClientI, request proto.BuildImageRequest,
 			writer: io.MultiWriter(buildLogBuffer, logWriter),
 		}
 	}
+	if authInfo != nil {
+		fmt.Fprintf(buildLog, "Building: %s for: %s\n",
+			request.StreamName, authInfo.Username)
+	}
 	img, name, err := b.buildWithLogger(builder, client, request, authInfo,
 		startTime, &buildInfo.slaveAddress, buildLog)
 	finishTime := time.Now()
@@ -142,8 +146,8 @@ func (b *Builder) build(client srpc.ClientI, request proto.BuildImageRequest,
 		b.logger.Printf("Error archiving build log: %s\n", archiveError)
 	}
 	if err == nil {
-		b.logger.Printf("Built image for stream: %s in %s\n",
-			request.StreamName, format.Duration(finishTime.Sub(startTime)))
+		b.logger.Printf("Built image: %s in %s\n",
+			name, format.Duration(finishTime.Sub(startTime)))
 	}
 	return img, name, err
 }
