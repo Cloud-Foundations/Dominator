@@ -2,6 +2,7 @@ package builder
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +48,9 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 		return nil, err
 	}
 	defer os.RemoveAll(manifestDirectory)
-	img, err := buildImageFromManifest(client, manifestDirectory, request,
+	ctx, cancel := makeContext(b.maximumBuildDuration)
+	defer cancel()
+	img, err := buildImageFromManifest(ctx, client, manifestDirectory, request,
 		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
 	if err != nil {
 		return nil, err
@@ -242,8 +245,8 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 	return cmd.Run()
 }
 
-func buildImageFromManifest(client srpc.ClientI, manifestDir string,
-	request proto.BuildImageRequest, bindMounts []string,
+func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
+	manifestDir string, request proto.BuildImageRequest, bindMounts []string,
 	envGetter environmentGetter, gitInfo *gitInfoType,
 	mtimesCopyFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
 	*image.Image, error) {
@@ -287,7 +290,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	}
 	vGetter.add("REQUESTED_GIT_BRANCH", request.GitBranch)
 	request.Variables = vGetter
-	manifest, err := unpackImageAndProcessManifest(client, manifestDir,
+	manifest, err := unpackImageAndProcessManifest(ctx, client, manifestDir,
 		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog,
 		logger)
 	if err != nil {
@@ -336,7 +339,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 		mf.Merge(manifest.mtimesCopyAddFilter)
 		mtimesCopyFilter = mf.ExportFilter()
 	}
-	img, err := packImage(nil, client, request, rootDir, manifest.filter,
+	img, err := packImage(ctx, nil, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
 		tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
@@ -351,7 +354,7 @@ func buildImageFromManifest(client srpc.ClientI, manifestDir string,
 	return img, nil
 }
 
-func buildImageFromManifestAndUpload(client srpc.ClientI,
+func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger, logger log.Logger) (*image.Image, string, error) {
 	request := proto.BuildImageRequest{
@@ -359,6 +362,7 @@ func buildImageFromManifestAndUpload(client srpc.ClientI,
 		ExpiresIn:  expiresIn,
 	}
 	img, err := buildImageFromManifest(
+		ctx,
 		client,
 		options.ManifestDirectory,
 		request,
@@ -430,13 +434,14 @@ func buildTreeCache(rootDir string, fs *filesystem.FileSystem,
 	return &cache, nil
 }
 
-func buildTreeFromManifest(client srpc.ClientI, options BuildLocalOptions,
-	buildLog io.Writer, logger log.Logger) (string, error) {
+func buildTreeFromManifest(ctx context.Context, client srpc.ClientI,
+	options BuildLocalOptions, buildLog io.Writer,
+	logger log.Logger) (string, error) {
 	rootDir, err := makeTempDirectory("", "tree")
 	if err != nil {
 		return "", err
 	}
-	_, err = unpackImageAndProcessManifest(client,
+	_, err = unpackImageAndProcessManifest(ctx, client,
 		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
 		variablesGetter(options.Variables), buildLog, logger)
 	if err != nil {

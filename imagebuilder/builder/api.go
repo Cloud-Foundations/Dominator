@@ -2,6 +2,7 @@ package builder
 
 import (
 	"bytes"
+	"context"
 	"io"
 	stdlog "log"
 	"regexp"
@@ -201,10 +202,11 @@ type BuildErrorType struct {
 }
 
 type BuildLocalOptions struct {
-	BindMounts        []string
-	ManifestDirectory string
-	MtimesCopyFilter  *filter.Filter
-	Variables         map[string]string
+	BindMounts           []string
+	ManifestDirectory    string
+	maximumBuildDuration time.Duration // Default/maximum: 24 hours.
+	MtimesCopyFilter     *filter.Filter
+	Variables            map[string]string
 }
 
 type Builder struct {
@@ -222,7 +224,8 @@ type Builder struct {
 	logger                      log.DebugLogger
 	imageStreamsPublicUrl       string // No variable expansion applied.
 	imageStreamsUrl             string
-	initialNamespace            string // For catching golang bugs.
+	initialNamespace            string        // For catching golang bugs.
+	maximumBuildDuration        time.Duration // Default/maximum: 24 hours.
 	maximumExpiration           time.Duration
 	maximumExpirationPrivileged time.Duration
 	minimumExpiration           time.Duration
@@ -250,6 +253,7 @@ type BuilderOptions struct {
 	CreateSlaveTimeout                  time.Duration
 	ImageRebuildInterval                time.Duration
 	ImageServerAddress                  string
+	MaximumBuildDuration                time.Duration // Default/max: 24 hours.
 	MaximumExpirationDuration           time.Duration // Default: 1 day.
 	MaximumExpirationDurationPrivileged time.Duration // Default: 1 month.
 	MinimumExpirationDuration           time.Duration // Def: 15 min. Min: 5 min
@@ -366,8 +370,8 @@ func BuildImageFromManifest(client *srpc.Client, manifestDir, streamName string,
 func BuildImageFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (string, error) {
-	_, name, err := buildImageFromManifestAndUpload(client, options, streamName,
-		expiresIn, buildLog, stdlog.New(buildLog, "", 0))
+	_, name, err := buildImageFromManifestAndUpload(context.TODO(), client,
+		options, streamName, expiresIn, buildLog, stdlog.New(buildLog, "", 0))
 	return name, err
 }
 
@@ -385,31 +389,33 @@ func BuildTreeFromManifest(client *srpc.Client, manifestDir string,
 
 func BuildTreeFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, buildLog io.Writer) (string, error) {
-	return buildTreeFromManifest(client, options, buildLog,
+	return buildTreeFromManifest(context.TODO(), client, options, buildLog,
 		stdlog.New(buildLog, "", 0))
 }
 
 func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 	buildLog io.Writer) error {
-	return processManifest(manifestDir, rootDir, bindMounts, nil, buildLog)
+	return processManifest(context.TODO(), manifestDir, rootDir, bindMounts,
+		nil, buildLog)
 }
 
 func ProcessManifestWithOptions(options BuildLocalOptions,
 	rootDir string, buildLog io.Writer) error {
-	return processManifest(options.ManifestDirectory, rootDir,
+	return processManifest(context.TODO(), options.ManifestDirectory, rootDir,
 		options.BindMounts, variablesGetter(options.Variables), buildLog)
 }
 
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(client, manifestDir, 0, rootDir,
-		bindMounts, true, nil, buildLog, stdlog.New(buildLog, "", 0))
+	_, err := unpackImageAndProcessManifest(context.TODO(), client, manifestDir,
+		0, rootDir, bindMounts, true, nil, buildLog,
+		stdlog.New(buildLog, "", 0))
 	return err
 }
 
 func UnpackImageAndProcessManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, rootDir string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(client,
+	_, err := unpackImageAndProcessManifest(context.TODO(), client,
 		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
 		variablesGetter(options.Variables), buildLog,
 		stdlog.New(buildLog, "", 0))

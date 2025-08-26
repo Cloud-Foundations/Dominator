@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -142,9 +143,9 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	return manifestConfig, nil
 }
 
-func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
-	maxSourceAge time.Duration, rootDir string, bindMounts []string,
-	applyFilter bool, envGetter environmentGetter,
+func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
+	manifestDir string, maxSourceAge time.Duration, rootDir string,
+	bindMounts []string, applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer, logger log.Logger) (manifestType, error) {
 	manifestConfig, err := readManifestFile(manifestDir, envGetter)
 	if err != nil {
@@ -177,7 +178,8 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 		return manifestType{}, fmt.Errorf("error unpacking image: %w", err)
 	}
 	startTime := time.Now()
-	err = processManifest(manifestDir, rootDir, bindMounts, envGetter, buildLog)
+	err = processManifest(ctx, manifestDir, rootDir, bindMounts, envGetter,
+		buildLog)
 	if err != nil {
 		return manifestType{},
 			errors.New("error processing manifest: " + err.Error())
@@ -198,8 +200,9 @@ func unpackImageAndProcessManifest(client srpc.ClientI, manifestDir string,
 	}, nil
 }
 
-func processManifest(manifestDir, rootDir string, bindMounts []string,
-	envGetter environmentGetter, buildLog io.Writer) error {
+func processManifest(ctx context.Context, manifestDir, rootDir string,
+	bindMounts []string, envGetter environmentGetter,
+	buildLog io.Writer) error {
 	// Copy in system /etc/resolv.conf
 	file, err := os.Open("/etc/resolv.conf")
 	if err != nil {
@@ -221,7 +224,7 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	defer g.Quit()
-	err = runInTarget(g, file, buildLog, buildLog, rootDir, envGetter,
+	err = runInTarget(ctx, g, file, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "copy-in", "/etc/resolv.conf")
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
@@ -229,8 +232,8 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
-	err = runScripts(g, manifestDir, "pre-install-scripts", rootDir, envGetter,
-		buildLog)
+	err = runScripts(ctx, g, manifestDir, "pre-install-scripts", rootDir,
+		envGetter, buildLog)
 	if err != nil {
 		return err
 	}
@@ -242,12 +245,12 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		}
 	}
 	if len(packageList) > 0 {
-		err := updatePackageDatabase(g, rootDir, envGetter, buildLog)
+		err := updatePackageDatabase(ctx, g, rootDir, envGetter, buildLog)
 		if err != nil {
 			return err
 		}
 	}
-	err = installPackages(g, packageList, rootDir, envGetter, buildLog)
+	err = installPackages(ctx, g, packageList, rootDir, envGetter, buildLog)
 	if err != nil {
 		return errors.New("error installing packages: " + err.Error())
 	}
@@ -255,14 +258,15 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 	if err != nil {
 		return err
 	}
-	err = runScripts(g, manifestDir, "scripts", rootDir, envGetter, buildLog)
+	err = runScripts(ctx, g, manifestDir, "scripts", rootDir, envGetter,
+		buildLog)
 	if err != nil {
 		return err
 	}
-	if err := cleanPackages(g, rootDir, buildLog); err != nil {
+	if err := cleanPackages(ctx, g, rootDir, buildLog); err != nil {
 		return err
 	}
-	if err := clearResolvConf(g, buildLog, rootDir); err != nil {
+	if err := clearResolvConf(ctx, g, buildLog, rootDir); err != nil {
 		return err
 	}
 	err = copyFiles(manifestDir, "post-scripts-files", rootDir, buildLog)
@@ -273,7 +277,7 @@ func processManifest(manifestDir, rootDir string, bindMounts []string,
 		return err
 	}
 	directoriesToDelete = nil
-	err = runScripts(nil, manifestDir, "post-cleanup-scripts", rootDir,
+	err = runScripts(ctx, nil, manifestDir, "post-cleanup-scripts", rootDir,
 		envGetter, buildLog)
 	if err != nil {
 		return err
@@ -310,15 +314,16 @@ func copyFile(destFilename, sourceFilename string, mode os.FileMode,
 	return fsutil.CopyFile(destFilename, sourceFilename, mode)
 }
 
-func installPackages(g *goroutine.Goroutine, packageList []string,
-	rootDir string, envGetter environmentGetter, buildLog io.Writer) error {
+func installPackages(ctx context.Context, g *goroutine.Goroutine,
+	packageList []string, rootDir string, envGetter environmentGetter,
+	buildLog io.Writer) error {
 	if len(packageList) < 1 { // Nothing to do.
 		fmt.Fprintln(buildLog, "\nNo packages to install")
 		return nil
 	}
 	fmt.Fprintln(buildLog, "\nUpgrading packages:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
+	err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "upgrade")
 	if err != nil {
 		return errors.New("error upgrading: " + err.Error())
@@ -331,7 +336,7 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	startTime = time.Now()
 	args := []string{"install"}
 	args = append(args, packageList...)
-	err = runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
+	err = runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, args...)
 	if err != nil {
 		return errors.New("error installing: " + err.Error())
@@ -341,8 +346,9 @@ func installPackages(g *goroutine.Goroutine, packageList []string,
 	return nil
 }
 
-func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
-	envGetter environmentGetter, buildLog io.Writer) error {
+func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
+	dirname, rootDir string, envGetter environmentGetter,
+	buildLog io.Writer) error {
 	scriptsDir := filepath.Join(manifestDir, dirname)
 	file, err := os.Open(scriptsDir)
 	if err != nil {
@@ -390,7 +396,7 @@ func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
 	for _, name := range names {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
-		err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
+		err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 			packagerPathname, "run", filepath.Join("/.scripts", name))
 		if err != nil {
 			return errors.New("error running script: " + name + ": " +
@@ -407,11 +413,11 @@ func runScripts(g *goroutine.Goroutine, manifestDir, dirname, rootDir string,
 	return nil
 }
 
-func updatePackageDatabase(g *goroutine.Goroutine, rootDir string,
-	envGetter environmentGetter, buildLog io.Writer) error {
+func updatePackageDatabase(ctx context.Context, g *goroutine.Goroutine,
+	rootDir string, envGetter environmentGetter, buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nUpdating package database:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, buildLog, rootDir, envGetter,
+	err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 		packagerPathname, "update")
 	if err != nil {
 		return errors.New("error updating: " + err.Error())
