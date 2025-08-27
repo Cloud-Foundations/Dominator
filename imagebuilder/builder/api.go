@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bytes"
-	"context"
 	"io"
 	stdlog "log"
 	"regexp"
@@ -204,7 +203,7 @@ type BuildErrorType struct {
 type BuildLocalOptions struct {
 	BindMounts           []string
 	ManifestDirectory    string
-	maximumBuildDuration time.Duration // Default/maximum: 24 hours.
+	MaximumBuildDuration time.Duration // Default/maximum: 24 hours.
 	MtimesCopyFilter     *filter.Filter
 	Variables            map[string]string
 }
@@ -370,7 +369,9 @@ func BuildImageFromManifest(client *srpc.Client, manifestDir, streamName string,
 func BuildImageFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, streamName string, expiresIn time.Duration,
 	buildLog buildLogger) (string, error) {
-	_, name, err := buildImageFromManifestAndUpload(context.TODO(), client,
+	ctx, cancel := makeContext(options.MaximumBuildDuration)
+	defer cancel()
+	_, name, err := buildImageFromManifestAndUpload(ctx, client,
 		options, streamName, expiresIn, buildLog, stdlog.New(buildLog, "", 0))
 	return name, err
 }
@@ -389,33 +390,42 @@ func BuildTreeFromManifest(client *srpc.Client, manifestDir string,
 
 func BuildTreeFromManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, buildLog io.Writer) (string, error) {
-	return buildTreeFromManifest(context.TODO(), client, options, buildLog,
+	ctx, cancel := makeContext(options.MaximumBuildDuration)
+	defer cancel()
+	return buildTreeFromManifest(ctx, client, options, buildLog,
 		stdlog.New(buildLog, "", 0))
 }
 
 func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 	buildLog io.Writer) error {
-	return processManifest(context.TODO(), manifestDir, rootDir, bindMounts,
+	ctx, cancel := makeContext(0)
+	defer cancel()
+	return processManifest(ctx, manifestDir, rootDir, bindMounts,
 		nil, buildLog)
 }
 
 func ProcessManifestWithOptions(options BuildLocalOptions,
 	rootDir string, buildLog io.Writer) error {
-	return processManifest(context.TODO(), options.ManifestDirectory, rootDir,
+	ctx, cancel := makeContext(options.MaximumBuildDuration)
+	defer cancel()
+	return processManifest(ctx, options.ManifestDirectory, rootDir,
 		options.BindMounts, variablesGetter(options.Variables), buildLog)
 }
 
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	rootDir string, bindMounts []string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(context.TODO(), client, manifestDir,
-		0, rootDir, bindMounts, true, nil, buildLog,
-		stdlog.New(buildLog, "", 0))
+	ctx, cancel := makeContext(0)
+	defer cancel()
+	_, err := unpackImageAndProcessManifest(ctx, client, manifestDir, 0,
+		rootDir, bindMounts, true, nil, buildLog, stdlog.New(buildLog, "", 0))
 	return err
 }
 
 func UnpackImageAndProcessManifestWithOptions(client *srpc.Client,
 	options BuildLocalOptions, rootDir string, buildLog io.Writer) error {
-	_, err := unpackImageAndProcessManifest(context.TODO(), client,
+	ctx, cancel := makeContext(options.MaximumBuildDuration)
+	defer cancel()
+	_, err := unpackImageAndProcessManifest(ctx, client,
 		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
 		variablesGetter(options.Variables), buildLog,
 		stdlog.New(buildLog, "", 0))
