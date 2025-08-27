@@ -50,10 +50,11 @@ func buildFromManifest(manifestDirectory, streamName string,
 	name, err := builder.BuildImageFromManifestWithOptions(
 		srpcClient,
 		builder.BuildLocalOptions{
-			BindMounts:        bindMounts,
-			ManifestDirectory: manifestDirectory,
-			MtimesCopyFilter:  mtimesCopyFilter,
-			Variables:         variables,
+			BindMounts:           bindMounts,
+			ManifestDirectory:    manifestDirectory,
+			MaximumBuildDuration: *maximumBuildDuration,
+			MtimesCopyFilter:     mtimesCopyFilter,
+			Variables:            variables,
 		},
 		streamName,
 		*expiresIn,
@@ -97,9 +98,10 @@ func buildTreeFromManifestSubcommand(args []string,
 	rootDir, err := builder.BuildTreeFromManifestWithOptions(
 		srpcClient,
 		builder.BuildLocalOptions{
-			BindMounts:        bindMounts,
-			ManifestDirectory: args[0],
-			Variables:         variables,
+			BindMounts:           bindMounts,
+			ManifestDirectory:    args[0],
+			MaximumBuildDuration: *maximumBuildDuration,
+			Variables:            variables,
 		},
 		logWriter)
 	if err != nil {
@@ -138,9 +140,10 @@ func processManifestSubcommand(args []string, logger log.DebugLogger) error {
 	}
 	err := builder.ProcessManifestWithOptions(
 		builder.BuildLocalOptions{
-			BindMounts:        bindMounts,
-			ManifestDirectory: args[0],
-			Variables:         variables,
+			BindMounts:           bindMounts,
+			ManifestDirectory:    args[0],
+			MaximumBuildDuration: *maximumBuildDuration,
+			Variables:            variables,
 		},
 		args[1], logWriter)
 	if err != nil {
