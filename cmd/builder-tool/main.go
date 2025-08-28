@@ -40,7 +40,7 @@ var (
 	maxSourceAge = flag.Duration("maxSourceAge", time.Hour,
 		"Maximum age of a source image before it is rebuilt")
 	maximumBuildDuration = flag.Duration("maximumBuildDuration", 24*time.Hour,
-		"Maximum time to build an image locally")
+		"Maximum time to build an image")
 	mtimesCopyFilterFile = flag.String("mtimesCopyFilterFile", "",
 		"Filter file to apply when copying mtimes")
 	rawSize      flagutil.Size

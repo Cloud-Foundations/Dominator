@@ -34,11 +34,12 @@ func buildImage(args []string, logger log.Logger) error {
 		}
 	}
 	request := proto.BuildImageRequest{
-		StreamName:     args[0],
-		ExpiresIn:      *expiresIn,
-		MaxSourceAge:   *maxSourceAge,
-		StreamBuildLog: true,
-		Variables:      variables,
+		StreamName:           args[0],
+		ExpiresIn:            *expiresIn,
+		MaximumBuildDuration: *maximumBuildDuration,
+		MaxSourceAge:         *maxSourceAge,
+		StreamBuildLog:       true,
+		Variables:            variables,
 	}
 	if len(args) > 1 {
 		request.GitBranch = args[1]
