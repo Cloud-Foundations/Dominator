@@ -121,7 +121,8 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 		return nil, err
 	}
 	defer g.Quit()
-	ctx, cancel := makeContext(b.maximumBuildDuration)
+	ctx, cancel := makeContext2(b.maximumBuildDuration,
+		request.MaximumBuildDuration)
 	defer cancel()
 	err = runInTarget(ctx, g, nil, buildLog, buildLog, "", nil,
 		args[0], args[1:]...)

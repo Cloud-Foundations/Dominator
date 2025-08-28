@@ -48,7 +48,8 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 		return nil, err
 	}
 	defer os.RemoveAll(manifestDirectory)
-	ctx, cancel := makeContext(b.maximumBuildDuration)
+	ctx, cancel := makeContext2(b.maximumBuildDuration,
+		request.MaximumBuildDuration)
 	defer cancel()
 	img, err := buildImageFromManifest(ctx, client, manifestDirectory, request,
 		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
