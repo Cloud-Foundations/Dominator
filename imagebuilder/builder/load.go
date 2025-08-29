@@ -139,6 +139,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		logger:                      params.Logger,
 		imageStreamsPublicUrl:       masterConfiguration.ImageStreamsUrl,
 		initialNamespace:            initialNamespace,
+		maximumBuildDuration:        options.MaximumBuildDuration,
 		maximumExpiration:           options.MaximumExpirationDuration,
 		maximumExpirationPrivileged: options.MaximumExpirationDurationPrivileged,
 		minimumExpiration:           options.MinimumExpirationDuration,

@@ -11,6 +11,7 @@ type BuildImageRequest struct {
 	ExpiresIn             time.Duration
 	GitBranch             string
 	MaxSourceAge          time.Duration
+	MaximumBuildDuration  time.Duration
 	ReturnImage           bool
 	StreamBuildLog        bool
 	StreamName            string

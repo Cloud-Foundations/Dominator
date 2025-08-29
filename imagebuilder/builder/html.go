@@ -260,6 +260,13 @@ func (stream *imageStreamType) WriteHtml(writer io.Writer) {
 		stream.getSourceImage(stream.builder, buildLog)
 	if err != nil {
 		fmt.Fprintf(writer, "<b>%s</b><br>\n", err)
+		fmt.Fprintln(writer,
+			"<hr style=\"height:2px\"><font color=\"#fbb\">")
+		fmt.Fprintln(writer, "<b>Failed fetch log:</b>")
+		fmt.Fprintln(writer, "<pre>")
+		io.Copy(writer, buildLog)
+		fmt.Fprintln(writer, "</pre>")
+		fmt.Fprintln(writer, "</font>")
 		return
 	}
 	defer os.RemoveAll(manifestDirectory)

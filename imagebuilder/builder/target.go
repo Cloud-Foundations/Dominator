@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -27,8 +28,10 @@ func newNamespaceTarget() (*goroutine.Goroutine, error) {
 }
 
 // newNamespaceTargetWithMounts will create a goroutine which is locked to an OS
-// thread with a separate mount namespace. The directories specified by
-// bindMounts will be mounted into the new namespace.
+// thread with a separate mount namespace. Some standard file-systems
+// (i.e. /proc and /sys) will be mounted into the new namespace, and the
+// directories specified by bindMounts will be bind-mmounted into the new
+// namespace.
 func newNamespaceTargetWithMounts(rootDir string, bindMounts []string) (
 	*goroutine.Goroutine, error) {
 	g, err := newNamespaceTarget()
@@ -44,14 +47,14 @@ func newNamespaceTargetWithMounts(rootDir string, bindMounts []string) (
 
 // Run a command in the target root directory in the specified namespace and
 // with a new PID namespace.
-func runInTarget(g *goroutine.Goroutine, stdin io.Reader, stdout io.Writer,
-	stderr io.Writer, rootDir string, envGetter environmentGetter,
-	prog string, args ...string) error {
+func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
+	stdout io.Writer, stderr io.Writer, rootDir string,
+	envGetter environmentGetter, prog string, args ...string) error {
 	var environmentToInject map[string]string
 	if envGetter != nil {
 		environmentToInject = envGetter.getenv()
 	}
-	cmd := exec.Command(prog, args...)
+	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Env = stripVariables(os.Environ(), environmentToCopy, environmentToSet,
 		environmentToInject)
 	cmd.Dir = "/"

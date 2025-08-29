@@ -3,6 +3,7 @@ package builder
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -43,18 +44,18 @@ var environmentToSet = map[string]string{
 	"USER":    "root",
 }
 
-func cleanPackages(g *goroutine.Goroutine, rootDir string,
+func cleanPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nCleaning packages:")
 	startTime := time.Now()
-	err := runInTarget(g, nil, buildLog, buildLog, rootDir, nil,
+	err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, nil,
 		packagerPathname, "clean")
 	if err != nil {
 		return errors.New("error cleaning: " + err.Error())
 	}
 	stdout := &bytes.Buffer{}
-	err = runInTarget(g, nil, stdout, buildLog, rootDir, nil, packagerPathname,
-		"show-clean-patterns")
+	err = runInTarget(ctx, g, nil, stdout, buildLog, rootDir, nil,
+		packagerPathname, "show-clean-patterns")
 	if err != nil {
 		fmt.Fprintf(buildLog, "Deep clean failed: %s\n", err)
 	} else {
@@ -71,9 +72,10 @@ func cleanPackages(g *goroutine.Goroutine, rootDir string,
 	return nil
 }
 
-func clearResolvConf(g *goroutine.Goroutine, writer io.Writer,
-	rootDir string) error {
-	return runInTarget(g, nil, writer, writer, rootDir, nil,
+func clearResolvConf(ctx context.Context, g *goroutine.Goroutine,
+	writer io.Writer, rootDir string) error {
+	return runInTarget(ctx, g, nil, writer, writer, rootDir,
+		nil,
 		"/bin/cp", "/dev/null", "/etc/resolv.conf")
 }
 
@@ -119,7 +121,11 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 		return nil, err
 	}
 	defer g.Quit()
-	err = runInTarget(g, nil, buildLog, buildLog, "", nil, args[0], args[1:]...)
+	ctx, cancel := makeContext2(b.maximumBuildDuration,
+		request.MaximumBuildDuration)
+	defer cancel()
+	err = runInTarget(ctx, g, nil, buildLog, buildLog, "", nil,
+		args[0], args[1:]...)
 	if err != nil {
 		return nil, err
 	} else {
@@ -127,16 +133,16 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 		if err := packager.writePackageInstaller(rootDir); err != nil {
 			return nil, err
 		}
-		if err := clearResolvConf(g, buildLog, rootDir); err != nil {
+		if err := clearResolvConf(ctx, g, buildLog, rootDir); err != nil {
 			return nil, err
 		}
 		buildDuration := time.Since(startTime)
 		fmt.Fprintf(buildLog, "\nBuild time: %s\n",
 			format.Duration(buildDuration))
-		if err := cleanPackages(g, rootDir, buildLog); err != nil {
+		if err := cleanPackages(ctx, g, rootDir, buildLog); err != nil {
 			return nil, err
 		}
-		return packImage(g, client, request, rootDir,
+		return packImage(ctx, g, client, request, rootDir,
 			stream.Filter, nil, nil, stream.imageFilter, stream.imageTags,
 			stream.imageTriggers, b.mtimesCopyFilter, buildLog, b.logger)
 	}

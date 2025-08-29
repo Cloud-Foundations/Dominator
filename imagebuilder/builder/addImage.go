@@ -2,6 +2,7 @@ package builder
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -145,10 +146,11 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 	return &fs.FileSystem, nil
 }
 
-func listPackages(g *goroutine.Goroutine, rootDir string) (
+func listPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(g, nil, w, w, rootDir, nil, packagerPathname, cmd)
+		return runInTarget(ctx, g, nil, w, w, rootDir, nil, packagerPathname,
+			cmd)
 	})
 }
 
@@ -176,7 +178,7 @@ func makeImageNameOnce(streamName string) string {
 	return path.Join(streamName, datestamp)
 }
 
-func packImage(g *goroutine.Goroutine, client srpc.ClientI,
+func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
 	imageFilter *filter.Filter, rawTags tags.Tags, trig *triggers.Triggers,
@@ -193,7 +195,7 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 		}
 		defer g.Quit()
 	}
-	packages, err := listPackages(g, dirname)
+	packages, err := listPackages(ctx, g, dirname)
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)
 	}
@@ -230,7 +232,8 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 		fmt.Fprintf(buildLog, "Copied mtimes in %s\n",
 			format.Duration(time.Since(patchStartTime)))
 	}
-	if err := runTests(g, dirname, buildLog); err != nil {
+	// Run tests, which has the side effect of mutating the namespace.
+	if err := runTests(ctx, g, dirname, buildLog); err != nil {
 		return nil, err
 	}
 	objClient := objectclient.AttachObjectClient(client)
@@ -268,7 +271,10 @@ func packImage(g *goroutine.Goroutine, client srpc.ClientI,
 	return img, nil
 }
 
-func runTests(g *goroutine.Goroutine, rootDir string,
+// runTests will run the tests in the "/tests" directory under rootDir. It
+// uses the specified goroutine with a prepared mount namespace. This namespace
+// will be modified.
+func runTests(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	buildLog buildLogger) error {
 	var testProgrammes []string
 	err := filepath.Walk(filepath.Join(rootDir, "tests"),
@@ -285,11 +291,15 @@ func runTests(g *goroutine.Goroutine, rootDir string,
 	if len(testProgrammes) < 1 {
 		return nil
 	}
+	g.Run(func() { err = setupMounts(rootDir, nil) })
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(buildLog, "Running %d tests\n", len(testProgrammes))
 	results := make(chan testResultType, 1)
 	for _, prog := range testProgrammes {
 		go func(prog string) {
-			results <- runTest(g, rootDir, prog)
+			results <- runTest(ctx, g, rootDir, prog)
 		}(prog)
 	}
 	numFailures := 0
@@ -312,7 +322,8 @@ func runTests(g *goroutine.Goroutine, rootDir string,
 	return nil
 }
 
-func runTest(g *goroutine.Goroutine, rootDir, prog string) testResultType {
+func runTest(ctx context.Context, g *goroutine.Goroutine,
+	rootDir, prog string) testResultType {
 	startTime := time.Now()
 	result := testResultType{
 		buffer: make(chan byte, 4096),
@@ -321,8 +332,8 @@ func runTest(g *goroutine.Goroutine, rootDir, prog string) testResultType {
 	errChannel := make(chan error, 1)
 	timer := time.NewTimer(time.Second * 10)
 	go func() {
-		errChannel <- runInTarget(g, nil, &result, &result, rootDir, nil,
-			packagerPathname, "run", prog)
+		errChannel <- runInTarget(ctx, g, nil, &result, &result,
+			rootDir, nil, packagerPathname, "run", prog)
 	}()
 	select {
 	case result.err = <-errChannel:

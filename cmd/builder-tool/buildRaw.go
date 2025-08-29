@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package main
@@ -94,9 +95,10 @@ func buildRawFromManifest(manifestDir, rawFilename string,
 	err = builder.UnpackImageAndProcessManifestWithOptions(
 		srpcClient,
 		builder.BuildLocalOptions{
-			BindMounts:        bindMounts,
-			ManifestDirectory: manifestDir,
-			Variables:         variables,
+			BindMounts:           bindMounts,
+			ManifestDirectory:    manifestDir,
+			MaximumBuildDuration: *maximumBuildDuration,
+			Variables:            variables,
 		},
 		rootDir,
 		logWriter)
