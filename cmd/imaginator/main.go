@@ -40,7 +40,7 @@ var (
 		"Port number of image server")
 	imageRebuildInterval = flag.Duration("imageRebuildInterval", time.Hour,
 		"time between automatic rebuilds of images")
-	maximumBuildDuration = flag.Duration("maximumBuildDuration", 0,
+	maximumBuildDuration = flag.Duration("maximumBuildDuration", 24*time.Hour,
 		"Maximum time to build an image")
 	maximumExpirationDuration = flag.Duration("maximumExpirationDuration",
 		24*time.Hour, "Maximum expiration time for regular users")
