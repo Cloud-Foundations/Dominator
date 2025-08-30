@@ -514,9 +514,14 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 	client, _ := dialServer(b.imageServerAddress, 0)
 	var sleepUntil time.Time
 	for ; ; time.Sleep(time.Until(sleepUntil)) {
-		b.logger.Println("Starting automatic image build cycle")
 		startTime := time.Now()
 		sleepUntil = startTime.Add(minInterval)
+		if err := b.WaitForStreamsLoaded(5 * time.Minute); err != nil {
+			if b.extendAutoRebuildImages(client, minInterval*2) {
+				continue
+			}
+		}
+		b.logger.Println("Starting automatic image build cycle")
 		if b.extendAutoRebuildImages(client, minInterval*2) {
 			continue
 		}
