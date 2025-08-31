@@ -59,11 +59,9 @@ func dialServer(address string, retryTimeout time.Duration) (
 	})
 }
 
-// checkToAutoExtend will return true if auto building images should have their
-// lifetimes extended rather than built. Some conditions where it returns true:
-// - Auto building has been disabled.
-// - A slave driver is configured but failes to provide a slave in time
-func (b *Builder) checkToAutoExtend() bool {
+// checkAutoBuildDisabled will return true if auto building images has been
+// disabled.
+func (b *Builder) checkAutoBuildDisabled() bool {
 	b.disableLock.RLock()
 	disableUntil := b.disableAutoBuildsUntil
 	b.disableLock.RUnlock()
@@ -71,6 +69,17 @@ func (b *Builder) checkToAutoExtend() bool {
 		b.logger.Printf("Auto rebuilds disabled until %s (for %s), will extend image lifetimes\n",
 			disableUntil.Format(format.TimeFormatSeconds),
 			format.Duration(duration))
+		return true
+	}
+	return false
+}
+
+// checkToAutoExtend will return true if auto building images should have their
+// lifetimes extended rather than built. Some conditions where it returns true:
+// - Auto building has been disabled.
+// - A slave driver is configured but failes to provide a slave in time
+func (b *Builder) checkToAutoExtend() bool {
+	if b.checkAutoBuildDisabled() {
 		return true
 	}
 	if b.slaveDriver == nil {
@@ -396,31 +405,26 @@ func (b *Builder) disableBuildRequests(disableFor time.Duration) (
 	return b.disableBuildRequestsUntil, nil
 }
 
-// extendAutoRebuildImages will return true if image lifetimes were extended and
-// thus auto rebuilding should be skipped.
-func (b *Builder) extendAutoRebuildImages(client srpc.ClientI,
-	expiresIn time.Duration) bool {
-	if !b.checkToAutoExtend() {
-		return false
+// extendImage will extend the lifetime of an image.
+func (b *Builder) extendImage(client srpc.ClientI, streamName string,
+	expiresIn time.Duration) {
+	imageName, err := imgclient.FindLatestImage(client, streamName, false)
+	if err != nil {
+		b.logger.Printf("Error finding latest image for stream: %s: %s\n",
+			streamName, err)
+		return
 	}
-	for _, streamName := range b.listStreamsToAutoRebuild() {
-		imageName, err := imgclient.FindLatestImage(client, streamName, false)
-		if err != nil {
-			b.logger.Printf("Error finding latest image for stream: %s: %s\n",
-				streamName, err)
-			continue
-		}
-		if imageName == "" {
-			continue
-		}
-		err = imgclient.ChangeImageExpiration(client, imageName,
-			time.Now().Add(expiresIn))
-		if err != nil {
-			b.logger.Printf("Error extending expiration for image: %s: %s\n",
-				imageName, err)
-		}
+	if imageName == "" {
+		return
 	}
-	return true
+	err = imgclient.ChangeImageExpiration(client, imageName,
+		time.Now().Add(expiresIn))
+	if err != nil {
+		b.logger.Printf("Error extending expiration for image: %s: %s\n",
+			imageName, err)
+		return
+	}
+	b.logger.Printf("Extended expiration for image: %s\n", imageName)
 }
 
 func (b *Builder) getCurrentBuildLog(streamName string) ([]byte, error) {
@@ -479,7 +483,14 @@ func (b *Builder) getLatestBuildLog(streamName string) ([]byte, error) {
 }
 
 func (b *Builder) rebuildImage(client srpc.ClientI, streamName string,
-	expiresIn time.Duration) {
+	expiresIn time.Duration, extendOnly *bool) {
+	if !*extendOnly {
+		*extendOnly = b.checkToAutoExtend()
+	}
+	if *extendOnly {
+		b.extendImage(client, streamName, expiresIn)
+		return
+	}
 	_, _, err := b.build(client, proto.BuildImageRequest{
 		StreamName: streamName,
 		ExpiresIn:  expiresIn,
@@ -488,6 +499,7 @@ func (b *Builder) rebuildImage(client srpc.ClientI, streamName string,
 	if err == nil {
 		return
 	}
+	// Image build failed, so extend expiration of latest image.
 	imageName, e := imgclient.FindLatestImage(client, streamName, false)
 	if e != nil {
 		b.logger.Printf("Error finding latest image: %s: %s\n", streamName, e)
@@ -514,14 +526,15 @@ func (b *Builder) rebuildImages(minInterval time.Duration) {
 	client, _ := dialServer(b.imageServerAddress, 0)
 	var sleepUntil time.Time
 	for ; ; time.Sleep(time.Until(sleepUntil)) {
-		b.logger.Println("Starting automatic image build cycle")
 		startTime := time.Now()
 		sleepUntil = startTime.Add(minInterval)
-		if b.extendAutoRebuildImages(client, minInterval*2) {
-			continue
+		var extendOnly bool
+		if err := b.WaitForStreamsLoaded(5 * time.Minute); err != nil {
+			extendOnly = true
 		}
+		b.logger.Println("Starting automatic image build cycle")
 		for _, streamName := range b.listStreamsToAutoRebuild() {
-			b.rebuildImage(client, streamName, minInterval*2)
+			b.rebuildImage(client, streamName, minInterval*2, &extendOnly)
 		}
 		b.logger.Printf("Completed automatic image build cycle in %s\n",
 			format.Duration(time.Since(startTime)))
