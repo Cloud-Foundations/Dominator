@@ -93,6 +93,9 @@ var (
 		15*time.Second, "Default timeout (I/O deadline) during HTTP CONNECT")
 	srpcDefaultKeepAlivePeriod = flag.Duration("srpcDefaultKeepAlivePeriod",
 		5*time.Minute, "Default TCP keep-alive period")
+	srpcDefaultTlsHandshakeTimeout = flag.Duration(
+		"srpcDefaultTlsHandshakeTimeout",
+		time.Minute, "Default timeout (I/O deadline) during TLS handshake")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
 	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
