@@ -3,6 +3,7 @@ package srpc
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -80,6 +81,7 @@ var (
 	numPanicedCalls              uint64
 	numServerConnections         uint64
 	numOpenServerConnections     uint64
+	numOpenRawServerConnections  uint64
 	numRejectedServerConnections uint64
 	numRunningMethods            uint64
 	registerBuiltin              sync.Once
@@ -132,6 +134,12 @@ func registerServerMetrics() {
 	}
 	err = serverMetricsDir.RegisterMetric("num-open-connections",
 		&numOpenServerConnections, units.None, "number of open connections")
+	if err != nil {
+		panic(err)
+	}
+	err = serverMetricsDir.RegisterMetric("num-open-raw-connections",
+		&numOpenRawServerConnections, units.None,
+		"number of open raw connections")
 	if err != nil {
 		panic(err)
 	}
@@ -356,7 +364,13 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	logger := prefixlogger.New("SRPC/s("+req.RemoteAddr+"): ", logger)
 	serverMetricsMutex.Lock()
 	numServerConnections++
+	numOpenRawServerConnections++
 	serverMetricsMutex.Unlock()
+	defer func() {
+		serverMetricsMutex.Lock()
+		numOpenRawServerConnections--
+		serverMetricsMutex.Unlock()
+	}()
 	if doTls && serverTlsConfig == nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
@@ -440,7 +454,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		if req.TLS == nil {
 			tlsConn = tls.Server(unsecuredConn, serverTlsConfig)
 			myConn.conn = tlsConn
-			if err := tlsConn.Handshake(); err != nil {
+			if err := tlsHandshake(tlsConn); err != nil {
 				serverMetricsMutex.Lock()
 				numRejectedServerConnections++
 				serverMetricsMutex.Unlock()
@@ -693,6 +707,16 @@ func listPublicMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {
 	for _, method := range methods {
 		writer.WriteString(method)
 	}
+}
+
+func tlsHandshake(conn *tls.Conn) error {
+	ctx, cancel := context.WithDeadline(context.Background(),
+		time.Now().Add(*srpcDefaultTlsHandshakeTimeout))
+	defer cancel()
+	if err := conn.HandshakeContext(ctx); err != nil {
+		return fmt.Errorf("TLS handshake error: %s", err)
+	}
+	return nil
 }
 
 func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {

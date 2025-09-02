@@ -158,7 +158,7 @@ func dialHTTPEndpoint(network, address string, tlsConfig *tls.Config,
 	}
 	if fullTLS {
 		tlsConn := tls.Client(unsecuredConn, tlsConfig)
-		if err := tlsConn.Handshake(); err != nil {
+		if err := tlsHandshake(tlsConn); err != nil {
 			if strings.Contains(err.Error(), ErrorBadCertificate.Error()) {
 				return nil, ErrorBadCertificate
 			}
@@ -171,7 +171,7 @@ func dialHTTPEndpoint(network, address string, tlsConfig *tls.Config,
 	}
 	if endpoint.tls && !fullTLS {
 		tlsConn := tls.Client(unsecuredConn, tlsConfig)
-		if err := tlsConn.Handshake(); err != nil {
+		if err := tlsHandshake(tlsConn); err != nil {
 			if strings.Contains(err.Error(), ErrorBadCertificate.Error()) {
 				return nil, ErrorBadCertificate
 			}
