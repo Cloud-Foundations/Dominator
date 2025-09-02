@@ -737,6 +737,7 @@ type RestoreVmFromSnapshotRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
 	Name              string
+	Retain            bool
 }
 
 type RestoreVmFromSnapshotResponse struct {
