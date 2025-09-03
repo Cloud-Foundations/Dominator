@@ -3371,14 +3371,13 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	return nil
 }
 
-func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
-	snapshotName string) error {
-	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
+func (m *Manager) restoreVmFromSnapshot(req proto.RestoreVmFromSnapshotRequest,
+	authInfo *srpc.AuthInformation) error {
+	snapshotSuffix, err := sanitiseSnapshotName(req.Name)
 	if err != nil {
 		return err
 	}
-	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	vm, err := m.getVmLockAndAuth(req.IpAddress, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
@@ -3392,20 +3391,23 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 		}
 	}()
 	if vm.State != proto.StateStopped {
-		if !forceIfNotStopped {
+		if !req.ForceIfNotStopped {
 			return errors.New("VM is not stopped")
 		}
 	}
 	for index, volume := range vm.VolumeLocations {
 		snapshotFilename := volume.Filename + "." + snapshotSuffix
-		if err := os.Rename(snapshotFilename, volume.Filename); err != nil {
+		err := restore(snapshotFilename, volume.Filename, req.Retain)
+		if err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		}
-		vm.mutex.Lock()
-		delete(vm.Volumes[index].Snapshots, snapshotName)
-		vm.mutex.Unlock()
+		if !req.Retain {
+			vm.mutex.Lock()
+			delete(vm.Volumes[index].Snapshots, req.Name)
+			vm.mutex.Unlock()
+		}
 		changed = true
 	}
 	return nil

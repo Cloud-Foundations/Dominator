@@ -3,6 +3,8 @@ package manager
 import (
 	"bufio"
 	"os"
+
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
 
 type bufferedFile struct {
@@ -38,6 +40,15 @@ func openBufferedFile(filename string) (*bufferedFile, error) {
 		File:   file,
 		Reader: bufio.NewReader(file),
 	}, nil
+}
+
+func restore(oldName, newName string, retain bool) error {
+	if retain {
+		return fsutil.CopyFile(newName, oldName, fsutil.PrivateFilePerms)
+	} else {
+		return os.Rename(oldName, newName)
+	}
+
 }
 
 func (r *bufferedFile) Read(p []byte) (int, error) {

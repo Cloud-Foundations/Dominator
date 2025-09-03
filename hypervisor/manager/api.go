@@ -518,8 +518,16 @@ func (m *Manager) ReplaceVmUserData(ipAddr net.IP, reader io.Reader,
 func (m *Manager) RestoreVmFromSnapshot(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
 	snapshotName string) error {
-	return m.restoreVmFromSnapshot(ipAddr, authInfo, forceIfNotStopped,
-		snapshotName)
+	return m.RestoreVmFromSnapshot2(proto.RestoreVmFromSnapshotRequest{
+		IpAddress:         ipAddr,
+		ForceIfNotStopped: forceIfNotStopped,
+		Name:              snapshotName,
+	}, authInfo)
+}
+
+func (m *Manager) RestoreVmFromSnapshot2(req proto.RestoreVmFromSnapshotRequest,
+	authInfo *srpc.AuthInformation) error {
+	return m.restoreVmFromSnapshot(req, authInfo)
 }
 
 func (m *Manager) RestoreVmImage(ipAddr net.IP,
