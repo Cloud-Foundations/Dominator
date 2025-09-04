@@ -10,9 +10,8 @@ func (t *srpcType) RestoreVmFromSnapshot(conn *srpc.Conn,
 	request hypervisor.RestoreVmFromSnapshotRequest,
 	reply *hypervisor.RestoreVmFromSnapshotResponse) error {
 	response := hypervisor.RestoreVmFromSnapshotResponse{
-		errors.ErrorToString(t.manager.RestoreVmFromSnapshot(request.IpAddress,
-			conn.GetAuthInformation(), request.ForceIfNotStopped,
-			request.Name))}
+		errors.ErrorToString(t.manager.RestoreVmFromSnapshot2(request,
+			conn.GetAuthInformation()))}
 	*reply = response
 	return nil
 }
