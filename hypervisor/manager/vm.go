@@ -118,14 +118,14 @@ func copyData(filename string, reader io.Reader, length uint64,
 	return err
 }
 
-func createTapDevice(bridge string) (*os.File, error) {
+func createTapDevice(bridge string) (*os.File, string, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tapFile, tapName, err := libnet.CreateTapDevice()
 	if err != nil {
-		return nil, fmt.Errorf("error creating tap device: %s", err)
+		return nil, "", fmt.Errorf("error creating tap device: %s", err)
 	}
 	doAutoClose := true
 	defer func() {
@@ -137,14 +137,14 @@ func createTapDevice(bridge string) (*os.File, error) {
 		"mtu", strconv.Itoa(bridgeIf.MTU),
 		"up")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("error upping: %s: %s", err, output)
+		return nil, "", fmt.Errorf("error upping: %s: %s", err, output)
 	}
 	cmd = exec.Command("ip", "link", "set", tapName, "master", bridge)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("error attaching: %s: %s", err, output)
+		return nil, "", fmt.Errorf("error attaching: %s: %s", err, output)
 	}
 	doAutoClose = false
-	return tapFile, nil
+	return tapFile, tapName, nil
 }
 
 func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
@@ -4434,14 +4434,17 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		return err
 	}
 	var tapFiles []*os.File
+	var tapNames []string
 	for _, bridge := range bridges {
-		tapFile, err := createTapDevice(bridge)
+		tapFile, tapName, err := createTapDevice(bridge)
 		if err != nil {
 			return fmt.Errorf("error creating tap device: %s", err)
 		}
 		defer tapFile.Close()
 		tapFiles = append(tapFiles, tapFile)
+		tapNames = append(tapNames, tapName)
 	}
+	vm.logger.Debugf(0, "tap devices: %v\n", tapNames)
 	pidfile := filepath.Join(vm.dirname, "pidfile")
 	err = vm.startQemuVm(enableNetboot, haveManagerLock, pidfile, nCpus,
 		netOptions, tapFiles)
