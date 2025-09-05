@@ -100,6 +100,8 @@ var (
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
+	retain = flag.Bool("retain", false,
+		"If true, retain the old snapshot after restoring VM")
 	secondarySubnetIDs         flagutil.StringList
 	secondaryVolumeSizes       flagutil.SizeList
 	secondaryVolumesInitParams = flag.String("secondaryVolumesInitParams", "",

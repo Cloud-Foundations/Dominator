@@ -31,6 +31,7 @@ func restoreVmFromSnapshotOnHypervisor(hypervisor string, ipAddr net.IP,
 		IpAddress:         ipAddr,
 		ForceIfNotStopped: *forceIfNotStopped,
 		Name:              *snapshotName,
+		Retain:            *retain,
 	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
