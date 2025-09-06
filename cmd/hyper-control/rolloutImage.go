@@ -179,7 +179,7 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 	}
 	logger.Debugln(0, "splitting unused/used Hypervisors")
 	unusedHypervisors, usedHypervisors := markUnusedHypervisors(hypervisors,
-		cpuSharer)
+		cpuSharer, logger)
 	logger.Debugf(0, "%d unused, %d used Hypervisors\n",
 		len(unusedHypervisors), len(usedHypervisors))
 	numSteps := math.Sqrt(float64(len(unusedHypervisors)*2)) +
@@ -254,6 +254,44 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 	logger.Printf("rollout completed in %s\n",
 		format.Duration(time.Since(startTime)))
 	return nil
+}
+
+func checkIdle(h *hypervisorType, dialer libnet.Dialer) {
+	h.logger.Debugf(1, "connecting to: %s\n", h.hostname)
+	client, err := h.hypervisorClientResource.GetHTTPWithDialer(nil, dialer)
+	if err != nil {
+		h.logger.Printf("error connecting to hypervisor: %s\n", err)
+		return
+	}
+	defer client.Put()
+	request := hyper_proto.ListVMsRequest{
+		IgnoreStateMask: 1<<hyper_proto.StateFailedToStart |
+			1<<hyper_proto.StateStopping |
+			1<<hyper_proto.StateStopped |
+			1<<hyper_proto.StateDestroying,
+	}
+	var reply hyper_proto.ListVMsResponse
+	errorChannel := make(chan error, 1)
+	timer := time.NewTimer(*connectTimeout)
+	go func() {
+		errorChannel <- client.RequestReply("Hypervisor.ListVMs", request,
+			&reply)
+	}()
+	select {
+	case err := <-errorChannel:
+		if err != nil {
+			client.Close()
+			h.logger.Printf("error listing VMS: %s", err)
+			return
+		}
+		timer.Stop()
+		if len(reply.IpAddresses) < 1 {
+			h.noVMs = true
+		}
+	case <-timer.C:
+		client.Close()
+		h.logger.Println("timed out listing VMS")
+	}
 }
 
 func checkImage(imageServerClientResource *srpc.ClientResource,
@@ -343,41 +381,26 @@ func listConnectedHypervisorsInLocation(clientResource *srpc.ClientResource,
 }
 
 func markUnusedHypervisors(hypervisors []*hypervisorType,
-	cpuSharer cpusharer.CpuSharer) (
+	cpuSharer cpusharer.CpuSharer, logger log.DebugLogger) (
 	map[*hypervisorType]struct{}, map[*hypervisorType]struct{}) {
-	dialer := libnet.NewCpuSharingDialer(&net.Dialer{}, cpuSharer)
+	dialer := libnet.NewCpuSharingDialer(
+		&net.Dialer{Timeout: *connectTimeout},
+		cpuSharer)
 	waitGroup := &sync.WaitGroup{}
 	for _, hypervisor_ := range hypervisors {
 		waitGroup.Add(1)
 		go func(h *hypervisorType) {
 			defer waitGroup.Done()
+			logger.Debugf(2, "grabbing CPU for: %s\n", h.hostname)
 			cpuSharer.GrabCpu()
 			defer cpuSharer.ReleaseCpu()
-			client, err := h.hypervisorClientResource.GetHTTPWithDialer(nil,
-				dialer)
-			if err != nil {
-				h.logger.Printf("error connecting to hypervisor: %s\n", err)
-				return
-			}
-			defer client.Put()
-			request := hyper_proto.ListVMsRequest{
-				IgnoreStateMask: 1<<hyper_proto.StateFailedToStart |
-					1<<hyper_proto.StateStopping |
-					1<<hyper_proto.StateStopped |
-					1<<hyper_proto.StateDestroying,
-			}
-			var reply hyper_proto.ListVMsResponse
-			err = client.RequestReply("Hypervisor.ListVMs", request, &reply)
-			if err != nil {
-				h.logger.Printf("error listing VMS: %s", err)
-				return
-			}
-			if len(reply.IpAddresses) < 1 {
-				h.noVMs = true
-			}
+			checkIdle(h, dialer)
 		}(hypervisor_)
 	}
+	logger.Debugf(1, "waiting for %d Hypervisors to list VMs\n",
+		len(hypervisors))
 	waitGroup.Wait()
+	logger.Debugln(1, "finished waiting")
 	unusedHypervisors := make(map[*hypervisorType]struct{})
 	usedHypervisors := make(map[*hypervisorType]struct{})
 	for _, hypervisor := range hypervisors {
