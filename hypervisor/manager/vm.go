@@ -660,6 +660,28 @@ func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
 	return nil
 }
 
+func (m *Manager) changeVmHostname(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, hostname string) error {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	err = vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)
+	if err != nil {
+		return err
+	}
+	for _, address := range vm.SecondaryAddresses {
+		err := vm.manager.DhcpServer.AddLease(address, vm.Hostname)
+		if err != nil {
+			vm.logger.Println(err)
+		}
+	}
+	vm.Hostname = hostname
+	vm.writeAndSendInfo()
+	return nil
+}
+
 func (m *Manager) changeVmMachineType(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, machineType proto.MachineType) error {
 	if err := machineType.CheckValid(); err != nil {

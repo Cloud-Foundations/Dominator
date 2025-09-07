@@ -181,6 +181,11 @@ func (m *Manager) ChangeVmDestroyProtection(ipAddr net.IP,
 	return m.changeVmDestroyProtection(ipAddr, authInfo, destroyProtection)
 }
 
+func (m *Manager) ChangeVmHostname(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, hostname string) error {
+	return m.changeVmHostname(ipAddr, authInfo, hostname)
+}
+
 func (m *Manager) ChangeVmMachineType(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, machineType proto.MachineType) error {
 	return m.changeVmMachineType(ipAddr, authInfo, machineType)
