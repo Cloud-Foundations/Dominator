@@ -19,13 +19,13 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func acknowledgeVm(client *srpc.Client, ipAddress net.IP) error {
+func acknowledgeVm(client srpc.ClientI, ipAddress net.IP) error {
 	request := proto.AcknowledgeVmRequest{ipAddress}
 	var reply proto.AcknowledgeVmResponse
 	return client.RequestReply("Hypervisor.AcknowledgeVm", request, &reply)
 }
 
-func addVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
+func addVmVolumes(client srpc.ClientI, ipAddress net.IP, sizes []uint64) error {
 	request := proto.AddVmVolumesRequest{
 		IpAddress:   ipAddress,
 		VolumeSizes: sizes,
@@ -38,7 +38,7 @@ func addVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
 	return errors.New(reply.Error)
 }
 
-func changeVmConsoleType(client *srpc.Client, ipAddress net.IP,
+func changeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.ConsoleType) error {
 	request := proto.ChangeVmConsoleTypeRequest{
 		ConsoleType: consoleType,
@@ -53,7 +53,7 @@ func changeVmConsoleType(client *srpc.Client, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
-func changeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
+func changeVmCpuPriority(client srpc.ClientI, ipAddress net.IP,
 	request proto.ChangeVmCpuPriorityRequest) error {
 	var reply proto.ChangeVmCpuPriorityResponse
 	err := client.RequestReply("Hypervisor.ChangeVmCpuPriority", request,
@@ -64,7 +64,22 @@ func changeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
-func changeVmMachineType(client *srpc.Client, ipAddress net.IP,
+func changeVmHostname(client srpc.ClientI, ipAddress net.IP,
+	hostname string) error {
+	request := proto.ChangeVmHostnameRequest{
+		Hostname:  hostname,
+		IpAddress: ipAddress,
+	}
+	var reply proto.ChangeVmHostnameResponse
+	err := client.RequestReply("Hypervisor.ChangeVmHostname", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func changeVmMachineType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.MachineType) error {
 	request := proto.ChangeVmMachineTypeRequest{
 		MachineType: consoleType,
@@ -79,7 +94,7 @@ func changeVmMachineType(client *srpc.Client, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
-func changeVmSize(client *srpc.Client,
+func changeVmSize(client srpc.ClientI,
 	request proto.ChangeVmSizeRequest) error {
 	var reply proto.ChangeVmSizeResponse
 	err := client.RequestReply("Hypervisor.ChangeVmSize", request, &reply)
@@ -89,7 +104,7 @@ func changeVmSize(client *srpc.Client,
 	return errors.New(reply.Error)
 }
 
-func changeVmSubnet(client *srpc.Client,
+func changeVmSubnet(client srpc.ClientI,
 	request proto.ChangeVmSubnetRequest) (proto.ChangeVmSubnetResponse, error) {
 	var reply proto.ChangeVmSubnetResponse
 	err := client.RequestReply("Hypervisor.ChangeVmSubnet", request, &reply)
@@ -102,7 +117,7 @@ func changeVmSubnet(client *srpc.Client,
 	return reply, nil
 }
 
-func changeVmVolumeInterfaces(client *srpc.Client, ipAddress net.IP,
+func changeVmVolumeInterfaces(client srpc.ClientI, ipAddress net.IP,
 	volumeInterfaces []proto.VolumeInterface) error {
 	request := proto.ChangeVmVolumeInterfacesRequest{
 		Interfaces: volumeInterfaces,
@@ -117,7 +132,7 @@ func changeVmVolumeInterfaces(client *srpc.Client, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
-func changeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+func changeVmVolumeSize(client srpc.ClientI, ipAddress net.IP, index uint,
 	size uint64) error {
 	request := proto.ChangeVmVolumeSizeRequest{
 		IpAddress:   ipAddress,
@@ -132,7 +147,7 @@ func changeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
 	return errors.New(reply.Error)
 }
 
-func connectToVmConsole(client *srpc.Client, ipAddr net.IP,
+func connectToVmConsole(client srpc.ClientI, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	serverConn, err := client.Call("Hypervisor.ConnectToVmConsole")
 	if err != nil {
@@ -191,7 +206,7 @@ func connectToVmConsole(client *srpc.Client, ipAddr net.IP,
 	return writeErr
 }
 
-func createVm(client *srpc.Client, request proto.CreateVmRequest,
+func createVm(client srpc.ClientI, request proto.CreateVmRequest,
 	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
 	if conn, err := client.Call("Hypervisor.CreateVm"); err != nil {
 		return err
@@ -222,7 +237,7 @@ func createVm(client *srpc.Client, request proto.CreateVmRequest,
 	}
 }
 
-func deleteVmVolume(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+func deleteVmVolume(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	volumeIndex uint) error {
 	request := proto.DeleteVmVolumeRequest{
 		AccessToken: accessToken,
@@ -237,7 +252,7 @@ func deleteVmVolume(client *srpc.Client, ipAddr net.IP, accessToken []byte,
 	return errors.New(reply.Error)
 }
 
-func destroyVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func destroyVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	request := proto.DestroyVmRequest{
 		AccessToken: accessToken,
 		IpAddress:   ipAddr,
@@ -250,7 +265,7 @@ func destroyVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
 	return errors.New(reply.Error)
 }
 
-func exportLocalVm(client *srpc.Client, ipAddr net.IP,
+func exportLocalVm(client srpc.ClientI, ipAddr net.IP,
 	verificationCookie []byte) (proto.ExportLocalVmInfo, error) {
 	request := proto.ExportLocalVmRequest{
 		IpAddress:          ipAddr,
@@ -267,7 +282,7 @@ func exportLocalVm(client *srpc.Client, ipAddr net.IP,
 	return reply.VmInfo, nil
 }
 
-func getCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
+func getCapacity(client srpc.ClientI) (proto.GetCapacityResponse, error) {
 	request := proto.GetCapacityRequest{}
 	var reply proto.GetCapacityResponse
 	err := client.RequestReply("Hypervisor.GetCapacity", request, &reply)
@@ -304,7 +319,7 @@ func getPublicKey(client srpc.ClientI) ([]byte, error) {
 	return reply.KeyPEM, nil
 }
 
-func getRootCookiePath(client *srpc.Client) (string, error) {
+func getRootCookiePath(client srpc.ClientI) (string, error) {
 	request := proto.GetRootCookiePathRequest{}
 	var reply proto.GetRootCookiePathResponse
 	err := client.RequestReply("Hypervisor.GetRootCookiePath", request, &reply)
@@ -317,7 +332,7 @@ func getRootCookiePath(client *srpc.Client) (string, error) {
 	return reply.Path, nil
 }
 
-func getVmCreateRequest(client *srpc.Client, ipAddr net.IP) (
+func getVmCreateRequest(client srpc.ClientI, ipAddr net.IP) (
 	proto.CreateVmRequest, error) {
 	request := proto.GetVmCreateRequestRequest{IpAddress: ipAddr}
 	var reply proto.GetVmCreateRequestResponse
@@ -331,7 +346,7 @@ func getVmCreateRequest(client *srpc.Client, ipAddr net.IP) (
 	return reply.CreateVmRequest, nil
 }
 
-func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
+func getVmInfo(client srpc.ClientI, ipAddr net.IP) (proto.VmInfo, error) {
 	request := proto.GetVmInfoRequest{IpAddress: ipAddr}
 	var reply proto.GetVmInfoResponse
 	err := client.RequestReply("Hypervisor.GetVmInfo", request, &reply)
@@ -344,7 +359,7 @@ func getVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
 	return reply.VmInfo, nil
 }
 
-func getVmInfos(client *srpc.Client,
+func getVmInfos(client srpc.ClientI,
 	request proto.GetVmInfosRequest) ([]proto.VmInfo, error) {
 	var reply proto.GetVmInfosResponse
 	err := client.RequestReply("Hypervisor.GetVmInfos", request, &reply)
@@ -357,7 +372,7 @@ func getVmInfos(client *srpc.Client,
 	return reply.VmInfos, nil
 }
 
-func getVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
+func getVmLastPatchLog(client srpc.ClientI, ipAddr net.IP) (
 	[]byte, time.Time, error) {
 	conn, err := client.Call("Hypervisor.GetVmLastPatchLog")
 	if err != nil {
@@ -385,7 +400,7 @@ func getVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
 	return buffer.Bytes(), response.PatchTime, nil
 }
 
-func holdLock(client *srpc.Client, timeout time.Duration,
+func holdLock(client srpc.ClientI, timeout time.Duration,
 	writeLock bool) error {
 	request := proto.HoldLockRequest{timeout, writeLock}
 	var reply proto.HoldLockResponse
@@ -396,7 +411,7 @@ func holdLock(client *srpc.Client, timeout time.Duration,
 	return errors.New(reply.Error)
 }
 
-func holdVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+func holdVmLock(client srpc.ClientI, ipAddr net.IP, timeout time.Duration,
 	writeLock bool) error {
 	request := proto.HoldVmLockRequest{ipAddr, timeout, writeLock}
 	var reply proto.HoldVmLockResponse
@@ -407,7 +422,7 @@ func holdVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
 	return errors.New(reply.Error)
 }
 
-func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
+func listSubnets(client srpc.ClientI, doSort bool) ([]proto.Subnet, error) {
 	request := proto.ListSubnetsRequest{Sort: doSort}
 	var reply proto.ListSubnetsResponse
 	err := client.RequestReply("Hypervisor.ListSubnets", request, &reply)
@@ -420,7 +435,7 @@ func listSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
 	return reply.Subnets, nil
 }
 
-func listVMs(client *srpc.Client,
+func listVMs(client srpc.ClientI,
 	request proto.ListVMsRequest) ([]net.IP, error) {
 	var reply proto.ListVMsResponse
 	err := client.RequestReply("Hypervisor.ListVMs", request, &reply)
@@ -430,7 +445,7 @@ func listVMs(client *srpc.Client,
 	return reply.IpAddresses, nil
 }
 
-func listVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
+func listVolumeDirectories(client srpc.ClientI, doSort bool) ([]string, error) {
 	var request proto.ListVolumeDirectoriesRequest
 	var reply proto.ListVolumeDirectoriesResponse
 	err := client.RequestReply("Hypervisor.ListVolumeDirectories", request,
@@ -447,7 +462,7 @@ func listVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
 	return reply.Directories, nil
 }
 
-func powerOff(client *srpc.Client, stopVMs bool) error {
+func powerOff(client srpc.ClientI, stopVMs bool) error {
 	request := proto.PowerOffRequest{StopVMs: stopVMs}
 	var reply proto.PowerOffResponse
 	err := client.RequestReply("Hypervisor.PowerOff", request, &reply)
@@ -457,7 +472,7 @@ func powerOff(client *srpc.Client, stopVMs bool) error {
 	return errors.New(reply.Error)
 }
 
-func prepareVmForMigration(client *srpc.Client, ipAddr net.IP,
+func prepareVmForMigration(client srpc.ClientI, ipAddr net.IP,
 	accessToken []byte, enable bool) error {
 	request := proto.PrepareVmForMigrationRequest{
 		AccessToken: accessToken,
@@ -473,7 +488,7 @@ func prepareVmForMigration(client *srpc.Client, ipAddr net.IP,
 	return errors.New(reply.Error)
 }
 
-func registerExternalLeases(client *srpc.Client, addressList proto.AddressList,
+func registerExternalLeases(client srpc.ClientI, addressList proto.AddressList,
 	hostnames []string) error {
 	request := proto.RegisterExternalLeasesRequest{
 		Addresses: addressList,
@@ -488,7 +503,7 @@ func registerExternalLeases(client *srpc.Client, addressList proto.AddressList,
 	return errors.New(reply.Error)
 }
 
-func reorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+func reorderVmVolumes(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	volumeIndices []uint) error {
 	request := proto.ReorderVmVolumesRequest{
 		IpAddress:     ipAddr,
@@ -513,7 +528,7 @@ func replaceVmIdentity(client srpc.ClientI,
 	return errors.New(response.Error)
 }
 
-func scanVmRoot(client *srpc.Client, ipAddr net.IP,
+func scanVmRoot(client srpc.ClientI, ipAddr net.IP,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	request := proto.ScanVmRootRequest{IpAddress: ipAddr, Filter: scanFilter}
 	var reply proto.ScanVmRootResponse
@@ -524,7 +539,7 @@ func scanVmRoot(client *srpc.Client, ipAddr net.IP,
 	return reply.FileSystem, errors.New(reply.Error)
 }
 
-func setDisabledState(client *srpc.Client, disable bool) error {
+func setDisabledState(client srpc.ClientI, disable bool) error {
 	request := proto.SetDisabledStateRequest{Disable: disable}
 	var reply proto.SetDisabledStateResponse
 	err := client.RequestReply("Hypervisor.SetDisabledState", request, &reply)
@@ -534,7 +549,7 @@ func setDisabledState(client *srpc.Client, disable bool) error {
 	return errors.New(reply.Error)
 }
 
-func startVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func startVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	request := proto.StartVmRequest{
 		AccessToken: accessToken,
 		IpAddress:   ipAddr,
@@ -547,7 +562,7 @@ func startVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
 	return errors.New(reply.Error)
 }
 
-func stopVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func stopVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	request := proto.StopVmRequest{
 		AccessToken: accessToken,
 		IpAddress:   ipAddr,

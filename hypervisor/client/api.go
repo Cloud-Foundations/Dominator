@@ -11,74 +11,79 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func AcknowledgeVm(client *srpc.Client, ipAddress net.IP) error {
+func AcknowledgeVm(client srpc.ClientI, ipAddress net.IP) error {
 	return acknowledgeVm(client, ipAddress)
 }
 
-func AddVmVolumes(client *srpc.Client, ipAddress net.IP, sizes []uint64) error {
+func AddVmVolumes(client srpc.ClientI, ipAddress net.IP, sizes []uint64) error {
 	return addVmVolumes(client, ipAddress, sizes)
 }
 
-func ChangeVmConsoleType(client *srpc.Client, ipAddress net.IP,
+func ChangeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.ConsoleType) error {
 	return changeVmConsoleType(client, ipAddress, consoleType)
 }
 
-func ChangeVmCpuPriority(client *srpc.Client, ipAddress net.IP,
+func ChangeVmCpuPriority(client srpc.ClientI, ipAddress net.IP,
 	request proto.ChangeVmCpuPriorityRequest) error {
 	return changeVmCpuPriority(client, ipAddress, request)
 }
 
-func ChangeVmMachineType(client *srpc.Client, ipAddress net.IP,
+func ChangeVmHostname(client srpc.ClientI, ipAddress net.IP,
+	hostname string) error {
+	return changeVmHostname(client, ipAddress, hostname)
+}
+
+func ChangeVmMachineType(client srpc.ClientI, ipAddress net.IP,
 	machineType proto.MachineType) error {
 	return changeVmMachineType(client, ipAddress, machineType)
 }
 
-func ChangeVmSize(client *srpc.Client,
+func ChangeVmSize(client srpc.ClientI,
 	request proto.ChangeVmSizeRequest) error {
 	return changeVmSize(client, request)
 }
 
-func ChangeVmSubnet(client *srpc.Client,
+func ChangeVmSubnet(client srpc.ClientI,
 	request proto.ChangeVmSubnetRequest) (proto.ChangeVmSubnetResponse, error) {
 	return changeVmSubnet(client, request)
 }
 
-func ChangeVmVolumeInterfaces(client *srpc.Client, ipAddress net.IP,
+func ChangeVmVolumeInterfaces(client srpc.ClientI, ipAddress net.IP,
 	volumeInterfaces []proto.VolumeInterface) error {
 	return changeVmVolumeInterfaces(client, ipAddress, volumeInterfaces)
 }
 
-func ChangeVmVolumeSize(client *srpc.Client, ipAddress net.IP, index uint,
+func ChangeVmVolumeSize(client srpc.ClientI, ipAddress net.IP, index uint,
 	size uint64) error {
 	return changeVmVolumeSize(client, ipAddress, index, size)
 }
 
-func ConnectToVmConsole(client *srpc.Client, ipAddr net.IP,
+func ConnectToVmConsole(client srpc.ClientI, ipAddr net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	return connectToVmConsole(client, ipAddr, vncViewerCommand, logger)
 }
 
-func CreateVm(client *srpc.Client, request proto.CreateVmRequest,
+func CreateVm(client srpc.ClientI, request proto.CreateVmRequest,
 	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
 	return createVm(client, request, reply, logger)
 }
 
-func DeleteVmVolume(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+func DeleteVmVolume(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	volumeIndex uint) error {
 	return deleteVmVolume(client, ipAddr, accessToken, volumeIndex)
 }
 
-func DestroyVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func DestroyVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	return destroyVm(client, ipAddr, accessToken)
 }
 
-func ExportLocalVm(client *srpc.Client, ipAddr net.IP,
+func ExportLocalVm(client srpc.ClientI, ipAddr net.IP,
 	verificationCookie []byte) (proto.ExportLocalVmInfo, error) {
 	return exportLocalVm(client, ipAddr, verificationCookie)
 }
 
-func GetCapacity(client *srpc.Client) (proto.GetCapacityResponse, error) {
+func GetCapacity(client srpc.ClientI) (proto.GetCapacityResponse, error) {
 	return getCapacity(client)
 }
 
@@ -92,67 +97,67 @@ func GetPublicKey(client srpc.ClientI) ([]byte, error) {
 	return getPublicKey(client)
 }
 
-func GetRootCookiePath(client *srpc.Client) (string, error) {
+func GetRootCookiePath(client srpc.ClientI) (string, error) {
 	return getRootCookiePath(client)
 }
 
-func GetVmCreateRequest(client *srpc.Client, ipAddr net.IP) (
+func GetVmCreateRequest(client srpc.ClientI, ipAddr net.IP) (
 	proto.CreateVmRequest, error) {
 	return getVmCreateRequest(client, ipAddr)
 }
 
-func GetVmInfo(client *srpc.Client, ipAddr net.IP) (proto.VmInfo, error) {
+func GetVmInfo(client srpc.ClientI, ipAddr net.IP) (proto.VmInfo, error) {
 	return getVmInfo(client, ipAddr)
 }
 
-func GetVmInfos(client *srpc.Client,
+func GetVmInfos(client srpc.ClientI,
 	request proto.GetVmInfosRequest) ([]proto.VmInfo, error) {
 	return getVmInfos(client, request)
 }
 
-func GetVmLastPatchLog(client *srpc.Client, ipAddr net.IP) (
+func GetVmLastPatchLog(client srpc.ClientI, ipAddr net.IP) (
 	[]byte, time.Time, error) {
 	return getVmLastPatchLog(client, ipAddr)
 }
 
-func HoldLock(client *srpc.Client, timeout time.Duration,
+func HoldLock(client srpc.ClientI, timeout time.Duration,
 	writeLock bool) error {
 	return holdLock(client, timeout, writeLock)
 }
 
-func HoldVmLock(client *srpc.Client, ipAddr net.IP, timeout time.Duration,
+func HoldVmLock(client srpc.ClientI, ipAddr net.IP, timeout time.Duration,
 	writeLock bool) error {
 	return holdVmLock(client, ipAddr, timeout, writeLock)
 }
 
-func ListSubnets(client *srpc.Client, doSort bool) ([]proto.Subnet, error) {
+func ListSubnets(client srpc.ClientI, doSort bool) ([]proto.Subnet, error) {
 	return listSubnets(client, doSort)
 }
 
-func ListVMs(client *srpc.Client,
+func ListVMs(client srpc.ClientI,
 	request proto.ListVMsRequest) ([]net.IP, error) {
 	return listVMs(client, request)
 }
 
-func ListVolumeDirectories(client *srpc.Client, doSort bool) ([]string, error) {
+func ListVolumeDirectories(client srpc.ClientI, doSort bool) ([]string, error) {
 	return listVolumeDirectories(client, doSort)
 }
 
-func PowerOff(client *srpc.Client, stopVMs bool) error {
+func PowerOff(client srpc.ClientI, stopVMs bool) error {
 	return powerOff(client, stopVMs)
 }
 
-func PrepareVmForMigration(client *srpc.Client, ipAddr net.IP,
+func PrepareVmForMigration(client srpc.ClientI, ipAddr net.IP,
 	accessToken []byte, enable bool) error {
 	return prepareVmForMigration(client, ipAddr, accessToken, enable)
 }
 
-func RegisterExternalLeases(client *srpc.Client, addressList proto.AddressList,
+func RegisterExternalLeases(client srpc.ClientI, addressList proto.AddressList,
 	hostnames []string) error {
 	return registerExternalLeases(client, addressList, hostnames)
 }
 
-func ReorderVmVolumes(client *srpc.Client, ipAddr net.IP, accessToken []byte,
+func ReorderVmVolumes(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	volumeIndices []uint) error {
 	return reorderVmVolumes(client, ipAddr, accessToken, volumeIndices)
 }
@@ -162,19 +167,19 @@ func ReplaceVmIdentity(client srpc.ClientI,
 	return replaceVmIdentity(client, request)
 }
 
-func ScanVmRoot(client *srpc.Client, ipAddr net.IP,
+func ScanVmRoot(client srpc.ClientI, ipAddr net.IP,
 	scanFilter *filter.Filter) (*filesystem.FileSystem, error) {
 	return scanVmRoot(client, ipAddr, scanFilter)
 }
 
-func SetDisabledState(client *srpc.Client, disable bool) error {
+func SetDisabledState(client srpc.ClientI, disable bool) error {
 	return setDisabledState(client, disable)
 }
 
-func StartVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func StartVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	return startVm(client, ipAddr, accessToken)
 }
 
-func StopVm(client *srpc.Client, ipAddr net.IP, accessToken []byte) error {
+func StopVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	return stopVm(client, ipAddr, accessToken)
 }
