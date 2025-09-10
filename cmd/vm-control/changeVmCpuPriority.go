@@ -37,7 +37,7 @@ func changeVmCpuPriorityOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	var reply proto.ChangeVmOwnerUsersResponse
+	var reply proto.ChangeVmCpuPriorityResponse
 	err = client.RequestReply("Hypervisor.ChangeVmCpuPriority",
 		request, &reply)
 	if err != nil {

@@ -209,6 +209,7 @@ var subcommands = []commands.Command{
 	{"change-vm-cpus", "IPaddr", 1, 1, changeVmCPUsSubcommand},
 	{"change-vm-destroy-protection", "IPaddr", 1, 1,
 		changeVmDestroyProtectionSubcommand},
+	{"change-vm-hostname", "IPaddr", 1, 1, changeVmHostnameSubcommand},
 	{"change-vm-machine-type", "IPaddr", 1, 1, changeVmMachineTypeSubcommand},
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
 	{"change-vm-owner-groups", "IPaddr", 1, 1, changeVmOwnerGroupsSubcommand},

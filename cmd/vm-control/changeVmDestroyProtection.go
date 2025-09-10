@@ -37,7 +37,7 @@ func changeVmDestroyProtectionOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	var reply proto.ChangeVmOwnerUsersResponse
+	var reply proto.ChangeVmDestroyProtectionResponse
 	err = client.RequestReply("Hypervisor.ChangeVmDestroyProtection",
 		request, &reply)
 	if err != nil {

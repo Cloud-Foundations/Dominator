@@ -33,6 +33,8 @@ Some of the sub-commands available are:
 - **change-vm-console-type**: change the console type for a VM
 - **change-vm-cpu-priority**: change the CPU priority for a VM
 - **change-vm-cpus**: change the number of CPUs for a VM
+- **change-vm-hostname**: change the hostname for a VM. This does not change the
+                          Name tag. Use **change-vm-tags** to change the tag
 - **change-vm-destroy-protection**: enable/disable destroy protect for a VM
 - **change-vm-machine-type**: change the machine type for a VM
 - **change-vm-memory**: change the memory for a VM
