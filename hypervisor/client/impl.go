@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -38,6 +39,17 @@ func addVmVolumes(client srpc.ClientI, ipAddress net.IP, sizes []uint64) error {
 	return errors.New(reply.Error)
 }
 
+func becomePrimaryVmOwner(client srpc.ClientI, ipAddress net.IP) error {
+	request := proto.BecomePrimaryVmOwnerRequest{ipAddress}
+	var reply proto.BecomePrimaryVmOwnerResponse
+	err := client.RequestReply("Hypervisor.BecomePrimaryVmOwner", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func changeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.ConsoleType) error {
 	request := proto.ChangeVmConsoleTypeRequest{
@@ -53,11 +65,26 @@ func changeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
-func changeVmCpuPriority(client srpc.ClientI, ipAddress net.IP,
+func changeVmCpuPriority(client srpc.ClientI,
 	request proto.ChangeVmCpuPriorityRequest) error {
 	var reply proto.ChangeVmCpuPriorityResponse
 	err := client.RequestReply("Hypervisor.ChangeVmCpuPriority", request,
 		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func changeVmDestroyProtection(client srpc.ClientI, ipAddress net.IP,
+	destroyProtection bool) error {
+	request := proto.ChangeVmDestroyProtectionRequest{
+		DestroyProtection: destroyProtection,
+		IpAddress:         ipAddress,
+	}
+	var reply proto.ChangeVmDestroyProtectionResponse
+	err := client.RequestReply("Hypervisor.ChangeVmDestroyProtection",
+		request, &reply)
 	if err != nil {
 		return err
 	}
@@ -94,6 +121,29 @@ func changeVmMachineType(client srpc.ClientI, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
+func changeVmOwnerGroups(client srpc.ClientI, ipAddress net.IP,
+	ownerGroups []string) error {
+	request := proto.ChangeVmOwnerGroupsRequest{ipAddress, ownerGroups}
+	var reply proto.ChangeVmOwnerGroupsResponse
+	err := client.RequestReply("Hypervisor.ChangeVmOwnerGroups", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func changeVmOwnerUsers(client srpc.ClientI, ipAddress net.IP,
+	ownerUsers []string) error {
+	request := proto.ChangeVmOwnerUsersRequest{ipAddress, ownerUsers}
+	var reply proto.ChangeVmOwnerUsersResponse
+	err := client.RequestReply("Hypervisor.ChangeVmOwnerUsers", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func changeVmSize(client srpc.ClientI,
 	request proto.ChangeVmSizeRequest) error {
 	var reply proto.ChangeVmSizeResponse
@@ -115,6 +165,16 @@ func changeVmSubnet(client srpc.ClientI,
 		return proto.ChangeVmSubnetResponse{}, err
 	}
 	return reply, nil
+}
+
+func changeVmTags(client srpc.ClientI, ipAddress net.IP, tgs tags.Tags) error {
+	request := proto.ChangeVmTagsRequest{ipAddress, tgs}
+	var reply proto.ChangeVmTagsResponse
+	err := client.RequestReply("Hypervisor.ChangeVmTags", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
 }
 
 func changeVmVolumeInterfaces(client srpc.ClientI, ipAddress net.IP,
@@ -141,6 +201,16 @@ func changeVmVolumeSize(client srpc.ClientI, ipAddress net.IP, index uint,
 	}
 	var reply proto.ChangeVmVolumeSizeResponse
 	err := client.RequestReply("Hypervisor.ChangeVmVolumeSize", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func commitImportedVm(client srpc.ClientI, ipAddress net.IP) error {
+	request := proto.CommitImportedVmRequest{ipAddress}
+	var reply proto.CommitImportedVmResponse
+	err := client.RequestReply("Hypervisor.CommitImportedVm", request, &reply)
 	if err != nil {
 		return err
 	}
@@ -265,6 +335,55 @@ func destroyVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 	return errors.New(reply.Error)
 }
 
+func discardVmAccessToken(client srpc.ClientI, ipAddress net.IP,
+	token []byte) error {
+	request := proto.DiscardVmAccessTokenRequest{
+		AccessToken: token,
+		IpAddress:   ipAddress}
+	var reply proto.DiscardVmAccessTokenResponse
+	err := client.RequestReply("Hypervisor.DiscardVmAccessToken", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func discardVmOldImage(client srpc.ClientI, ipAddress net.IP) error {
+	request := proto.DiscardVmOldImageRequest{ipAddress}
+	var reply proto.DiscardVmOldImageResponse
+	err := client.RequestReply("Hypervisor.DiscardVmOldImage", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func discardVmOldUserData(client srpc.ClientI, ipAddress net.IP) error {
+	request := proto.DiscardVmOldUserDataRequest{ipAddress}
+	var reply proto.DiscardVmOldUserDataResponse
+	err := client.RequestReply("Hypervisor.DiscardVmOldUserData", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func discardVmSnapshot(client srpc.ClientI, ipAddress net.IP,
+	name string) error {
+	request := proto.DiscardVmSnapshotRequest{
+		IpAddress: ipAddress,
+		Name:      name,
+	}
+	var reply proto.DiscardVmSnapshotResponse
+	err := client.RequestReply("Hypervisor.DiscardVmSnapshot", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func exportLocalVm(client srpc.ClientI, ipAddr net.IP,
 	verificationCookie []byte) (proto.ExportLocalVmInfo, error) {
 	request := proto.ExportLocalVmRequest{
@@ -330,6 +449,20 @@ func getRootCookiePath(client srpc.ClientI) (string, error) {
 		return "", err
 	}
 	return reply.Path, nil
+}
+
+func getVmAccessToken(client srpc.ClientI, ipAddress net.IP,
+	lifetime time.Duration) ([]byte, error) {
+	request := proto.GetVmAccessTokenRequest{ipAddress, lifetime}
+	var reply proto.GetVmAccessTokenResponse
+	err := client.RequestReply("Hypervisor.GetVmAccessToken", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	return reply.Token, nil
 }
 
 func getVmCreateRequest(client srpc.ClientI, ipAddr net.IP) (
@@ -422,6 +555,16 @@ func holdVmLock(client srpc.ClientI, ipAddr net.IP, timeout time.Duration,
 	return errors.New(reply.Error)
 }
 
+func importLocalVm(client srpc.ClientI,
+	request proto.ImportLocalVmRequest) error {
+	var reply proto.ImportLocalVmResponse
+	err := client.RequestReply("Hypervisor.ImportLocalVm", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func listSubnets(client srpc.ClientI, doSort bool) ([]proto.Subnet, error) {
 	request := proto.ListSubnetsRequest{Sort: doSort}
 	var reply proto.ListSubnetsResponse
@@ -462,6 +605,46 @@ func listVolumeDirectories(client srpc.ClientI, doSort bool) ([]string, error) {
 	return reply.Directories, nil
 }
 
+func migrateVm(client srpc.ClientI, request proto.MigrateVmRequest,
+	commitFunc func() bool, logger log.DebugLogger) error {
+	conn, err := client.Call("Hypervisor.MigrateVm")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	for {
+		var reply proto.MigrateVmResponse
+		if err := conn.Decode(&reply); err != nil {
+			return err
+		}
+		if reply.Error != "" {
+			return errors.New(reply.Error)
+		}
+		if reply.ProgressMessage != "" {
+			logger.Debugln(0, reply.ProgressMessage)
+		}
+		if reply.RequestCommit {
+			commitResponse := proto.MigrateVmResponseResponse{commitFunc()}
+			if err := conn.Encode(commitResponse); err != nil {
+				return err
+			}
+			if err := conn.Flush(); err != nil {
+				return err
+			}
+		}
+		if reply.Final {
+			break
+		}
+	}
+	return nil
+}
+
 func powerOff(client srpc.ClientI, stopVMs bool) error {
 	request := proto.PowerOffRequest{StopVMs: stopVMs}
 	var reply proto.PowerOffResponse
@@ -486,6 +669,34 @@ func prepareVmForMigration(client srpc.ClientI, ipAddr net.IP,
 		return err
 	}
 	return errors.New(reply.Error)
+}
+
+func probeVmPort(client srpc.ClientI, request proto.ProbeVmPortRequest) (
+	proto.ProbeVmPortResponse, error) {
+	var response proto.ProbeVmPortResponse
+	err := client.RequestReply("Hypervisor.ProbeVmPort", request,
+		&response)
+	if err != nil {
+		return response, err
+	}
+	return response, errors.New(response.Error)
+}
+
+func rebootVm(client srpc.ClientI, ipAddress net.IP,
+	dhcpTimeout time.Duration) (bool, error) {
+	request := proto.RebootVmRequest{
+		DhcpTimeout: dhcpTimeout,
+		IpAddress:   ipAddress,
+	}
+	var reply proto.RebootVmResponse
+	err := client.RequestReply("Hypervisor.RebootVm", request, &reply)
+	if err != nil {
+		return false, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return false, err
+	}
+	return reply.DhcpTimedOut, nil
 }
 
 func registerExternalLeases(client srpc.ClientI, addressList proto.AddressList,
@@ -517,6 +728,17 @@ func reorderVmVolumes(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	return errors.New(reply.Error)
 }
 
+func replaceVmCredentials(client srpc.ClientI,
+	request proto.ReplaceVmCredentialsRequest) error {
+	var response proto.ReplaceVmCredentialsResponse
+	err := client.RequestReply("Hypervisor.ReplaceVmCredentials", request,
+		&response)
+	if err != nil {
+		return err
+	}
+	return errors.New(response.Error)
+}
+
 func replaceVmIdentity(client srpc.ClientI,
 	request proto.ReplaceVmIdentityRequest) error {
 	var response proto.ReplaceVmIdentityResponse
@@ -526,6 +748,38 @@ func replaceVmIdentity(client srpc.ClientI,
 		return err
 	}
 	return errors.New(response.Error)
+}
+
+func restoreVmFromSnapshot(client srpc.ClientI,
+	request proto.RestoreVmFromSnapshotRequest) error {
+	var response proto.RestoreVmFromSnapshotResponse
+	err := client.RequestReply("Hypervisor.RestoreVmFromSnapshot", request,
+		&response)
+	if err != nil {
+		return err
+	}
+	return errors.New(response.Error)
+}
+
+func restoreVmImage(client srpc.ClientI,
+	request proto.RestoreVmImageRequest) error {
+	var response proto.RestoreVmImageResponse
+	err := client.RequestReply("Hypervisor.RestoreVmImage", request,
+		&response)
+	if err != nil {
+		return err
+	}
+	return errors.New(response.Error)
+}
+
+func restoreVmUserData(client srpc.ClientI, ipAddress net.IP) error {
+	request := proto.RestoreVmUserDataRequest{ipAddress}
+	var reply proto.RestoreVmUserDataResponse
+	err := client.RequestReply("Hypervisor.RestoreVmUserData", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
 }
 
 func scanVmRoot(client srpc.ClientI, ipAddr net.IP,
@@ -549,17 +803,29 @@ func setDisabledState(client srpc.ClientI, disable bool) error {
 	return errors.New(reply.Error)
 }
 
-func startVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
+func snapshotVm(client srpc.ClientI,
+	request proto.SnapshotVmRequest) error {
+	var reply proto.SnapshotVmResponse
+	err := client.RequestReply("Hypervisor.SnapshotVm", request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
+func startVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
+	dhcpTimeout time.Duration) (bool, error) {
 	request := proto.StartVmRequest{
 		AccessToken: accessToken,
+		DhcpTimeout: dhcpTimeout,
 		IpAddress:   ipAddr,
 	}
 	var reply proto.StartVmResponse
 	err := client.RequestReply("Hypervisor.StartVm", request, &reply)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return errors.New(reply.Error)
+	return reply.DhcpTimedOut, errors.New(reply.Error)
 }
 
 func stopVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
