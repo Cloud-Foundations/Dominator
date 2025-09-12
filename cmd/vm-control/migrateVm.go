@@ -19,25 +19,9 @@ func migrateVmSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func discardAccessToken(hypervisor *srpc.Client, ipAddr net.IP) {
-	request := hyper_proto.DiscardVmAccessTokenRequest{IpAddress: ipAddr}
-	var reply hyper_proto.DiscardVmAccessTokenResponse
-	hypervisor.RequestReply("Hypervisor.DiscardVmAccessToken", request, &reply)
-}
-
 func getVmAccessTokenClient(hypervisor *srpc.Client,
 	ipAddr net.IP) ([]byte, error) {
-	request := hyper_proto.GetVmAccessTokenRequest{ipAddr, time.Hour * 24}
-	var reply hyper_proto.GetVmAccessTokenResponse
-	err := hypervisor.RequestReply("Hypervisor.GetVmAccessToken", request,
-		&reply)
-	if err != nil {
-		return nil, err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return nil, err
-	}
-	return reply.Token, nil
+	return hyperclient.GetVmAccessToken(hypervisor, ipAddr, time.Hour*24)
 }
 
 func migrateVm(vmHostname string, logger log.DebugLogger) error {
@@ -65,7 +49,7 @@ func migrateVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	if err != nil {
 		return err
 	}
-	defer discardAccessToken(sourceHypervisor, vmIP)
+	defer hyperclient.DiscardVmAccessToken(sourceHypervisor, vmIP, nil)
 	destHypervisorAddress, err := getHypervisorAddress(vmInfo, logger)
 	if err != nil {
 		return err
@@ -76,62 +60,31 @@ func migrateVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 	}
 	defer destHypervisor.Close()
 	logger.Debugf(0, "migrating VM to %s\n", destHypervisorAddress)
-	conn, err := destHypervisor.Call("Hypervisor.MigrateVm")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
 	request := hyper_proto.MigrateVmRequest{
 		AccessToken:      accessToken,
 		IpAddress:        vmIP,
 		SkipMemoryCheck:  *skipMemoryCheck,
 		SourceHypervisor: sourceHypervisorAddress,
 	}
-	if err := conn.Encode(request); err != nil {
-		return err
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	for {
-		var reply hyper_proto.MigrateVmResponse
-		if err := conn.Decode(&reply); err != nil {
-			return err
-		}
-		if reply.Error != "" {
-			return errors.New(reply.Error)
-		}
-		if reply.ProgressMessage != "" {
-			logger.Debugln(0, reply.ProgressMessage)
-		}
-		if reply.RequestCommit {
-			if err := requestCommit(conn); err != nil {
-				return err
-			}
-		}
-		if reply.Final {
-			break
-		}
-	}
-	return nil
+	return hyperclient.MigrateVm(destHypervisor, request, func() bool {
+		return requestCommit(logger)
+	},
+		logger)
 }
 
-func requestCommit(conn *srpc.Conn) error {
+func requestCommit(logger log.DebugLogger) bool {
 	userResponse, err := askForInputChoice("Commit VM",
 		[]string{"commit", "abandon"})
 	if err != nil {
-		return err
+		logger.Println(err)
+		return false
 	}
-	var response hyper_proto.MigrateVmResponseResponse
 	switch userResponse {
 	case "abandon":
 	case "commit":
-		response.Commit = true
+		return true
 	default:
-		return fmt.Errorf("invalid response: %s", userResponse)
+		logger.Printf("invalid response: %s\n", userResponse)
 	}
-	if err := conn.Encode(response); err != nil {
-		return err
-	}
-	return conn.Flush()
+	return false
 }

@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func discardVmOldUserDataSubcommand(args []string,
@@ -27,17 +26,10 @@ func discardVmOldUserData(vmHostname string, logger log.DebugLogger) error {
 
 func discardVmOldUserDataOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.DiscardVmOldUserDataRequest{ipAddr}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.DiscardVmOldUserDataResponse
-	err = client.RequestReply("Hypervisor.DiscardVmOldUserData", request,
-		&reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.DiscardVmOldUserData(client, ipAddr)
 }

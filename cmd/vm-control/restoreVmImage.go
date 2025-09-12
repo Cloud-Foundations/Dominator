@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -32,10 +32,5 @@ func restoreVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	var reply proto.RestoreVmImageResponse
-	err = client.RequestReply("Hypervisor.RestoreVmImage", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.RestoreVmImage(client, request)
 }

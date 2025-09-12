@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/tags"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func changeVmTagsSubcommand(args []string, logger log.DebugLogger) error {
@@ -35,39 +32,23 @@ func changeVmTagsOnHypervisor(hypervisor string, ipAddr net.IP,
 	}
 	defer client.Close()
 	if _, ok := vmTags[""]; ok {
-		return setVmTagsOnHypervisor(client, ipAddr, vmTags, logger)
+		return hyperclient.ChangeVmTags(client, ipAddr, vmTags)
 	}
 	if _, ok := vmTags["*"]; ok {
-		return setVmTagsOnHypervisor(client, ipAddr, vmTags, logger)
+		return hyperclient.ChangeVmTags(client, ipAddr, vmTags)
 	}
-	request := proto.GetVmInfoRequest{ipAddr}
-	var reply proto.GetVmInfoResponse
-	err = client.RequestReply("Hypervisor.GetVmInfo", request, &reply)
+	vmInfo, err := hyperclient.GetVmInfo(client, ipAddr)
 	if err != nil {
 		return err
 	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
+	if len(vmInfo.Tags) < 1 {
+		return hyperclient.ChangeVmTags(client, ipAddr, vmTags)
 	}
-	if len(reply.VmInfo.Tags) < 1 {
-		return setVmTagsOnHypervisor(client, ipAddr, vmTags, logger)
-	}
-	reply.VmInfo.Tags.Merge(vmTags)
-	for key, value := range reply.VmInfo.Tags {
+	vmInfo.Tags.Merge(vmTags)
+	for key, value := range vmInfo.Tags {
 		if value == "" {
-			delete(reply.VmInfo.Tags, key)
+			delete(vmInfo.Tags, key)
 		}
 	}
-	return setVmTagsOnHypervisor(client, ipAddr, reply.VmInfo.Tags, logger)
-}
-
-func setVmTagsOnHypervisor(client *srpc.Client, ipAddr net.IP,
-	vmTags tags.Tags, logger log.DebugLogger) error {
-	request := proto.ChangeVmTagsRequest{ipAddr, vmTags}
-	var reply proto.ChangeVmTagsResponse
-	err := client.RequestReply("Hypervisor.ChangeVmTags", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.ChangeVmTags(client, ipAddr, vmInfo.Tags)
 }

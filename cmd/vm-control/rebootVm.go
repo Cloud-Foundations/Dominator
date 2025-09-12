@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func rebootVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -26,24 +26,16 @@ func rebootVm(vmHostname string, logger log.DebugLogger) error {
 
 func rebootVmOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.RebootVmRequest{
-		DhcpTimeout: *dhcpTimeout,
-		IpAddress:   ipAddr,
-	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.RebootVmResponse
-	err = client.RequestReply("Hypervisor.RebootVm", request, &reply)
+	dhcpTimedOut, err := hyperclient.RebootVm(client, ipAddr, *dhcpTimeout)
 	if err != nil {
 		return err
 	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	if reply.DhcpTimedOut {
+	if dhcpTimedOut {
 		return errors.New("DHCP ACK timed out")
 	}
 	return maybeWatchVm(client, hypervisor, ipAddr, logger)

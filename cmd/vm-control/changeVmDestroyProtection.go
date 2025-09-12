@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func changeVmDestroyProtectionSubcommand(args []string,
@@ -28,20 +27,11 @@ func changeVmDestroyProtection(vmHostname string,
 
 func changeVmDestroyProtectionOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.ChangeVmDestroyProtectionRequest{
-		DestroyProtection: *destroyProtection,
-		IpAddress:         ipAddr,
-	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.ChangeVmDestroyProtectionResponse
-	err = client.RequestReply("Hypervisor.ChangeVmDestroyProtection",
-		request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.ChangeVmDestroyProtection(client, ipAddr,
+		*destroyProtection)
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -45,12 +46,8 @@ func probeVmPortOnHypervisorClient(client *srpc.Client, ipAddr net.IP,
 		PortNumber: *probePortNum,
 		Timeout:    *probeTimeout,
 	}
-	var reply proto.ProbeVmPortResponse
-	err := client.RequestReply("Hypervisor.ProbeVmPort", request, &reply)
+	reply, err := hyperclient.ProbeVmPort(client, request)
 	if err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
 	if !reply.PortIsOpen {
