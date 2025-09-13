@@ -78,7 +78,14 @@ func diffFiles(tool, leftFile, rightFile string) error {
 	cmd.Args = append(cmd.Args, rightFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		// Ignore exit code.
+		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // getTypedFileReader returns a file reader. The reader must be closed before
