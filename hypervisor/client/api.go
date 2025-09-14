@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io"
 	"net"
 	"time"
 
@@ -11,6 +12,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
+
+type FlushReadWriter interface {
+	Flush() error
+	io.ReadWriter
+}
 
 func AcknowledgeVm(client srpc.ClientI, ipAddress net.IP) error {
 	return acknowledgeVm(client, ipAddress)
@@ -90,6 +96,18 @@ func CommitImportedVm(client srpc.ClientI, ipAddress net.IP) error {
 func ConnectToVmConsole(client srpc.ClientI, ipAddress net.IP,
 	vncViewerCommand string, logger log.DebugLogger) error {
 	return connectToVmConsole(client, ipAddress, vncViewerCommand, logger)
+}
+
+func ConnectToVmManager(hypervisorAddress string, ipAddress net.IP,
+	connectionHandler func(conn FlushReadWriter) error) error {
+	return connectToVmManager(hypervisorAddress, ipAddress, connectionHandler)
+}
+
+func ConnectToVmSerialPort(hypervisorAddress string, ipAddress net.IP,
+	serialPortNumber uint,
+	connectionHandler func(conn FlushReadWriter) error) error {
+	return connectToVmSerialPort(hypervisorAddress, ipAddress, serialPortNumber,
+		connectionHandler)
 }
 
 func CreateVm(client srpc.ClientI, request proto.CreateVmRequest,

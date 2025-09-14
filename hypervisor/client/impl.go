@@ -276,6 +276,68 @@ func connectToVmConsole(client srpc.ClientI, ipAddr net.IP,
 	return writeErr
 }
 
+func connectToVmSerialPort(hypervisorAddress string, ipAddress net.IP,
+	serialPortNumber uint,
+	connectionHandler func(conn FlushReadWriter) error) error {
+	client, err := srpc.DialHTTP("tcp", hypervisorAddress, 0)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	conn, err := client.Call("Hypervisor.ConnectToVmSerialPort")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	request := proto.ConnectToVmSerialPortRequest{
+		IpAddress:  ipAddress,
+		PortNumber: serialPortNumber,
+	}
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	var response proto.ConnectToVmSerialPortResponse
+	if err := conn.Decode(&response); err != nil {
+		return err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return err
+	}
+	return connectionHandler(conn)
+}
+
+func connectToVmManager(hypervisorAddress string, ipAddress net.IP,
+	connectionHandler func(conn FlushReadWriter) error) error {
+	client, err := srpc.DialHTTP("tcp", hypervisorAddress, 0)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	conn, err := client.Call("Hypervisor.ConnectToVmManager")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	request := proto.ConnectToVmManagerRequest{IpAddress: ipAddress}
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	var response proto.ConnectToVmManagerResponse
+	if err := conn.Decode(&response); err != nil {
+		return err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return err
+	}
+	return connectionHandler(conn)
+}
+
 func createVm(client srpc.ClientI, request proto.CreateVmRequest,
 	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
 	if conn, err := client.Call("Hypervisor.CreateVm"); err != nil {
@@ -339,7 +401,8 @@ func discardVmAccessToken(client srpc.ClientI, ipAddress net.IP,
 	token []byte) error {
 	request := proto.DiscardVmAccessTokenRequest{
 		AccessToken: token,
-		IpAddress:   ipAddress}
+		IpAddress:   ipAddress,
+	}
 	var reply proto.DiscardVmAccessTokenResponse
 	err := client.RequestReply("Hypervisor.DiscardVmAccessToken", request,
 		&reply)
