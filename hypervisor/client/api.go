@@ -110,6 +110,11 @@ func ConnectToVmSerialPort(hypervisorAddress string, ipAddress net.IP,
 		connectionHandler)
 }
 
+func CopyVm(client srpc.ClientI, request proto.CopyVmRequest,
+	logger log.DebugLogger) (proto.CopyVmResponse, error) {
+	return copyVm(client, request, logger)
+}
+
 func CreateVm(client srpc.ClientI, request proto.CreateVmRequest,
 	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
 	return createVm(client, request, reply, logger)
@@ -223,6 +228,11 @@ func MigrateVm(client srpc.ClientI, request proto.MigrateVmRequest,
 	return migrateVm(client, request, commitFunc, logger)
 }
 
+func OpenCreateVmConn(client srpc.ClientI, request proto.CreateVmRequest) (
+	*srpc.Conn, error) {
+	return openCreateVmConn(client, request)
+}
+
 func PowerOff(client srpc.ClientI, stopVMs bool) error {
 	return powerOff(client, stopVMs)
 }
@@ -235,6 +245,11 @@ func PrepareVmForMigration(client srpc.ClientI, ipAddress net.IP,
 func ProbeVmPort(client srpc.ClientI, request proto.ProbeVmPortRequest) (
 	proto.ProbeVmPortResponse, error) {
 	return probeVmPort(client, request)
+}
+
+func ProcessCreateVmResponses(conn *srpc.Conn,
+	logger log.DebugLogger) (proto.CreateVmResponse, error) {
+	return processCreateVmResponses(conn, logger)
 }
 
 func RebootVm(client srpc.ClientI, ipAddress net.IP,

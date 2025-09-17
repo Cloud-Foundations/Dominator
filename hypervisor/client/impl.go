@@ -338,35 +338,53 @@ func connectToVmManager(hypervisorAddress string, ipAddress net.IP,
 	return connectionHandler(conn)
 }
 
-func createVm(client srpc.ClientI, request proto.CreateVmRequest,
-	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
-	if conn, err := client.Call("Hypervisor.CreateVm"); err != nil {
-		return err
-	} else {
-		defer conn.Close()
-		if err := conn.Encode(request); err != nil {
-			return err
+func copyVm(client srpc.ClientI, request proto.CopyVmRequest,
+	logger log.DebugLogger) (proto.CopyVmResponse, error) {
+	conn, err := client.Call("Hypervisor.CopyVm")
+	if err != nil {
+		return proto.CopyVmResponse{},
+			fmt.Errorf("error calling Hypervisor.CopyVm: %s", err)
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return proto.CopyVmResponse{},
+			fmt.Errorf("error encoding CopyVm request: %s", err)
+	}
+	if err := conn.Flush(); err != nil {
+		return proto.CopyVmResponse{},
+			fmt.Errorf("error flushing CopyVm request: %s", err)
+	}
+	for {
+		var response proto.CopyVmResponse
+		if err := conn.Decode(&response); err != nil {
+			return proto.CopyVmResponse{},
+				fmt.Errorf("error decoding CopyVm response: %s", err)
 		}
-		if err := conn.Flush(); err != nil {
-			return err
+		if response.Error != "" {
+			return proto.CopyVmResponse{}, errors.New(response.Error)
 		}
-		for {
-			var response proto.CreateVmResponse
-			if err := conn.Decode(&response); err != nil {
-				return fmt.Errorf("error decoding: %s", err)
-			}
-			if response.Error != "" {
-				return errors.New(response.Error)
-			}
-			if response.ProgressMessage != "" {
-				logger.Debugln(0, response.ProgressMessage)
-			}
-			if response.Final {
-				*reply = response
-				return nil
-			}
+		if response.ProgressMessage != "" {
+			logger.Debugln(0, response.ProgressMessage)
+		}
+		if response.Final {
+			return response, nil
 		}
 	}
+}
+
+func createVm(client srpc.ClientI, request proto.CreateVmRequest,
+	reply *proto.CreateVmResponse, logger log.DebugLogger) error {
+	conn, err := openCreateVmConn(client, request)
+	if err != nil {
+		return err
+	}
+	response, err := processCreateVmResponses(conn, logger)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	*reply = response
+	return conn.Close()
 }
 
 func deleteVmVolume(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
@@ -708,6 +726,18 @@ func migrateVm(client srpc.ClientI, request proto.MigrateVmRequest,
 	return nil
 }
 
+func openCreateVmConn(client srpc.ClientI, request proto.CreateVmRequest) (
+	*srpc.Conn, error) {
+	conn, err := client.Call("Hypervisor.CreateVm")
+	if err != nil {
+		return nil, fmt.Errorf("error calling Hypervisor.CreateVm: %s", err)
+	}
+	if err := conn.Encode(request); err != nil {
+		return nil, fmt.Errorf("error encoding request: %s", err)
+	}
+	return conn, nil
+}
+
 func powerOff(client srpc.ClientI, stopVMs bool) error {
 	request := proto.PowerOffRequest{StopVMs: stopVMs}
 	var reply proto.PowerOffResponse
@@ -743,6 +773,30 @@ func probeVmPort(client srpc.ClientI, request proto.ProbeVmPortRequest) (
 		return response, err
 	}
 	return response, errors.New(response.Error)
+}
+
+func processCreateVmResponses(conn *srpc.Conn,
+	logger log.DebugLogger) (proto.CreateVmResponse, error) {
+	if err := conn.Flush(); err != nil {
+		return proto.CreateVmResponse{},
+			fmt.Errorf("error flushing: %s", err)
+	}
+	for {
+		var response proto.CreateVmResponse
+		if err := conn.Decode(&response); err != nil {
+			return proto.CreateVmResponse{},
+				fmt.Errorf("error decoding: %s", err)
+		}
+		if response.Error != "" {
+			return proto.CreateVmResponse{}, errors.New(response.Error)
+		}
+		if response.ProgressMessage != "" {
+			logger.Debugln(0, response.ProgressMessage)
+		}
+		if response.Final {
+			return response, nil
+		}
+	}
 }
 
 func rebootVm(client srpc.ClientI, ipAddress net.IP,
