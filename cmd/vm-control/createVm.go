@@ -64,14 +64,16 @@ func createVmSubcommand(args []string, logger log.DebugLogger) error {
 func callCreateVm(client *srpc.Client, request hyper_proto.CreateVmRequest,
 	reply *hyper_proto.CreateVmResponse, imageReader, userDataReader io.Reader,
 	imageSize, userDataSize int64, logger log.DebugLogger) error {
-	conn, err := client.Call("Hypervisor.CreateVm")
+	conn, err := hyperclient.OpenCreateVmConn(client, request)
 	if err != nil {
-		return fmt.Errorf("error calling Hypervisor.CreateVm: %s", err)
+		return err
 	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
 	// Stream any required data.
 	if imageReader != nil {
 		logger.Debugln(0, "uploading image")
@@ -95,9 +97,13 @@ func callCreateVm(client *srpc.Client, request hyper_proto.CreateVmRequest,
 				err, nCopied, userDataSize)
 		}
 	}
-	response, err := processCreateVmResponses(conn, logger)
+	response, err := hyperclient.ProcessCreateVmResponses(conn, logger)
+	if err != nil {
+		return err
+	}
 	*reply = response
-	return err
+	doClose = false
+	return conn.Close()
 }
 
 func checkTags(logger log.DebugLogger) {
@@ -436,29 +442,6 @@ func makeVolumeInitParams(numVolumes uint) []volumeInitParams {
 	return vinitParams
 }
 
-func processCreateVmResponses(conn *srpc.Conn,
-	logger log.DebugLogger) (hyper_proto.CreateVmResponse, error) {
-	var zeroResponse hyper_proto.CreateVmResponse
-	if err := conn.Flush(); err != nil {
-		return zeroResponse, fmt.Errorf("error flushing: %s", err)
-	}
-	for {
-		var response hyper_proto.CreateVmResponse
-		if err := conn.Decode(&response); err != nil {
-			return zeroResponse, fmt.Errorf("error decoding: %s", err)
-		}
-		if response.Error != "" {
-			return zeroResponse, errors.New(response.Error)
-		}
-		if response.ProgressMessage != "" {
-			logger.Debugln(0, response.ProgressMessage)
-		}
-		if response.Final {
-			return response, nil
-		}
-	}
-}
-
 func readBlockDeviceSize(filename string) (int64, error) {
 	if strings.HasPrefix(filename, "/dev/") {
 		filename = filename[5:]
@@ -494,6 +477,9 @@ func setupVmWithIdentity(client *srpc.Client, hypervisorAddress string,
 		vmIP, logger)
 	if err != nil {
 		return err
+	}
+	if *doNotStart {
+		return nil
 	}
 	return hyperclient.StartVm(client, vmIP, nil)
 }

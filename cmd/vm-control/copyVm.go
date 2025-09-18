@@ -1,13 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -23,37 +21,6 @@ func copyVm(vmHostname string, logger log.DebugLogger) error {
 		return err
 	} else {
 		return copyVmFromHypervisor(hypervisor, vmIP, logger)
-	}
-}
-
-func callCopyVm(client *srpc.Client, request hyper_proto.CopyVmRequest,
-	reply *hyper_proto.CopyVmResponse, logger log.DebugLogger) error {
-	conn, err := client.Call("Hypervisor.CopyVm")
-	if err != nil {
-		return fmt.Errorf("error calling Hypervisor.CopyVm: %s", err)
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding CopyVm request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return fmt.Errorf("error flushing CopyVm request: %s", err)
-	}
-	for {
-		var response hyper_proto.CopyVmResponse
-		if err := conn.Decode(&response); err != nil {
-			return fmt.Errorf("error decoding CopyVm response: %s", err)
-		}
-		if response.Error != "" {
-			return errors.New(response.Error)
-		}
-		if response.ProgressMessage != "" {
-			logger.Debugln(0, response.ProgressMessage)
-		}
-		if response.Final {
-			*reply = response
-			return nil
-		}
 	}
 }
 
@@ -120,9 +87,9 @@ func copyVmFromHypervisor(sourceHypervisorAddress string, vmIP net.IP,
 		SourceHypervisor: sourceHypervisorAddress,
 		VmInfo:           *vmInfo,
 	}
-	var reply hyper_proto.CopyVmResponse
 	logger.Debugf(0, "copying VM to %s\n", destHypervisorAddress)
-	if err := callCopyVm(destHypervisor, request, &reply, logger); err != nil {
+	reply, err := hyperclient.CopyVm(destHypervisor, request, logger)
+	if err != nil {
 		return err
 	}
 	err = hyperclient.AcknowledgeVm(destHypervisor, reply.IpAddress)

@@ -168,9 +168,9 @@ func restoreVmOnHypervisor(hypervisor string, request proto.CreateVmRequest,
 		return err
 	}
 	defer client.Close()
-	conn, err := client.Call("Hypervisor.CreateVm")
+	conn, err := hyperclient.OpenCreateVmConn(client, request)
 	if err != nil {
-		return fmt.Errorf("error calling Hypervisor.CreateVm: %s", err)
+		return err
 	}
 	doCloseConn := true
 	defer func() {
@@ -178,12 +178,6 @@ func restoreVmOnHypervisor(hypervisor string, request proto.CreateVmRequest,
 			conn.Close()
 		}
 	}()
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
-	if err != nil {
-		return err
-	}
 	err = copyVolumeFromVmRestorer(conn, restorer, 0,
 		request.VmInfo.Volumes[0].Size, logger)
 	if err != nil {
@@ -199,12 +193,14 @@ func restoreVmOnHypervisor(hypervisor string, request proto.CreateVmRequest,
 			return err
 		}
 	}
-	reply, err := processCreateVmResponses(conn, logger)
+	reply, err := hyperclient.ProcessCreateVmResponses(conn, logger)
 	if err != nil {
 		return err
 	}
 	doCloseConn = false
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		return err
+	}
 	if err := hyperclient.AcknowledgeVm(client, reply.IpAddress); err != nil {
 		return fmt.Errorf("error acknowledging VM: %s", err)
 	}
