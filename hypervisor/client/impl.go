@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
@@ -387,6 +388,53 @@ func createVm(client srpc.ClientI, request proto.CreateVmRequest,
 	return conn.Close()
 }
 
+func debugVmImage(client srpc.ClientI, request proto.DebugVmImageRequest,
+	imageReader io.Reader, imageSize int64,
+	logger log.DebugLogger) (bool, error) {
+	conn, err := client.Call("Hypervisor.DebugVmImage")
+	if err != nil {
+		return false,
+			fmt.Errorf("error calling Hypervisor.DebugVmImage: %s", err)
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return false, fmt.Errorf("error encoding request: %s", err)
+	}
+	// Stream any required data.
+	if imageReader != nil {
+		logger.Debugln(0, "uploading image")
+		startTime := time.Now()
+		if nCopied, err := io.CopyN(conn, imageReader, imageSize); err != nil {
+			return false,
+				fmt.Errorf("error uploading image: %s got %d of %d bytes",
+					err, nCopied, imageSize)
+		} else {
+			duration := time.Since(startTime)
+			speed := uint64(float64(nCopied) / duration.Seconds())
+			logger.Debugf(0, "uploaded image in %s (%s/s)\n",
+				format.Duration(duration), format.FormatBytes(speed))
+		}
+	}
+	if err := conn.Flush(); err != nil {
+		return false, fmt.Errorf("error flushing: %s", err)
+	}
+	for {
+		var response proto.DebugVmImageResponse
+		if err := conn.Decode(&response); err != nil {
+			return false, fmt.Errorf("error decoding: %s", err)
+		}
+		if response.Error != "" {
+			return false, errors.New(response.Error)
+		}
+		if response.ProgressMessage != "" {
+			logger.Debugln(0, response.ProgressMessage)
+		}
+		if response.Final {
+			return response.DhcpTimedOut, nil
+		}
+	}
+}
+
 func deleteVmVolume(client srpc.ClientI, ipAddr net.IP, accessToken []byte,
 	volumeIndex uint) error {
 	request := proto.DeleteVmVolumeRequest{
@@ -738,6 +786,36 @@ func openCreateVmConn(client srpc.ClientI, request proto.CreateVmRequest) (
 	return conn, nil
 }
 
+func patchVmImage(client srpc.ClientI, request proto.PatchVmImageRequest,
+	logger log.DebugLogger) (bool, error) {
+	conn, err := client.Call("Hypervisor.PatchVmImage")
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return false, err
+	}
+	if err := conn.Flush(); err != nil {
+		return false, err
+	}
+	for {
+		var response proto.PatchVmImageResponse
+		if err := conn.Decode(&response); err != nil {
+			return false, err
+		}
+		if response.Error != "" {
+			return false, errors.New(response.Error)
+		}
+		if response.ProgressMessage != "" {
+			logger.Debugln(0, response.ProgressMessage)
+		}
+		if response.Final {
+			return false, nil // TODO(rgooch): add DhcpTimedOut.
+		}
+	}
+}
+
 func powerOff(client srpc.ClientI, stopVMs bool) error {
 	request := proto.PowerOffRequest{StopVMs: stopVMs}
 	var reply proto.PowerOffResponse
@@ -865,6 +943,43 @@ func replaceVmIdentity(client srpc.ClientI,
 		return err
 	}
 	return errors.New(response.Error)
+}
+
+func replaceVmImage(client srpc.ClientI, request proto.ReplaceVmImageRequest,
+	imageReader io.Reader, logger log.DebugLogger) (bool, error) {
+	conn, err := client.Call("Hypervisor.ReplaceVmImage")
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return false, err
+	}
+	// Stream any required data.
+	if imageReader != nil {
+		logger.Debugln(0, "uploading image")
+		if _, err := io.Copy(conn, imageReader); err != nil {
+			return false, err
+		}
+	}
+	if err := conn.Flush(); err != nil {
+		return false, err
+	}
+	for {
+		var response proto.ReplaceVmImageResponse
+		if err := conn.Decode(&response); err != nil {
+			return false, err
+		}
+		if response.Error != "" {
+			return false, errors.New(response.Error)
+		}
+		if response.ProgressMessage != "" {
+			logger.Debugln(0, response.ProgressMessage)
+		}
+		if response.Final {
+			return response.DhcpTimedOut, nil
+		}
+	}
 }
 
 func restoreVmFromSnapshot(client srpc.ClientI,

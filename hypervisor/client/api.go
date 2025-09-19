@@ -120,6 +120,12 @@ func CreateVm(client srpc.ClientI, request proto.CreateVmRequest,
 	return createVm(client, request, reply, logger)
 }
 
+func DebugVmImage(client srpc.ClientI, request proto.DebugVmImageRequest,
+	imageReader io.Reader, imageSize int64,
+	logger log.DebugLogger) (bool, error) {
+	return debugVmImage(client, request, imageReader, imageSize, logger)
+}
+
 func DeleteVmVolume(client srpc.ClientI, ipAddress net.IP, accessToken []byte,
 	volumeIndex uint) error {
 	return deleteVmVolume(client, ipAddress, accessToken, volumeIndex)
@@ -233,6 +239,11 @@ func OpenCreateVmConn(client srpc.ClientI, request proto.CreateVmRequest) (
 	return openCreateVmConn(client, request)
 }
 
+func PatchVmImage(client srpc.ClientI, request proto.PatchVmImageRequest,
+	logger log.DebugLogger) (bool, error) {
+	return patchVmImage(client, request, logger)
+}
+
 func PowerOff(client srpc.ClientI, stopVMs bool) error {
 	return powerOff(client, stopVMs)
 }
@@ -275,6 +286,11 @@ func ReplaceVmCredentials(client srpc.ClientI,
 func ReplaceVmIdentity(client srpc.ClientI,
 	request proto.ReplaceVmIdentityRequest) error {
 	return replaceVmIdentity(client, request)
+}
+
+func ReplaceVmImage(client srpc.ClientI, request proto.ReplaceVmImageRequest,
+	imageReader io.Reader, logger log.DebugLogger) (bool, error) {
+	return replaceVmImage(client, request, imageReader, logger)
 }
 
 func RestoreVmFromSnapshot(client srpc.ClientI,
