@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -17,45 +17,6 @@ func replaceVmImageSubcommand(args []string, logger log.DebugLogger) error {
 		return fmt.Errorf("error replacing VM image: %s", err)
 	}
 	return nil
-}
-
-func callReplaceVmImage(client *srpc.Client,
-	request proto.ReplaceVmImageRequest, reply *proto.ReplaceVmImageResponse,
-	imageReader io.Reader, logger log.DebugLogger) error {
-	conn, err := client.Call("Hypervisor.ReplaceVmImage")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return err
-	}
-	// Stream any required data.
-	if imageReader != nil {
-		logger.Debugln(0, "uploading image")
-		if _, err := io.Copy(conn, imageReader); err != nil {
-			return err
-		}
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	for {
-		var response proto.ReplaceVmImageResponse
-		if err := conn.Decode(&response); err != nil {
-			return err
-		}
-		if response.Error != "" {
-			return errors.New(response.Error)
-		}
-		if response.ProgressMessage != "" {
-			logger.Debugln(0, response.ProgressMessage)
-		}
-		if response.Final {
-			*reply = response
-			return nil
-		}
-	}
 }
 
 func replaceVmImage(vmHostname string, logger log.DebugLogger) error {
@@ -104,10 +65,13 @@ func replaceVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	var reply proto.ReplaceVmImageResponse
-	err = callReplaceVmImage(client, request, &reply, imageReader, logger)
+	dhcpTimedOut, err := hyperclient.ReplaceVmImage(client, request,
+		imageReader, logger)
 	if err != nil {
 		return err
+	}
+	if dhcpTimedOut {
+		return errors.New("DHCP ACK timed out")
 	}
 	return nil
 }
