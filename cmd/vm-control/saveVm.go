@@ -201,7 +201,7 @@ func saveVmOnHypervisor(hypervisor string, ipAddr net.IP, destination string,
 	if err := encodeJsonToVmSaver(saver, "info.json", vmInfo); err != nil {
 		return err
 	}
-	conn, length, err := callGetVmUserData(client, ipAddr)
+	conn, length, err := hyperclient.GetVmUserData(client, ipAddr, nil)
 	if err != nil {
 		return err
 	}
