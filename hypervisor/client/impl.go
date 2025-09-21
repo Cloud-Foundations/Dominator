@@ -580,6 +580,29 @@ func getRootCookiePath(client srpc.ClientI) (string, error) {
 	return reply.Path, nil
 }
 
+func getUpdates(client srpc.ClientI, params GetUpdatesParams) error {
+	conn, err := client.Call("Hypervisor.GetUpdates")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if params.ConnectedHandler != nil {
+		if err := params.ConnectedHandler(); err != nil {
+			return err
+		}
+	}
+	go sendUpdateRequests(conn, params.RequestsChannel, params.Logger)
+	for {
+		var update proto.Update
+		if err := conn.Decode(&update); err != nil {
+			return err
+		}
+		if err := params.UpdateHandler(update); err != nil {
+			return err
+		}
+	}
+}
+
 func getVmAccessToken(client srpc.ClientI, ipAddress net.IP,
 	lifetime time.Duration) ([]byte, error) {
 	request := proto.GetVmAccessTokenRequest{ipAddress, lifetime}
@@ -660,6 +683,39 @@ func getVmLastPatchLog(client srpc.ClientI, ipAddr net.IP) (
 		return nil, time.Time{}, err
 	}
 	return buffer.Bytes(), response.PatchTime, nil
+}
+
+func getVmUserData(client srpc.ClientI, ipAddress net.IP,
+	accessToken []byte) (io.ReadCloser, uint64, error) {
+	conn, err := client.Call("Hypervisor.GetVmUserData")
+	if err != nil {
+		return nil, 0, err
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
+	request := proto.GetVmUserDataRequest{
+		AccessToken: accessToken,
+		IpAddress:   ipAddress,
+	}
+	if err := conn.Encode(request); err != nil {
+		return nil, 0, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, 0, err
+	}
+	var response proto.GetVmUserDataResponse
+	if err := conn.Decode(&response); err != nil {
+		return nil, 0, err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return nil, 0, err
+	}
+	doClose = false
+	return conn, response.Length, nil
 }
 
 func holdLock(client srpc.ClientI, timeout time.Duration,
@@ -1025,6 +1081,23 @@ func scanVmRoot(client srpc.ClientI, ipAddr net.IP,
 	return reply.FileSystem, errors.New(reply.Error)
 }
 
+func sendUpdateRequests(conn *srpc.Conn,
+	requests <-chan proto.GetUpdatesRequest, logger log.DebugLogger) {
+	if requests == nil {
+		return
+	}
+	for request := range requests {
+		if err := conn.Encode(request); err != nil {
+			logger.Printf("error sending GetUpdatesRequest: %s", err)
+			return
+		}
+		if err := conn.Flush(); err != nil {
+			logger.Printf("error flushing GetUpdatesRequest: %s", err)
+			return
+		}
+	}
+}
+
 func setDisabledState(client srpc.ClientI, disable bool) error {
 	request := proto.SetDisabledStateRequest{Disable: disable}
 	var reply proto.SetDisabledStateResponse
@@ -1071,4 +1144,69 @@ func stopVm(client srpc.ClientI, ipAddr net.IP, accessToken []byte) error {
 		return err
 	}
 	return errors.New(reply.Error)
+}
+
+func traceVmMetadata(client srpc.ClientI, ipAddress net.IP,
+	pathHandler func(path string) error) error {
+	request := proto.TraceVmMetadataRequest{ipAddress}
+	conn, err := client.Call("Hypervisor.TraceVmMetadata")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	var reply proto.TraceVmMetadataResponse
+	if err := conn.Decode(&reply); err != nil {
+		return err
+	}
+	if reply.Error != "" {
+		return errors.New(reply.Error)
+	}
+	for {
+		if line, err := conn.ReadString('\n'); err != nil {
+			return err
+		} else {
+			line = line[:len(line)-1]
+			if len(line) < 1 {
+				return nil
+			}
+			if err := pathHandler(line); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func watchDhcp(client srpc.ClientI, request proto.WatchDhcpRequest,
+	handlePacket func(ifName string, rawPacket []byte) error) error {
+	conn, err := client.Call("Hypervisor.WatchDhcp")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	maxPackets := request.MaxPackets
+	for count := uint64(0); maxPackets < 1 || count < maxPackets; {
+		var reply proto.WatchDhcpResponse
+		if err := conn.Decode(&reply); err != nil {
+			return err
+		}
+		if err := errors.New(reply.Error); err != nil {
+			return err
+		}
+		if err := handlePacket(reply.Interface, reply.Packet); err != nil {
+			return err
+		}
+	}
+	return nil
 }

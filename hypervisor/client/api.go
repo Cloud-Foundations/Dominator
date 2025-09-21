@@ -18,6 +18,13 @@ type FlushReadWriter interface {
 	io.ReadWriter
 }
 
+type GetUpdatesParams struct {
+	ConnectedHandler func() error
+	Logger           log.DebugLogger
+	RequestsChannel  <-chan proto.GetUpdatesRequest
+	UpdateHandler    func(update proto.Update) error
+}
+
 func AcknowledgeVm(client srpc.ClientI, ipAddress net.IP) error {
 	return acknowledgeVm(client, ipAddress)
 }
@@ -177,6 +184,10 @@ func GetRootCookiePath(client srpc.ClientI) (string, error) {
 	return getRootCookiePath(client)
 }
 
+func GetUpdates(client srpc.ClientI, params GetUpdatesParams) error {
+	return getUpdates(client, params)
+}
+
 func GetVmAccessToken(client srpc.ClientI, ipAddress net.IP,
 	lifetime time.Duration) ([]byte, error) {
 	return getVmAccessToken(client, ipAddress, lifetime)
@@ -199,6 +210,11 @@ func GetVmInfos(client srpc.ClientI,
 func GetVmLastPatchLog(client srpc.ClientI, ipAddress net.IP) (
 	[]byte, time.Time, error) {
 	return getVmLastPatchLog(client, ipAddress)
+}
+
+func GetVmUserData(client srpc.ClientI, ipAddress net.IP,
+	accessToken []byte) (io.ReadCloser, uint64, error) {
+	return getVmUserData(client, ipAddress, accessToken)
 }
 
 func HoldLock(client srpc.ClientI, timeout time.Duration,
@@ -333,4 +349,14 @@ func StartVmDhcpTimeout(client srpc.ClientI, ipAddress net.IP,
 
 func StopVm(client srpc.ClientI, ipAddress net.IP, accessToken []byte) error {
 	return stopVm(client, ipAddress, accessToken)
+}
+
+func TraceVmMetadata(client srpc.ClientI, ipAddress net.IP,
+	pathHandler func(path string) error) error {
+	return traceVmMetadata(client, ipAddress, pathHandler)
+}
+
+func WatchDhcp(client srpc.ClientI, request proto.WatchDhcpRequest,
+	handlePacket func(ifName string, rawPacket []byte) error) error {
+	return watchDhcp(client, request, handlePacket)
 }
