@@ -1038,6 +1038,41 @@ func replaceVmImage(client srpc.ClientI, request proto.ReplaceVmImageRequest,
 	}
 }
 
+func replaceVmUserData(client srpc.ClientI, ipAddress net.IP,
+	userData io.Reader, size uint64, logger log.DebugLogger) error {
+	request := proto.ReplaceVmUserDataRequest{
+		IpAddress: ipAddress,
+		Size:      uint64(size),
+	}
+	conn, err := client.Call("Hypervisor.ReplaceVmUserData")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return err
+	}
+	logger.Debugln(0, "uploading user data")
+	if _, err := io.CopyN(conn, userData, int64(size)); err != nil {
+		return err
+	}
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+	errorString, err := conn.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	if err := errors.New(errorString[:len(errorString)-1]); err != nil {
+		return err
+	}
+	var response proto.ReplaceVmUserDataResponse
+	if err := conn.Decode(&response); err != nil {
+		return err
+	}
+	return errors.New(response.Error)
+}
+
 func restoreVmFromSnapshot(client srpc.ClientI,
 	request proto.RestoreVmFromSnapshotRequest) error {
 	var response proto.RestoreVmFromSnapshotResponse

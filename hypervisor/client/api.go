@@ -309,6 +309,11 @@ func ReplaceVmImage(client srpc.ClientI, request proto.ReplaceVmImageRequest,
 	return replaceVmImage(client, request, imageReader, logger)
 }
 
+func ReplaceVmUserData(client srpc.ClientI, ipAddress net.IP,
+	userData io.Reader, size uint64, logger log.DebugLogger) error {
+	return replaceVmUserData(client, ipAddress, userData, size, logger)
+}
+
 func RestoreVmFromSnapshot(client srpc.ClientI,
 	request proto.RestoreVmFromSnapshotRequest) error {
 	return restoreVmFromSnapshot(client, request)
