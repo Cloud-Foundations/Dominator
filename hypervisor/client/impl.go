@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/rsync"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -716,6 +717,44 @@ func getVmUserData(client srpc.ClientI, ipAddress net.IP,
 	}
 	doClose = false
 	return conn, response.Length, nil
+}
+
+func getVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
+	writer io.WriteSeeker, reader io.Reader, initialFileSize, size uint64,
+	logger log.DebugLogger) (proto.GetVmVolumeResponse, error) {
+	conn, err := client.Call("Hypervisor.GetVmVolume")
+	if err != nil {
+		return proto.GetVmVolumeResponse{}, err
+	}
+	defer conn.Close()
+	if err := conn.Encode(request); err != nil {
+		return proto.GetVmVolumeResponse{},
+			fmt.Errorf("error encoding request: %s", err)
+	}
+	if err := conn.Flush(); err != nil {
+		return proto.GetVmVolumeResponse{}, err
+	}
+	var response proto.GetVmVolumeResponse
+	if err := conn.Decode(&response); err != nil {
+		return proto.GetVmVolumeResponse{}, err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return proto.GetVmVolumeResponse{}, err
+	}
+	startTime := time.Now()
+	stats, err := rsync.GetBlocks(conn, conn, conn, reader, writer,
+		size, initialFileSize)
+	if err != nil {
+		return proto.GetVmVolumeResponse{}, err
+	}
+	duration := time.Since(startTime)
+	speed := uint64(float64(stats.NumRead) / duration.Seconds())
+	logger.Debugf(0, "sent %s B, received %s/%s B (%.0f * speedup, %s/s)\n",
+		format.FormatBytes(stats.NumWritten), format.FormatBytes(stats.NumRead),
+		format.FormatBytes(size),
+		float64(size)/float64(stats.NumRead+stats.NumWritten),
+		format.FormatBytes(speed))
+	return response, nil
 }
 
 func holdLock(client srpc.ClientI, timeout time.Duration,

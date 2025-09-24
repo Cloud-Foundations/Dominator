@@ -217,6 +217,13 @@ func GetVmUserData(client srpc.ClientI, ipAddress net.IP,
 	return getVmUserData(client, ipAddress, accessToken)
 }
 
+func GetVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
+	writer io.WriteSeeker, reader io.Reader, initialFileSize, size uint64,
+	logger log.DebugLogger) (proto.GetVmVolumeResponse, error) {
+	return getVmVolume(client, request, writer, reader, initialFileSize, size,
+		logger)
+}
+
 func HoldLock(client srpc.ClientI, timeout time.Duration,
 	writeLock bool) error {
 	return holdLock(client, timeout, writeLock)
