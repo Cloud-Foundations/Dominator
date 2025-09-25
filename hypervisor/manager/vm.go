@@ -2626,39 +2626,23 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
 
 func migratevmUserData(hypervisor *srpc.Client, filename string,
 	ipAddr net.IP, accessToken []byte) error {
-	conn, err := hypervisor.Call("Hypervisor.GetVmUserData")
+	userData, size, err := hyperclient.GetVmUserData(hypervisor, ipAddr,
+		accessToken)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	request := proto.GetVmUserDataRequest{
-		AccessToken: accessToken,
-		IpAddress:   ipAddr,
-	}
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	var reply proto.GetVmUserDataResponse
-	if err := conn.Decode(&reply); err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	if reply.Length < 1 {
+	if size < 1 {
 		return nil
 	}
+	defer userData.Close()
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		fsutil.PrivateFilePerms)
 	if err != nil {
-		io.CopyN(ioutil.Discard, conn, int64(reply.Length))
+		io.CopyN(ioutil.Discard, userData, int64(size))
 		return err
 	}
 	defer writer.Close()
-	if _, err := io.CopyN(writer, conn, int64(reply.Length)); err != nil {
+	if _, err := io.CopyN(writer, userData, int64(size)); err != nil {
 		return err
 	}
 	return nil
@@ -2681,9 +2665,9 @@ func (vm *vmInfoType) makeExtraLogger(filename string) (
 func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 	sourceIpAddr net.IP, accessToken []byte, getExtraFiles bool) error {
 	for index, volume := range vm.VolumeLocations {
-		_, err := migrateVmVolume(hypervisor, volume.DirectoryToCleanup,
+		err := migrateVmVolume(hypervisor, volume.DirectoryToCleanup,
 			volume.Filename, uint(index), vm.Volumes[index].Size, sourceIpAddr,
-			accessToken, getExtraFiles)
+			accessToken, getExtraFiles, vm.logger)
 		if err != nil {
 			return err
 		}
@@ -2693,29 +2677,28 @@ func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 
 func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 	volumeIndex uint, size uint64, ipAddr net.IP, accessToken []byte,
-	getExtraFiles bool) (
-	*rsync.Stats, error) {
+	getExtraFiles bool, logger log.DebugLogger) error {
 	var initialFileSize uint64
 	reader, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			return err
 		}
 	} else {
 		defer reader.Close()
 		if fi, err := reader.Stat(); err != nil {
-			return nil, err
+			return err
 		} else {
 			initialFileSize = uint64(fi.Size())
 			if initialFileSize > size {
-				return nil, errors.New("file larger than volume")
+				return errors.New("file larger than volume")
 			}
 		}
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE,
 		fsutil.PrivateFilePerms)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer writer.Close()
 	request := proto.GetVmVolumeRequest{
@@ -2725,46 +2708,28 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		IpAddress:        ipAddr,
 		VolumeIndex:      volumeIndex,
 	}
-	conn, err := hypervisor.Call("Hypervisor.GetVmVolume")
+	response, err := hyperclient.GetVmVolume(hypervisor, request, writer,
+		reader, initialFileSize, size, logger)
 	if err != nil {
 		if reader == nil {
 			os.Remove(filename)
 		}
-		return nil, err
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return nil, fmt.Errorf("error encoding request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return nil, err
-	}
-	var response proto.GetVmVolumeResponse
-	if err := conn.Decode(&response); err != nil {
-		return nil, err
-	}
-	if err := errors.New(response.Error); err != nil {
-		return nil, err
-	}
-	stats, err := rsync.GetBlocks(conn, conn, conn, reader, writer, size,
-		initialFileSize)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	if !getExtraFiles {
-		return &stats, nil
+		return nil
 	}
 	for name, data := range response.ExtraFiles {
 		if name != "initrd" && name != "kernel" {
-			return nil, fmt.Errorf("received unsupported extra file: %s", name)
+			return fmt.Errorf("received unsupported extra file: %s", name)
 		}
 		err := ioutil.WriteFile(filepath.Join(directory, name), data,
 			fsutil.PrivateFilePerms)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &stats, nil
+	return nil
 }
 
 func (m *Manager) notifyVmMetadataRequest(ipAddr net.IP, path string) {
