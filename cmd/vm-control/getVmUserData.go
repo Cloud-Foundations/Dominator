@@ -38,20 +38,20 @@ func getVmUserDataOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	conn, length, err := hyperclient.GetVmUserData(client, ipAddr, nil)
+	readerCloser, length, err := hyperclient.GetVmUserData(client, ipAddr, nil)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer readerCloser.Close()
 	file, err := os.OpenFile(*userDataFile, os.O_WRONLY|os.O_CREATE,
 		fsutil.PrivateFilePerms)
 	if err != nil {
-		io.CopyN(ioutil.Discard, conn, int64(length))
+		io.CopyN(ioutil.Discard, readerCloser, int64(length))
 		return err
 	}
 	defer file.Close()
 	logger.Debugln(0, "downloading user data")
-	if _, err := io.CopyN(file, conn, int64(length)); err != nil {
+	if _, err := io.CopyN(file, readerCloser, int64(length)); err != nil {
 		return err
 	}
 	return nil
