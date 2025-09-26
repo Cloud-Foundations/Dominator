@@ -5,10 +5,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	terminalclient "github.com/Cloud-Foundations/Dominator/lib/net/terminal/client"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func connectToVmManagerSubcommand(args []string,
@@ -34,26 +33,11 @@ func connectToVmManagerOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	conn, err := client.Call("Hypervisor.ConnectToVmManager")
+	err = hyperclient.ConnectToVmManager(hypervisor, ipAddr,
+		func(conn hyperclient.FlushReadWriter) error {
+			return terminalclient.StartTerminal(conn)
+		})
 	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	request := proto.ConnectToVmManagerRequest{IpAddress: ipAddr}
-	if err := conn.Encode(request); err != nil {
-		return err
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	var response proto.ConnectToVmManagerResponse
-	if err := conn.Decode(&response); err != nil {
-		return err
-	}
-	if err := errors.New(response.Error); err != nil {
-		return err
-	}
-	if err := terminalclient.StartTerminal(conn); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

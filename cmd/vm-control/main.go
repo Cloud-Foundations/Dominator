@@ -100,6 +100,8 @@ var (
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
+	retain = flag.Bool("retain", false,
+		"If true, retain the old snapshot after restoring VM")
 	secondarySubnetIDs         flagutil.StringList
 	secondaryVolumeSizes       flagutil.SizeList
 	secondaryVolumesInitParams = flag.String("secondaryVolumesInitParams", "",
@@ -207,6 +209,7 @@ var subcommands = []commands.Command{
 	{"change-vm-cpus", "IPaddr", 1, 1, changeVmCPUsSubcommand},
 	{"change-vm-destroy-protection", "IPaddr", 1, 1,
 		changeVmDestroyProtectionSubcommand},
+	{"change-vm-hostname", "IPaddr", 1, 1, changeVmHostnameSubcommand},
 	{"change-vm-machine-type", "IPaddr", 1, 1, changeVmMachineTypeSubcommand},
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
 	{"change-vm-owner-groups", "IPaddr", 1, 1, changeVmOwnerGroupsSubcommand},

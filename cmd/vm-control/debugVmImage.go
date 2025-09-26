@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
-	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -64,71 +62,16 @@ func debugVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		return err
 	}
 	defer client.Close()
-	var reply proto.DebugVmImageResponse
-	err = callDebugVmImage(client, request, &reply, imageReader,
+	dhcpTimedOut, err := hyperclient.DebugVmImage(client, request, imageReader,
 		int64(request.ImageDataSize), logger)
 	if err != nil {
 		return err
 	}
-	if reply.DhcpTimedOut {
+	if dhcpTimedOut {
 		return errors.New("DHCP ACK timed out")
 	}
 	if *dhcpTimeout > 0 {
 		logger.Debugln(0, "Received DHCP ACK")
 	}
 	return maybeWatchVm(client, hypervisor, ipAddr, logger)
-}
-
-func callDebugVmImage(client *srpc.Client,
-	request proto.DebugVmImageRequest,
-	reply *proto.DebugVmImageResponse, imageReader io.Reader,
-	imageSize int64, logger log.DebugLogger) error {
-	conn, err := client.Call("Hypervisor.DebugVmImage")
-	if err != nil {
-		return fmt.Errorf("error calling Hypervisor.DebugVmImage: %s", err)
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
-	// Stream any required data.
-	if imageReader != nil {
-		logger.Debugln(0, "uploading image")
-		startTime := time.Now()
-		if nCopied, err := io.CopyN(conn, imageReader, imageSize); err != nil {
-			return fmt.Errorf("error uploading image: %s got %d of %d bytes",
-				err, nCopied, imageSize)
-		} else {
-			duration := time.Since(startTime)
-			speed := uint64(float64(nCopied) / duration.Seconds())
-			logger.Debugf(0, "uploaded image in %s (%s/s)\n",
-				format.Duration(duration), format.FormatBytes(speed))
-		}
-	}
-	response, err := processDebugVmImageResponses(conn, logger)
-	*reply = response
-	return err
-}
-
-func processDebugVmImageResponses(conn *srpc.Conn,
-	logger log.DebugLogger) (proto.DebugVmImageResponse, error) {
-	var zeroResponse proto.DebugVmImageResponse
-	if err := conn.Flush(); err != nil {
-		return zeroResponse, fmt.Errorf("error flushing: %s", err)
-	}
-	for {
-		var response proto.DebugVmImageResponse
-		if err := conn.Decode(&response); err != nil {
-			return zeroResponse, fmt.Errorf("error decoding: %s", err)
-		}
-		if response.Error != "" {
-			return zeroResponse, errors.New(response.Error)
-		}
-		if response.ProgressMessage != "" {
-			logger.Debugln(0, response.ProgressMessage)
-		}
-		if response.Final {
-			return response, nil
-		}
-	}
 }

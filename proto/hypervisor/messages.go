@@ -130,6 +130,15 @@ type ChangeVmDestroyProtectionResponse struct {
 	Error string
 }
 
+type ChangeVmHostnameRequest struct {
+	Hostname  string
+	IpAddress net.IP
+}
+
+type ChangeVmHostnameResponse struct {
+	Error string
+}
+
 type ChangeVmMachineTypeRequest struct {
 	MachineType MachineType
 	IpAddress   net.IP
@@ -737,6 +746,7 @@ type RestoreVmFromSnapshotRequest struct {
 	IpAddress         net.IP
 	ForceIfNotStopped bool
 	Name              string
+	Retain            bool
 }
 
 type RestoreVmFromSnapshotResponse struct {

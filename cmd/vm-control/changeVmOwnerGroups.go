@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func changeVmOwnerGroupsSubcommand(args []string,
@@ -27,16 +26,10 @@ func changeVmOwnerGroups(vmHostname string, logger log.DebugLogger) error {
 
 func changeVmOwnerGroupsOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.ChangeVmOwnerGroupsRequest{ipAddr, ownerGroups}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.ChangeVmOwnerGroupsResponse
-	err = client.RequestReply("Hypervisor.ChangeVmOwnerGroups", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.ChangeVmOwnerGroups(client, ipAddr, ownerGroups)
 }

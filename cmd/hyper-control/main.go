@@ -21,6 +21,8 @@ import (
 )
 
 var (
+	connectTimeout = flag.Duration("connectTimeout", 15*time.Second,
+		"connection timeout")
 	externalLeaseHostnames flagutil.StringList
 	externalLeaseAddresses proto.AddressList
 	emailBodyFilename      = flag.String("emailBodyFilename", "",

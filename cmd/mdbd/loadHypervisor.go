@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -51,18 +52,8 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 		return fmt.Errorf("error connecting to: %s: %s", hypervisor, err)
 	}
 	defer client.Close()
-	conn, err := client.Call("Hypervisor.GetUpdates")
-	if err != nil {
-		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
-	}
-	defer conn.Close()
 	initialUpdate := true
-	for {
-		var update proto.Update
-		if err := conn.Decode(&update); err != nil {
-			return fmt.Errorf("error decoding from: %s: %s",
-				conn.RemoteAddr(), err)
-		}
+	updateHandler := func(update proto.Update) error {
 		g.updateVMs(update.VMs, initialUpdate)
 		initialUpdate = false
 		if waitGroup != nil {
@@ -73,7 +64,12 @@ func (g *hypervisorGeneratorType) getUpdates(hypervisor string,
 		case g.eventChannel <- struct{}{}:
 		default:
 		}
+		return nil
 	}
+	return hyperclient.GetUpdates(client, hyperclient.GetUpdatesParams{
+		Logger:        g.logger,
+		UpdateHandler: updateHandler,
+	})
 }
 
 func (g *hypervisorGeneratorType) Generate(unused_datacentre string,

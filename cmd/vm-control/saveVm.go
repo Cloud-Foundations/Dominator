@@ -15,11 +15,9 @@ import (
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
-	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/rsync"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -83,8 +81,12 @@ func copyVolumeToVmSaver(saver vmSaver, client *srpc.Client, ipAddr net.IP,
 		if writer, err := saver.OpenWriter(filename, size); err != nil {
 			return err
 		} else {
-			err := copyVmVolumeToWriter(writer, reader, initialFileSize,
-				client, ipAddr, volIndex, size, logger)
+			request := proto.GetVmVolumeRequest{
+				IpAddress:   ipAddr,
+				VolumeIndex: volIndex,
+			}
+			_, err := hyperclient.GetVmVolume(client, request, writer, reader,
+				initialFileSize, size, logger)
 			if err != nil {
 				writer.Close()
 				return err
@@ -92,47 +94,6 @@ func copyVolumeToVmSaver(saver vmSaver, client *srpc.Client, ipAddr net.IP,
 			return writer.Close()
 		}
 	}
-}
-
-func copyVmVolumeToWriter(writer io.WriteSeeker, reader io.Reader,
-	initialFileSize uint64, client *srpc.Client, ipAddr net.IP, volIndex uint,
-	size uint64, logger log.DebugLogger) error {
-	request := proto.GetVmVolumeRequest{
-		IpAddress:   ipAddr,
-		VolumeIndex: volIndex,
-	}
-	conn, err := client.Call("Hypervisor.GetVmVolume")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	var response proto.GetVmVolumeResponse
-	if err := conn.Decode(&response); err != nil {
-		return err
-	}
-	if err := errors.New(response.Error); err != nil {
-		return err
-	}
-	startTime := time.Now()
-	stats, err := rsync.GetBlocks(conn, conn, conn, reader, writer,
-		size, initialFileSize)
-	if err != nil {
-		return err
-	}
-	duration := time.Since(startTime)
-	speed := uint64(float64(stats.NumRead) / duration.Seconds())
-	logger.Debugf(0, "sent %s B, received %s/%s B (%.0f * speedup, %s/s)\n",
-		format.FormatBytes(stats.NumWritten), format.FormatBytes(stats.NumRead),
-		format.FormatBytes(size),
-		float64(size)/float64(stats.NumRead+stats.NumWritten),
-		format.FormatBytes(speed))
-	return nil
 }
 
 func encodeJsonToVmSaver(saver vmSaver, filename string,
@@ -201,7 +162,7 @@ func saveVmOnHypervisor(hypervisor string, ipAddr net.IP, destination string,
 	if err := encodeJsonToVmSaver(saver, "info.json", vmInfo); err != nil {
 		return err
 	}
-	conn, length, err := callGetVmUserData(client, ipAddr)
+	conn, length, err := hyperclient.GetVmUserData(client, ipAddr, nil)
 	if err != nil {
 		return err
 	}

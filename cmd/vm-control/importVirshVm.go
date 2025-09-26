@@ -14,7 +14,6 @@ import (
 	"time"
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -353,13 +352,8 @@ func importVirshVm(macAddr, domainName string, sAddrs []proto.Address,
 		return err
 	}
 	request.VerificationCookie = verificationCookie
-	var reply proto.GetVmInfoResponse
 	logger.Debugln(0, "issuing import RPC")
-	err = client.RequestReply("Hypervisor.ImportLocalVm", request, &reply)
-	if err != nil {
-		return fmt.Errorf("Hypervisor.ImportLocalVm RPC failed: %s", err)
-	}
-	if err := errors.New(reply.Error); err != nil {
+	if err := hyperclient.ImportLocalVm(client, request); err != nil {
 		return fmt.Errorf("Hypervisor failed to import: %s", err)
 	}
 	logger.Debugln(0, "imported VM")

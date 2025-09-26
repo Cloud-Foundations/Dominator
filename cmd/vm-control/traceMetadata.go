@@ -1,13 +1,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func traceVmMetadataSubcommand(args []string, logger log.DebugLogger) error {
@@ -37,35 +36,10 @@ func traceVmMetadataOnHypervisor(hypervisor string, ipAddr net.IP,
 
 func doTraceMetadata(client *srpc.Client, ipAddr net.IP,
 	logger log.Logger) error {
-	request := proto.TraceVmMetadataRequest{ipAddr}
-	conn, err := client.Call("Hypervisor.TraceVmMetadata")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return err
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	var reply proto.TraceVmMetadataResponse
-	if err := conn.Decode(&reply); err != nil {
-		return err
-	}
-	if reply.Error != "" {
-		return errors.New(reply.Error)
-	}
-	for {
-		if line, err := conn.ReadString('\n'); err != nil {
-			return err
-		} else {
-			if line == "\n" {
-				return nil
-			}
-			logger.Print(line)
-		}
-	}
+	return hyperclient.TraceVmMetadata(client, ipAddr, func(path string) error {
+		logger.Println(path)
+		return nil
+	})
 }
 
 func maybeWatchVm(client *srpc.Client, hypervisor string, ipAddr net.IP,

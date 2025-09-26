@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func discardVmSnapshotSubcommand(args []string, logger log.DebugLogger) error {
@@ -26,19 +25,10 @@ func discardVmSnapshot(vmHostname string, logger log.DebugLogger) error {
 
 func discardVmSnapshotOnHypervisor(hypervisor string, ipAddr net.IP,
 	logger log.DebugLogger) error {
-	request := proto.DiscardVmSnapshotRequest{
-		IpAddress: ipAddr,
-		Name:      *snapshotName,
-	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.DiscardVmSnapshotResponse
-	err = client.RequestReply("Hypervisor.DiscardVmSnapshot", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.DiscardVmSnapshot(client, ipAddr, *snapshotName)
 }

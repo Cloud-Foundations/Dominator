@@ -41,7 +41,7 @@ func askForCommitDecision(client *srpc.Client, ipAddress net.IP) error {
 		}
 		return errorCommitAbandoned
 	case "commit":
-		return commitVm(client, ipAddress)
+		return hyperclient.CommitImportedVm(client, ipAddress)
 	case "defer":
 		return errorCommitDeferred
 	}
@@ -62,16 +62,6 @@ func askForInputChoice(prompt string, choices []string) (string, error) {
 			}
 		}
 	}
-}
-
-func commitVm(client *srpc.Client, ipAddress net.IP) error {
-	request := proto.CommitImportedVmRequest{ipAddress}
-	var reply proto.CommitImportedVmResponse
-	err := client.RequestReply("Hypervisor.CommitImportedVm", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
 }
 
 func importLocalVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -130,12 +120,7 @@ func importLocalVmInfo(vmInfo proto.VmInfo, rootVolume string,
 		VmInfo:             vmInfo,
 		VolumeFilenames:    []string{rootFilename},
 	}
-	var reply proto.GetVmInfoResponse
-	err = client.RequestReply("Hypervisor.ImportLocalVm", request, &reply)
-	if err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
+	if err := hyperclient.ImportLocalVm(client, request); err != nil {
 		return err
 	}
 	logger.Debugln(0, "imported VM")

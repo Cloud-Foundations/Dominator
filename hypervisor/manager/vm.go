@@ -118,14 +118,14 @@ func copyData(filename string, reader io.Reader, length uint64,
 	return err
 }
 
-func createTapDevice(bridge string) (*os.File, error) {
+func createTapDevice(bridge string) (*os.File, string, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tapFile, tapName, err := libnet.CreateTapDevice()
 	if err != nil {
-		return nil, fmt.Errorf("error creating tap device: %s", err)
+		return nil, "", fmt.Errorf("error creating tap device: %s", err)
 	}
 	doAutoClose := true
 	defer func() {
@@ -137,14 +137,14 @@ func createTapDevice(bridge string) (*os.File, error) {
 		"mtu", strconv.Itoa(bridgeIf.MTU),
 		"up")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("error upping: %s: %s", err, output)
+		return nil, "", fmt.Errorf("error upping: %s: %s", err, output)
 	}
 	cmd = exec.Command("ip", "link", "set", tapName, "master", bridge)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("error attaching: %s: %s", err, output)
+		return nil, "", fmt.Errorf("error attaching: %s: %s", err, output)
 	}
 	doAutoClose = false
-	return tapFile, nil
+	return tapFile, tapName, nil
 }
 
 func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
@@ -656,6 +656,28 @@ func (m *Manager) changeVmDestroyProtection(ipAddr net.IP,
 	}
 	defer vm.mutex.Unlock()
 	vm.DestroyProtection = destroyProtection
+	vm.writeAndSendInfo()
+	return nil
+}
+
+func (m *Manager) changeVmHostname(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, hostname string) error {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	err = vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)
+	if err != nil {
+		return err
+	}
+	for _, address := range vm.SecondaryAddresses {
+		err := vm.manager.DhcpServer.AddLease(address, vm.Hostname)
+		if err != nil {
+			vm.logger.Println(err)
+		}
+	}
+	vm.Hostname = hostname
 	vm.writeAndSendInfo()
 	return nil
 }
@@ -2604,39 +2626,23 @@ func (m *Manager) migrateVmChecks(vmInfo proto.VmInfo,
 
 func migratevmUserData(hypervisor *srpc.Client, filename string,
 	ipAddr net.IP, accessToken []byte) error {
-	conn, err := hypervisor.Call("Hypervisor.GetVmUserData")
+	userData, size, err := hyperclient.GetVmUserData(hypervisor, ipAddr,
+		accessToken)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	request := proto.GetVmUserDataRequest{
-		AccessToken: accessToken,
-		IpAddress:   ipAddr,
-	}
-	if err := conn.Encode(request); err != nil {
-		return fmt.Errorf("error encoding request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return err
-	}
-	var reply proto.GetVmUserDataResponse
-	if err := conn.Decode(&reply); err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	if reply.Length < 1 {
+	if size < 1 {
 		return nil
 	}
+	defer userData.Close()
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		fsutil.PrivateFilePerms)
 	if err != nil {
-		io.CopyN(ioutil.Discard, conn, int64(reply.Length))
+		io.CopyN(ioutil.Discard, userData, int64(size))
 		return err
 	}
 	defer writer.Close()
-	if _, err := io.CopyN(writer, conn, int64(reply.Length)); err != nil {
+	if _, err := io.CopyN(writer, userData, int64(size)); err != nil {
 		return err
 	}
 	return nil
@@ -2659,9 +2665,9 @@ func (vm *vmInfoType) makeExtraLogger(filename string) (
 func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 	sourceIpAddr net.IP, accessToken []byte, getExtraFiles bool) error {
 	for index, volume := range vm.VolumeLocations {
-		_, err := migrateVmVolume(hypervisor, volume.DirectoryToCleanup,
+		err := migrateVmVolume(hypervisor, volume.DirectoryToCleanup,
 			volume.Filename, uint(index), vm.Volumes[index].Size, sourceIpAddr,
-			accessToken, getExtraFiles)
+			accessToken, getExtraFiles, vm.logger)
 		if err != nil {
 			return err
 		}
@@ -2671,29 +2677,28 @@ func (vm *vmInfoType) migrateVmVolumes(hypervisor *srpc.Client,
 
 func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 	volumeIndex uint, size uint64, ipAddr net.IP, accessToken []byte,
-	getExtraFiles bool) (
-	*rsync.Stats, error) {
+	getExtraFiles bool, logger log.DebugLogger) error {
 	var initialFileSize uint64
 	reader, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			return err
 		}
 	} else {
 		defer reader.Close()
 		if fi, err := reader.Stat(); err != nil {
-			return nil, err
+			return err
 		} else {
 			initialFileSize = uint64(fi.Size())
 			if initialFileSize > size {
-				return nil, errors.New("file larger than volume")
+				return errors.New("file larger than volume")
 			}
 		}
 	}
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE,
 		fsutil.PrivateFilePerms)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer writer.Close()
 	request := proto.GetVmVolumeRequest{
@@ -2703,46 +2708,28 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		IpAddress:        ipAddr,
 		VolumeIndex:      volumeIndex,
 	}
-	conn, err := hypervisor.Call("Hypervisor.GetVmVolume")
+	response, err := hyperclient.GetVmVolume(hypervisor, request, writer,
+		reader, initialFileSize, size, logger)
 	if err != nil {
 		if reader == nil {
 			os.Remove(filename)
 		}
-		return nil, err
-	}
-	defer conn.Close()
-	if err := conn.Encode(request); err != nil {
-		return nil, fmt.Errorf("error encoding request: %s", err)
-	}
-	if err := conn.Flush(); err != nil {
-		return nil, err
-	}
-	var response proto.GetVmVolumeResponse
-	if err := conn.Decode(&response); err != nil {
-		return nil, err
-	}
-	if err := errors.New(response.Error); err != nil {
-		return nil, err
-	}
-	stats, err := rsync.GetBlocks(conn, conn, conn, reader, writer, size,
-		initialFileSize)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	if !getExtraFiles {
-		return &stats, nil
+		return nil
 	}
 	for name, data := range response.ExtraFiles {
 		if name != "initrd" && name != "kernel" {
-			return nil, fmt.Errorf("received unsupported extra file: %s", name)
+			return fmt.Errorf("received unsupported extra file: %s", name)
 		}
 		err := ioutil.WriteFile(filepath.Join(directory, name), data,
 			fsutil.PrivateFilePerms)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &stats, nil
+	return nil
 }
 
 func (m *Manager) notifyVmMetadataRequest(ipAddr net.IP, path string) {
@@ -3371,14 +3358,13 @@ func (m *Manager) replaceVmUserData(ipAddr net.IP, reader io.Reader,
 	return nil
 }
 
-func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
-	authInfo *srpc.AuthInformation, forceIfNotStopped bool,
-	snapshotName string) error {
-	snapshotSuffix, err := sanitiseSnapshotName(snapshotName)
+func (m *Manager) restoreVmFromSnapshot(req proto.RestoreVmFromSnapshotRequest,
+	authInfo *srpc.AuthInformation) error {
+	snapshotSuffix, err := sanitiseSnapshotName(req.Name)
 	if err != nil {
 		return err
 	}
-	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	vm, err := m.getVmLockAndAuth(req.IpAddress, true, authInfo, nil)
 	if err != nil {
 		return err
 	}
@@ -3392,20 +3378,23 @@ func (m *Manager) restoreVmFromSnapshot(ipAddr net.IP,
 		}
 	}()
 	if vm.State != proto.StateStopped {
-		if !forceIfNotStopped {
+		if !req.ForceIfNotStopped {
 			return errors.New("VM is not stopped")
 		}
 	}
 	for index, volume := range vm.VolumeLocations {
 		snapshotFilename := volume.Filename + "." + snapshotSuffix
-		if err := os.Rename(snapshotFilename, volume.Filename); err != nil {
+		err := restore(snapshotFilename, volume.Filename, req.Retain)
+		if err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		}
-		vm.mutex.Lock()
-		delete(vm.Volumes[index].Snapshots, snapshotName)
-		vm.mutex.Unlock()
+		if !req.Retain {
+			vm.mutex.Lock()
+			delete(vm.Volumes[index].Snapshots, req.Name)
+			vm.mutex.Unlock()
+		}
 		changed = true
 	}
 	return nil
@@ -4432,14 +4421,17 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		return err
 	}
 	var tapFiles []*os.File
+	var tapNames []string
 	for _, bridge := range bridges {
-		tapFile, err := createTapDevice(bridge)
+		tapFile, tapName, err := createTapDevice(bridge)
 		if err != nil {
 			return fmt.Errorf("error creating tap device: %s", err)
 		}
 		defer tapFile.Close()
 		tapFiles = append(tapFiles, tapFile)
+		tapNames = append(tapNames, tapName)
 	}
+	vm.logger.Debugf(0, "tap devices: %v\n", tapNames)
 	pidfile := filepath.Join(vm.dirname, "pidfile")
 	err = vm.startQemuVm(enableNetboot, haveManagerLock, pidfile, nCpus,
 		netOptions, tapFiles)

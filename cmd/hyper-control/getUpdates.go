@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -79,18 +80,11 @@ func getUpdatesOnHypervisor(hypervisor string, logger log.DebugLogger) error {
 		return err
 	}
 	defer client.Close()
-	conn, err := client.Call("Hypervisor.GetUpdates")
-	if err != nil {
-		return err
+	updateHandler := func(update hyper_proto.Update) error {
+		return json.WriteWithIndent(os.Stdout, "    ", update)
 	}
-	defer conn.Close()
-	for {
-		var update hyper_proto.Update
-		if err := conn.Decode(&update); err != nil {
-			return err
-		}
-		if err := json.WriteWithIndent(os.Stdout, "    ", update); err != nil {
-			return err
-		}
-	}
+	return hyperclient.GetUpdates(client, hyperclient.GetUpdatesParams{
+		Logger:        logger,
+		UpdateHandler: updateHandler,
+	})
 }

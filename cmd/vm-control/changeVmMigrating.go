@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func setVmMigratingSubcommand(args []string, logger log.DebugLogger) error {
@@ -35,19 +34,10 @@ func changeVmMigrationState(vmHostname string, enable bool,
 	} else {
 		hypervisor = fmt.Sprintf("localhost:%d", *hypervisorPortNum)
 	}
-	request := proto.PrepareVmForMigrationRequest{
-		Enable:    enable,
-		IpAddress: ipAddr}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	var reply proto.PrepareVmForMigrationResponse
-	err = client.RequestReply("Hypervisor.PrepareVmForMigration", request,
-		&reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return hyperclient.PrepareVmForMigration(client, ipAddr, nil, enable)
 }
