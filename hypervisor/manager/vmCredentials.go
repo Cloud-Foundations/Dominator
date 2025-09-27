@@ -360,6 +360,9 @@ func (vm *vmInfoType) refreshCredentials(httpClient *http.Client,
 	x509CertPEM, err := requestCertificate(httpClient, pubkeys.x509PEM,
 		algorithm, vm.manager.StartOptions.IdentityProvider, username, "X.509",
 		vm.logger)
+	if err != nil {
+		return time.Time{}, err
+	}
 	cert, err := decodeCert(x509CertPEM)
 	if err != nil {
 		return time.Time{}, err
@@ -375,6 +378,9 @@ func (vm *vmInfoType) refreshCredentials(httpClient *http.Client,
 	sshCertEnc, err := requestCertificate(httpClient, pubkeys.ssh, algorithm,
 		vm.manager.StartOptions.IdentityProvider, username, "SSH",
 		vm.logger)
+	if err != nil {
+		return time.Time{}, err
+	}
 	reader = bytes.NewReader(sshCertEnc)
 	err = fsutil.CopyToFile(
 		filepath.Join(vm.dirname, sshCertFile),
