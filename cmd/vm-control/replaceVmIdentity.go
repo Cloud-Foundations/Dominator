@@ -16,8 +16,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
-	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 const (
@@ -55,16 +57,47 @@ func replaceVmIdentityOnConnectedHypervisor(client srpc.ClientI,
 	hypervisorAddress string, vmIP net.IP, logger log.DebugLogger) error {
 	if *identityName == "" {
 		return hyperclient.ReplaceVmIdentity(client,
-			proto.ReplaceVmIdentityRequest{IpAddress: vmIP})
+			hyper_proto.ReplaceVmIdentityRequest{IpAddress: vmIP})
 	}
 	hypervisorHostname, _, err := net.SplitHostPort(hypervisorAddress)
 	if err != nil {
 		return err
 	}
-	hypervisorIPs, err := net.LookupHost(hypervisorHostname)
+	hypervisorIpList, err := net.LookupHost(hypervisorHostname)
 	if err != nil {
 		return err
 	}
+	hypervisorIpMap := stringutil.ConvertListToMap(hypervisorIpList, true)
+	if *fleetManagerHostname != "" {
+		fm := fmt.Sprintf("%s:%d", *fleetManagerHostname, *fleetManagerPortNum)
+		fmClient, err := dialFleetManager(fm)
+		if err != nil {
+			return err
+		}
+		defer fmClient.Close()
+		request := fm_proto.GetMachineInfoRequest{
+			Hostname:               hypervisorHostname,
+			IgnoreMissingLocalTags: true,
+		}
+		var reply fm_proto.GetMachineInfoResponse
+		err = fmClient.RequestReply("FleetManager.GetMachineInfo", request,
+			&reply)
+		if err != nil {
+			return err
+		}
+		if err := errors.New(reply.Error); err != nil {
+			return err
+		}
+		if reply.Machine.HostIpAddress != nil {
+			hypervisorIpMap[reply.Machine.HostIpAddress.String()] = struct{}{}
+		}
+		for _, netEntry := range reply.Machine.SecondaryNetworkEntries {
+			if netEntry.HostIpAddress != nil {
+				hypervisorIpMap[netEntry.HostIpAddress.String()] = struct{}{}
+			}
+		}
+	}
+	delete(hypervisorIpMap, "") // Just in case.
 	identityProvider, err := hyperclient.GetIdentityProvider(client)
 	if err != nil {
 		return err
@@ -97,13 +130,17 @@ func replaceVmIdentityOnConnectedHypervisor(client srpc.ClientI,
 		Host:   baseUrl.Host,
 		Path:   certificateRequestPath,
 	}
+	var requestorNetblocks []string
+	for ip := range hypervisorIpMap {
+		requestorNetblocks = append(requestorNetblocks, ip+"/32")
+	}
 	resp, err := httpClient.PostForm(
 		requestUrl.String(),
 		url.Values{
 			"identity": []string{*identityName},
 			"pubkey": []string{
 				base64.RawURLEncoding.EncodeToString(pubkeyDER)},
-			"requestor_netblock": []string{hypervisorIPs[0] + "/32"},
+			"requestor_netblock": requestorNetblocks,
 			"target_netblock":    []string{vmIP.String() + "/32"},
 		})
 	if err != nil {
@@ -139,7 +176,7 @@ func replaceVmIdentityOnConnectedHypervisor(client srpc.ClientI,
 		cert.NotAfter.Format(format.TimeFormatSeconds),
 		format.Duration(time.Until(cert.NotAfter)))
 	return hyperclient.ReplaceVmIdentity(client,
-		proto.ReplaceVmIdentityRequest{
+		hyper_proto.ReplaceVmIdentityRequest{
 			IdentityRequestorCertificate: certPEM,
 			IpAddress:                    vmIP,
 		})
