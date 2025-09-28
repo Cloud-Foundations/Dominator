@@ -32,6 +32,7 @@ type EnableUpdatesResponse struct{}
 
 type FastUpdateRequest struct {
 	DisableSafetyCheck    bool
+	FailOnReboot          bool
 	ForceDisruptiveUpdate bool
 	Hostname              string
 	Timeout               time.Duration // Default: 15 minutes.
