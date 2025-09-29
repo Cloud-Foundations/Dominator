@@ -71,6 +71,7 @@ const (
 	statusUpdating
 	statusUpdateDenied
 	statusFailedToUpdate
+	statusRebootBlocked
 	statusWaitingForNextFullPoll
 	statusSynced
 )

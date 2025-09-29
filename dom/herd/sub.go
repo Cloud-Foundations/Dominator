@@ -23,6 +23,7 @@ import (
 	domproto "github.com/Cloud-Foundations/Dominator/proto/dominator"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/client"
+	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
 
 var (
@@ -165,7 +166,7 @@ func (sub *Sub) makeUnbusy() {
 // Returns true if a client connection was open but the Poll failed due to an
 // I/O error, indicating a retry is reasonable.
 func (sub *Sub) connectAndPoll() bool {
-	return sub.connectAndPoll2(false, nil)
+	return sub.connectAndPoll2(false, false, nil)
 }
 
 // Returns true if a client connection was open but the Poll failed due to an
@@ -173,7 +174,7 @@ func (sub *Sub) connectAndPoll() bool {
 // If swapImages is true, the required and planned images are swapped.
 // If fastMessageChannel is not nil, fast updates are requested and relevant
 // messages are sent to the channel.
-func (sub *Sub) connectAndPoll2(swapImages bool,
+func (sub *Sub) connectAndPoll2(swapImages, failOnReboot bool,
 	fastMessageChannel chan<- FastUpdateMessage) bool {
 	if sub.loadConfiguration(swapImages) {
 		sub.generationCount = 0 // Force a full poll.
@@ -285,7 +286,8 @@ func (sub *Sub) connectAndPoll2(swapImages bool,
 		sub.boostScanSpeed(srpcClient, fastMessageChannel)
 	}
 	sub.status = statusPolling
-	retval := sub.poll(srpcClient, previousStatus, fastMessageChannel != nil)
+	retval := sub.poll(srpcClient, previousStatus, fastMessageChannel != nil,
+		failOnReboot)
 	<-sub.herd.pollSemaphore
 	return retval
 }
@@ -440,7 +442,7 @@ func (sub *Sub) processFileUpdates() bool {
 // Returns true if the Poll failed due to an I/O error, indicating a retry is
 // reasonable.
 func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus,
-	fast bool) bool {
+	fast, failOnReboot bool) bool {
 	if err := srpcClient.SetTimeout(5 * time.Minute); err != nil {
 		sub.herd.logger.Printf("poll(%s): error setting timeout: %s\n", sub)
 	}
@@ -661,7 +663,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus,
 			return false
 		}
 		sub.status = statusComputingUpdate
-		if idle, status := sub.sendUpdate(srpcClient); !idle {
+		if idle, status := sub.sendUpdate(srpcClient, failOnReboot); !idle {
 			sub.status = status
 			sub.reclaim()
 			return false
@@ -837,7 +839,8 @@ func (sub *Sub) fetchMissingObjects(srpcClient *srpc.Client, img *image.Image,
 }
 
 // Returns true if no update needs to be performed.
-func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
+func (sub *Sub) sendUpdate(srpcClient *srpc.Client,
+	failOnReboot bool) (bool, subStatus) {
 	logger := sub.herd.logger
 	var request subproto.UpdateRequest
 	var reply subproto.UpdateResponse
@@ -854,6 +857,13 @@ func (sub *Sub) sendUpdate(srpcClient *srpc.Client) (bool, subStatus) {
 		// then mark the update as unsafe.
 		if sub.checkForUnsafeChange(request) {
 			return false, statusUnsafeUpdate
+		}
+	}
+	if failOnReboot {
+		triggers := sublib.MatchTriggersInUpdate(request)
+		_, reboot := sublib.CheckImpact(triggers)
+		if reboot {
+			return false, statusRebootBlocked
 		}
 	}
 	if value, ok := sub.mdb.Tags["ForceDisruptiveUpdate"]; ok {
@@ -1096,13 +1106,17 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 			sleeper.Reset()
 		}
 		switch sub.status {
-		case statusSynced, statusUpdatesDisabled, statusUnsafeUpdate:
+		case statusSynced,
+			statusUpdatesDisabled,
+			statusUnsafeUpdate,
+			statusRebootBlocked:
 			return
 		default:
 		}
 		sub.pendingForceDisruptiveUpdate = request.ForceDisruptiveUpdate
 		sub.pendingSafetyClear = request.DisableSafetyCheck
-		sub.connectAndPoll2(request.UsePlannedImage, progressChannel)
+		sub.connectAndPoll2(request.UsePlannedImage, request.FailOnReboot,
+			progressChannel)
 	}
 	sub.sendFastUpdateMessage(progressChannel, "timed out")
 }
