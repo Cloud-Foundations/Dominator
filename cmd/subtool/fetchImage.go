@@ -32,9 +32,8 @@ func fetchImage(srpcClient *srpc.Client, imageName string) error {
 		Client:   srpcClient,
 	}
 	var generationCount, lastGenerationCount, lastScanCount uint64
-	err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime, true,
-		&generationCount, &lastGenerationCount, &lastScanCount,
-		logger)
+	_, err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime,
+		true, &generationCount, &lastGenerationCount, &lastScanCount, logger)
 	fmt.Fprintln(os.Stderr)
 	return err
 }

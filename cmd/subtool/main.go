@@ -27,6 +27,8 @@ var (
 	debug             = flag.Bool("debug", false, "Enable debug mode")
 	deleteBeforeFetch = flag.Bool("deleteBeforeFetch", false,
 		"If true, delete prior to Fetch rather than during Update")
+	failOnReboot = flag.Bool("failOnReboot", false,
+		"If true, fail when pushing image if it would reboot the sub")
 	file = flag.String("file", "",
 		"Name of file to write encoded data to")
 	forceDisruption = flag.Bool("forceDisruption", false,

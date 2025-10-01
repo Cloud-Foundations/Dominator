@@ -34,8 +34,13 @@ type uType struct {
 	fsChangeDuration   time.Duration
 }
 
+// CheckImpact will return whether any trigger has high impact or will reboot.
+func CheckImpact(triggerList []*triggers.Trigger) (highImpact, reboot bool) {
+	return checkImpact(triggerList)
+}
+
 // MatchTriggersInUpdate will return a list of triggers in an update request
-// that match the list of changes. Since there is file-system to compare to,
+// that match the list of changes. Since there is no file-system to compare to,
 // potential mtime-only changes will also match.
 func MatchTriggersInUpdate(request sub.UpdateRequest) []*triggers.Trigger {
 	return matchTriggersInUpdate(request)

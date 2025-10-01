@@ -78,6 +78,8 @@ func (status subStatus) string() string {
 		return "update denied"
 	case statusFailedToUpdate:
 		return "update failed"
+	case statusRebootBlocked:
+		return "reboot blocked"
 	case statusWaitingForNextFullPoll:
 		return "waiting for next full poll"
 	case statusSynced:

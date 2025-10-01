@@ -27,6 +27,8 @@ var (
 		"Hostname of dominator")
 	domPortNum = flag.Uint("domPortNum", constants.DominatorPortNumber,
 		"Port number of dominator")
+	failOnReboot = flag.Bool("failOnReboot", false,
+		"If true, fail a fast-update if it would reboot the sub")
 	forceDisruptiveUpdate = flag.Bool("forceDisruptiveUpdate", false,
 		"If true, force a disruptive update during a fast-update")
 	locationsToMatch  flagutil.StringList
