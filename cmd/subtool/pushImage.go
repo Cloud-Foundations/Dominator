@@ -48,17 +48,19 @@ func pushImageSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func expectUpdateToDisconnect(request sub.UpdateRequest) bool {
+func expectUpdateToDisconnect(request sub.UpdateRequest) (
+	disconnect, reboot bool) {
 	trg := sublib.MatchTriggersInUpdate(request)
 	for _, trigger := range trg {
 		if trigger.DoReboot {
-			return true
+			disconnect = true
+			reboot = true
 		}
 		if trigger.Service == "subd" {
-			return true
+			disconnect = true
 		}
 	}
-	return false
+	return
 }
 
 func pushImage(srpcClient *srpc.Client, imageName string) error {
@@ -140,6 +142,9 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	if err == nil {
 		return nil
 	}
+	if *showTimes {
+		logger.Println()
+	}
 	if !expectDisconnect {
 		return err
 	}
@@ -205,7 +210,7 @@ func getImageRetry(clientName, imageName string,
 func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 	imageServerAddress string, timeoutTime time.Time, singleFetch bool,
 	generationCount, lastGenerationCount, lastScanCount *uint64,
-	logger log.DebugLogger) error {
+	logger log.DebugLogger) (bool, error) {
 	deleteEarly := *deleteBeforeFetch
 	ignoreMissingComputedFiles := true
 	pushComputedFiles := true
@@ -220,11 +225,11 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 	for ; time.Now().Before(timeoutTime); time.Sleep(interval) {
 		var pollReply sub.PollResponse
 		if err := client.BoostCpuLimit(subObj.Client); err != nil {
-			return err
+			return newlineNeeded, err
 		}
 		if err := pollAndBuildPointers(subObj.Client, generationCount,
 			&pollReply); err != nil {
-			return err
+			return newlineNeeded, err
 		}
 		if pollReply.FileSystem == nil {
 			if interval < 5*time.Second {
@@ -262,6 +267,10 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 		if pollReply.FileSystem == nil {
 			continue
 		}
+		if newlineNeeded {
+			fmt.Fprintln(os.Stderr)
+			newlineNeeded = false
+		}
 		if deleteEarly {
 			deleteEarly = false
 			if deleteUnneededFiles(subObj.Client, pollReply.FileSystem,
@@ -279,7 +288,7 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 			if !objectsNeeded {
 				logger.Println("No objects need to be fetched or pushed")
 			}
-			return nil
+			return newlineNeeded, nil
 		}
 		objectsNeeded = true
 		if len(objectsToFetch) > 0 {
@@ -295,11 +304,11 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 			if err != nil {
 				logger.Printf("Error calling %s:Subd.Fetch(%s): %s\n",
 					subObj.Hostname, imageServerAddress, err)
-				return err
+				return newlineNeeded, err
 			}
 			showTimeTaken(startTime)
 			if singleFetch {
-				return nil
+				return newlineNeeded, nil
 			}
 		}
 		if len(objectsToPush) > 0 {
@@ -308,12 +317,12 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 			err := domlib.PushObjects(*subObj, objectsToPush, logger)
 			if err != nil {
 				showBlankLine()
-				return err
+				return newlineNeeded, err
 			}
 			showTimeTaken(startTime)
 		}
 	}
-	return errors.New("timed out fetching and pushing objects")
+	return newlineNeeded, errors.New("timed out fetching and pushing objects")
 }
 
 // pollFetchPushAndUpdate will:
@@ -329,8 +338,12 @@ func pollFetchPushAndUpdate(subObj *domlib.Sub, img *image.Image,
 	deleteMissingComputedFiles, ignoreMissingComputedFiles bool,
 	generationCount, lastGenerationCount, lastScanCount *uint64,
 	logger log.DebugLogger) (bool, error) {
-	err := pollFetchAndPush(subObj, img, imageServerAddress, timeoutTime,
+	newlineNeeded, err := pollFetchAndPush(subObj, img, imageServerAddress, timeoutTime,
 		false, generationCount, lastGenerationCount, lastScanCount, logger)
+	if newlineNeeded {
+		fmt.Fprintln(os.Stderr)
+		newlineNeeded = false
+	}
 	if err != nil {
 		return false, err
 	}
@@ -345,19 +358,20 @@ func pollFetchPushAndUpdate(subObj *domlib.Sub, img *image.Image,
 		return false, errors.New("missing computed file(s)")
 	}
 	showTimeTaken(startTime)
-	expectDisconnect := expectUpdateToDisconnect(updateRequest)
+	expectDisconnect, expectReboot := expectUpdateToDisconnect(updateRequest)
+	if expectReboot && *failOnReboot {
+		return false, errors.New("reboot prevented")
+	}
 	updateRequest.ImageName = imageName
 	updateRequest.Wait = true
-	stopTicker := make(chan struct{}, 1)
 	if !*showTimes {
 		logger.Println("Starting Subd.Update()")
-		go tickerLoop(stopTicker)
 	}
 	startTime = showStart("Subd.Update()")
+	tickerChannel := startTicker()
 	err = client.CallUpdate(subObj.Client, updateRequest, &updateReply)
-	stopTicker <- struct{}{}
+	stopTicker(tickerChannel)
 	if err != nil {
-		showBlankLine()
 		return expectDisconnect, err
 	}
 	if !*showTimes {
@@ -379,13 +393,12 @@ func pollFetchPushAndUpdate(subObj *domlib.Sub, img *image.Image,
 func fetchUntil(subObj *domlib.Sub, request sub.FetchRequest,
 	timeoutTime time.Time, logger log.DebugLogger) error {
 	for ; time.Now().Before(timeoutTime); time.Sleep(time.Second) {
-		stopTicker := make(chan struct{}, 1)
 		if !*showTimes {
 			logger.Println("Starting Subd.Fetch()")
-			go tickerLoop(stopTicker)
 		}
+		tickerChannel := startTicker()
 		err := client.CallFetch(subObj.Client, request, &sub.FetchResponse{})
-		stopTicker <- struct{}{}
+		stopTicker(tickerChannel)
 		if err == nil {
 			return nil
 		}
@@ -443,17 +456,34 @@ func showBlankLine() {
 	}
 }
 
-func tickerLoop(stopTicker <-chan struct{}) {
+func startTicker() chan<- chan<- struct{} {
+	tickerChannel := make(chan chan<- struct{}, 1)
+	go tickerLoop(tickerChannel)
+	return tickerChannel
+}
+
+func stopTicker(tickerChannel chan<- chan<- struct{}) {
+	writtenChannel := make(chan struct{}, 1)
+	tickerChannel <- writtenChannel
+	<-writtenChannel
+}
+
+func tickerLoop(tickerChannel <-chan chan<- struct{}) {
+	var newlineNeeded bool
 	for {
 		timer := time.NewTimer(time.Second)
 		select {
 		case <-timer.C:
 			fmt.Fprintf(os.Stderr, ".")
-		case <-stopTicker:
+			newlineNeeded = true
+		case writtenChannel := <-tickerChannel:
 			if !timer.Stop() {
 				<-timer.C
 			}
-			fmt.Fprintln(os.Stderr)
+			if newlineNeeded && !*showTimes {
+				fmt.Fprintln(os.Stderr)
+			}
+			writtenChannel <- struct{}{}
 			return
 		}
 	}
