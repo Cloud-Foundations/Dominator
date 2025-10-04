@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/net/smtp"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 var (
@@ -43,6 +44,9 @@ func (h *hypervisorType) addVmsToMap(vmsPerOwner map[string][]*vmInfoType) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	for _, vm := range h.vms {
+		if vm.State == hyper_proto.StateStopped {
+			continue
+		}
 		for _, owner := range vm.OwnerUsers {
 			vmsPerOwner[owner] = append(vmsPerOwner[owner], vm)
 		}
@@ -54,6 +58,9 @@ func (m *Manager) getBadHypervisors() []*hypervisorType {
 	defer m.mutex.RUnlock()
 	badHypervisors := make([]*hypervisorType, 0)
 	for _, hypervisor := range m.hypervisors {
+		if hypervisor.disabled {
+			continue
+		}
 		switch hypervisor.probeStatus {
 		case probeStatusNotYetProbed:
 			continue
