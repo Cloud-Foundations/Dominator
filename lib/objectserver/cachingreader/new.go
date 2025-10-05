@@ -38,11 +38,13 @@ func newObjectServer(baseDir string, maxCachedBytes uint64,
 		time.Duration(rusageStart.Utime.Usec)*time.Microsecond
 	logger.Printf("Scanned %d object%s in %s (%s user CPUtime)\n",
 		len(objects), plural, time.Since(startTime), userTime)
+	lruFlushRequestor := make(chan chan<- error, 1)
 	lruUpdateNotifier := make(chan struct{}, 1)
 	objSrv := &ObjectServer{
 		baseDir:             baseDir,
 		flushTimer:          time.NewTimer(time.Minute),
 		logger:              logger,
+		lruFlushRequestor:   lruFlushRequestor,
 		lruUpdateNotifier:   lruUpdateNotifier,
 		maxCachedBytes:      maxCachedBytes,
 		objectServerAddress: objectServerAddress,
@@ -54,6 +56,6 @@ func newObjectServer(baseDir string, maxCachedBytes uint64,
 		return nil, err
 	}
 	objSrv.linkOrphanedEntries()
-	go objSrv.flusher(lruUpdateNotifier)
+	go objSrv.flusher(lruFlushRequestor, lruUpdateNotifier)
 	return objSrv, nil
 }

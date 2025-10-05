@@ -27,6 +27,7 @@ type ObjectServer struct {
 	baseDir             string
 	flushTimer          *time.Timer
 	logger              log.DebugLogger
+	lruFlushRequestor   chan<- chan<- error
 	lruUpdateNotifier   chan<- struct{}
 	maxCachedBytes      uint64
 	objectServerAddress string
@@ -51,6 +52,10 @@ func NewObjectServer(baseDir string, maxCachedBytes uint64,
 
 func (objSrv *ObjectServer) FetchObjects(hashes []hash.Hash) error {
 	return objSrv.fetchObjects(hashes)
+}
+
+func (objSrv *ObjectServer) Flush() error {
+	return objSrv.flush()
 }
 
 func (objSrv *ObjectServer) GetObjects(hashes []hash.Hash) (
