@@ -109,8 +109,12 @@ func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
 	if len(hashesToFetch) < 1 {
 		return &or, nil
 	}
-	or.objectClient = client.NewObjectClient(objSrv.objectServerAddress)
-	if realOR, err := or.objectClient.GetObjects(hashesToFetch); err != nil {
+	objectClient := objSrv.params.ObjectClient
+	if objectClient == nil {
+		objectClient = client.NewObjectClient(objSrv.params.ObjectServerAddress)
+		or.objectClient = objectClient
+	}
+	if realOR, err := objectClient.GetObjects(hashesToFetch); err != nil {
 		or.Close()
 		return nil, err
 	} else {
@@ -152,7 +156,7 @@ func (objSrv *ObjectServer) getStats(grabLock bool) Stats {
 }
 
 func (or *objectsReader) Close() error {
-	or.objSrv.logger.Printf(
+	or.objSrv.params.Logger.Printf(
 		"objectcache: total: %d (%s), downloaded: %d (%s), waited: %d (%s)\n",
 		or.totalObjects, format.FormatBytes(or.totalBytes),
 		or.downloadedObjects, format.FormatBytes(or.downloadedBytes),
@@ -164,15 +168,16 @@ func (or *objectsReader) Close() error {
 		}
 	}
 	or.objSrv.rwLock.Unlock()
-	if or.objectClient == nil {
-		return nil
-	}
 	var err error
-	if e := or.objectsReader.Close(); err == nil && e != nil {
-		err = e
+	if or.objectsReader != nil {
+		if e := or.objectsReader.Close(); err == nil && e != nil {
+			err = e
+		}
 	}
-	if e := or.objectClient.Close(); err == nil && e != nil {
-		err = e
+	if or.objectClient != nil {
+		if e := or.objectClient.Close(); err == nil && e != nil {
+			err = e
+		}
 	}
 	if err != nil {
 		return err
@@ -194,7 +199,7 @@ func (or *objectsReader) nextObject(skipOpen bool) (
 	if object == nil { // No caching.
 		return or.objectsReader.NextObject()
 	}
-	filename := filepath.Join(or.objSrv.baseDir,
+	filename := filepath.Join(or.objSrv.params.BaseDirectory,
 		objectcache.HashToFilename(object.hash))
 	or.objSrv.rwLock.RLock()
 	downloadingChannel := object.downloadingChannel

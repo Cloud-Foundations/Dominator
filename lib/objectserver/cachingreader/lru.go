@@ -118,7 +118,7 @@ func (objSrv *ObjectServer) linkOrphanedEntries() {
 
 func (objSrv *ObjectServer) loadLru() error {
 	startTime := time.Now()
-	filename := filepath.Join(objSrv.baseDir, ".lru")
+	filename := filepath.Join(objSrv.params.BaseDirectory, ".lru")
 	file, err := os.Open(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -131,7 +131,7 @@ func (objSrv *ObjectServer) loadLru() error {
 	if err := objSrv.readLru(reader); err != nil {
 		return err
 	}
-	objSrv.logger.Printf("Loaded LRU in %s\n",
+	objSrv.params.Logger.Printf("Loaded LRU in %s\n",
 		format.Duration(time.Since(startTime)))
 	return nil
 }
@@ -173,26 +173,26 @@ func (objSrv *ObjectServer) readLru(reader io.Reader) error {
 // Returns true if space is available.
 func (objSrv *ObjectServer) releaseSpaceWithLock(size uint64) bool {
 	if objSrv.data.CachedBytes+objSrv.data.DownloadingBytes+size <=
-		objSrv.maxCachedBytes {
+		objSrv.params.MaximumCachedBytes {
 		return true
 	}
 	if objSrv.data.CachedBytes-
 		objSrv.data.LruBytes+objSrv.data.DownloadingBytes+size >
-		objSrv.maxCachedBytes {
+		objSrv.params.MaximumCachedBytes {
 		return false // No amount of deleting unused objects will help.
 	}
 	for object := objSrv.oldest; object != nil; object = objSrv.oldest {
-		filename := filepath.Join(objSrv.baseDir,
+		filename := filepath.Join(objSrv.params.BaseDirectory,
 			objectcache.HashToFilename(object.hash))
 		if err := os.Remove(filename); err != nil {
-			objSrv.logger.Println(err)
+			objSrv.params.Logger.Println(err)
 			return false
 		}
 		objSrv.removeFromLruWithLock(object)
 		delete(objSrv.objects, object.hash)
 		objSrv.data.CachedBytes -= object.size
 		if objSrv.data.CachedBytes+objSrv.data.DownloadingBytes+size <=
-			objSrv.maxCachedBytes {
+			objSrv.params.MaximumCachedBytes {
 			return true
 		}
 	}
@@ -240,7 +240,7 @@ func (objSrv *ObjectServer) removeFromLruWithLock(object *objectType) {
 func (objSrv *ObjectServer) saveLru() error {
 	objSrv.rwLock.RLock()
 	defer objSrv.rwLock.RUnlock()
-	filename := filepath.Join(objSrv.baseDir, ".lru")
+	filename := filepath.Join(objSrv.params.BaseDirectory, ".lru")
 	writer, err := fsutil.CreateRenamingWriter(filename, filePerms)
 	if err != nil {
 		return err

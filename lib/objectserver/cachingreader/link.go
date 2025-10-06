@@ -21,7 +21,8 @@ func (objSrv *ObjectServer) linkObject(filename string,
 		return false, err
 	}
 	defer reader.Close()
-	source := filepath.Join(objSrv.baseDir, objectcache.HashToFilename(hashVal))
+	source := filepath.Join(objSrv.params.BaseDirectory,
+		objectcache.HashToFilename(hashVal))
 	if err := os.Link(source, filename); err == nil {
 		return true, nil
 	}
