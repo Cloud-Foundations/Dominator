@@ -40,7 +40,7 @@ func patchDirectorySubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
-	_, objectClient := getClients()
+	objectsGetter := getObjectsGetter(logger)
 	var triggersRunner sublib.TriggersRunner
 	if *runTriggers {
 		if dirName != "/" {
@@ -75,7 +75,7 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	defer os.Remove(rootDir)
 	errorChannel := make(chan error)
 	go func() {
-		errorChannel <- patchRoot(img, objectClient, imageName, dirName,
+		errorChannel <- patchRoot(img, objectsGetter, imageName, dirName,
 			rootDir, triggersRunner, logger)
 	}()
 	return <-errorChannel

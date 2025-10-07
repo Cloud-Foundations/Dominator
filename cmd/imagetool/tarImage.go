@@ -11,25 +11,24 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/tar"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
-	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
 
 func tarImageSubcommand(args []string, logger log.DebugLogger) error {
-	_, objectClient := getClients()
+	objectsGetter := getObjectsGetter(logger)
 	outputFilename := ""
 	if len(args) > 1 {
 		outputFilename = args[1]
 	}
-	err := tarImageAndWrite(objectClient, args[0], outputFilename)
+	err := tarImageAndWrite(objectsGetter, args[0], outputFilename)
 	if err != nil {
 		return fmt.Errorf("error taring image: %s", err)
 	}
 	return nil
 }
 
-func tarImageAndWrite(objectClient *objectclient.ObjectClient, imageName,
+func tarImageAndWrite(objectsGetter objectserver.ObjectsGetter, imageName,
 	outputFilename string) error {
-	fs, objectsGetter, _, err := getImageForUnpack(objectClient, imageName)
+	fs, objectsGetter, _, err := getImageForUnpack(objectsGetter, imageName)
 	if err != nil {
 		return err
 	}

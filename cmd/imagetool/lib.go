@@ -25,6 +25,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image/packageutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
@@ -190,11 +191,12 @@ func getTypedImageBuildLogReader(typedName string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if hashPtr := buildLog.Object; hashPtr != nil {
-		_, objectClient := getClients()
-		_, r, err := objectClient.GetObject(*hashPtr)
+		objectsGetter := getObjectsGetter(logger)
+		_, r, err := objectserver.GetObject(objectsGetter, *hashPtr)
 		if err != nil {
 			return nil, err
 		}
+		defer r.Close()
 		return r, nil
 	} else if buildLog.URL != "" {
 		resp, err := http.Get(buildLog.URL)
