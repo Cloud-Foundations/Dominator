@@ -312,6 +312,12 @@ func (m *Manager) ExportLocalVm(authInfo *srpc.AuthInformation,
 	return m.exportLocalVm(authInfo, request)
 }
 
+// Flush will flush any pending state changes to persistent storage (e.g.
+// object cache LRU).
+func (m *Manager) Flush() error {
+	return m.flush()
+}
+
 func (m *Manager) GetCapacity() proto.GetCapacityResponse {
 	return proto.GetCapacityResponse{
 		MemoryInMiB:      m.memTotalInMiB,
