@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -31,6 +32,10 @@ const (
 	dirPerms = syscall.S_IRWXU | syscall.S_IRGRP | syscall.S_IXGRP |
 		syscall.S_IROTH | syscall.S_IXOTH
 )
+
+type Flusher interface {
+	Flush() error
+}
 
 var (
 	dhcpServerOnBridgesOnly = flag.Bool("dhcpServerOnBridgesOnly", false,
@@ -106,6 +111,17 @@ func main() {
 	flag.Usage = printUsage
 	flag.Parse()
 	processCommand(flag.Args())
+}
+
+func handleSignals(flusher Flusher, logger log.Logger) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	for range ch {
+		if err := flusher.Flush(); err != nil {
+			logger.Println(err)
+		}
+		os.Exit(1)
+	}
 }
 
 func run() {
@@ -222,6 +238,7 @@ func run() {
 	if err != nil {
 		logger.Fatalf("Cannot start metadata server: %s\n", err)
 	}
+	go handleSignals(managerObj, logger)
 	if err := httpd.StartServer(*portNum, managerObj, false); err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
