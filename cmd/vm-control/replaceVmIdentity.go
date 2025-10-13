@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -155,14 +154,7 @@ func replaceVmIdentityOnConnectedHypervisor(client srpc.ClientI,
 	if err != nil {
 		return fmt.Errorf("error reading role requesting certificate: %s", err)
 	}
-	block, _ = pem.Decode(certPEM)
-	if block == nil {
-		return errors.New("error decoding PEM certificate")
-	}
-	if block.Type != "CERTIFICATE" {
-		return fmt.Errorf("unsupported certificate type: \"%s\"", block.Type)
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, _, err := x509util.ParseCertificatePEM(certPEM, logger)
 	if err != nil {
 		return err
 	}
@@ -171,7 +163,7 @@ func replaceVmIdentityOnConnectedHypervisor(client srpc.ClientI,
 		return err
 	}
 	logger.Debugf(0,
-		"Received identity requesting certificate for: %s, expires at: %s (in %s)\n",
+		"Received role requesting certificate for: %s, expires at: %s (in %s)\n",
 		username,
 		cert.NotAfter.Format(format.TimeFormatSeconds),
 		format.Duration(time.Until(cert.NotAfter)))
