@@ -37,6 +37,11 @@ type Flusher interface {
 	Flush() error
 }
 
+type flushLogger interface {
+	Flusher
+	log.Logger
+}
+
 var (
 	dhcpServerOnBridgesOnly = flag.Bool("dhcpServerOnBridgesOnly", false,
 		"If true, run the DHCP server on bridge interfaces only")
@@ -113,13 +118,14 @@ func main() {
 	processCommand(flag.Args())
 }
 
-func handleSignals(flusher Flusher, logger log.Logger) {
+func handleSignals(flusher Flusher, logger flushLogger) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	for range ch {
 		if err := flusher.Flush(); err != nil {
 			logger.Println(err)
 		}
+		logger.Flush()
 		os.Exit(1)
 	}
 }
