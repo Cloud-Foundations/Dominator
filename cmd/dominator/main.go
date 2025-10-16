@@ -97,13 +97,12 @@ func main() {
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
-	params := setupserver.Params{Logger: logger}
+	params := setupserver.Params{
+		Logger:         logger,
+		PermitInsecure: *permitInsecureMode,
+	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
-		if *permitInsecureMode {
-			logger.Println(err)
-		} else {
-			logger.Fatalln(err)
-		}
+		logger.Fatalln(err)
 	}
 	rlim := syscall.Rlimit{Cur: *fdLimit, Max: *fdLimit}
 	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
