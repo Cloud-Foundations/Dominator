@@ -26,13 +26,12 @@ var (
 type serverType struct{}
 
 func doMain(logger log.DebugLogger) error {
-	params := setupserver.Params{Logger: logger}
+	params := setupserver.Params{
+		Logger:         logger,
+		PermitInsecure: *permitInsecureMode,
+	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
-		if *permitInsecureMode {
-			logger.Println(err)
-		} else {
-			return err
-		}
+		return err
 	}
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *portNum))
 	if err != nil {
