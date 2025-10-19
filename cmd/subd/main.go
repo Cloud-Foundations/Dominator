@@ -282,13 +282,12 @@ func main() {
 	runtime.GOMAXPROCS(int(*maxThreads))
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
-	params := setupserver.Params{Logger: logger}
+	params := setupserver.Params{
+		Logger:         logger,
+		PermitInsecure: *permitInsecureMode,
+	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
-		if *permitInsecureMode {
-			logger.Println(err)
-		} else {
-			logger.Fatalln(err)
-		}
+		logger.Fatalln(err)
 	}
 	bytesPerSecond, blocksPerSecond, firstScan, ok := getCachedFsSpeed(
 		workingRootDir, tmpDir)
