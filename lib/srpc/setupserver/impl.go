@@ -3,7 +3,6 @@ package setupserver
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
@@ -74,31 +74,6 @@ func getSleepInterval(cert *x509.Certificate) time.Duration {
 	} else {
 		return 5 * time.Second
 	}
-}
-
-func loadCerts(filename string) ([]*x509.Certificate, error) {
-	pemData, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	var certs []*x509.Certificate
-	for len(pemData) > 0 {
-		var block *pem.Block
-		block, pemData = pem.Decode(pemData)
-		if block == nil {
-			break
-		}
-		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
-			continue
-		}
-		certBytes := block.Bytes
-		cert, err := x509.ParseCertificate(certBytes)
-		if err != nil {
-			return nil, err
-		}
-		certs = append(certs, cert)
-	}
-	return certs, nil
 }
 
 func loadClientCert(params Params) (*tls.Certificate, error) {
@@ -201,13 +176,23 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 	srpc.RegisterClientTlsConfig(clientConfig)
 	if !params.ClientOnly {
 		if *caFile == "" {
+			if params.PermitInsecure {
+				params.Logger.Println("no CA file specified: unauthenticated connections permitted")
+				return tlsCert.Leaf, nil
+			}
 			return nil, srpc.ErrorMissingCA
 		}
 		caCertPool := x509.NewCertPool()
 		identityCertPool := x509.NewCertPool()
 		var earliestCertExpiration time.Time
-		if certs, err := loadCerts(*caFile); err != nil {
+		if certs, _, err := x509util.LoadCertificatePEMs(*caFile); err != nil {
 			if os.IsNotExist(err) {
+				if params.PermitInsecure {
+					params.Logger.Printf(
+						"%s not found: unauthenticated connections permitted\n",
+						*caFile)
+					return tlsCert.Leaf, nil
+				}
 				return nil, srpc.ErrorMissingCA
 			}
 			return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
@@ -228,7 +213,7 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 		serverConfig.ClientCAs = caCertPool
 		serverConfig.Certificates = append(serverConfig.Certificates, *tlsCert)
 		if *identityCaFile != "" {
-			certs, err := loadCerts(*identityCaFile)
+			certs, _, err := x509util.LoadCertificatePEMs(*identityCaFile)
 			if err != nil {
 				if !os.IsNotExist(err) {
 					return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",

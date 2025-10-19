@@ -35,7 +35,7 @@ func saveImageSubcommand(args []string, logger log.DebugLogger) error {
 func saveImage(imageName string, outFileName string,
 	logger log.DebugLogger) error {
 	imageSClient, _ := getMasterClients()
-	_, objectClient := getClients()
+	objectsGetter := getObjectsGetter(logger)
 	response, err := client.GetImageArchive(imageSClient, imageName)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func saveImage(imageName string, outFileName string,
 		}
 		return nil
 	})
-	objectsReader, err := objectClient.GetObjects(objectsList)
+	objectsReader, err := objectsGetter.GetObjects(objectsList)
 	if err != nil {
 		return err
 	}

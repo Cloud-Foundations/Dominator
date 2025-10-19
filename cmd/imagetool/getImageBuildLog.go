@@ -7,24 +7,20 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
 
 func getImageBuildLogSubcommand(args []string, logger log.DebugLogger) error {
-	_, objectClient := getClients()
 	var outFileName string
 	if len(args) > 1 {
 		outFileName = args[1]
 	}
-	err := getImageBuildLog(objectClient, args[0], outFileName)
-	if err != nil {
+	if err := getImageBuildLog(args[0], outFileName); err != nil {
 		return fmt.Errorf("error getting image build log: %s", err)
 	}
 	return nil
 }
 
-func getImageBuildLog(objectClient *objectclient.ObjectClient,
-	imageName, outFileName string) error {
+func getImageBuildLog(imageName, outFileName string) error {
 	reader, err := getTypedImageBuildLogReader(imageName)
 	if err != nil {
 		return err

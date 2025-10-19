@@ -377,6 +377,30 @@ func (m *Manager) checkFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 	return false, nil
 }
 
+// checkFreeSpace will check if the backing store for the specified volume has
+// sufficient space. It returns nil if there is space. The freeSpaceTable is
+// updated if there is space.
+func (m *Manager) checkFreeSpaceForVolume(volume proto.LocalVolume,
+	freeSpaceTable map[string]uint64, size uint64) error {
+	storageIndex, err := m.nameToIndex(volume.DirectoryToCleanup)
+	if err != nil {
+		return err
+	}
+	if freeSpaceTable == nil {
+		freeSpaceTable = make(map[string]uint64)
+	}
+	haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable,
+		uint(storageIndex))
+	if err != nil {
+		return err
+	}
+	if !haveFreeSpace {
+		return errors.New("not enough free space")
+	}
+	freeSpaceTable[m.volumeDirectories[storageIndex]] -= size
+	return nil
+}
+
 func (m *Manager) checkTrim(filename string) bool {
 	return m.volumeInfos[filepath.Dir(filepath.Dir(filename))].CanTrim
 }
@@ -513,6 +537,18 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 		}
 	}
 	return directoriesToUse, nil
+}
+
+// nameToIndex will return the volume index for the specified directory (which
+// may be a subdirectory of one of the volumeDirectories. It returns an error
+// if the name is not found.
+func (m *Manager) nameToIndex(name string) (int, error) {
+	for index, volumeDirectory := range m.volumeDirectories {
+		if strings.HasPrefix(name, volumeDirectory+"/") {
+			return index, nil
+		}
+	}
+	return -1, fmt.Errorf("no volume directory for: %s", name)
 }
 
 func (m *Manager) setupObjectCache(mountTable *mounts.MountTable) error {

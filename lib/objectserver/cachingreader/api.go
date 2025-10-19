@@ -8,6 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
 
 type objectType struct {
@@ -24,17 +25,23 @@ type downloadingObject struct {
 }
 
 type ObjectServer struct {
-	baseDir             string
-	flushTimer          *time.Timer
-	logger              log.DebugLogger
-	lruUpdateNotifier   chan<- struct{}
-	maxCachedBytes      uint64
-	objectServerAddress string
-	rwLock              sync.RWMutex // Protect the following fields.
-	data                Stats
-	newest              *objectType // For unused objects only.
-	objects             map[hash.Hash]*objectType
-	oldest              *objectType // For unused objects only.
+	flushTimer        *time.Timer
+	lruFlushRequestor chan<- chan<- error
+	lruUpdateNotifier chan<- struct{}
+	params            Params
+	rwLock            sync.RWMutex // Protect the following fields.
+	data              Stats
+	newest            *objectType // For unused objects only.
+	objects           map[hash.Hash]*objectType
+	oldest            *objectType // For unused objects only.
+}
+
+type Params struct {
+	BaseDirectory       string
+	Logger              log.DebugLogger
+	MaximumCachedBytes  uint64               // Default: 1GiB.
+	ObjectClient        *client.ObjectClient // Exclusive of ObjectServerAddress
+	ObjectServerAddress string               // Exclusive of ObjectClient.
 }
 
 type Stats struct {
@@ -44,13 +51,27 @@ type Stats struct {
 
 }
 
+func New(params Params) (*ObjectServer, error) {
+	return newObjectServer(params)
+}
+
+// Deprecated.
 func NewObjectServer(baseDir string, maxCachedBytes uint64,
 	objectServerAddress string, logger log.DebugLogger) (*ObjectServer, error) {
-	return newObjectServer(baseDir, maxCachedBytes, objectServerAddress, logger)
+	return New(Params{
+		BaseDirectory:       baseDir,
+		Logger:              logger,
+		MaximumCachedBytes:  maxCachedBytes,
+		ObjectServerAddress: objectServerAddress,
+	})
 }
 
 func (objSrv *ObjectServer) FetchObjects(hashes []hash.Hash) error {
 	return objSrv.fetchObjects(hashes)
+}
+
+func (objSrv *ObjectServer) Flush() error {
+	return objSrv.flush()
 }
 
 func (objSrv *ObjectServer) GetObjects(hashes []hash.Hash) (

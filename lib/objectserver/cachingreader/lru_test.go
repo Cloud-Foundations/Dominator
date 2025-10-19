@@ -24,7 +24,9 @@ var (
 
 func TestReadAndEmptyLRU(t *testing.T) {
 	objSrv := &ObjectServer{
-		logger: testlogger.New(t),
+		params: Params{
+			Logger: testlogger.New(t),
+		},
 		objects: map[hash.Hash]*objectType{
 			hash0: object0,
 			hash1: object1,

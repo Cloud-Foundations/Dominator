@@ -17,11 +17,18 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/net/rrdialer"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
+
+type objectsFlushGetter interface {
+	Flush() error
+	objectserver.ObjectsGetter
+}
 
 var (
 	allocateBlocks = flag.Bool("allocateBlocks", false,
@@ -75,6 +82,9 @@ var (
 	minFreeBytes      flagutil.Size = 4 << 20
 	objectAddInterval               = flag.Duration("objectAddInterval", 0,
 		"Interval between object uploads (for debugging)")
+	objectCacheDirectory = flag.String("objectCacheDirectory", "",
+		"Directory to store object cache")
+	objectCacheSize  = flagutil.Size(10 << 30)
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image when making raw image")
 	releaseNotes = flag.String("releaseNotes", "",
@@ -103,12 +113,14 @@ func init() {
 	flag.Var(&diffArgs, "diffArgs",
 		"Comma separated list of optional arguments to pass to diffing tool")
 	flag.Var(&minFreeBytes, "minFreeBytes",
-		"minimum number of free bytes in raw image")
+		"Minimum number of free bytes in raw image")
+	flag.Var(&objectCacheSize, "objectCacheSize",
+		"Maximum size of object cache")
 	flag.Var(&requiredPaths, "requiredPaths",
 		"Comma separated list of required path:type entries")
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		"Comma separated list of patterns to exclude from scanning")
-	flag.Var(&tableType, "tableType", "partition table type for make-raw-image")
+	flag.Var(&tableType, "tableType", "Partition table type for make-raw-image")
 	flag.Var(&tagsToMatch, "tagsToMatch", "Tags to match when finding/listing")
 }
 
@@ -227,6 +239,7 @@ var (
 	imageSrpcClient       *srpc.Client
 	masterImageSrpcClient *srpc.Client
 	theObjectClient       *objectclient.ObjectClient
+	theObjectsFlushGetter objectsFlushGetter
 	theMasterObjectClient *objectclient.ObjectClient
 
 	listSelector filesystem.ListSelector
@@ -244,6 +257,28 @@ func getMasterClients() (*srpc.Client, *objectclient.ObjectClient) {
 	getPointedClients(*masterImageServerHostname,
 		&masterImageSrpcClient, &theMasterObjectClient)
 	return masterImageSrpcClient, theMasterObjectClient
+}
+
+func getObjectsGetter(logger log.DebugLogger) objectserver.ObjectsGetter {
+	_, objectClient := getClients()
+	if *objectCacheDirectory == "" {
+		return objectClient
+	}
+	if theObjectsFlushGetter != nil {
+		return theObjectsFlushGetter
+	}
+	var err error
+	theObjectsFlushGetter, err = cachingreader.New(cachingreader.Params{
+		BaseDirectory:      *objectCacheDirectory,
+		Logger:             logger,
+		MaximumCachedBytes: uint64(objectCacheSize),
+		ObjectClient:       objectClient,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return theObjectsFlushGetter
 }
 
 func getPointedClients(hostname string, iClient **srpc.Client,
@@ -328,5 +363,9 @@ func doMain() int {
 }
 
 func main() {
-	os.Exit(doMain())
+	retval := doMain()
+	if theObjectsFlushGetter != nil {
+		theObjectsFlushGetter.Flush()
+	}
+	os.Exit(retval)
 }

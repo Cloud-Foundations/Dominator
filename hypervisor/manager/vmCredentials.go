@@ -40,14 +40,13 @@ type pubkeysSignerType struct {
 }
 
 func loadCertAndSetDeadline(refresher *backoffdelay.Refresher,
-	timer *time.Timer, filename string, certType string, logger log.Logger) {
-	certPEM, err := os.ReadFile(filename)
+	timer *time.Timer, filename string, certType string,
+	logger log.DebugLogger) {
+	cert, _, err := x509util.LoadCertificatePEM(filename, logger)
 	if err != nil {
-		return
-	}
-	cert, err := decodeCert(certPEM)
-	if err != nil {
-		logger.Println(err)
+		if !os.IsNotExist(err) {
+			logger.Println(err)
+		}
 		return
 	}
 	refresher.SetDeadline(cert.NotAfter)
@@ -363,7 +362,7 @@ func (vm *vmInfoType) refreshCredentials(httpClient *http.Client,
 	if err != nil {
 		return time.Time{}, err
 	}
-	cert, err := decodeCert(x509CertPEM)
+	cert, _, err := x509util.ParseCertificatePEM(x509CertPEM, vm.logger)
 	if err != nil {
 		return time.Time{}, err
 	}

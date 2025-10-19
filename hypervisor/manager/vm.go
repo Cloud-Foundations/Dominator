@@ -958,12 +958,9 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 		vm.writeAndSendInfo()
 		return nil
 	}
-	var statbuf syscall.Statfs_t
-	if err := syscall.Statfs(localVolume.Filename, &statbuf); err != nil {
+	err = m.checkFreeSpaceForVolume(localVolume, nil, size-volume.Size)
+	if err != nil {
 		return err
-	}
-	if size-volume.Size > uint64(statbuf.Bavail*uint64(statbuf.Bsize)) {
-		return errors.New("not enough free space")
 	}
 	if err := setVolumeSize(localVolume.Filename, size); err != nil {
 		return err
@@ -2842,6 +2839,11 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 			return err
 		}
 	} else {
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil,
+			vm.Volumes[0].Size)
+		if err != nil {
+			return err
+		}
 		if err := sendVmPatchImageMessage(conn, "copying root"); err != nil {
 			return err
 		}
@@ -3203,6 +3205,13 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 		defer client.Close()
+		estimatedSize := computeSize(request.MinimumFreeBytes,
+			request.RoundupPower, img.FileSystem.EstimateUsage(0))
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil,
+			estimatedSize)
+		if err != nil {
+			return sendError(conn, err)
+		}
 		request.ImageName = imageName
 		err = sendUpdate(conn, "unpacking image: "+imageName)
 		if err != nil {
@@ -3227,12 +3236,17 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			newSize = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
+		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
+			request.ImageDataSize)
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, newSize)
+		if err != nil {
+			maybeDrainImage(conn, request.ImageDataSize)
+			return sendError(conn, err)
+		}
 		err := copyData(tmpRootFilename, conn, request.ImageDataSize, vm.logger)
 		if err != nil {
 			return err
 		}
-		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
-			request.ImageDataSize)
 		if err := setVolumeSize(tmpRootFilename, newSize); err != nil {
 			return sendError(conn, err)
 		}
@@ -3252,13 +3266,17 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return sendError(conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
+		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
+			uint64(httpResponse.ContentLength))
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, newSize)
+		if err != nil {
+			return sendError(conn, err)
+		}
 		err = copyData(tmpRootFilename, httpResponse.Body,
 			uint64(httpResponse.ContentLength), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
-		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
-			uint64(httpResponse.ContentLength))
 		if err := setVolumeSize(tmpRootFilename, newSize); err != nil {
 			return sendError(conn, err)
 		}
@@ -3591,7 +3609,6 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	if vm.getActiveKernelPath() != "" {
 		return errors.New("cannot snapshot root volume with separate kernel")
 	}
-	// TODO(rgooch): First check for sufficient free space.
 	if vm.State != proto.StateStopped {
 		if !forceIfNotStopped {
 			return errors.New("VM is not stopped")
@@ -3603,6 +3620,17 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 			vm.writeAndSendInfo()
 		}
 		return err
+	}
+	freeSpaceTable := make(map[string]uint64)
+	for index, volume := range vm.Volumes {
+		if index != 0 && snapshotRootOnly {
+			continue
+		}
+		err := m.checkFreeSpaceForVolume(vm.VolumeLocations[index],
+			freeSpaceTable, volume.Size)
+		if err != nil {
+			return err
+		}
 	}
 	doCleanup := true
 	defer func() {

@@ -14,7 +14,7 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 	objSrv.rwLock.RUnlock()
 	fmt.Fprintf(writer,
 		"Objectcache max: %s, total: %s (%d), cached: %s, in use: %s, downloading: %s<br>\n",
-		format.FormatBytes(objSrv.maxCachedBytes),
+		format.FormatBytes(objSrv.params.MaximumCachedBytes),
 		format.FormatBytes(stats.CachedBytes+stats.DownloadingBytes),
 		numObjects,
 		format.FormatBytes(stats.CachedBytes),

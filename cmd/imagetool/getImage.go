@@ -10,22 +10,21 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
-	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 )
 
 func getImageSubcommand(args []string, logger log.DebugLogger) error {
-	_, objectClient := getClients()
-	err := getImageAndWrite(objectClient, args[0], args[1], logger)
+	objectsGetter := getObjectsGetter(logger)
+	err := getImageAndWrite(objectsGetter, args[0], args[1], logger)
 	if err != nil {
 		return fmt.Errorf("error getting image: %s", err)
 	}
 	return nil
 }
 
-func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
+func getImageAndWrite(objectsGetter objectserver.ObjectsGetter, name,
 	dirname string, logger log.DebugLogger) error {
 	startTime := time.Now()
-	fs, objectsGetter, _, err := getImageForUnpack(objectClient, name)
+	fs, objectsGetter, _, err := getImageForUnpack(objectsGetter, name)
 	if err != nil {
 		return err
 	}
@@ -44,18 +43,18 @@ func getImageAndWrite(objectClient *objectclient.ObjectClient, name,
 	return util.WriteImageName(dirname, name)
 }
 
-func getImageForUnpack(objectClient *objectclient.ObjectClient, name string) (
+func getImageForUnpack(objectsGetter objectserver.ObjectsGetter, name string) (
 	*filesystem.FileSystem, objectserver.ObjectsGetter, string, error) {
 	fs, name, err := getTypedFileSystemAndName(name)
 	if err != nil {
 		return nil, nil, "", err
 	}
 	if *computedFilesRoot == "" {
-		return fs, objectClient, name, nil
+		return fs, objectsGetter, name, nil
 	}
-	objectsGetter, err := util.ReplaceComputedFiles(fs,
+	objectsGetter, err = util.ReplaceComputedFiles(fs,
 		&util.ComputedFilesData{RootDirectory: *computedFilesRoot},
-		objectClient)
+		objectsGetter)
 	if err != nil {
 		return nil, nil, "", err
 	}

@@ -194,22 +194,18 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 		return err
 	}
 	logger.Debugln(0, "upgrading unused Hypervisors")
-	err = upgradeOneThenAll(fleetManagerClientResource, imageName,
+	err = upgradeHypervisors(fleetManagerClientResource, imageName,
 		unusedHypervisors, cpuSharer, uint(len(unusedHypervisors)))
 	if err != nil {
 		return err
 	}
-	numConcurrent := uint(len(usedHypervisors) / 2)
-	if numConcurrent < 1 {
-		numConcurrent = 1
-	} else if numConcurrent > uint(len(unusedHypervisors)) {
-		numConcurrent = 1
-	} else if numConcurrent*10 < uint(len(usedHypervisors)) {
-		numConcurrent++
+	maxConcurrent := uint(len(usedHypervisors) / 2)
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
 	}
 	logger.Debugln(0, "upgrading used Hypervisors")
-	err = upgradeOneThenAll(fleetManagerClientResource, imageName,
-		usedHypervisors, cpuSharer, numConcurrent)
+	err = upgradeHypervisors(fleetManagerClientResource, imageName,
+		usedHypervisors, cpuSharer, maxConcurrent)
 	if err != nil {
 		return err
 	}
@@ -465,7 +461,7 @@ func setupHypervisor(hostname string, imageName string, tgs tags.Tags,
 	}
 }
 
-func upgradeOneThenAll(fleetManagerClientResource *srpc.ClientResource,
+func upgradeHypervisors(fleetManagerClientResource *srpc.ClientResource,
 	imageName string, hypervisors map[*hypervisorType]struct{},
 	cpuSharer *cpusharer.FifoCpuSharer, maxConcurrent uint) error {
 	if len(hypervisors) < 1 {

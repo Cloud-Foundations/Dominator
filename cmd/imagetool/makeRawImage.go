@@ -9,12 +9,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 )
 
 func makeRawImageSubcommand(args []string, logger log.DebugLogger) error {
-	_, objectClient := getClients()
-	if err := makeRawImage(objectClient, args[0], args[1]); err != nil {
+	objectsGetter := getObjectsGetter(logger)
+	if err := makeRawImage(objectsGetter, args[0], args[1]); err != nil {
 		return fmt.Errorf("error making raw image: %s", err)
 	}
 	return nil
@@ -43,12 +43,12 @@ func loadOverlayFiles() (map[string][]byte, error) {
 	return overlayFiles, err
 }
 
-func makeRawImage(objectClient *objectclient.ObjectClient, name,
+func makeRawImage(objectsGetter objectserver.ObjectsGetter, name string,
 	rawFilename string) error {
 	if os.Geteuid() != 0 {
 		return reExecAsRoot()
 	}
-	fs, objectsGetter, imageName, err := getImageForUnpack(objectClient, name)
+	fs, objectsGetter, imageName, err := getImageForUnpack(objectsGetter, name)
 	if err != nil {
 		return err
 	}

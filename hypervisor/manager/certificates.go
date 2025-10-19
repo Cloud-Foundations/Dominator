@@ -3,8 +3,6 @@ package manager
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"time"
@@ -13,22 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 )
-
-func decodeCert(certPEM []byte) (*x509.Certificate, error) {
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return nil, errors.New("error decoding PEM certificate")
-	}
-	if block.Type != "CERTIFICATE" {
-		return nil,
-			fmt.Errorf("unsupported certificate type: \"%s\"", block.Type)
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	return cert, nil
-}
 
 func parseKeyPair(certPEM, keyPEM []byte) (*tls.Certificate, string, error) {
 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
