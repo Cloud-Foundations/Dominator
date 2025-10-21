@@ -714,6 +714,12 @@ func tlsHandshake(conn *tls.Conn) error {
 		time.Now().Add(*srpcDefaultTlsHandshakeTimeout))
 	defer cancel()
 	if err := conn.HandshakeContext(ctx); err != nil {
+		if err, ok := err.(*tls.CertificateVerificationError); ok {
+			if len(err.UnverifiedCertificates) > 0 {
+				return fmt.Errorf("TLS handshake error: %s, CN=%s",
+					err, err.UnverifiedCertificates[0].Subject.CommonName)
+			}
+		}
 		return fmt.Errorf("TLS handshake error: %s", err)
 	}
 	return nil
