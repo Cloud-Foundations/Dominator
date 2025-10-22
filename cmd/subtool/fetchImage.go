@@ -21,9 +21,7 @@ func fetchImageSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func fetchImage(srpcClient *srpc.Client, imageName string) error {
-	imageServerAddress := fmt.Sprintf("%s:%d",
-		*imageServerHostname, *imageServerPortNum)
-	img, err := getImageRetry(imageServerAddress, imageName, timeoutTime)
+	img, err := getImageRetry(getImageServerAddress(), imageName, timeoutTime)
 	if err != nil {
 		logger.Fatalf("Error getting image: %s\n", err)
 	}
@@ -32,8 +30,9 @@ func fetchImage(srpcClient *srpc.Client, imageName string) error {
 		Client:   srpcClient,
 	}
 	var generationCount, lastGenerationCount, lastScanCount uint64
-	_, err = pollFetchAndPush(&subObj, img, imageServerAddress, timeoutTime,
-		true, &generationCount, &lastGenerationCount, &lastScanCount, logger)
+	_, err = pollFetchAndPush(&subObj, img, getObjectServerAddress(),
+		timeoutTime, true, &generationCount, &lastGenerationCount,
+		&lastScanCount, logger)
 	fmt.Fprintln(os.Stderr)
 	return err
 }
