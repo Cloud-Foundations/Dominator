@@ -37,8 +37,8 @@ var (
 		"If true, force an upgrade even if changing the image")
 	filterFile = flag.String("filterFile", "",
 		"Replacement filter file to apply when pushing image")
-	imageServerHostname = flag.String("imageServerHostname", "localhost",
-		"Hostname of image server")
+	imageServerHostname = flag.String("imageServerHostname", "",
+		`Hostname of image server (default "localhost")`)
 	imageServerPortNum = flag.Uint("imageServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
@@ -53,11 +53,11 @@ var (
 		"If true, (re)open a connection for each Poll")
 	numPolls = flag.Int("numPolls", 1,
 		"The number of polls to run (infinite: < 0)")
-	objectServerHostname = flag.String("objectServerHostname", "localhost",
-		"Hostname of image server")
+	objectServerHostname = flag.String("objectServerHostname", "",
+		`Hostname of object server (default imageServerHostname)`)
 	objectServerPortNum = flag.Uint("objectServerPortNum",
 		constants.ImageServerPortNumber,
-		"Port number of image server")
+		"Port number of object server")
 	scanExcludeList  flagutil.StringList = constants.ScanExcludeList
 	scanSpeedPercent                     = flag.Uint("scanSpeedPercent",
 		constants.DefaultScanSpeedPercent,

@@ -66,9 +66,8 @@ func expectUpdateToDisconnect(request sub.UpdateRequest) (
 func pushImage(srpcClient *srpc.Client, imageName string) error {
 	computedInodes := make(map[string]*filesystem.RegularInode)
 	// Start querying the imageserver for the image.
-	imageServerAddress := fmt.Sprintf("%s:%d",
-		*imageServerHostname, *imageServerPortNum)
-	imgChannel := getImageChannel(imageServerAddress, imageName, timeoutTime)
+	imgChannel := getImageChannel(getImageServerAddress(), imageName,
+		timeoutTime)
 	if !*forceImageChange {
 		subImageName, err := getSubImage(srpcClient)
 		if err != nil {
@@ -135,7 +134,7 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	}
 	var generationCount, lastGenerationCount, lastScanCount uint64
 	expectDisconnect, err := pollFetchPushAndUpdate(&subObj, img, imageName,
-		imageServerAddress,
+		getObjectServerAddress(),
 		timeoutTime, deleteMissingComputedFiles, ignoreMissingComputedFiles,
 		&generationCount, &lastGenerationCount, &lastScanCount,
 		logger)
@@ -156,7 +155,7 @@ func pushImage(srpcClient *srpc.Client, imageName string) error {
 	}
 	subObj.Client = srpcClient
 	_, err = pollFetchPushAndUpdate(&subObj, img, imageName,
-		imageServerAddress,
+		getObjectServerAddress(),
 		timeoutTime, deleteMissingComputedFiles, ignoreMissingComputedFiles,
 		&generationCount, &lastGenerationCount, &lastScanCount,
 		logger)
@@ -208,7 +207,7 @@ func getImageRetry(clientName, imageName string,
 }
 
 func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
-	imageServerAddress string, timeoutTime time.Time, singleFetch bool,
+	objectServerAddress string, timeoutTime time.Time, singleFetch bool,
 	generationCount, lastGenerationCount, lastScanCount *uint64,
 	logger log.DebugLogger) (bool, error) {
 	deleteEarly := *deleteBeforeFetch
@@ -296,14 +295,14 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 			startTime := showStart("Fetch()")
 			err := fetchUntil(subObj, sub.FetchRequest{
 				LockFor:       *lockDuration,
-				ServerAddress: imageServerAddress,
+				ServerAddress: objectServerAddress,
 				SpeedPercent:  byte(*networkSpeedPercent),
 				Wait:          true,
 				Hashes:        objectcache.ObjectMapToCache(objectsToFetch)},
 				timeoutTime, logger)
 			if err != nil {
 				logger.Printf("Error calling %s:Subd.Fetch(%s): %s\n",
-					subObj.Hostname, imageServerAddress, err)
+					subObj.Hostname, objectServerAddress, err)
 				return newlineNeeded, err
 			}
 			showTimeTaken(startTime)
@@ -334,12 +333,13 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 // It returns true if the update was expected to restart subd or reboot, and an
 // error if there was a problem.
 func pollFetchPushAndUpdate(subObj *domlib.Sub, img *image.Image,
-	imageName string, imageServerAddress string, timeoutTime time.Time,
+	imageName string, objectServerAddress string, timeoutTime time.Time,
 	deleteMissingComputedFiles, ignoreMissingComputedFiles bool,
 	generationCount, lastGenerationCount, lastScanCount *uint64,
 	logger log.DebugLogger) (bool, error) {
-	newlineNeeded, err := pollFetchAndPush(subObj, img, imageServerAddress, timeoutTime,
-		false, generationCount, lastGenerationCount, lastScanCount, logger)
+	newlineNeeded, err := pollFetchAndPush(subObj, img, objectServerAddress,
+		timeoutTime, false, generationCount, lastGenerationCount, lastScanCount,
+		logger)
 	if newlineNeeded {
 		fmt.Fprintln(os.Stderr)
 		newlineNeeded = false

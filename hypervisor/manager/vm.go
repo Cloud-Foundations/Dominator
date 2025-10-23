@@ -401,6 +401,9 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	authInfo *srpc.AuthInformation) (*vmInfoType, error) {
+	if err := validateHostname(req.Hostname); err != nil {
+		return nil, err
+	}
 	for _, volume := range req.Volumes {
 		if err := volume.Interface.CheckValid(); err != nil {
 			return nil, err

@@ -155,10 +155,21 @@ func (stream *imageStreamType) getManifest(b *Builder, streamName string,
 		return "", nil, err
 	}
 	if manifestLocation.directory != "" {
+		manifestDirectory := filepath.Join(manifestRoot,
+			manifestLocation.directory)
+		if fi, err := os.Stat(manifestDirectory); err != nil {
+			if os.IsNotExist(err) {
+				return "", nil, fmt.Errorf("%s does not exist in repository",
+					manifestLocation.directory)
+			}
+			return "", nil, err
+		} else if !fi.IsDir() {
+			return "", nil, fmt.Errorf(
+				"%s exists in repository but is not a directory",
+				manifestLocation.directory)
+		}
 		// Move manifest directory into manifestRoot, remove anything else.
-		err := os.Rename(filepath.Join(manifestRoot,
-			manifestLocation.directory),
-			gitDirectory)
+		err := os.Rename(manifestDirectory, gitDirectory)
 		if err != nil {
 			return "", nil, err
 		}

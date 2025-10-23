@@ -25,9 +25,8 @@ func pushMissingObjectsSubcommand(args []string, logger log.DebugLogger) error {
 
 func pushMissingObjects(srpcClient *srpc.Client, imageName string) error {
 	// Start querying the imageserver for the image.
-	imageServerAddress := fmt.Sprintf("%s:%d",
-		*imageServerHostname, *imageServerPortNum)
-	imgChannel := getImageChannel(imageServerAddress, imageName, timeoutTime)
+	imgChannel := getImageChannel(getImageServerAddress(), imageName,
+		timeoutTime)
 	subObj := lib.Sub{
 		Hostname: *subHostname,
 		Client:   srpcClient,
@@ -42,8 +41,7 @@ func pushMissingObjects(srpcClient *srpc.Client, imageName string) error {
 		return errors.New("sub not ready")
 	}
 	subObj.FileSystem = fs
-	objSrv := objectclient.NewObjectClient(fmt.Sprintf("%s:%d",
-		*objectServerHostname, *objectServerPortNum))
+	objSrv := objectclient.NewObjectClient(getObjectServerAddress())
 	subObjClient := objectclient.AttachObjectClient(srpcClient)
 	defer subObjClient.Close()
 	imageResult := <-imgChannel

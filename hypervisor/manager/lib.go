@@ -2,7 +2,9 @@ package manager
 
 import (
 	"bufio"
+	"fmt"
 	"os"
+	"unicode"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
@@ -53,4 +55,20 @@ func restore(oldName, newName string, retain bool) error {
 
 func (r *bufferedFile) Read(p []byte) (int, error) {
 	return r.Reader.Read(p)
+}
+
+func validateHostname(hostname string) error {
+	for _, char := range hostname {
+		if unicode.IsLetter(char) ||
+			unicode.IsNumber(char) {
+			continue
+		}
+		switch char {
+		case '-', '.':
+			continue
+		}
+		return fmt.Errorf("hostname: %s contains invalid character: %c",
+			hostname, char)
+	}
+	return nil
 }

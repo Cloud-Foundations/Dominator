@@ -28,8 +28,6 @@ func fetch(srpcClient *srpc.Client, hashesFilename string) error {
 	}
 	defer hashesFile.Close()
 	scanner := bufio.NewScanner(hashesFile)
-	serverAddress := fmt.Sprintf("%s:%d",
-		*objectServerHostname, *objectServerPortNum)
 	hashes := make([]hash.Hash, 0)
 	for scanner.Scan() {
 		hashval, err := objectcache.FilenameToHash(scanner.Text())
@@ -42,7 +40,7 @@ func fetch(srpcClient *srpc.Client, hashesFilename string) error {
 		return err
 	}
 	return srpcClient.RequestReply("Subd.Fetch", sub.FetchRequest{
-		ServerAddress: serverAddress,
+		ServerAddress: getObjectServerAddress(),
 		SpeedPercent:  byte(*networkSpeedPercent),
 		Wait:          true,
 		Hashes:        hashes,

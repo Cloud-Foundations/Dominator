@@ -28,9 +28,8 @@ func showUpdateRequestSubcommand(args []string, logger log.DebugLogger) error {
 
 func showUpdateRequest(srpcClient *srpc.Client, imageName string) error {
 	// Start querying the imageserver for the image.
-	imageServerAddress := fmt.Sprintf("%s:%d",
-		*imageServerHostname, *imageServerPortNum)
-	imgChannel := getImageChannel(imageServerAddress, imageName, timeoutTime)
+	imgChannel := getImageChannel(getImageServerAddress(), imageName,
+		timeoutTime)
 	subObj := lib.Sub{
 		Hostname: *subHostname,
 		Client:   srpcClient,
