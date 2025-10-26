@@ -142,25 +142,29 @@ The Life of an Update
 
 Consider updating the image on a single machine. The following steps are taken:
 
--   the new *required* image is written to the **MDB** record for the machine
+- the new *required* image is written to the **MDB** record for the machine
 
--   the **Dominator** computes the *required* file-system state based on the image name recorded in the **MDB** and the results of the last poll of the **sub**
+- the **Dominator** computes the *required* file-system state based on the image name recorded in the **MDB** and the results of the last poll of the **sub**
 
--   the **Dominator** directs the **sub** to fetch any files it needs from the **Image Server** and store them in a private cache, provided the **sub** has sufficient space available
+- the **Dominator** directs the **sub** to fetch any files it needs from the **Image Server** and store them in a private cache, provided the **sub** has sufficient space available
 
--   the **Dominator** re-polls the **sub** and if all the required files are available directs it to perform the update
+- the **Dominator** re-polls the **sub** and if all the required files are available directs it to perform the update
 
--   the **sub** will perform a nearly atomic update on the system, ensuring that the time that the system spends in an inconsistent state is minimal (typically a small fraction of a second):
+- the **sub** will perform a nearly atomic update on the system, ensuring that the time that the system spends in an inconsistent state is minimal (typically a small fraction of a second):
 
-    -   move the fetched files to their desired locations
+  - stop any affected daemons. Daemons being removed will not be started later
 
-    -   delete unwanted files
+  - move the fetched files to their desired locations
 
-    -   restart any affected daemons, perform a health check and return the completion status and result to the **Dominator** in the next **poll** response (if the kernel was not changed)
+  - delete unwanted files
 
-    -   reboot the machine (if the kernel was changed)
+  - start any affected daemons (for triggers with the `DoReload` field set to `true`, the daemon is reloaded instead of the `stop`/`start` sequence)
 
--   the **Dominator** will continue to poll the **sub** for its file-system state and health check results
+  - perform a health check and return the completion status and result to the **Dominator** in the next **poll** response (if the kernel was not changed)
+
+  - reboot the machine (if the kernel was changed)
+
+- the **Dominator** will continue to poll the **sub** for its file-system state and health check results.
 
 From the perspective of the **Dominator** system, performing an update is the same as keeping machines in compliance. The only difference is that the number of files to fetch and change is usually larger with an update.
 
@@ -302,32 +306,39 @@ The `triggerfile` parameter refers to a JSON-encoded file containing a list of *
     {
         "MatchLines": [
             "/etc/ssh/.*",
-            "/usr/sbin/sshd"
         ],
         "Service": "ssh",
-        "HighImpact": false
+        "DoReload": true
+    },
+    {
+        "MatchLines": [
+            "/usr/sbin/sshd"
+        ],
+        "Service": "ssh"
     },
     {
         "MatchLines": [
             "/etc/cron[.]*",
             "/usr/sbin/cron"
         ],
-        "Service": "cron",
-        "HighImpact": false
+        "Service": "cron"
     },
     {
         "MatchLines": [
             "/lib/modules/.*",
             "/boot/vmlinuz-.*"
         ],
-        "Service": "reboot",
+        "Service": "kernel-upgrade",
+        "DoReboot": true,
         "HighImpact": true
     }
 ]
 ```
-Services are (re)started by passing the name of the service and either `start` or `stop` to the service utility.
+Services are (re)started by passing the name of the service and either `start` or `stop` to the service utility, unless `DoReload` is set to `true`, in which case `reload` is sent to the service utility. Note how in this example, there are two triggers for the `sshd` service. If the configuration files are changed, the service is merely reloaded; if the programme is changed the service is stopped and started.
 
-The `HighImpact` field is used to tell the **Dominator** that (re)starting the service will have a high impact on the machine (such as a reboot). The **Dominator** can use this limit the number of high impact changes at a time (e.g. to enforce a policy that no more than 100 machines at a time will be rebooted, it will wait for machines to come back up before rebooting more).
+The `DoReboot` field is used to tell **subd** to reboot the machine if the trigger is successfully started (after triggers have run). Standard reboot methods are tried first, and then more aggressive methods are tried after a while to attempt to ensure that a major system upgrade boots into the new OS.
+
+The `HighImpact` field is used to tell the **Dominator** that (re)starting the service will have a high impact on the machine (such as a reboot or a service which takes a long time to come up). This can be used to limit the number of high impact changes at a time (e.g. to enforce a policy that no more than 100 machines at a time will be rebooted, it will wait for machines to come back up before rebooting more).
 
 Advanced Features
 =================
