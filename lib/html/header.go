@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -104,6 +105,12 @@ func writeHeader(writer io.Writer, req *http.Request, noGC bool) {
 				memStatsAfterGC.Sys-memStatsAfterGC.HeapReleased))
 	}
 	fmt.Fprintf(writer, "  </tr>\n")
+	if hostname, err := os.Hostname(); err != nil {
+		fmt.Fprintf(writer, "    <td>Error getting hostname: %s</td>\n", err)
+	} else {
+		fmt.Fprintf(writer, "    <td>Hostname: %s</td>\n", hostname)
+	}
+	fmt.Fprintln(writer, "    <td></td>")
 	fmt.Fprintf(writer, "</table>\n")
 	fmt.Fprintln(writer, "Raw <a href=\"metrics\">metrics</a><br>")
 	if req != nil {
