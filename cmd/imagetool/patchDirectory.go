@@ -171,6 +171,8 @@ func readOne(objectsDir string, hashVal hash.Hash, length uint64,
 }
 
 // Returns true if there were failures.
+// TODO(rgooch): move the subd/rpcd/update.go:runTrigger() code into a separate
+// package and leverage that here instead.
 func runTriggersFunc(triggerList []*triggers.Trigger, action string,
 	logger log.Logger) bool {
 	// First process reboot triggers. Process them all.
@@ -207,9 +209,25 @@ func runTriggersFunc(triggerList []*triggers.Trigger, action string,
 		}
 		return true
 	}
+	// No reboot: just do a simple restart (or reload) for triggers. Don't
+	// bother with the stop/start sequence that subd does.
+	restartingTriggers := make(map[string]struct{})
 	for _, trigger := range triggerList {
-		logger.Printf("Action: service %s %s\n", trigger.Service, "restart")
-		if !osutil.RunCommand(logger, "service", trigger.Service, "restart") {
+		if !trigger.DoReload {
+			restartingTriggers[trigger.Service] = struct{}{}
+		}
+	}
+	for _, trigger := range triggerList {
+		action := "restart"
+		if _, restart := restartingTriggers[trigger.Service]; restart {
+			if trigger.DoReload {
+				continue // This service will be stopped/started: skip reload.
+			}
+		} else if trigger.DoReload {
+			action = "reload"
+		}
+		logger.Printf("Action: service %s %s\n", trigger.Service, action)
+		if !osutil.RunCommand(logger, "service", trigger.Service, action) {
 			hadFailures = true
 		}
 	}
