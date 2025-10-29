@@ -33,14 +33,13 @@ const (
 )
 
 var environmentToCopy = map[string]struct{}{
-	"PATH":  {},
-	"TZ":    {},
-	"SHELL": {},
+	"TZ": {},
 }
 
 var environmentToSet = map[string]string{
 	"HOME":    "/",
 	"LOGNAME": "root",
+	"PATH":    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 	"USER":    "root",
 }
 
