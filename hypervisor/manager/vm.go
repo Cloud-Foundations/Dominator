@@ -3186,6 +3186,11 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	defer func() {
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
+	if request.VolumeFormat != vm.Volumes[0].Format && !request.SkipBackup {
+		maybeDrainImage(conn, request.ImageDataSize)
+		return sendError(conn,
+			errors.New("cannot change volume format unless you skip backup"))
+	}
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
 	defer os.Remove(tmpInitrdFilename)
@@ -3314,6 +3319,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if err := os.Rename(tmpRootFilename, rootFilename); err != nil {
 			return sendError(conn, err)
 		}
+		vm.Volumes[0].Format = request.VolumeFormat
 	} else {
 		oldRootFilename := vm.VolumeLocations[0].Filename + ".old"
 		if err := os.Rename(rootFilename, oldRootFilename); err != nil {

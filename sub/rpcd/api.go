@@ -67,6 +67,7 @@ type rpcType struct {
 	lastWriteError               string
 	lockedBy                     *srpc.Conn
 	lockedUntil                  time.Time
+	stoppedServices              map[string]struct{}
 }
 
 type addObjectsHandlerType struct {

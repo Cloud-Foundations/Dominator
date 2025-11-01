@@ -6,8 +6,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/pathregexp"
 )
 
+type keyType struct {
+	doReload    bool
+	serviceName string
+}
+
 type MergeableTriggers struct {
-	triggers map[string]*mergeableTrigger // Key: service name.
+	triggers map[keyType]*mergeableTrigger
 }
 
 type mergeableTrigger struct {
@@ -19,10 +24,11 @@ type mergeableTrigger struct {
 type Trigger struct {
 	MatchLines   []string
 	matchRegexes []pathregexp.Regexp
-	Service      string
-	SortName     string `json:",omitempty"`
-	DoReboot     bool   `json:",omitempty"`
-	HighImpact   bool   `json:",omitempty"`
+	Service      string // Name of service.
+	SortName     string `json:",omitempty"` // Control order of triggers run.
+	DoReboot     bool   `json:",omitempty"` // If true, reboot after start.
+	DoReload     bool   `json:",omitempty"` // If true, only reload the service.
+	HighImpact   bool   `json:",omitempty"` // If true, trigger is disruptive.
 }
 
 func (trigger *Trigger) RegisterStrings(registerFunc func(string)) {
@@ -61,7 +67,7 @@ func (triggers *Triggers) Len() int {
 }
 
 func (triggers *Triggers) Less(left, right int) bool {
-	return triggers.Triggers[left].Service < triggers.Triggers[right].Service
+	return triggers.less(left, right)
 }
 
 func (triggers *Triggers) RegisterStrings(registerFunc func(string)) {

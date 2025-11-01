@@ -123,6 +123,7 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 		options.DisruptionCancel = t.disruptionCancel
 		options.DisruptionRequest = t.disruptionRequest
 	}
+	t.stoppedServices = make(map[string]struct{})
 	t.params.WorkdirGoroutine.Run(func() {
 		hadTriggerFailures, fsChangeDuration, lastUpdateError =
 			lib.UpdateWithOptions(request, options)
@@ -130,6 +131,7 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 	t.lastUpdateHadTriggerFailures = hadTriggerFailures
 	t.lastUpdateError = lastUpdateError
 	timeTaken := time.Since(startTime)
+	t.stoppedServices = nil
 	if t.lastUpdateError != nil {
 		t.params.Logger.Printf("Update(): last error: %s\n", t.lastUpdateError)
 	} else {
@@ -162,7 +164,7 @@ func (t *rpcType) runTriggers(triggers []*triggers.Trigger, action string,
 	logger log.Logger) bool {
 	var retval bool
 	t.systemGoroutine.Run(func() {
-		retval = runTriggers(triggers, action, logger)
+		retval = runTriggers(triggers, action, t.stoppedServices, logger)
 	})
 	return retval
 }
@@ -206,17 +208,21 @@ func normalRebootAndWait(logger log.Logger) {
 
 // Returns true if there were failures.
 func runTriggers(triggerList []*triggers.Trigger, action string,
-	logger log.Logger) bool {
+	stoppedServices map[string]struct{}, logger log.Logger) bool {
 	hadFailures := false
 	needRestart := false
 	logPrefix := ""
 	var rebootingTriggers []*triggers.Trigger
+	restartingTriggers := make(map[string]struct{})
 	if *disableTriggers {
 		logPrefix = "Disabled: "
 	}
 	for _, trigger := range triggerList {
 		if trigger.DoReboot {
 			rebootingTriggers = append(rebootingTriggers, trigger)
+		}
+		if !trigger.DoReload {
+			restartingTriggers[trigger.Service] = struct{}{}
 		}
 	}
 	if len(rebootingTriggers) > 0 {
@@ -237,18 +243,37 @@ func runTriggers(triggerList []*triggers.Trigger, action string,
 			}
 			continue
 		}
+		action := action
+		if _, ok := restartingTriggers[trigger.Service]; ok {
+			if trigger.DoReload {
+				continue // This service will be stopped/started: skip reload.
+			}
+			if action == "stop" {
+				stoppedServices[trigger.Service] = struct{}{}
+			}
+		} else if _, stopped := stoppedServices[trigger.Service]; !stopped {
+			// This service only needs to be reloaded.
+			if action == "stop" {
+				continue // Skip stopping the service.
+			}
+			if len(rebootingTriggers) > 0 {
+				continue // We're going to reboot anyway: skip reloading.
+			}
+			action = "reload"
+		}
 		logger.Printf("%sAction: service %s %s\n",
 			logPrefix, trigger.Service, action)
 		if *disableTriggers {
 			continue
 		}
 		if !osutil.RunCommand(logger, "service", trigger.Service, action) {
-			// Ignore failure for the "reboot" service: try later.
-			if action != "start" ||
-				!trigger.DoReboot ||
-				trigger.Service != "reboot" {
-				hadFailures = true
+			// Ignore start failure for the "reboot" service: try later.
+			if action == "start" &&
+				trigger.DoReboot &&
+				trigger.Service == "reboot" {
+				continue
 			}
+			hadFailures = true
 		}
 	}
 	if len(rebootingTriggers) > 0 {

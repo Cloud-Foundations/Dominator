@@ -724,6 +724,7 @@ type ReplaceVmImageRequest struct {
 	RoundupPower     uint64
 	SkipBackup       bool
 	SkipBootloader   bool
+	VolumeFormat     VolumeFormat `json:",omitempty"`
 } // RAW image data (length=ImageDataSize) is streamed afterwards.
 
 type ReplaceVmImageResponse struct { // Multiple responses are sent.

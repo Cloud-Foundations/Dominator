@@ -11,23 +11,19 @@ func (mt *MergeableTriggers) exportTriggers() *Triggers {
 		return nil
 	}
 	triggerList := make([]*Trigger, 0, len(mt.triggers))
-	serviceNames := make([]string, 0, len(mt.triggers))
-	for service := range mt.triggers {
-		serviceNames = append(serviceNames, service)
-	}
-	sort.Strings(serviceNames)
-	for _, service := range serviceNames {
-		trigger := mt.triggers[service]
+	for key, trigger := range mt.triggers {
 		matchLines := stringutil.ConvertMapKeysToList(trigger.matchLines, true)
 		triggerList = append(triggerList, &Trigger{
 			MatchLines: matchLines,
-			Service:    service,
+			Service:    key.serviceName,
 			DoReboot:   trigger.doReboot,
+			DoReload:   key.doReload,
 			HighImpact: trigger.highImpact,
 		})
 	}
 	triggers := New()
 	triggers.Triggers = triggerList
+	sort.Sort(triggers)
 	return triggers
 }
 
@@ -36,14 +32,16 @@ func (mt *MergeableTriggers) merge(triggers *Triggers) {
 		return
 	}
 	if mt.triggers == nil {
-		mt.triggers = make(map[string]*mergeableTrigger, len(triggers.Triggers))
+		mt.triggers = make(map[keyType]*mergeableTrigger,
+			len(triggers.Triggers))
 	}
 	for _, trigger := range triggers.Triggers {
-		trig := mt.triggers[trigger.Service]
+		key := keyType{trigger.DoReload, trigger.Service}
+		trig := mt.triggers[key]
 		if trig == nil {
 			trig = new(mergeableTrigger)
 			trig.matchLines = make(map[string]struct{})
-			mt.triggers[trigger.Service] = trig
+			mt.triggers[key] = trig
 		}
 		for _, matchLine := range trigger.MatchLines {
 			trig.matchLines[matchLine] = struct{}{}
