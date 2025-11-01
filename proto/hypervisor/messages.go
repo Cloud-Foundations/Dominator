@@ -721,6 +721,7 @@ type ReplaceVmImageRequest struct {
 	IpAddress        net.IP
 	MinimumFreeBytes uint64
 	OverlayFiles     map[string][]byte
+	PreDelete        bool
 	RoundupPower     uint64
 	SkipBackup       bool
 	SkipBootloader   bool
