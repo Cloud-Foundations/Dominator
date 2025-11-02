@@ -3199,6 +3199,26 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	defer os.Remove(tmpKernelFilename)
 	tmpRootFilename := vm.VolumeLocations[0].Filename + ".new"
 	defer os.Remove(tmpRootFilename)
+	if request.PreDelete {
+		if vm.State != proto.StateStopped {
+			maybeDrainImage(conn, request.ImageDataSize)
+			return sendError(conn,
+				errors.New("VM must be stopped to pre-delete"))
+		}
+		if err := os.Remove(vm.VolumeLocations[0].Filename); err != nil {
+			vm.logger.Println(err)
+		}
+		if initrdFilename := vm.getActiveInitrdPath(); initrdFilename != "" {
+			if err := os.Remove(initrdFilename); err != nil {
+				vm.logger.Println(err)
+			}
+		}
+		if kernelFilename := vm.getActiveKernelPath(); kernelFilename != "" {
+			if err := os.Remove(kernelFilename); err != nil {
+				vm.logger.Println(err)
+			}
+		}
+	}
 	var newSize uint64
 	if request.ImageName != "" {
 		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
