@@ -978,6 +978,87 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 	return grow2fs(localVolume.Filename, vm.logger)
 }
 
+func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, storageIndex, volumeIndex uint) error {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	var haveLock bool
+	defer func() {
+		vm.allowMutationsAndUnlock(haveLock)
+	}()
+	if storageIndex >= uint(len(m.volumeDirectories)) {
+		return errors.New("invalid storage index")
+	}
+	if volumeIndex >= uint(len(vm.Volumes)) {
+		return errors.New("invalid volume index")
+	}
+	volume := vm.Volumes[volumeIndex]
+	localVolume := vm.VolumeLocations[volumeIndex]
+	if oldStorageIndex, err := m.nameToIndex(localVolume.Filename); err != nil {
+		return err
+	} else if storageIndex == oldStorageIndex {
+		return nil
+	}
+	if vm.getActiveInitrdPath() != "" {
+		return errors.New("cannot move root volume with separate initrd")
+	}
+	if vm.getActiveKernelPath() != "" {
+		return errors.New("cannot move root volume with separate kernel")
+	}
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	if volumeIndex == 0 {
+		if _, err := os.Stat(localVolume.Filename + ".old"); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+		} else {
+			return errors.New("cannot move root volume with old image")
+		}
+	}
+	if len(volume.Snapshots) > 0 {
+		return errors.New("cannot move volume with snapshots")
+	}
+	newVolumeDirectory := filepath.Join(m.volumeDirectories[storageIndex],
+		vm.ipAddress)
+	newLocalVolume := proto.LocalVolume{
+		DirectoryToCleanup: newVolumeDirectory,
+		Filename: filepath.Join(newVolumeDirectory,
+			indexToName(int(volumeIndex))),
+	}
+	err = m.checkFreeSpaceForVolume(newLocalVolume, nil, volume.Size)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(newVolumeDirectory, fsutil.DirPerms); err != nil {
+		return err
+	}
+	defer os.Remove(newVolumeDirectory)
+	defer os.Remove(localVolume.DirectoryToCleanup)
+	err = fsutil.CopyFileExclusive(newLocalVolume.Filename,
+		localVolume.Filename, fsutil.PrivateFilePerms)
+	if err != nil {
+		return err
+	}
+	// TODO(rgooch): add support for initrd and kernel and remove checks above.
+	if err := os.Remove(localVolume.Filename); err != nil {
+		return err
+	}
+	vm.mutex.Lock()
+	haveLock = true
+	vm.VolumeLocations[volumeIndex] = newLocalVolume
+	if err := vm.writeInfo(); err != nil {
+		vm.logger.Println(err)
+		return err
+	}
+	return nil
+}
+
 func (m *Manager) checkVmHasHealthAgent(ipAddr net.IP) (bool, error) {
 	vm, err := m.getVmAndLock(ipAddr, false)
 	if err != nil {

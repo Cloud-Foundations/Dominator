@@ -227,6 +227,12 @@ func (m *Manager) ChangeVmVolumeSize(ipAddr net.IP,
 	return m.changeVmVolumeSize(ipAddr, authInfo, index, size)
 }
 
+func (m *Manager) ChangeVmVolumeStorageIndex(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, storageIndex, volumeIndex uint) error {
+	return m.changeVmVolumeStorageIndex(ipAddr, authInfo, storageIndex,
+		volumeIndex)
+}
+
 func (m *Manager) CheckOwnership(authInfo *srpc.AuthInformation) bool {
 	return m.checkOwnership(authInfo)
 }
