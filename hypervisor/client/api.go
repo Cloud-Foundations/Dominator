@@ -96,6 +96,12 @@ func ChangeVmVolumeSize(client srpc.ClientI, ipAddress net.IP, index uint,
 	return changeVmVolumeSize(client, ipAddress, index, size)
 }
 
+func ChangeVmVolumeStorageIndex(client srpc.ClientI, ipAddress net.IP,
+	storageIndex, volumeIndex uint) error {
+	return changeVmVolumeStorageIndex(client, ipAddress, storageIndex,
+		volumeIndex)
+}
+
 func CommitImportedVm(client srpc.ClientI, ipAddress net.IP) error {
 	return commitImportedVm(client, ipAddress)
 }

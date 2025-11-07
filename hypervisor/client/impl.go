@@ -209,6 +209,22 @@ func changeVmVolumeSize(client srpc.ClientI, ipAddress net.IP, index uint,
 	return errors.New(reply.Error)
 }
 
+func changeVmVolumeStorageIndex(client srpc.ClientI, ipAddress net.IP,
+	storageIndex, volumeIndex uint) error {
+	request := proto.ChangeVmVolumeStorageIndexRequest{
+		IpAddress:    ipAddress,
+		StorageIndex: storageIndex,
+		VolumeIndex:  volumeIndex,
+	}
+	var reply proto.ChangeVmVolumeStorageIndexResponse
+	err := client.RequestReply("Hypervisor.ChangeVmVolumeStorageIndex",
+		request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func commitImportedVm(client srpc.ClientI, ipAddress net.IP) error {
 	request := proto.CommitImportedVmRequest{ipAddress}
 	var reply proto.CommitImportedVmResponse
