@@ -119,7 +119,9 @@ var (
 	spreadVolumes = flag.Bool("spreadVolumes", false,
 		"If true, spread the VM volumes across backing stores")
 	storageIndices flagutil.UintList
-	subnetId       = flag.String("subnetId", "",
+	storageIndex   = flag.Uint("storageIndex", 0,
+		"Index of volume backing store to move volume to")
+	subnetId = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
 	requestIPs   flagutil.StringList
 	roundupPower = flag.Uint64("roundupPower", 28,
@@ -222,6 +224,8 @@ var subcommands = []commands.Command{
 	{"change-vm-volume-interfaces", "IPaddr", 1, 1,
 		changeVmVolumeInterfacesSubcommand},
 	{"change-vm-volume-size", "IPaddr", 1, 1, changeVmVolumeSizeSubcommand},
+	{"change-vm-volume-storage-index", "IPaddr", 1, 1,
+		changeVmVolumeStorageIndexSubcommand},
 	{"connect-to-vm-console", "IPaddr", 1, 1, connectToVmConsoleSubcommand},
 	{"connect-to-vm-serial-port", "IPaddr", 1, 1,
 		connectToVmSerialPortSubcommand},
