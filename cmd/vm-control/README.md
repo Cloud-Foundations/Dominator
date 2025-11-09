@@ -47,6 +47,8 @@ Some of the sub-commands available are:
 - **change-vm-volume-interfaces**: change the volume interfaces (device types
                                    presented to VM) for the specified VM
 - **change-vm-volume-size**: change the size of a specified volume on a VM
+- **change-vm-volume-storage-index**: change the storage backend for a specified
+                                      volume on a VM
 - **connect-to-vm-console**: connect to the Virtual Network Console for the
                              specified VM
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
