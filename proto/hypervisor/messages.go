@@ -216,6 +216,16 @@ type ChangeVmVolumeSizeResponse struct {
 	Error string
 }
 
+type ChangeVmVolumeStorageIndexRequest struct {
+	IpAddress    net.IP
+	StorageIndex uint
+	VolumeIndex  uint
+}
+
+type ChangeVmVolumeStorageIndexResponse struct {
+	Error string
+}
+
 type CommitImportedVmRequest struct {
 	IpAddress net.IP
 }
@@ -721,6 +731,7 @@ type ReplaceVmImageRequest struct {
 	IpAddress        net.IP
 	MinimumFreeBytes uint64
 	OverlayFiles     map[string][]byte
+	PreDelete        bool
 	RoundupPower     uint64
 	SkipBackup       bool
 	SkipBootloader   bool

@@ -389,8 +389,7 @@ func (m *Manager) checkFreeSpaceForVolume(volume proto.LocalVolume,
 	if freeSpaceTable == nil {
 		freeSpaceTable = make(map[string]uint64)
 	}
-	haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable,
-		uint(storageIndex))
+	haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable, storageIndex)
 	if err != nil {
 		return err
 	}
@@ -539,16 +538,16 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 	return directoriesToUse, nil
 }
 
-// nameToIndex will return the volume index for the specified directory (which
+// nameToIndex will return the storage index for the specified directory (which
 // may be a subdirectory of one of the volumeDirectories. It returns an error
 // if the name is not found.
-func (m *Manager) nameToIndex(name string) (int, error) {
+func (m *Manager) nameToIndex(name string) (uint, error) {
 	for index, volumeDirectory := range m.volumeDirectories {
 		if strings.HasPrefix(name, volumeDirectory+"/") {
-			return index, nil
+			return uint(index), nil
 		}
 	}
-	return -1, fmt.Errorf("no volume directory for: %s", name)
+	return 0, fmt.Errorf("no volume directory for: %s", name)
 }
 
 func (m *Manager) setupObjectCache(mountTable *mounts.MountTable) error {
