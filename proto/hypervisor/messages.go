@@ -538,6 +538,16 @@ type GetVmVolumeResponse struct {
 	ExtraFiles map[string][]byte // May contain "kernel", "initrd" and such.
 }
 
+type GetVmVolumeStorageConfigurationRequest struct {
+	IpAddress net.IP
+}
+
+type GetVmVolumeStorageConfigurationResponse struct {
+	Error                string        `json:",omitempty"`
+	StorageInfos         []StorageInfo `json:",omitempty"`
+	VolumeStorageIndices []uint        `json:",omitempty"`
+}
+
 type HoldLockRequest struct {
 	Timeout   time.Duration
 	WriteLock bool
@@ -831,6 +841,8 @@ type StartVmResponse struct {
 	Error        string
 }
 
+type State uint
+
 type StopVmRequest struct {
 	AccessToken []byte
 	IpAddress   net.IP
@@ -840,7 +852,12 @@ type StopVmResponse struct {
 	Error string
 }
 
-type State uint
+type StorageInfo struct {
+	AvailableBytes uint64
+	FreeBytes      uint64
+	SizeBytes      uint64
+	UsableBytes    uint64
+}
 
 type Subnet struct {
 	Id                string
