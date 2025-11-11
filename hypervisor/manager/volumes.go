@@ -33,6 +33,12 @@ var (
 	memoryVolumeDirectoryMutex sync.Mutex
 )
 
+type capacityType struct {
+	available uint64 // Available to mortals.
+	free      uint64 // Available to root.
+	size      uint64 // Total size.
+}
+
 type mountInfo struct {
 	mountEntry *mounts.MountEntry
 	size       uint64
@@ -108,20 +114,23 @@ func e2setLabel(device, label string) error {
 	return exec.Command("e2label", device, label).Run()
 }
 
-func getFreeSpace(dirname string, freeSpaceTable map[string]uint64) (
-	uint64, error) {
-	if freeSpace, ok := freeSpaceTable[dirname]; ok {
-		return freeSpace, nil
+func getCapacity(dirname string, capacityTable map[string]capacityType) (
+	capacityType, error) {
+	if capacity, ok := capacityTable[dirname]; ok {
+		return capacity, nil
 	}
 	var statbuf syscall.Statfs_t
 	if err := syscall.Statfs(dirname, &statbuf); err != nil {
-		return 0, fmt.Errorf("error statfsing: %s: %s", dirname, err)
+		return capacityType{},
+			fmt.Errorf("error statfsing: %s: %s", dirname, err)
 	}
-	// Even though volumes are written as root, treat them as ordinary users so
-	// that they don't consume the space reserved for root.
-	freeSpace := uint64(statbuf.Bavail * uint64(statbuf.Bsize))
-	freeSpaceTable[dirname] = freeSpace
-	return freeSpace, nil
+	capacity := capacityType{
+		available: uint64(statbuf.Bavail * uint64(statbuf.Bsize)),
+		free:      uint64(statbuf.Bfree * uint64(statbuf.Bsize)),
+		size:      uint64(statbuf.Blocks * uint64(statbuf.Bsize)),
+	}
+	capacityTable[dirname] = capacity
+	return capacity, nil
 }
 
 func getMemoryVolumeDirectory(logger log.Logger) (string, error) {
@@ -343,10 +352,10 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 
 // checkFreeSpace will check if the specified backing store has sufficient
 // space. It returns true if there is space.
-func (m *Manager) checkFreeSpace(size uint64, freeSpaceTable map[string]uint64,
-	storageIndex uint) (bool, error) {
-	freeSpace, err := getFreeSpace(m.volumeDirectories[storageIndex],
-		freeSpaceTable)
+func (m *Manager) checkFreeSpace(size uint64,
+	capacityTable map[string]capacityType, storageIndex uint) (bool, error) {
+	capacity, err := getCapacity(m.volumeDirectories[storageIndex],
+		capacityTable)
 	if err != nil {
 		return false, err
 	}
@@ -356,22 +365,22 @@ func (m *Manager) checkFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 		if m.ObjectCacheBytes > stats.CachedBytes {
 			unused := m.ObjectCacheBytes - stats.CachedBytes
 			unused += unused >> 2 // In practice block usage is +30%.
-			if unused < freeSpace {
-				freeSpace -= unused
+			if unused < capacity.available {
+				capacity.available -= unused
 			} else {
-				freeSpace = 0
+				capacity.available = 0
 			}
 		}
 	}
 	// Keep an extra 1 GiB free space for the root file-system. Be nice.
 	if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
-		if freeSpace > 1<<30 {
-			freeSpace -= 1 << 30
+		if capacity.available > 1<<30 {
+			capacity.available -= 1 << 30
 		} else {
-			freeSpace = 0
+			capacity.available = 0
 		}
 	}
-	if size < freeSpace {
+	if size < capacity.available {
 		return true, nil
 	}
 	return false, nil
@@ -381,22 +390,25 @@ func (m *Manager) checkFreeSpace(size uint64, freeSpaceTable map[string]uint64,
 // sufficient space. It returns nil if there is space. The freeSpaceTable is
 // updated if there is space.
 func (m *Manager) checkFreeSpaceForVolume(volume proto.LocalVolume,
-	freeSpaceTable map[string]uint64, size uint64) error {
+	capacityTable map[string]capacityType, size uint64) error {
 	storageIndex, err := m.nameToIndex(volume.DirectoryToCleanup)
 	if err != nil {
 		return err
 	}
-	if freeSpaceTable == nil {
-		freeSpaceTable = make(map[string]uint64)
+	if capacityTable == nil {
+		capacityTable = make(map[string]capacityType)
 	}
-	haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable, storageIndex)
+	haveFreeSpace, err := m.checkFreeSpace(size, capacityTable, storageIndex)
 	if err != nil {
 		return err
 	}
 	if !haveFreeSpace {
 		return errors.New("not enough free space")
 	}
-	freeSpaceTable[m.volumeDirectories[storageIndex]] -= size
+	storageDirectory := m.volumeDirectories[storageIndex]
+	capacity := capacityTable[storageDirectory]
+	capacity.available -= size
+	capacityTable[storageDirectory] = capacity
 	return nil
 }
 
@@ -456,20 +468,22 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 	return nil
 }
 
-func (m *Manager) findFreeSpace(size uint64, freeSpaceTable map[string]uint64,
-	position *uint) (string, error) {
+func (m *Manager) findFreeSpace(size uint64,
+	capacityTable map[string]capacityType, position *uint) (string, error) {
 	if *position >= uint(len(m.volumeDirectories)) {
 		*position = 0
 	}
 	startingPosition := *position
 	for {
-		haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable, *position)
+		haveFreeSpace, err := m.checkFreeSpace(size, capacityTable, *position)
 		if err != nil {
 			return "", err
 		}
 		if haveFreeSpace {
 			dirname := m.volumeDirectories[*position]
-			freeSpaceTable[dirname] -= size
+			capacity := capacityTable[dirname]
+			capacity.available -= size
+			capacityTable[dirname] = capacity
 			return dirname, nil
 		}
 		*position++
@@ -497,12 +511,12 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 			return nil, errors.New("secondary volumes cannot be zero sized")
 		}
 	}
-	freeSpaceTable := make(map[string]uint64, len(m.volumeDirectories))
+	capacityTable := make(map[string]capacityType, len(m.volumeDirectories))
 	directoriesToUse := make([]string, 0, len(sizes))
 	var position uint
 	for index, size := range sizes {
 		if index < len(storageIndices) {
-			haveFreeSpace, err := m.checkFreeSpace(size, freeSpaceTable,
+			haveFreeSpace, err := m.checkFreeSpace(size, capacityTable,
 				storageIndices[index])
 			if err != nil {
 				return nil, err
@@ -515,7 +529,7 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 				m.volumeDirectories[storageIndices[index]])
 			continue
 		}
-		dirname, err := m.findFreeSpace(size, freeSpaceTable, &position)
+		dirname, err := m.findFreeSpace(size, capacityTable, &position)
 		if err != nil {
 			return nil, err
 		}
