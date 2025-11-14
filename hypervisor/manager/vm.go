@@ -2233,6 +2233,64 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 		vm.Volumes[request.VolumeIndex].Size)
 }
 
+func (m *Manager) getVmVolumeStorageConfiguration(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte) (
+	proto.GetVmVolumeStorageConfigurationResponse, error) {
+	capacityTable := make(map[string]capacityType)
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return proto.GetVmVolumeStorageConfigurationResponse{}, err
+	}
+	defer vm.mutex.RUnlock()
+	// TODO(rgooch): abstract storage backends and reduce code duplication and
+	//               add rate limiting on system calls.
+	storageInfos := make([]proto.StorageInfo, 0, len(m.volumeDirectories))
+	for storageIndex, storageDirectory := range m.volumeDirectories {
+		capacity, err := getCapacity(storageDirectory, capacityTable)
+		if err != nil {
+			return proto.GetVmVolumeStorageConfigurationResponse{}, err
+		}
+		storageInfo := proto.StorageInfo{
+			AvailableBytes: capacity.available,
+			FreeBytes:      capacity.free,
+			SizeBytes:      capacity.size,
+			UsableBytes:    capacity.available,
+		}
+		if m.objectCache != nil && int(storageIndex) == m.objectVolumeIndex {
+			stats := m.objectCache.GetStats()
+			if m.ObjectCacheBytes > stats.CachedBytes {
+				unused := m.ObjectCacheBytes - stats.CachedBytes
+				unused += unused >> 2 // In practice block usage is +30%.
+				if unused < capacity.available {
+					storageInfo.UsableBytes -= unused
+				} else {
+					storageInfo.UsableBytes = 0
+				}
+			}
+		}
+		if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
+			if storageInfo.UsableBytes > 1<<30 {
+				storageInfo.UsableBytes -= 1 << 30
+			} else {
+				storageInfo.UsableBytes = 0
+			}
+		}
+		storageInfos = append(storageInfos, storageInfo)
+	}
+	volumeStorageIndices := make([]uint, 0, len(vm.VolumeLocations))
+	for _, volume := range vm.VolumeLocations {
+		storageIndex, err := m.nameToIndex(volume.DirectoryToCleanup)
+		if err != nil {
+			return proto.GetVmVolumeStorageConfigurationResponse{}, err
+		}
+		volumeStorageIndices = append(volumeStorageIndices, storageIndex)
+	}
+	return proto.GetVmVolumeStorageConfigurationResponse{
+		StorageInfos:         storageInfos,
+		VolumeStorageIndices: volumeStorageIndices,
+	}, nil
+}
+
 func (m *Manager) holdVmLock(ipAddr net.IP, timeout time.Duration,
 	writeLock bool, authInfo *srpc.AuthInformation) error {
 	if timeout > time.Minute {
@@ -3731,13 +3789,13 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		}
 		return err
 	}
-	freeSpaceTable := make(map[string]uint64)
+	capacityTable := make(map[string]capacityType)
 	for index, volume := range vm.Volumes {
 		if index != 0 && snapshotRootOnly {
 			continue
 		}
 		err := m.checkFreeSpaceForVolume(vm.VolumeLocations[index],
-			freeSpaceTable, volume.Size)
+			capacityTable, volume.Size)
 		if err != nil {
 			return err
 		}

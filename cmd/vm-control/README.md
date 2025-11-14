@@ -77,6 +77,7 @@ Some of the sub-commands available are:
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
 - **get-vm-user-data**: get (copy) the user data for a VM
 - **get-vm-volume**: get (copy) a specified VM volume
+- **get-vm-volume-storage-configuration**: get and show the volume storage information for a VM
 - **import-local-vm**: import a local raw VM. This is primarily for debugging
 - **import-virsh-vm**: import a local virsh VM. The specified domain name must
                        be a FQDN, which is used to obtain the IP address of the

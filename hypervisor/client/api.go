@@ -230,6 +230,11 @@ func GetVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
 		logger)
 }
 
+func GetVmVolumeStorageConfiguration(client srpc.ClientI, ipAddress net.IP) (
+	proto.GetVmVolumeStorageConfigurationResponse, error) {
+	return getVmVolumeStorageConfiguration(client, ipAddress)
+}
+
 func HoldLock(client srpc.ClientI, timeout time.Duration,
 	writeLock bool) error {
 	return holdLock(client, timeout, writeLock)

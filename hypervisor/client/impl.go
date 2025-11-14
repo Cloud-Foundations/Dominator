@@ -773,6 +773,23 @@ func getVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
 	return response, nil
 }
 
+func getVmVolumeStorageConfiguration(client srpc.ClientI, ipAddress net.IP) (
+	proto.GetVmVolumeStorageConfigurationResponse, error) {
+	request := proto.GetVmVolumeStorageConfigurationRequest{
+		IpAddress: ipAddress,
+	}
+	var reply proto.GetVmVolumeStorageConfigurationResponse
+	err := client.RequestReply("Hypervisor.GetVmVolumeStorageConfiguration",
+		request, &reply)
+	if err != nil {
+		return proto.GetVmVolumeStorageConfigurationResponse{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.GetVmVolumeStorageConfigurationResponse{}, err
+	}
+	return reply, nil
+}
+
 func holdLock(client srpc.ClientI, timeout time.Duration,
 	writeLock bool) error {
 	request := proto.HoldLockRequest{timeout, writeLock}

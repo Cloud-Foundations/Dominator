@@ -424,6 +424,12 @@ func (m *Manager) GetVmVolume(conn *srpc.Conn) error {
 	return m.getVmVolume(conn)
 }
 
+func (m *Manager) GetVmVolumeStorageConfiguration(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, accessToken []byte) (
+	proto.GetVmVolumeStorageConfigurationResponse, error) {
+	return m.getVmVolumeStorageConfiguration(ipAddr, authInfo, accessToken)
+}
+
 func (m *Manager) GetUUID() (string, error) {
 	return m.uuid, nil
 }
