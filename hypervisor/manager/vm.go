@@ -1039,7 +1039,6 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 		return err
 	}
 	defer os.Remove(newVolumeDirectory)
-	defer os.Remove(localVolume.DirectoryToCleanup)
 	err = fsutil.CopyFileExclusive(newLocalVolume.Filename,
 		localVolume.Filename, fsutil.PrivateFilePerms)
 	if err != nil {
@@ -1049,6 +1048,7 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 	if err := os.Remove(localVolume.Filename); err != nil {
 		return err
 	}
+	os.Remove(localVolume.DirectoryToCleanup)
 	vm.mutex.Lock()
 	haveLock = true
 	vm.VolumeLocations[volumeIndex] = newLocalVolume
