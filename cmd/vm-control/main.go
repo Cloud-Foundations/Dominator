@@ -248,6 +248,8 @@ var subcommands = []commands.Command{
 	{"get-vm-infos", "", 0, 0, getVmInfosSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
 	{"get-vm-volume", "IPaddr", 1, 1, getVmVolumeSubcommand},
+	{"get-vm-volume-storage-configuration", "IPaddr", 1, 1,
+		getVmVolumeStorageConfigurationSubcommand},
 	{"import-local-vm", "info-file root-volume", 2, 2, importLocalVmSubcommand},
 	{"import-virsh-vm", "MACaddr domain [[MAC IP]...]", 2, -1,
 		importVirshVmSubcommand},
