@@ -150,12 +150,12 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 				"failed to load identity requestor certificate: %s\n", err)
 			continue
 		}
-		if err := vmInfo.scanSnapshots(); err != nil {
-			vmInfo.logger.Printf("failed to scan snapshots: %s\n", err)
+		if err := vmInfo.scanStorage(); err != nil {
+			vmInfo.logger.Printf("failed to scan storage: %s\n", err)
 			continue
 		}
 		if _, err := vmInfo.startManaging(0, false, false); err != nil {
-			manager.Logger.Println(err)
+			vmInfo.logger.Println(err)
 			if ipAddr == "0.0.0.0" {
 				delete(manager.vms, ipAddr)
 				vmInfo.destroy()

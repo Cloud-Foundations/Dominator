@@ -8,6 +8,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/images/qcow2"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -37,7 +38,7 @@ func (vm *vmInfoType) checkVolumes(grabLock bool) error {
 	return nil
 }
 
-func (vm *vmInfoType) scanSnapshots() error {
+func (vm *vmInfoType) scanStorage() error {
 	// Build a map of all filenames in VM volume directories.
 	dirnameToFilenames := make(map[string]map[string]struct{})
 	for _, volumeLocation := range vm.VolumeLocations {
@@ -51,12 +52,20 @@ func (vm *vmInfoType) scanSnapshots() error {
 		dirnameToFilenames[dirname] = stringutil.ConvertListToMap(filenames,
 			false)
 	}
-	// Look for snapshots and build new []proto.Volume.
-	newVolumes := make([]proto.Volume, len(vm.Volumes))
+	// Look for QCOW2 root volumes and snapshots and build new []proto.Volume.
+	newVolumes := make([]proto.Volume, 0, len(vm.Volumes))
 	for index, vl := range vm.VolumeLocations {
-		newVolumes[index] = vm.Volumes[index]
+		volume := vm.Volumes[index]
+		// Read QCOW2 header for root volumes. This should be cheap enough.
+		if index == 0 && volume.Format == proto.VolumeFormatQCOW2 {
+			header, err := qcow2.ReadHeaderFromFile(vl.Filename)
+			if err != nil {
+				return err
+			}
+			volume.VirtualSize = header.Size
+		}
 		snapshots := make(map[string]uint64)
-		newVolumes[index].Snapshots = snapshots
+		volume.Snapshots = snapshots
 		volumeName := indexToName(index)
 		snapshotBase := volumeName + ".snapshot"
 		for filename := range dirnameToFilenames[vl.DirectoryToCleanup] {
@@ -75,6 +84,7 @@ func (vm *vmInfoType) scanSnapshots() error {
 				}
 			}
 		}
+		newVolumes = append(newVolumes, volume)
 	}
 	// Compare with old volumes.
 	var changed bool
@@ -85,7 +95,7 @@ func (vm *vmInfoType) scanSnapshots() error {
 		}
 	}
 	if changed {
-		vm.logger.Printf("scanSnapshots(): snapshots changed: %v -> %v\n",
+		vm.logger.Printf("scanStorage(): storage changed: %v -> %v\n",
 			vm.Volumes, newVolumes)
 		vm.Volumes = newVolumes
 		if err := vm.writeInfo(); err != nil {
@@ -95,6 +105,8 @@ func (vm *vmInfoType) scanSnapshots() error {
 	return nil
 }
 
+// setupVolumes will allocate space for the VM volumes. It measures the
+// available storage capacity and ensures the requested volume sizes will fit.
 func (vm *vmInfoType) setupVolumes(rootSize uint64,
 	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
 	spreadVolumes bool, storageIndices []uint) error {
