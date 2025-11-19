@@ -961,7 +961,7 @@ func (m *Manager) changeVmVolumeSize(ipAddr net.IP,
 		vm.writeAndSendInfo()
 		return nil
 	}
-	err = m.checkFreeSpaceForVolume(localVolume, nil, size-volume.Size)
+	err = m.checkFreeSpaceForVolume(localVolume, nil, nil, size-volume.Size)
 	if err != nil {
 		return err
 	}
@@ -1031,7 +1031,8 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 		Filename: filepath.Join(newVolumeDirectory,
 			indexToName(int(volumeIndex))),
 	}
-	err = m.checkFreeSpaceForVolume(newLocalVolume, nil, volume.Size)
+	err = m.checkFreeSpaceForVolume(newLocalVolume, nil, nil,
+		volume.EffectiveSize())
 	if err != nil {
 		return err
 	}
@@ -2236,46 +2237,20 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 func (m *Manager) getVmVolumeStorageConfiguration(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, accessToken []byte) (
 	proto.GetVmVolumeStorageConfigurationResponse, error) {
-	capacityTable := make(map[string]capacityType)
 	vm, err := m.getVmAndLock(ipAddr, false)
 	if err != nil {
 		return proto.GetVmVolumeStorageConfigurationResponse{}, err
 	}
 	defer vm.mutex.RUnlock()
-	// TODO(rgooch): abstract storage backends and reduce code duplication and
-	//               add rate limiting on system calls.
-	storageInfos := make([]proto.StorageInfo, 0, len(m.volumeDirectories))
-	for storageIndex, storageDirectory := range m.volumeDirectories {
-		capacity, err := getCapacity(storageDirectory, capacityTable)
-		if err != nil {
-			return proto.GetVmVolumeStorageConfigurationResponse{}, err
-		}
-		storageInfo := proto.StorageInfo{
-			AvailableBytes: capacity.available,
-			FreeBytes:      capacity.free,
-			SizeBytes:      capacity.size,
-			UsableBytes:    capacity.available,
-		}
-		if m.objectCache != nil && int(storageIndex) == m.objectVolumeIndex {
-			stats := m.objectCache.GetStats()
-			if m.ObjectCacheBytes > stats.CachedBytes {
-				unused := m.ObjectCacheBytes - stats.CachedBytes
-				unused += unused >> 2 // In practice block usage is +30%.
-				if unused < capacity.available {
-					storageInfo.UsableBytes -= unused
-				} else {
-					storageInfo.UsableBytes = 0
-				}
-			}
-		}
-		if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
-			if storageInfo.UsableBytes > 1<<30 {
-				storageInfo.UsableBytes -= 1 << 30
-			} else {
-				storageInfo.UsableBytes = 0
-			}
-		}
-		storageInfos = append(storageInfos, storageInfo)
+	allocationTable := m.calculateStorageAllocations()
+	storageInfos, err := m.getCapacities()
+	if err != nil {
+		return proto.GetVmVolumeStorageConfigurationResponse{}, err
+	}
+	for index, storageInfo := range storageInfos {
+		storageInfo.UsableBytes = calculateUsableBytes(storageInfo,
+			allocationTable[uint(index)])
+		storageInfos[index] = storageInfo
 	}
 	volumeStorageIndices := make([]uint, 0, len(vm.VolumeLocations))
 	for _, volume := range vm.VolumeLocations {
@@ -2914,6 +2889,9 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	defer func() {
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
+	if vm.Volumes[0].Format != proto.VolumeFormatRaw {
+		return errors.New("cannot patch non-RAW volumes")
+	}
 	restart := vm.State == proto.StateRunning
 	switch vm.State {
 	case proto.StateStopped:
@@ -2981,7 +2959,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 			return err
 		}
 	} else {
-		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil,
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
 			vm.Volumes[0].Size)
 		if err != nil {
 			return err
@@ -3339,6 +3317,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	tmpRootFilename := vm.VolumeLocations[0].Filename + ".new"
 	defer os.Remove(tmpRootFilename)
 	if request.PreDelete {
+		// User has turned off the safeties. There may be messes to clean up.
 		if vm.State != proto.StateStopped {
 			maybeDrainImage(conn, request.ImageDataSize)
 			return sendError(conn,
@@ -3374,7 +3353,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		defer client.Close()
 		estimatedSize := computeSize(request.MinimumFreeBytes,
 			request.RoundupPower, img.FileSystem.EstimateUsage(0))
-		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil,
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
 			estimatedSize)
 		if err != nil {
 			return sendError(conn, err)
@@ -3403,9 +3382,11 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			newSize = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
+		// TODO(rgooch): re-evaluate why MinimumFreeBytes is being used.
 		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			request.ImageDataSize)
-		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, newSize)
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
+			newSize)
 		if err != nil {
 			maybeDrainImage(conn, request.ImageDataSize)
 			return sendError(conn, err)
@@ -3435,7 +3416,8 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		}
 		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
 			uint64(httpResponse.ContentLength))
-		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, newSize)
+		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
+			newSize)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3789,13 +3771,17 @@ func (m *Manager) snapshotVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		}
 		return err
 	}
-	capacityTable := make(map[string]capacityType)
+	allocationTable := m.calculateStorageAllocations()
+	capacities, err := m.getCapacities()
+	if err != nil {
+		return err
+	}
 	for index, volume := range vm.Volumes {
 		if index != 0 && snapshotRootOnly {
 			continue
 		}
 		err := m.checkFreeSpaceForVolume(vm.VolumeLocations[index],
-			capacityTable, volume.Size)
+			capacities, allocationTable, volume.Size)
 		if err != nil {
 			return err
 		}

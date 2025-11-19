@@ -44,6 +44,20 @@ type mountInfo struct {
 	size       uint64
 }
 
+// calculateUsableBytes will return the number of usable bytes, based on storage
+// capacity and allocation.
+func calculateUsableBytes(capacity proto.StorageInfo,
+	allocation uint64) uint64 {
+	if allocation >= capacity.SizeBytes {
+		return 0
+	}
+	usableBytes := capacity.SizeBytes - allocation
+	if capacity.UsableBytes < usableBytes {
+		usableBytes = capacity.UsableBytes
+	}
+	return usableBytes
+}
+
 // check2fs returns true if the device hosts an ext{2,3,4} file-system.
 func check2fs(device string) bool {
 	cmd := exec.Command("e2label", device)
@@ -114,11 +128,9 @@ func e2setLabel(device, label string) error {
 	return exec.Command("e2label", device, label).Run()
 }
 
-func getCapacity(dirname string, capacityTable map[string]capacityType) (
-	capacityType, error) {
-	if capacity, ok := capacityTable[dirname]; ok {
-		return capacity, nil
-	}
+// getCapacity returns the file-system capacity for a specified directory within
+// the file-system.
+func getCapacity(dirname string) (capacityType, error) {
 	var statbuf syscall.Statfs_t
 	if err := syscall.Statfs(dirname, &statbuf); err != nil {
 		return capacityType{},
@@ -129,7 +141,6 @@ func getCapacity(dirname string, capacityTable map[string]capacityType) (
 		free:      uint64(statbuf.Bfree * uint64(statbuf.Bsize)),
 		size:      uint64(statbuf.Blocks * uint64(statbuf.Bsize)),
 	}
-	capacityTable[dirname] = capacity
 	return capacity, nil
 }
 
@@ -350,65 +361,72 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	return partitionTable.Write(volume)
 }
 
-// checkFreeSpace will check if the specified backing store has sufficient
-// space. It returns true if there is space.
-func (m *Manager) checkFreeSpace(size uint64,
-	capacityTable map[string]capacityType, storageIndex uint) (bool, error) {
-	capacity, err := getCapacity(m.volumeDirectories[storageIndex],
-		capacityTable)
-	if err != nil {
-		return false, err
-	}
-	// Remove space reserved for the object cache but not yet used.
-	if m.objectCache != nil && int(storageIndex) == m.objectVolumeIndex {
-		stats := m.objectCache.GetStats()
-		if m.ObjectCacheBytes > stats.CachedBytes {
-			unused := m.ObjectCacheBytes - stats.CachedBytes
-			unused += unused >> 2 // In practice block usage is +30%.
-			if unused < capacity.available {
-				capacity.available -= unused
-			} else {
-				capacity.available = 0
+// calculateStorageAllocations returns a table of the VM volume allocations
+// (effective sizes) for each storage backend. This will grab and release the
+// Manager lock.
+func (m *Manager) calculateStorageAllocations() map[uint]uint64 {
+	// TODO(rgooch): maintain this dynamically as VMs are mutated.
+	// Collect VM infos.
+	var vmInfos []proto.LocalVmInfo
+	m.iterateOverVMs(0, nil, nil, nil, func(ipAddr string, vm *vmInfoType) {
+		vmInfos = append(vmInfos, vm.LocalVmInfo)
+	})
+	allocationTable := make(map[uint]uint64) // Key: storage index.
+	for _, vmInfo := range vmInfos {
+		for volumeIndex, lv := range vmInfo.VolumeLocations {
+			storageIndex, err := m.nameToIndex(lv.DirectoryToCleanup)
+			if err != nil {
+				m.Logger.Println(err)
+				continue
 			}
+			allocationTable[storageIndex] +=
+				vmInfo.Volumes[volumeIndex].EffectiveSize()
 		}
 	}
-	// Keep an extra 1 GiB free space for the root file-system. Be nice.
-	if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
-		if capacity.available > 1<<30 {
-			capacity.available -= 1 << 30
-		} else {
-			capacity.available = 0
-		}
-	}
-	if size < capacity.available {
-		return true, nil
-	}
-	return false, nil
+	return allocationTable
 }
 
-// checkFreeSpace will check if the backing store for the specified volume has
-// sufficient space. It returns nil if there is space. The freeSpaceTable is
-// updated if there is space.
+// checkFreeSpace will check if the specified backing store has sufficient
+// space. It returns true if there is space. The capacities and
+// allocationTable are updated if there is space.
+func (m *Manager) checkFreeSpace(size uint64,
+	capacities []proto.StorageInfo, allocationTable map[uint]uint64,
+	storageIndex uint) bool {
+	capacity := capacities[storageIndex]
+	usableBytes := calculateUsableBytes(capacity, allocationTable[storageIndex])
+	if size < usableBytes {
+		capacity.UsableBytes -= size
+		capacities[storageIndex] = capacity
+		allocationTable[storageIndex] += size
+		return true
+	}
+	return false
+}
+
+// checkFreeSpaceForVolume will check if the backing store for the specified
+// volume has sufficient space. It returns nil if there is space. The
+// capacityTable and allocationTable are updated if there is space.
 func (m *Manager) checkFreeSpaceForVolume(volume proto.LocalVolume,
-	capacityTable map[string]capacityType, size uint64) error {
+	capacities []proto.StorageInfo,
+	allocationTable map[uint]uint64, size uint64) error {
 	storageIndex, err := m.nameToIndex(volume.DirectoryToCleanup)
 	if err != nil {
 		return err
 	}
-	if capacityTable == nil {
-		capacityTable = make(map[string]capacityType)
+	if capacities == nil {
+		capacities, err = m.getCapacities()
+		if err != nil {
+			return err
+		}
 	}
-	haveFreeSpace, err := m.checkFreeSpace(size, capacityTable, storageIndex)
-	if err != nil {
-		return err
+	if allocationTable == nil {
+		allocationTable = m.calculateStorageAllocations()
 	}
+	haveFreeSpace := m.checkFreeSpace(size, capacities, allocationTable,
+		storageIndex)
 	if !haveFreeSpace {
 		return errors.New("not enough free space")
 	}
-	storageDirectory := m.volumeDirectories[storageIndex]
-	capacity := capacityTable[storageDirectory]
-	capacity.available -= size
-	capacityTable[storageDirectory] = capacity
 	return nil
 }
 
@@ -469,21 +487,18 @@ func (m *Manager) detectVolumeDirectories(mountTable *mounts.MountTable) error {
 }
 
 func (m *Manager) findFreeSpace(size uint64,
-	capacityTable map[string]capacityType, position *uint) (string, error) {
+	capacities []proto.StorageInfo, allocationTable map[uint]uint64,
+	position *uint) (
+	string, error) {
 	if *position >= uint(len(m.volumeDirectories)) {
 		*position = 0
 	}
 	startingPosition := *position
 	for {
-		haveFreeSpace, err := m.checkFreeSpace(size, capacityTable, *position)
-		if err != nil {
-			return "", err
-		}
+		haveFreeSpace := m.checkFreeSpace(size, capacities, allocationTable,
+			*position)
 		if haveFreeSpace {
 			dirname := m.volumeDirectories[*position]
-			capacity := capacityTable[dirname]
-			capacity.available -= size
-			capacityTable[dirname] = capacity
 			return dirname, nil
 		}
 		*position++
@@ -497,6 +512,63 @@ func (m *Manager) findFreeSpace(size uint64,
 	}
 }
 
+// getCapacity returns the capacity for a specified storage index and accounts
+// for the object cache and extra reserved space on the root file-system (if
+// applicable) in the UsableBytes field.
+func (m *Manager) getCapacity(storageIndex uint) (
+	proto.StorageInfo, error) {
+	rawCapacity, err := getCapacity(m.volumeDirectories[storageIndex])
+	if err != nil {
+		return proto.StorageInfo{}, err
+	}
+	capacity := proto.StorageInfo{
+		AvailableBytes: rawCapacity.available,
+		FreeBytes:      rawCapacity.free,
+		SizeBytes:      rawCapacity.size,
+		UsableBytes:    rawCapacity.available,
+	}
+	// Remove space reserved for the object cache but not yet used.
+	if m.objectCache != nil && int(storageIndex) == m.objectVolumeIndex {
+		stats := m.objectCache.GetStats()
+		if m.ObjectCacheBytes > stats.CachedBytes {
+			unused := m.ObjectCacheBytes - stats.CachedBytes
+			unused += unused >> 2 // In practice block usage is +30%.
+			if unused < capacity.UsableBytes {
+				capacity.UsableBytes -= unused
+			} else {
+				capacity.UsableBytes = 0
+			}
+		}
+	}
+	// Keep an extra 1 GiB free space for the root file-system. Be nice.
+	if m.volumeInfos[m.volumeDirectories[storageIndex]].MountPoint == "/" {
+		if capacity.UsableBytes > 1<<30 {
+			capacity.UsableBytes -= 1 << 30
+		} else {
+			capacity.UsableBytes = 0
+		}
+	}
+	return capacity, nil
+}
+
+// getCapacities returns the capacities of all storage backends.
+func (m *Manager) getCapacities() ([]proto.StorageInfo, error) {
+	// TODO(rgooch): abstract storage backends and reduce code duplication and
+	//               add rate limiting on system calls.
+	capacities := make([]proto.StorageInfo, 0, len(m.volumeDirectories))
+	for storageIndex := range m.volumeDirectories {
+		capacity, err := m.getCapacity(uint(storageIndex))
+		if err != nil {
+			return nil, err
+		}
+		capacities = append(capacities, capacity)
+	}
+	return capacities, nil
+}
+
+// getVolumeDirectories will return a list of volume directories in which VM
+// volumes may be created, one per specified volume. It measures the available
+// storage capacity and ensures the requested volume sizes will fit.
 func (m *Manager) getVolumeDirectories(rootSize uint64,
 	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
 	spreadVolumes bool, storageIndices []uint) ([]string, error) {
@@ -511,12 +583,16 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 			return nil, errors.New("secondary volumes cannot be zero sized")
 		}
 	}
-	capacityTable := make(map[string]capacityType, len(m.volumeDirectories))
+	allocationTable := m.calculateStorageAllocations()
+	capacities, err := m.getCapacities()
+	if err != nil {
+		return nil, err
+	}
 	directoriesToUse := make([]string, 0, len(sizes))
 	var position uint
 	for index, size := range sizes {
 		if index < len(storageIndices) {
-			haveFreeSpace, err := m.checkFreeSpace(size, capacityTable,
+			haveFreeSpace := m.checkFreeSpace(size, capacities, allocationTable,
 				storageIndices[index])
 			if err != nil {
 				return nil, err
@@ -529,7 +605,8 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 				m.volumeDirectories[storageIndices[index]])
 			continue
 		}
-		dirname, err := m.findFreeSpace(size, capacityTable, &position)
+		dirname, err := m.findFreeSpace(size, capacities, allocationTable,
+			&position)
 		if err != nil {
 			return nil, err
 		}
