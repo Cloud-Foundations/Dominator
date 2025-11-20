@@ -4,6 +4,16 @@ type Header struct {
 	Size uint64
 }
 
+type Peeker interface {
+	Peek(n int) ([]byte, error)
+}
+
+// PeekHeader will peek into the Peeker and decode a QCOW2 header.
+// It returns a *Header on success, else an error.
+func PeekHeader(peeker Peeker) (*Header, error) {
+	return peekHeader(peeker)
+}
+
 // ReadHeaderFromFile will read a QCOW2 header from a specified file.
 // It returns a *Header on success, else an error.
 func ReadHeaderFromFile(filename string) (*Header, error) {

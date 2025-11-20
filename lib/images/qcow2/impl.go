@@ -7,9 +7,25 @@ import (
 	"os"
 )
 
+const (
+	headerSize = 72
+)
+
 var (
 	magic = []byte("QFI\xfb")
 )
+
+func peekHeader(peeker Peeker) (*Header, error) {
+	buffer, err := peeker.Peek(headerSize)
+	if err != nil {
+		return nil, err
+	}
+	var header Header
+	if err := Unmarshal(buffer, &header); err != nil {
+		return nil, err
+	}
+	return &header, nil
+}
 
 func readHeaderFromFile(filename string) (*Header, error) {
 	file, err := os.Open(filename)
@@ -17,7 +33,7 @@ func readHeaderFromFile(filename string) (*Header, error) {
 		return nil, err
 	}
 	defer file.Close()
-	buffer := make([]byte, 72)
+	buffer := make([]byte, headerSize)
 	nRead, err := file.Read(buffer)
 	if err != nil {
 		return nil, err
@@ -33,7 +49,7 @@ func readHeaderFromFile(filename string) (*Header, error) {
 }
 
 func unmarshal(data []byte, v *Header) error {
-	if len(data) < 72 {
+	if len(data) < headerSize {
 		return errors.New("header too short")
 	}
 	if !bytes.Equal(data[:4], magic) {
