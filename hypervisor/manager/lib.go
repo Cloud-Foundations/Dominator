@@ -3,6 +3,8 @@ package manager
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"unicode"
 
@@ -12,6 +14,17 @@ import (
 type bufferedFile struct {
 	*os.File
 	*bufio.Reader
+}
+
+type drainingReader struct {
+	bytesRead uint64
+	reader    peekingReader
+	size      uint64
+}
+
+type peekingReader interface {
+	io.Reader
+	Peek(n int) ([]byte, error)
 }
 
 // multiRename will perform multiple renames. If restoreOnFailure is true it
@@ -55,6 +68,31 @@ func restore(oldName, newName string, retain bool) error {
 
 func (r *bufferedFile) Read(p []byte) (int, error) {
 	return r.Reader.Read(p)
+}
+
+func newDrainingReader(reader peekingReader, size uint64) *drainingReader {
+	return &drainingReader{
+		reader: reader,
+		size:   size,
+	}
+}
+
+func (dr *drainingReader) Drain() error {
+	if dr.bytesRead >= dr.size {
+		return nil
+	}
+	_, err := io.CopyN(ioutil.Discard, dr.reader, int64(dr.size-dr.bytesRead))
+	return err
+}
+
+func (dr *drainingReader) Peek(n int) ([]byte, error) {
+	return dr.reader.Peek(n)
+}
+
+func (dr *drainingReader) Read(p []byte) (int, error) {
+	nRead, err := dr.reader.Read(p)
+	dr.bytesRead += uint64(nRead)
+	return nRead, err
 }
 
 func validateHostname(hostname string) error {

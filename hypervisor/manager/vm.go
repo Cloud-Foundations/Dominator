@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
@@ -32,6 +33,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/images/qcow2"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -214,32 +216,6 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func maybeDrainAll(conn *srpc.Conn, request proto.CreateVmRequest) error {
-	if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
-		return err
-	}
-	if err := maybeDrainUserData(conn, request); err != nil {
-		return err
-	}
-	return nil
-}
-
-func maybeDrainImage(imageReader io.Reader, imageDataSize uint64) error {
-	if imageDataSize > 0 { // Drain data.
-		_, err := io.CopyN(ioutil.Discard, imageReader, int64(imageDataSize))
-		return err
-	}
-	return nil
-}
-
-func maybeDrainUserData(conn *srpc.Conn, request proto.CreateVmRequest) error {
-	if request.UserDataSize > 0 { // Drain data.
-		_, err := io.CopyN(ioutil.Discard, conn, int64(request.UserDataSize))
-		return err
 	}
 	return nil
 }
@@ -1352,8 +1328,15 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+	streamedDataSize := request.ImageDataSize + request.UserDataSize
+	if request.SecondaryVolumesData {
+		for _, volume := range request.SecondaryVolumes {
+			streamedDataSize += volume.Size
+		}
+	}
+	drainingReader := newDrainingReader(conn, streamedDataSize)
 	if m.disabled {
-		if err := maybeDrainAll(conn, request); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, errors.New("Hypervisor is disabled"))
@@ -1361,7 +1344,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	ownerUsers := make([]string, 1, len(request.OwnerUsers)+1)
 	ownerUsers[0] = conn.Username()
 	if ownerUsers[0] == "" {
-		if err := maybeDrainAll(conn, request); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, errors.New("no authentication data"))
@@ -1375,7 +1358,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		tlsCert, identityName, err = validateIdentityKeyPair(
 			request.IdentityCertificate, request.IdentityKey, ownerUsers[0])
 		if err != nil {
-			if err := maybeDrainAll(conn, request); err != nil {
+			if err := drainingReader.Drain(); err != nil {
 				return err
 			}
 			return sendError(conn, err)
@@ -1384,7 +1367,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}
 	vm, err := m.allocateVm(request, conn.GetAuthInformation())
 	if err != nil {
-		if err := maybeDrainAll(conn, request); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -1400,7 +1383,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
 	if err := os.Mkdir(vm.dirname, fsutil.DirPerms); err != nil {
-		if err := maybeDrainAll(conn, request); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -1409,7 +1392,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		filepath.Join(vm.dirname, IdentityRsaX509CertFile),
 		filepath.Join(vm.dirname, IdentityRsaX509KeyFile))
 	if err != nil {
-		if err := maybeDrainAll(conn, request); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -1419,7 +1402,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		rootVolumeType = request.Volumes[0].Type
 	}
 	if request.ImageName != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		if err := sendUpdate(conn, "getting image"); err != nil {
@@ -1463,13 +1446,16 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			vm.Volumes = []proto.Volume{{Size: uint64(fi.Size())}}
 		}
 	} else if request.ImageDataSize > 0 {
-		err := vm.copyRootVolume(request, conn, request.ImageDataSize,
+		err := vm.copyRootVolume(request, drainingReader, request.ImageDataSize,
 			rootVolumeType)
 		if err != nil {
-			return err
+			if err := drainingReader.Drain(); err != nil {
+				return err
+			}
+			return sendError(conn, err)
 		}
 	} else if request.ImageURL != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		httpResponse, err := http.Get(request.ImageURL)
@@ -1484,7 +1470,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
-		err = vm.copyRootVolume(request, httpResponse.Body,
+		err = vm.copyRootVolume(request, bufio.NewReader(httpResponse.Body),
 			uint64(httpResponse.ContentLength), rootVolumeType)
 		if err != nil {
 			return sendError(conn, err)
@@ -1616,9 +1602,10 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		return err
 	}
 	m.Logger.Debugf(1, "DebugVmImage(%s) starting\n", request.IpAddress)
+	drainingReader := newDrainingReader(conn, request.ImageDataSize)
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true, authInfo, nil)
 	if err != nil {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -1635,11 +1622,12 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 	}
 	if err != nil {
 		vm.allowMutationsAndUnlock(true)
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
 	}
+	// TODO(rgooch): check if there is space for the new volume.
 	rootFilename := vm.VolumeLocations[0].Filename + ".debug"
 	vm.mutex.Unlock()
 	haveLock := false
@@ -1651,8 +1639,8 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	if request.ImageName != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
-			return sendError(conn, err)
+		if err := drainingReader.Drain(); err != nil {
+			return err
 		}
 		if err := sendUpdate(conn, "getting image"); err != nil {
 			return sendError(conn, err)
@@ -1680,13 +1668,17 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 	} else if request.ImageDataSize > 0 {
-		err := copyData(rootFilename, conn, request.ImageDataSize, vm.logger)
+		err := copyData(rootFilename, drainingReader, request.ImageDataSize,
+			vm.logger)
+		if err := drainingReader.Drain(); err != nil {
+			return err
+		}
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else if request.ImageURL != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
-			return sendError(conn, err)
+		if err := drainingReader.Drain(); err != nil {
+			return err
 		}
 		httpResponse, err := http.Get(request.ImageURL)
 		if err != nil {
@@ -3273,9 +3265,10 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
+	drainingReader := newDrainingReader(conn, request.ImageDataSize)
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true, authInfo, nil)
 	if err != nil {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -3292,7 +3285,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	}
 	if err != nil {
 		vm.allowMutationsAndUnlock(true)
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		return sendError(conn, err)
@@ -3304,7 +3297,9 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
 	if request.VolumeFormat != vm.Volumes[0].Format && !request.SkipBackup {
-		maybeDrainImage(conn, request.ImageDataSize)
+		if err := drainingReader.Drain(); err != nil {
+			return err
+		}
 		return sendError(conn,
 			errors.New("cannot change volume format unless you skip backup"))
 	}
@@ -3319,7 +3314,9 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	if request.PreDelete {
 		// User has turned off the safeties. There may be messes to clean up.
 		if vm.State != proto.StateStopped {
-			maybeDrainImage(conn, request.ImageDataSize)
+			if err := drainingReader.Drain(); err != nil {
+				return err
+			}
 			return sendError(conn,
 				errors.New("VM must be stopped to pre-delete"))
 		}
@@ -3339,7 +3336,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	}
 	var newSize uint64
 	if request.ImageName != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		if err := sendUpdate(conn, "getting image"); err != nil {
@@ -3388,10 +3385,13 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
 			newSize)
 		if err != nil {
-			maybeDrainImage(conn, request.ImageDataSize)
+			if err := drainingReader.Drain(); err != nil {
+				return err
+			}
 			return sendError(conn, err)
 		}
-		err := copyData(tmpRootFilename, conn, request.ImageDataSize, vm.logger)
+		err := copyData(tmpRootFilename, drainingReader, request.ImageDataSize,
+			vm.logger)
 		if err != nil {
 			return err
 		}
@@ -3399,7 +3399,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 	} else if request.ImageURL != "" {
-		if err := maybeDrainImage(conn, request.ImageDataSize); err != nil {
+		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
 		httpResponse, err := http.Get(request.ImageURL)
@@ -4086,9 +4086,20 @@ func (vm *vmInfoType) cleanup() {
 }
 
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
-	reader io.Reader, dataSize uint64, volumeType proto.VolumeType) error {
-	err := vm.setupVolumes(dataSize, volumeType, request.SecondaryVolumes,
-		request.SpreadVolumes, nil)
+	reader peekingReader, dataSize uint64, volumeType proto.VolumeType) error {
+	volume := proto.Volume{Size: dataSize}
+	if len(request.Volumes) > 0 {
+		volume.Format = request.Volumes[0].Format
+	}
+	if volume.Format == proto.VolumeFormatQCOW2 {
+		qcow2Header, err := qcow2.PeekHeader(reader)
+		if err != nil {
+			return err
+		}
+		volume.VirtualSize = qcow2Header.Size
+	}
+	err := vm.setupVolumes(volume.EffectiveSize(), volumeType,
+		request.SecondaryVolumes, request.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -4096,11 +4107,7 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	var format proto.VolumeFormat
-	if len(request.Volumes) > 0 {
-		format = request.Volumes[0].Format
-	}
-	vm.Volumes = []proto.Volume{{Format: format, Size: dataSize}}
+	vm.Volumes = []proto.Volume{volume}
 	return nil
 }
 
