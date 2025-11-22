@@ -84,7 +84,7 @@ func findHypervisorsWithCapacity(inputHypervisors []fm_proto.Hypervisor,
 		}
 		var totalVolumeSize uint64
 		for _, volume := range vmInfo.Volumes {
-			totalVolumeSize += volume.Size
+			totalVolumeSize += volume.EffectiveSize()
 		}
 		if totalVolumeSize+h.AllocatedVolumeBytes > h.TotalVolumeBytes {
 			continue
