@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"os"
 )
 
@@ -27,14 +28,9 @@ func peekHeader(peeker Peeker) (*Header, error) {
 	return &header, nil
 }
 
-func readHeaderFromFile(filename string) (*Header, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
+func readHeader(reader io.Reader) (*Header, error) {
 	buffer := make([]byte, headerSize)
-	nRead, err := file.Read(buffer)
+	nRead, err := reader.Read(buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +42,15 @@ func readHeaderFromFile(filename string) (*Header, error) {
 		return nil, err
 	}
 	return &header, nil
+}
+
+func readHeaderFromFile(filename string) (*Header, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return ReadHeader(file)
 }
 
 func unmarshal(data []byte, v *Header) error {

@@ -1,5 +1,9 @@
 package qcow2
 
+import (
+	"io"
+)
+
 type Header struct {
 	Size uint64
 }
@@ -12,6 +16,12 @@ type Peeker interface {
 // It returns a *Header on success, else an error.
 func PeekHeader(peeker Peeker) (*Header, error) {
 	return peekHeader(peeker)
+}
+
+// ReadHeader will read a QCOW2 header from an io.Reader.
+// It returns a *Header on success, else an error.
+func ReadHeader(reader io.Reader) (*Header, error) {
+	return readHeader(reader)
 }
 
 // ReadHeaderFromFile will read a QCOW2 header from a specified file.
