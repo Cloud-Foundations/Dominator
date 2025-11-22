@@ -3334,7 +3334,8 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			}
 		}
 	}
-	var newSize uint64
+	newVolume := vm.Volumes[0]
+	newVolume.Format = request.VolumeFormat
 	if request.ImageName != "" {
 		if err := drainingReader.Drain(); err != nil {
 			return err
@@ -3376,27 +3377,34 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if fi, err := os.Stat(tmpRootFilename); err != nil {
 			return sendError(conn, err)
 		} else {
-			newSize = uint64(fi.Size())
+			newVolume.Size = uint64(fi.Size())
 		}
 	} else if request.ImageDataSize > 0 {
-		// TODO(rgooch): re-evaluate why MinimumFreeBytes is being used.
-		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
-			request.ImageDataSize)
+		newVolume.Size = request.ImageDataSize
+		if newVolume.Format == proto.VolumeFormatQCOW2 {
+			qcow2Header, err := qcow2.PeekHeader(drainingReader)
+			if err != nil {
+				if err := drainingReader.Drain(); err != nil {
+					return err
+				}
+				return sendError(conn, err)
+			}
+			newVolume.VirtualSize = qcow2Header.Size
+		} else {
+			newVolume.VirtualSize = 0
+		}
 		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
-			newSize)
+			newVolume.EffectiveSize())
 		if err != nil {
 			if err := drainingReader.Drain(); err != nil {
 				return err
 			}
 			return sendError(conn, err)
 		}
-		err := copyData(tmpRootFilename, drainingReader, request.ImageDataSize,
+		err := copyData(tmpRootFilename, drainingReader, newVolume.Size,
 			vm.logger)
 		if err != nil {
 			return err
-		}
-		if err := setVolumeSize(tmpRootFilename, newSize); err != nil {
-			return sendError(conn, err)
 		}
 	} else if request.ImageURL != "" {
 		if err := drainingReader.Drain(); err != nil {
@@ -3414,19 +3422,27 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return sendError(conn,
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
-		newSize = computeSize(request.MinimumFreeBytes, request.RoundupPower,
-			uint64(httpResponse.ContentLength))
+		reader := bufio.NewReader(httpResponse.Body)
+		newVolume.Size = uint64(httpResponse.ContentLength)
+		if newVolume.Format == proto.VolumeFormatQCOW2 {
+			qcow2Header, err := qcow2.PeekHeader(reader)
+			if err != nil {
+				if err := drainingReader.Drain(); err != nil {
+					return err
+				}
+				return sendError(conn, err)
+			}
+			newVolume.VirtualSize = qcow2Header.Size
+		} else {
+			newVolume.VirtualSize = 0
+		}
 		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
-			newSize)
+			newVolume.EffectiveSize())
 		if err != nil {
 			return sendError(conn, err)
 		}
-		err = copyData(tmpRootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength), vm.logger)
+		err = copyData(tmpRootFilename, reader, newVolume.Size, vm.logger)
 		if err != nil {
-			return sendError(conn, err)
-		}
-		if err := setVolumeSize(tmpRootFilename, newSize); err != nil {
 			return sendError(conn, err)
 		}
 	} else {
@@ -3478,7 +3494,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 	if request.ImageName != "" {
 		vm.ImageName = request.ImageName
 	}
-	vm.Volumes[0].Size = newSize
+	vm.Volumes[0] = newVolume
 	vm.writeAndSendInfo()
 	if restart && vm.State == proto.StateStopped {
 		vm.setState(proto.StateStarting)
