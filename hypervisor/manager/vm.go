@@ -4557,18 +4557,36 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 			return nil, nil, err
 		}
 		bridges = append(bridges, bridge)
+		netdevOptions := []string{
+			"tap",
+			fmt.Sprintf("id=net%d", index),
+			fmt.Sprintf("fd=%d", index+3),
+		}
+		if vlanOption != "" {
+			netdevOptions = append(netdevOptions, vlanOption)
+		}
+		deviceOptions := []string{
+			deviceDriver,
+			fmt.Sprintf("netdev=net%d", index),
+			fmt.Sprintf("mac=%s", address.MacAddress),
+		}
 		// Shitty old systems have ancient versions of QEMU which don't support
 		// the host_mtu option. So, lower the pain by only using the option if
 		// MTU!=1500.
-		var hostMtuOption string
 		if bridgeIf.MTU != 1500 {
-			hostMtuOption = fmt.Sprintf(",host_mtu=%d", bridgeIf.MTU)
+			deviceOptions = append(deviceOptions,
+				fmt.Sprintf("host_mtu=%d", bridgeIf.MTU))
+		}
+		if !vm.DisableVirtIO {
+			netdevOptions = append(netdevOptions, "vhost=on")
+			deviceOptions = append(deviceOptions,
+				"packed=on",
+				"disable-legacy=on",
+			)
 		}
 		options = append(options,
-			"-netdev", fmt.Sprintf("tap,id=net%d,fd=%d%s",
-				index, index+3, vlanOption),
-			"-device", fmt.Sprintf("%s%s,netdev=net%d,mac=%s",
-				deviceDriver, hostMtuOption, index, address.MacAddress))
+			"-netdev", strings.Join(netdevOptions, ","),
+			"-device", strings.Join(deviceOptions, ","))
 	}
 	return bridges, options, nil
 }

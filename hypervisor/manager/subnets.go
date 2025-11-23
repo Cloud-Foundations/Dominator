@@ -78,7 +78,7 @@ func (m *Manager) getBridgeForSubnet(subnet proto.Subnet) (
 	} else if bridge, ok := m.VlanIdToBridge[subnet.VlanId]; ok {
 		return bridge, "", nil
 	} else if bridge, ok = m.VlanIdToBridge[0]; ok {
-		return bridge, fmt.Sprintf(",vlan=%d", subnet.VlanId), nil
+		return bridge, fmt.Sprintf("vlan=%d", subnet.VlanId), nil
 	} else {
 		return "", "", fmt.Errorf("no usable bridge")
 	}
