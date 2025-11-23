@@ -564,6 +564,14 @@ func (vm *VmInfo) TotalStorage() uint64 {
 	return storage
 }
 
+func (volume *Volume) EffectiveSize() uint64 {
+	size := volume.Size
+	if volume.VirtualSize > size {
+		size = volume.VirtualSize
+	}
+	return size
+}
+
 func (left *Volume) Equal(right *Volume) bool {
 	if left.Format != right.Format {
 		return false
@@ -587,11 +595,14 @@ func (left *Volume) Equal(right *Volume) bool {
 	if left.Type != right.Type {
 		return false
 	}
+	if left.VirtualSize != right.VirtualSize {
+		return false
+	}
 	return true
 }
 
 func (volume *Volume) TotalStorage() uint64 {
-	storage := volume.Size
+	storage := volume.EffectiveSize()
 	for _, size := range volume.Snapshots {
 		storage += size
 	}

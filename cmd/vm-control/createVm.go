@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/images/qcow2"
 	"github.com/Cloud-Foundations/Dominator/lib/images/virtualbox"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -42,8 +44,11 @@ func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
 }
 
+// approximateVolumesForCreateRequest will make a modified copy of a VmInfo,
+// filling in approximate volume sizes. This may be used for placement
+// decisions.
 func approximateVolumesForCreateRequest(
-	vmInfo hyper_proto.VmInfo) hyper_proto.VmInfo {
+	vmInfo hyper_proto.VmInfo) (*hyper_proto.VmInfo, error) {
 	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
 	vmInfo.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
 	for _, size := range secondaryVolumeSizes {
@@ -51,7 +56,37 @@ func approximateVolumesForCreateRequest(
 			Size: uint64(size),
 		})
 	}
-	return vmInfo
+	if *imageName != "" {
+		return &vmInfo, nil
+	}
+	if *imageFile != "" && volumeFormat == hyper_proto.VolumeFormatQCOW2 {
+		qcow2Header, err := qcow2.ReadHeaderFromFile(*imageFile)
+		if err != nil {
+			return nil, err
+		}
+		vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
+		return &vmInfo, nil
+	}
+	if *imageURL != "" && volumeFormat == hyper_proto.VolumeFormatQCOW2 {
+		httpResponse, err := http.Get(*imageURL)
+		if err != nil {
+			return nil, err
+		}
+		defer httpResponse.Body.Close()
+		if httpResponse.StatusCode != http.StatusOK {
+			return nil, errors.New(httpResponse.Status)
+		}
+		if httpResponse.ContentLength < 0 {
+			return nil, errors.New("ContentLength from: " + *imageURL)
+		}
+		qcow2Header, err := qcow2.ReadHeader(httpResponse.Body)
+		if err != nil {
+			return nil, err
+		}
+		vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
+		return &vmInfo, nil
+	}
+	return &vmInfo, nil
 }
 
 func createVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -177,8 +212,11 @@ func createVm(logger log.DebugLogger) error {
 		request.VmInfo.VirtualCPUs < minimumCPUs {
 		return fmt.Errorf("vCPUs must be at least %d", minimumCPUs)
 	}
-	tmpVmInfo := approximateVolumesForCreateRequest(request.VmInfo)
-	if hypervisor, err := getHypervisorAddress(tmpVmInfo, logger); err != nil {
+	tmpVmInfo, err := approximateVolumesForCreateRequest(request.VmInfo)
+	if err != nil {
+		return err
+	}
+	if hypervisor, err := getHypervisorAddress(*tmpVmInfo, logger); err != nil {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)

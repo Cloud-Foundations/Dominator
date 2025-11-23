@@ -33,7 +33,7 @@ func getVmInfoMemoryInMiB(vmInfo proto.VmInfo) uint64 {
 	var memoryTotal uint64
 	for _, volume := range vmInfo.Volumes {
 		if volume.Type == proto.VolumeTypeMemory {
-			memoryTotal += volume.Size
+			memoryTotal += volume.EffectiveSize()
 		}
 	}
 	memoryInMiB := memoryTotal >> 20

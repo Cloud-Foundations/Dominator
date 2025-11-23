@@ -84,6 +84,7 @@ func makeVmInfo(t *testing.T, nonZeroFill bool, invertIndex int,
 						"foo": uint64(subBase) + 5,
 					},
 					VolumeType(base) + 6,
+					uint64(base) + 7,
 				}}
 				fieldValue.Set(reflect.ValueOf(volumes))
 			default:
