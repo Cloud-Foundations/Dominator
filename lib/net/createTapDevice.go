@@ -1,12 +1,15 @@
-// +build !linux
+//go:build !linux
 
 package net
 
 import (
 	"errors"
-	"os"
 )
 
-func createTapDevice() (*os.File, string, error) {
-	return nil, "", errors.New("tap devices not implemented on this OS")
+func createTapDevice(params TapDeviceParams) (*TapDevice, error) {
+	return nil, errors.New("tap devices not implemented on this OS")
+}
+
+func (td *TapDevice) close() error {
+	return errors.New("tap devices not implemented on this OS")
 }

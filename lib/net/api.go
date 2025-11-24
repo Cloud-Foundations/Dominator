@@ -29,6 +29,15 @@ type Dialer interface {
 	Dial(network, address string) (net.Conn, error)
 }
 
+type TapDevice struct {
+	Files []*os.File // One file per queue.
+	Name  string
+}
+
+type TapDeviceParams struct {
+	NumQueues uint // Default: 1. Set to 2 or greater to enable multi-queue.
+}
+
 type TCPConn interface {
 	net.Conn
 	SetKeepAlive(keepalive bool) error
@@ -49,7 +58,11 @@ func BindAndDial(network, localAddr, remoteAddr string, timeout time.Duration) (
 // success, else an error is returned. The device will be destroyed when the
 // file is closed.
 func CreateTapDevice() (*os.File, string, error) {
-	return createTapDevice()
+	if tapDevice, err := createTapDevice(TapDeviceParams{}); err != nil {
+		return nil, "", err
+	} else {
+		return tapDevice.Files[0], tapDevice.Name, nil
+	}
 }
 
 // GetBridgeVlanId will get the VLAN Id associated with the uplink EtherNet
@@ -150,4 +163,17 @@ func NewMeasuringDialer(dialer Dialer) *MeasuringDialer {
 // CumulativeDialTime returns the cumulative time spent blocking on Dial.
 func (d *MeasuringDialer) CumulativeDialTime() time.Duration {
 	return d.cumulativeDialTime
+}
+
+// CreateTapDeviceWithParams will create a "tap" network device with a randomly
+// chosen interface name. A *TapDevice is returned on success, else an error is
+// returned.
+// The device will be destroyed when all the returned queue files are closed.
+func CreateTapDeviceWithParams(params TapDeviceParams) (*TapDevice, error) {
+	return createTapDevice(params)
+}
+
+// Close will close all queue files for the TapDevice.
+func (td *TapDevice) Close() error {
+	return td.close()
 }
