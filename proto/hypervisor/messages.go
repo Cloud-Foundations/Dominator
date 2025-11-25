@@ -148,6 +148,15 @@ type ChangeVmMachineTypeResponse struct {
 	Error string
 }
 
+type ChangeVmNumNetworkQueuesRequest struct {
+	IpAddress             net.IP
+	NumQueuesPerInterface []uint
+}
+
+type ChangeVmNumNetworkQueuesResponse struct {
+	Error string
+}
+
 type ChangeVmOwnerGroupsRequest struct {
 	IpAddress   net.IP
 	OwnerGroups []string
@@ -652,6 +661,10 @@ type NetbootMachineResponse struct {
 	Error string
 }
 
+type NetworkEntry struct {
+	NumQueues uint `json:",omitempty"`
+}
+
 type PatchVmImageRequest struct {
 	ImageName    string
 	ImageTimeout time.Duration
@@ -912,10 +925,11 @@ type VmInfo struct {
 	MachineType         MachineType  `json:",omitempty"`
 	MemoryInMiB         uint64
 	MilliCPUs           uint
-	OwnerGroups         []string `json:",omitempty"`
-	OwnerUsers          []string `json:",omitempty"`
-	RootFileSystemLabel string   `json:",omitempty"`
-	SpreadVolumes       bool     `json:",omitempty"`
+	NetworkEntries      []NetworkEntry `json:",omitempty"`
+	OwnerGroups         []string       `json:",omitempty"`
+	OwnerUsers          []string       `json:",omitempty"`
+	RootFileSystemLabel string         `json:",omitempty"`
+	SpreadVolumes       bool           `json:",omitempty"`
 	State               State
 	SecondaryAddresses  []Address      `json:",omitempty"`
 	SecondarySubnetIDs  []string       `json:",omitempty"`

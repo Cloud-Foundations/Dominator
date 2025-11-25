@@ -63,6 +63,11 @@ func makeVmInfo(t *testing.T, nonZeroFill bool, invertIndex int,
 				reflect.ValueOf("value"))
 		case reflect.Slice:
 			switch fieldName {
+			case "NetworkEntries":
+				networkEntries := []NetworkEntry{{
+					1,
+				}}
+				fieldValue.Set(reflect.ValueOf(networkEntries))
 			case "OwnerGroups", "OwnerUsers", "SecondarySubnetIDs":
 				sliceValue := reflect.MakeSlice(stringType, 2, 2)
 				fieldValue.Set(sliceValue)
