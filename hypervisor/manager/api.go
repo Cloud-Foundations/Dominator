@@ -191,6 +191,11 @@ func (m *Manager) ChangeVmMachineType(ipAddr net.IP,
 	return m.changeVmMachineType(ipAddr, authInfo, machineType)
 }
 
+func (m *Manager) ChangeVmNumNetworkQueues(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, numQueuesPerInterface []uint) error {
+	return m.changeVmNumNetworkQueues(ipAddr, authInfo, numQueuesPerInterface)
+}
+
 func (m *Manager) ChangeVmOwnerGroups(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, ownerGroups []string) error {
 	return m.changeVmOwnerGroups(ipAddr, authInfo, ownerGroups)
