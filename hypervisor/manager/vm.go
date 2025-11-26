@@ -490,7 +490,6 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				MachineType:        req.MachineType,
 				MemoryInMiB:        req.MemoryInMiB,
 				MilliCPUs:          req.MilliCPUs,
-				NetworkEntries:     req.NetworkEntries[:len(secondaryAddresses)+1],
 				OwnerGroups:        req.OwnerGroups,
 				SpreadVolumes:      req.SpreadVolumes,
 				SecondaryAddresses: secondaryAddresses,
@@ -508,6 +507,12 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		ipAddress:        ipAddress,
 		logger:           prefixlogger.New(ipAddress+": ", m.Logger),
 		metadataChannels: make(map[chan<- string]struct{}),
+	}
+	if numEntries := len(req.NetworkEntries); numEntries > 0 {
+		if numEntries > len(secondaryAddresses)+1 {
+			numEntries = len(secondaryAddresses) + 1
+		}
+		vm.NetworkEntries = req.NetworkEntries[:numEntries]
 	}
 	m.vms[ipAddress] = vm
 	addressesToFree = nil
