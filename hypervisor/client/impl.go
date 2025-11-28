@@ -123,6 +123,21 @@ func changeVmMachineType(client srpc.ClientI, ipAddress net.IP,
 	return errors.New(reply.Error)
 }
 
+func changeVmNumNetworkQueues(client srpc.ClientI, ipAddress net.IP,
+	numQueuesPerInterface []uint) error {
+	request := proto.ChangeVmNumNetworkQueuesRequest{
+		IpAddress:             ipAddress,
+		NumQueuesPerInterface: numQueuesPerInterface,
+	}
+	var reply proto.ChangeVmNumNetworkQueuesResponse
+	err := client.RequestReply("Hypervisor.ChangeVmNumNetworkQueues", request,
+		&reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func changeVmOwnerGroups(client srpc.ClientI, ipAddress net.IP,
 	ownerGroups []string) error {
 	request := proto.ChangeVmOwnerGroupsRequest{ipAddress, ownerGroups}
