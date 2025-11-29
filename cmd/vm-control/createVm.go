@@ -225,6 +225,13 @@ func createVm(logger log.DebugLogger) error {
 }
 
 func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
+	var networkEntries []hyper_proto.NetworkEntry
+	if len(numNetworkQueues) > 0 {
+		for _, numQueues := range numNetworkQueues {
+			networkEntries = append(networkEntries,
+				hyper_proto.NetworkEntry{NumQueues: numQueues})
+		}
+	}
 	var volumes []hyper_proto.Volume
 	var volumeInterface hyper_proto.VolumeInterface
 	if len(volumeInterfaces) > 0 {
@@ -256,6 +263,7 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 		MachineType:        machineType,
 		MemoryInMiB:        uint64(memory >> 20),
 		MilliCPUs:          *milliCPUs,
+		NetworkEntries:     networkEntries,
 		OwnerGroups:        ownerGroups,
 		OwnerUsers:         ownerUsers,
 		Tags:               vmTags,

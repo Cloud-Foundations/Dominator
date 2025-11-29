@@ -38,6 +38,8 @@ Some of the sub-commands available are:
 - **change-vm-destroy-protection**: enable/disable destroy protect for a VM
 - **change-vm-machine-type**: change the machine type for a VM
 - **change-vm-memory**: change the memory for a VM
+- **change-vm-num-network-queues**: change the number of queues for each network
+                                    interface
 - **change-vm-owner-groups**: change the owner groups for a VM
 - **change-vm-owner-users**: change the extra owner users for a VM
 - **change-vm-subnet**: change the subnet ID for a VM. The primary IP address
