@@ -120,33 +120,35 @@ func copyData(filename string, reader io.Reader, length uint64,
 	return err
 }
 
-func createTapDevice(bridge string) (*os.File, string, error) {
+func createTapDeviceOnBridge(bridge string, numQueues uint) (
+	*libnet.TapDevice, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	tapFile, tapName, err := libnet.CreateTapDevice()
+	tapDevice, err := libnet.CreateTapDeviceWithParams(
+		libnet.TapDeviceParams{NumQueues: numQueues})
 	if err != nil {
-		return nil, "", fmt.Errorf("error creating tap device: %s", err)
+		return nil, fmt.Errorf("error creating tap device: %s", err)
 	}
 	doAutoClose := true
 	defer func() {
 		if doAutoClose {
-			tapFile.Close()
+			tapDevice.Close()
 		}
 	}()
-	cmd := exec.Command("ip", "link", "set", tapName,
+	cmd := exec.Command("ip", "link", "set", tapDevice.Name,
 		"mtu", strconv.Itoa(bridgeIf.MTU),
 		"up")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, "", fmt.Errorf("error upping: %s: %s", err, output)
+		return nil, fmt.Errorf("error upping: %s: %s", err, output)
 	}
-	cmd = exec.Command("ip", "link", "set", tapName, "master", bridge)
+	cmd = exec.Command("ip", "link", "set", tapDevice.Name, "master", bridge)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, "", fmt.Errorf("error attaching: %s: %s", err, output)
+		return nil, fmt.Errorf("error attaching: %s: %s", err, output)
 	}
 	doAutoClose = false
-	return tapFile, tapName, nil
+	return tapDevice, nil
 }
 
 func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
@@ -506,6 +508,12 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		logger:           prefixlogger.New(ipAddress+": ", m.Logger),
 		metadataChannels: make(map[chan<- string]struct{}),
 	}
+	if numEntries := len(req.NetworkEntries); numEntries > 0 {
+		if numEntries > len(secondaryAddresses)+1 {
+			numEntries = len(secondaryAddresses) + 1
+		}
+		vm.NetworkEntries = req.NetworkEntries[:numEntries]
+	}
 	m.vms[ipAddress] = vm
 	addressesToFree = nil
 	return vm, nil
@@ -705,6 +713,32 @@ func (m *Manager) changeVmMemory(vm *vmInfoType,
 		}
 	}
 	return changed, nil
+}
+
+func (m *Manager) changeVmNumNetworkQueues(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, numQueuesPerInterface []uint) error {
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	if vm.State != proto.StateStopped {
+		return errors.New("VM is not stopped")
+	}
+	for index := 0; index <= len(vm.SecondaryAddresses); index++ {
+		var numQueues uint
+		if index < len(numQueuesPerInterface) {
+			numQueues = numQueuesPerInterface[index]
+		}
+		if index < len(vm.NetworkEntries) {
+			vm.NetworkEntries[index].NumQueues = numQueues
+		} else {
+			vm.NetworkEntries = append(vm.NetworkEntries,
+				proto.NetworkEntry{NumQueues: numQueues})
+		}
+	}
+	vm.writeAndSendInfo()
+	return nil
 }
 
 func (m *Manager) changeVmOwnerGroups(ipAddr net.IP,
@@ -4542,6 +4576,7 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 	if vm.DisableVirtIO {
 		deviceDriver = "e1000"
 	}
+	fdIndex := 3
 	for index, address := range addresses {
 		subnet, ok := vm.manager.subnets[subnetIDs[index]]
 		if !ok {
@@ -4557,18 +4592,55 @@ func (vm *vmInfoType) getBridgesAndOptions(haveManagerLock bool) (
 			return nil, nil, err
 		}
 		bridges = append(bridges, bridge)
+		netdevOptions := []string{
+			"tap",
+			fmt.Sprintf("id=net%d", index),
+		}
+		if vlanOption != "" {
+			netdevOptions = append(netdevOptions, vlanOption)
+		}
+		deviceOptions := []string{
+			deviceDriver,
+			fmt.Sprintf("netdev=net%d", index),
+			fmt.Sprintf("mac=%s", address.MacAddress),
+		}
 		// Shitty old systems have ancient versions of QEMU which don't support
 		// the host_mtu option. So, lower the pain by only using the option if
 		// MTU!=1500.
-		var hostMtuOption string
 		if bridgeIf.MTU != 1500 {
-			hostMtuOption = fmt.Sprintf(",host_mtu=%d", bridgeIf.MTU)
+			deviceOptions = append(deviceOptions,
+				fmt.Sprintf("host_mtu=%d", bridgeIf.MTU))
+		}
+		if !vm.DisableVirtIO {
+			netdevOptions = append(netdevOptions, "vhost=on")
+			deviceOptions = append(deviceOptions,
+				"packed=on",
+				"disable-legacy=on",
+			)
+		}
+		var numQueues uint
+		if index < len(vm.NetworkEntries) {
+			numQueues = vm.NetworkEntries[index].NumQueues
+		}
+		if numQueues > 1 {
+			var fdList []string
+			for range numQueues {
+				fdList = append(fdList, fmt.Sprintf("%d", fdIndex))
+				fdIndex++
+			}
+			netdevOptions = append(netdevOptions,
+				fmt.Sprintf("fds=%s", strings.Join(fdList, ":")))
+			deviceOptions = append(deviceOptions,
+				"mq=on",
+				fmt.Sprintf("vectors=%d", numQueues*2+2),
+			)
+		} else {
+			netdevOptions = append(netdevOptions, fmt.Sprintf("fd=%d", fdIndex))
+			fdIndex++
 		}
 		options = append(options,
-			"-netdev", fmt.Sprintf("tap,id=net%d,fd=%d%s",
-				index, index+3, vlanOption),
-			"-device", fmt.Sprintf("%s%s,netdev=net%d,mac=%s",
-				deviceDriver, hostMtuOption, index, address.MacAddress))
+			"-netdev", strings.Join(netdevOptions, ","),
+			"-device", strings.Join(deviceOptions, ","))
 	}
 	return bridges, options, nil
 }
@@ -4625,16 +4697,28 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 	if err != nil {
 		return err
 	}
+	// Close all tap devices: either we have a failure, or QEMU will have picked
+	// them up and we no longer need to keep them open.
+	var tapDevicesToClose []*libnet.TapDevice
+	defer func() {
+		for _, tapDevice := range tapDevicesToClose {
+			tapDevice.Close()
+		}
+	}()
 	var tapFiles []*os.File
 	var tapNames []string
-	for _, bridge := range bridges {
-		tapFile, tapName, err := createTapDevice(bridge)
+	for index, bridge := range bridges {
+		var numQueues uint
+		if index < len(vm.NetworkEntries) {
+			numQueues = vm.NetworkEntries[index].NumQueues
+		}
+		tapDevice, err := createTapDeviceOnBridge(bridge, numQueues)
 		if err != nil {
 			return fmt.Errorf("error creating tap device: %s", err)
 		}
-		defer tapFile.Close()
-		tapFiles = append(tapFiles, tapFile)
-		tapNames = append(tapNames, tapName)
+		tapDevicesToClose = append(tapDevicesToClose, tapDevice)
+		tapFiles = append(tapFiles, tapDevice.Files...)
+		tapNames = append(tapNames, tapDevice.Name)
 	}
 	vm.logger.Debugf(0, "tap devices: %v\n", tapNames)
 	pidfile := filepath.Join(vm.dirname, "pidfile")

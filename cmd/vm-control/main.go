@@ -85,6 +85,7 @@ var (
 	machineType      hyper_proto.MachineType
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	numNetworkQueues flagutil.UintList
 	placement        placementType
 	placementCommand = flag.String("placementCommand", "",
 		"Command to make placement decisions when creating/copying/moving VM")
@@ -170,6 +171,8 @@ func init() {
 	flag.Var(&memory, "memory", "memory (default 1GiB)")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"minimum number of free bytes in root volume")
+	flag.Var(&numNetworkQueues, "numNetworkQueues",
+		"Number of queues for each network interface (for virtio TAP devices)")
 	flag.Var(&placement, "placement",
 		"Placement choice when selecting Hypervisor to create/copy/move VM")
 	flag.Var(&ownerGroups, "ownerGroups", "Groups who own the VM")
@@ -216,6 +219,8 @@ var subcommands = []commands.Command{
 	{"change-vm-hostname", "IPaddr", 1, 1, changeVmHostnameSubcommand},
 	{"change-vm-machine-type", "IPaddr", 1, 1, changeVmMachineTypeSubcommand},
 	{"change-vm-memory", "IPaddr", 1, 1, changeVmMemorySubcommand},
+	{"change-vm-num-network-queues", "IPaddr", 1, 1,
+		changeVmNumNetworkQueuesSubcommand},
 	{"change-vm-owner-groups", "IPaddr", 1, 1, changeVmOwnerGroupsSubcommand},
 	{"change-vm-owner-users", "IPaddr", 1, 1, changeVmOwnerUsersSubcommand},
 	{"change-vm-subnet", "IPaddr", 1, 1, changeVmSubnetSubcommand},

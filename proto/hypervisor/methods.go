@@ -360,6 +360,13 @@ func (machineType *MachineType) UnmarshalText(text []byte) error {
 	}
 }
 
+func (left *NetworkEntry) Equal(right *NetworkEntry) bool {
+	if left.NumQueues != right.NumQueues {
+		return false
+	}
+	return true
+}
+
 func (state State) MarshalText() ([]byte, error) {
 	if text := state.String(); text == stateUnknown {
 		return nil, errors.New(text)
@@ -500,6 +507,14 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	}
 	if left.MilliCPUs != right.MilliCPUs {
 		return false
+	}
+	if len(left.NetworkEntries) != len(right.NetworkEntries) {
+		return false
+	}
+	for index, leftNetworkEntry := range left.NetworkEntries {
+		if !leftNetworkEntry.Equal(&right.NetworkEntries[index]) {
+			return false
+		}
 	}
 	if !stringSlicesEqual(left.OwnerGroups, right.OwnerGroups) {
 		return false

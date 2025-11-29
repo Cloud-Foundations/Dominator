@@ -62,6 +62,11 @@ func ChangeVmMachineType(client srpc.ClientI, ipAddress net.IP,
 	return changeVmMachineType(client, ipAddress, machineType)
 }
 
+func ChangeVmNumNetworkQueues(client srpc.ClientI, ipAddress net.IP,
+	numQueuesPerInterface []uint) error {
+	return changeVmNumNetworkQueues(client, ipAddress, numQueuesPerInterface)
+}
+
 func ChangeVmOwnerGroups(client srpc.ClientI, ipAddress net.IP,
 	ownerGroups []string) error {
 	return changeVmOwnerGroups(client, ipAddress, ownerGroups)
