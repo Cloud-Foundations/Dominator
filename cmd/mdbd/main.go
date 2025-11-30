@@ -163,6 +163,8 @@ type mdbType struct {
 
 type pauseDataType struct {
 	Reason   string
+	Remove   bool
+	Since    time.Time
 	Until    time.Time
 	Username string
 }

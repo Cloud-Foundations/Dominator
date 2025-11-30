@@ -171,6 +171,8 @@ func (t *rpcType) pauseUpdatesTakeLock(request mdbserver.PauseUpdatesRequest,
 	}
 	t.pauseTable.Machines[request.Hostname] = pauseDataType{
 		Reason:   request.Reason,
+		Remove:   request.Remove,
+		Since:    time.Now(),
 		Until:    request.Until,
 		Username: username,
 	}
@@ -183,9 +185,6 @@ func (t *rpcType) resumeUpdates(conn *srpc.Conn,
 	currentMdb := t.currentMdb
 	if currentMdb == nil {
 		return "no MDB data"
-	}
-	if _, ok := currentMdb.table[request.Hostname]; !ok {
-		return fmt.Sprintf("machine: %s not in MDB", request.Hostname)
 	}
 	username := conn.Username()
 	if err := t.resumeUpdatesTakeLock(request, username); err != "" {

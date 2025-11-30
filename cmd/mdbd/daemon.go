@@ -215,9 +215,10 @@ func loadFromAll(generators *generatorList, datacentre string,
 	}
 	pauseTable.mutex.RLock()
 	for _, machine := range machineMap {
-		processMachine(machine, pauseTable, variables)
-		newMdb.Machines = append(newMdb.Machines, machine)
-		newMdb.table[machine.Hostname] = machine
+		if processMachine(machine, pauseTable, variables) {
+			newMdb.Machines = append(newMdb.Machines, machine)
+			newMdb.table[machine.Hostname] = machine
+		}
 	}
 	pauseTable.mutex.RUnlock()
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStop)
@@ -230,10 +231,14 @@ func loadFromAll(generators *generatorList, datacentre string,
 	return &newMdb, nil
 }
 
+// processMachine returns true if the machine should be added to the MDB.
 func processMachine(machine *mdb.Machine, pauseTable *pauseTableType,
-	variables map[string]string) {
+	variables map[string]string) bool {
 	if !machine.DisableUpdates {
 		if pauseData, ok := pauseTable.Machines[machine.Hostname]; ok {
+			if pauseData.Remove {
+				return false
+			}
 			if time.Until(pauseData.Until) > 0 {
 				machine.DisableUpdates = true
 			}
@@ -247,6 +252,7 @@ func processMachine(machine *mdb.Machine, pauseTable *pauseTableType,
 			machine.Tags[key] = processValue(value, variables)
 		}
 	}
+	return true
 }
 
 func processValue(value string, variables map[string]string) string {
