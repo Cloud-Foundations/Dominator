@@ -42,6 +42,8 @@ var (
 		"Network speed as percentage of capacity")
 	pauseDuration = flag.Duration("pauseDuration", time.Hour,
 		"Duration to pause updates for sub")
+	removePaused = flag.Bool("removePaused", false,
+		"Remove paused sub from MDB rather than disable updates")
 	scanExcludeList  flagutil.StringList = constants.ScanExcludeList
 	scanSpeedPercent                     = flag.Uint("scanSpeedPercent",
 		constants.DefaultScanSpeedPercent,

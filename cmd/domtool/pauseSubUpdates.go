@@ -32,6 +32,7 @@ func pauseSubUpdates(client srpc.ClientI, hostname, reason string) error {
 	request := mdbserver.PauseUpdatesRequest{
 		Hostname: hostname,
 		Reason:   reason,
+		Remove:   *removePaused,
 		Until:    time.Now().Add(*pauseDuration),
 	}
 	var reply mdbserver.PauseUpdatesResponse
