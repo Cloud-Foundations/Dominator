@@ -73,6 +73,14 @@ func dial(network, address string, dialer Dialer) (net.Conn, error) {
 		if strings.Contains(err.Error(), ErrorNoRouteToHost.Error()) {
 			return nil, ErrorNoRouteToHost
 		}
+		if strings.Contains(err.Error(), "server misbehaving") {
+			// Make it clear the problem is DNS.
+			return nil,
+				errors.New(strings.Replace(err.Error(),
+					"server misbehaving",
+					"DNS server misbehaving",
+					1))
+		}
 		return nil, err
 	}
 	if tcpConn, ok := conn.(libnet.TCPConn); ok {
