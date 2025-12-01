@@ -44,6 +44,7 @@ type ListImagesResponse struct {
 type PauseUpdatesRequest struct {
 	Hostname string
 	Reason   string
+	Remove   bool
 	Until    time.Time
 }
 

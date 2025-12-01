@@ -50,6 +50,7 @@ func startHttpServer(portNum uint, variables map[string]string,
 		pauseTable: pauseTable,
 		variables:  variables}
 	html.HandleFunc("/", s.statusHandler)
+	html.HandleFunc("/checkMachine", s.checkMachineHandler)
 	html.HandleFunc("/getVariable", s.getVariableHandler)
 	html.HandleFunc("/getVariables", s.getVariablesHandler)
 	html.HandleFunc("/showMachine", s.showMachineHandler)
@@ -139,6 +140,18 @@ func (s *httpServer) statusHandler(w http.ResponseWriter, req *http.Request) {
 
 func (s *httpServer) AddHtmlWriter(htmlWriter HtmlWriter) {
 	s.htmlWriters = append(s.htmlWriters, htmlWriter)
+}
+
+func (s *httpServer) checkMachineHandler(w http.ResponseWriter,
+	req *http.Request) {
+	hostname := req.URL.RawQuery
+	if _, ok := s.mdb.table[hostname]; !ok {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func (s *httpServer) getVariableHandler(w http.ResponseWriter,
@@ -249,6 +262,8 @@ func (s *httpServer) showPausedHandler(w http.ResponseWriter,
 		"Hostname",
 		"Username",
 		"Reason",
+		"Remove",
+		"Since",
 		"Until",
 		"For"}
 	switch parsedQuery.OutputType() {
@@ -263,11 +278,17 @@ func (s *httpServer) showPausedHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 		tw, _ := html.NewTableWriter(writer, true, fieldArgs...)
 		for _, pauseData := range pauseList {
+			var remove string
+			if pauseData.Remove {
+				remove = "yes"
+			}
 			columns := []string{
 				pauseData.Hostname,
 				pauseData.Username,
 				pauseData.Reason,
-				pauseData.Until.String(),
+				remove,
+				pauseData.Since.Format(format.TimeFormatSeconds),
+				pauseData.Until.Format(format.TimeFormatSeconds),
 				format.Duration(time.Until(pauseData.Until))}
 			tw.WriteRow("", "", columns...)
 		}
@@ -284,11 +305,17 @@ func (s *httpServer) showPausedHandler(w http.ResponseWriter,
 		defer w.Flush()
 		w.Write(fieldArgs)
 		for _, pauseData := range pauseList {
+			var remove string
+			if pauseData.Remove {
+				remove = "yes"
+			}
 			w.Write([]string{
 				pauseData.Hostname,
 				pauseData.Username,
 				pauseData.Reason,
-				pauseData.Until.String(),
+				remove,
+				pauseData.Since.Format(format.TimeFormatSeconds),
+				pauseData.Until.Format(format.TimeFormatSeconds),
 				format.Duration(time.Until(pauseData.Until)),
 			})
 		}
