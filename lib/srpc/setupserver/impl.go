@@ -85,7 +85,7 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 			return nil, err
 		}
 		params.Logger.Debugln(0,
-			"Loaded certifcate and key from metadata service\n")
+			"Loaded certifcate and key from metadata service")
 		return cert, nil
 	}
 	cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
@@ -97,7 +97,7 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 				return nil, err
 			}
 			params.Logger.Debugln(0,
-				"Loaded certifcate and key from metadata service\n")
+				"Loaded certifcate and key from metadata service")
 			return cert, nil
 		}
 		return nil, fmt.Errorf("unable to load keypair: %s", err)
