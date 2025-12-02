@@ -8,22 +8,27 @@ Abstract
 
 This paper describes a VM management system for a Private Cloud environment which is simple to configure and deploy, has few dependencies, scales to many thousand physical machines (Hypervisor nodes) with hundreds of VMs per node, is highly reliable and has dynamic IP address allocation. VM create time is as low as one second, which is best in class and approaches container platform performance. This system can integrate closely with the [**Dominator**](https://github.com/Cloud-Foundations/Dominator) ecosystem which provides [manifest driven image generation](../../user-guide/image-manifest.md) with the [Imaginator](../../cmd/imaginator/README.md), high performance image distribution and image-based patching. While you can easily create pets, you also get the tools to farm cattle. By leveraging [Keymaster](https://github.com/Cloud-Foundations/keymaster), existing organisation/corporate identities may be used for strong authentication (2FA, ephemeral credentials).
 
-The architecture is simple, flexible, does not require deploying Hypervisors in "clusters" and has a lightweight, losely-coupled "control plane" (Fleet Manager).
+The architecture is simple, flexible, does not require deploying Hypervisors in "clusters" and has a lightweight, losely-coupled "control plane" (Fleet Manager), avoiding the pitfalls of other architectures which have one or more Single Points of Failure (SPOFs).
 
 Background
 ==========
 
 Multiple solutions exist for managing Virtual Machines, but each has its own drawbacks:
 
--   Expensive, no native metadata service, not Open Source (VMware)
+- Expensive, no native metadata service, not Open Source (VMware)
 
--   Complex to configure, deploy, maintain and lack performance and reliability ([OpenStack](https://www.openstack.org/))
+- Complex to configure, deploy, maintain and lack performance and reliability ([OpenStack](https://www.openstack.org/))
 
--   Limited to small numbers of nodes, no metadata service ([proxmox](https://www.proxmox.com/en/), [Ganeti](http://www.ganeti.org/))
+- Limited to small numbers of nodes, no metadata service ([proxmox](https://www.proxmox.com/en/), [Ganeti](http://www.ganeti.org/))
 
--   Medium complexity, no metadata service, VMs limited to TCP traffic and reliant on SDN/proxies ([virtlet](https://www.mirantis.com/blog/virtlet-vms-containers-opencontrail-network-kubernetes-nfv/))
+- High complexity, dependency on [Kubernetes](https://kubernetes.io/), no metadata service, VMs limited to TCP traffic and reliant on SDN/proxies ([virtlet](https://www.mirantis.com/blog/virtlet-vms-containers-opencontrail-network-kubernetes-nfv/) and [KubeVirt](https://kubevirt.io/))
 
 While much computing workload is migrating to the Public Cloud, there remains a need for on-premise VM capacity. The goal is a cost effective, performant and reliable Private Cloud that lacks the bells and whistles of Public Cloud yet is simple and provides a reliable foundation for baseline computing workload and building add-on services if needed, *without compromising the robustness of the foundational platform*.
+
+Simplicity versus Complexity
+----------------------------
+
+Alternate solutions provide a limited set of VM manipulation operations requiring a complex ecosystem of large components. For example, the OpenStack Hypervisors (Nova) alone is ~600k lines of Python code, and KubeVirt is 2.6 *million* lines of Go code (sitting on top of 2 million lines of Kubernetes Go code). By comparison, the SmallStack Hypervisor is 15k lines of Go code and the Fleet Manager is 6k lines of Go code. Further, SmallStack is part of an ecosystem that manages the full life-cycle of Hypervisors, from building images to installing bare metal machines to patching and rollouts.
 
 The target audience for this system is the medium to large enterprise, yet it is designed to be so easy to configure, deploy and operate that a small enterprise (which often has between zero and one Operations staff) or hobbyist can confidently configure and use it.
 
