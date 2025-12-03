@@ -70,6 +70,7 @@ func (or *ObjectsReader) ObjectSizes() []uint64 {
 }
 
 type ObjectAdderQueue struct {
+	closedError     *error
 	conn            *srpc.Conn
 	getResponseChan chan<- struct{}
 	errorChan       <-chan error

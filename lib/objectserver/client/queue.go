@@ -71,6 +71,9 @@ func (objQ *ObjectAdderQueue) addData(data []byte, hashVal hash.Hash) error {
 }
 
 func (objQ *ObjectAdderQueue) close() error {
+	if objQ.closedError != nil {
+		return *objQ.closedError
+	}
 	// Wait for any sends in progress to complete.
 	objQ.sendSemaphore <- struct{}{}
 	var request objectserver.AddObjectRequest
@@ -78,7 +81,9 @@ func (objQ *ObjectAdderQueue) close() error {
 	err = updateError(err, objQ.conn.Flush())
 	close(objQ.getResponseChan)
 	err = updateError(err, objQ.consumeErrors(true))
-	return updateError(err, objQ.conn.Close())
+	err = updateError(err, objQ.conn.Close())
+	objQ.closedError = &err
+	return err
 }
 
 func updateError(oldError, newError error) error {

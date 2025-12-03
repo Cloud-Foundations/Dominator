@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Cloud-Foundations/Dominator/dom/lib"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -42,8 +44,11 @@ func pushMissingObjects(srpcClient *srpc.Client, imageName string) error {
 	}
 	subObj.FileSystem = fs
 	objSrv := objectclient.NewObjectClient(getObjectServerAddress())
-	subObjClient := objectclient.AttachObjectClient(srpcClient)
-	defer subObjClient.Close()
+	adderQueue, err := objectclient.NewObjectAdderQueue(srpcClient)
+	if err != nil {
+		return err
+	}
+	defer adderQueue.Close()
 	imageResult := <-imgChannel
 	img := imageResult.image
 	if *filterFile != "" {
@@ -55,23 +60,38 @@ func pushMissingObjects(srpcClient *srpc.Client, imageName string) error {
 	}
 	objectsToFetch, _ := lib.BuildMissingLists(subObj, img, false, true,
 		logger)
+	var totalBytes uint64
+	for _, size := range objectsToFetch {
+		totalBytes += size
+	}
+	logger.Printf("Pushing %d objects (%s)\n",
+		len(objectsToFetch), format.FormatBytes(totalBytes))
 	hashes := objectcache.ObjectMapToCache(objectsToFetch)
 	objectsReader, err := objSrv.GetObjects(hashes)
 	if err != nil {
 		return err
 	}
 	defer objectsReader.Close()
+	startTime := time.Now()
 	for _, hashVal := range hashes {
 		fmt.Printf("%x\n", hashVal)
 		length, reader, err := objectsReader.NextObject()
 		if err != nil {
 			return err
 		}
-		_, _, err = subObjClient.AddObject(reader, length, nil)
+		_, err = adderQueue.Add(reader, length)
 		reader.Close()
 		if err != nil {
 			return err
 		}
 	}
+	if err := adderQueue.Close(); err != nil {
+		return err
+	}
+	duration := time.Since(startTime)
+	speed := uint64(float64(totalBytes) / duration.Seconds())
+	logger.Printf("Pushed %d objects (%s) in %s (%s/s)\n",
+		len(objectsToFetch), format.FormatBytes(totalBytes),
+		format.Duration(duration), format.FormatBytes(speed))
 	return nil
 }
