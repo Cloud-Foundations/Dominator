@@ -541,5 +541,6 @@ func (conn *Conn) Username() string {
 }
 
 type ReceiverOptions struct {
-	PublicMethods []string
+	PublicMethods          []string // Methods not requiring method powers.
+	UnauthenticatedMethods []string // Methods not requiring authentication.
 }

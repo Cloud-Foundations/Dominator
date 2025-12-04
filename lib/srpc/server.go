@@ -51,6 +51,7 @@ type builtinReceiver struct{} // NOTE: GrantMethod allows all access.
 type methodWrapper struct {
 	methodType                    int
 	public                        bool
+	unauthenticatedPermitted      bool
 	fn                            reflect.Value
 	requestType                   reflect.Type
 	responseType                  reflect.Type
@@ -77,6 +78,8 @@ var (
 	receivers                    map[string]receiverType = make(map[string]receiverType)
 	serverMetricsDir             *tricorder.DirectorySpec
 	bucketer                     *tricorder.Bucketer
+	emptyMethodList              = make(map[string]struct{}) // None allowed.
+	someUnauthenticatedMethods   bool
 	serverMetricsMutex           sync.Mutex
 	numPanicedCalls              uint64
 	numServerConnections         uint64
@@ -199,6 +202,8 @@ func _registerName(name string, rcvr interface{},
 		return err
 	}
 	publicMethods := stringutil.ConvertListToMap(options.PublicMethods, false)
+	unauthenticatedMethods := stringutil.ConvertListToMap(
+		options.UnauthenticatedMethods, false)
 	for index := 0; index < typeOfReceiver.NumMethod(); index++ {
 		method := typeOfReceiver.Method(index)
 		if method.PkgPath != "" { // Method must be exported.
@@ -212,6 +217,10 @@ func _registerName(name string, rcvr interface{},
 		receiver.methods[method.Name] = mVal
 		if _, ok := publicMethods[method.Name]; ok {
 			mVal.public = true
+		}
+		if _, ok := unauthenticatedMethods[method.Name]; ok {
+			someUnauthenticatedMethods = true
+			mVal.unauthenticatedPermitted = true
 		}
 		dir, err := receiverMetricsDir.RegisterDirectory(method.Name)
 		if err != nil {
@@ -376,7 +385,15 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if (tlsRequired && !doTls) || req.Method != "CONNECT" {
+	if req.Method != "CONNECT" {
+		serverMetricsMutex.Lock()
+		numRejectedServerConnections++
+		serverMetricsMutex.Unlock()
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if tlsRequired && !doTls && !someUnauthenticatedMethods {
 		serverMetricsMutex.Lock()
 		numRejectedServerConnections++
 		serverMetricsMutex.Unlock()
@@ -384,7 +401,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if tlsRequired && req.TLS != nil {
+	if doTls && req.TLS != nil {
 		if serverTlsConfig == nil ||
 			!checkVerifiedChains(req.TLS.VerifiedChains,
 				serverTlsConfig.ClientCAs) {
@@ -418,7 +435,11 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		allowMethodPowers: true,
 		conn:              unsecuredConn,
 		localAddr:         unsecuredConn.LocalAddr().String(),
+		permittedMethods:  emptyMethodList, // Safe default: none permitted.
 		remoteAddr:        unsecuredConn.RemoteAddr().String(),
+	}
+	if req.Form.Get(doNotUseMethodPowers) == "true" {
+		myConn.allowMethodPowers = false
 	}
 	connType := "unknown"
 	defer func() {
@@ -445,9 +466,6 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 	if err != nil {
 		logger.Printf("error writing connect message: %s\n", err)
 		return
-	}
-	if req.Form.Get(doNotUseMethodPowers) == "true" {
-		myConn.allowMethodPowers = false
 	}
 	if doTls {
 		var tlsConn *tls.Conn
@@ -479,6 +497,9 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		myConn.ReadWriter = bufio.NewReadWriter(bufio.NewReader(tlsConn),
 			bufio.NewWriter(tlsConn))
 	} else {
+		if !tlsRequired {
+			myConn.permittedMethods = nil // All methods permitted.
+		}
 		myConn.ReadWriter = bufrw
 	}
 	logger.Debugf(0, "accepted %s connection\n", connType)
@@ -623,12 +644,14 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	} else if conn.allowMethodPowers &&
 		receiver.grantMethod(serviceName, conn.GetAuthInformation()) {
 		conn.haveMethodAccess = true
+	} else if method.public && conn.username != "" {
+		conn.haveMethodAccess = false
+	} else if method.unauthenticatedPermitted {
+		conn.haveMethodAccess = false
 	} else {
 		conn.haveMethodAccess = false
-		if !method.public {
-			method.numDeniedCalls++
-			return nil, ErrorAccessToMethodDenied
-		}
+		method.numDeniedCalls++
+		return nil, ErrorAccessToMethodDenied
 	}
 	authInfo := conn.GetAuthInformation()
 	if rn, err := receiver.blockMethod(methodName, authInfo); err != nil {
