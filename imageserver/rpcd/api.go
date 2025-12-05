@@ -24,6 +24,17 @@ var (
 		"Filename containing filter to include images for replication (default include all)")
 )
 
+type Config struct {
+	AllowUnauthenticatedReads bool
+	ReplicationMaster         string
+}
+
+type Params struct {
+	ImageDataBase *scanner.ImageDataBase
+	Logger        log.DebugLogger
+	ObjectServer  objectserver.FullObjectServer
+}
+
 type srpcType struct {
 	imageDataBase             *scanner.ImageDataBase
 	excludeFilter             *filter.Filter
@@ -49,20 +60,19 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 var replicationMessage = "cannot make changes while under replication control" +
 	", go to master: "
 
-func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
-	objSrv objectserver.FullObjectServer,
-	logger log.DebugLogger) (*htmlWriter, error) {
-	if *archiveMode && replicationMaster == "" {
+func Setup(config Config, params Params) (*htmlWriter, error) {
+	if *archiveMode && config.ReplicationMaster == "" {
 		return nil, errors.New("replication master required in archive mode")
 	}
 	finishedReplication := make(chan struct{})
 	srpcObj := &srpcType{
-		imageDataBase:       imdb,
+		imageDataBase:       params.ImageDataBase,
 		finishedReplication: finishedReplication,
-		replicationMaster:   replicationMaster,
-		imageserverResource: srpc.NewClientResource("tcp", replicationMaster),
-		objSrv:              objSrv,
-		logger:              logger,
+		replicationMaster:   config.ReplicationMaster,
+		imageserverResource: srpc.NewClientResource("tcp",
+			config.ReplicationMaster),
+		objSrv:              params.ObjectServer,
+		logger:              params.Logger,
 		archiveMode:         *archiveMode,
 		imagesBeingInjected: make(map[string]struct{}),
 	}
@@ -79,13 +89,30 @@ func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
 			return nil, err
 		}
 	}
-	srpc.RegisterNameWithOptions("ImageServer", srpcObj, srpc.ReceiverOptions{
-		PublicMethods: []string{
-			"ChangeImageExpiration",
+	publicMethods := []string{
+		"ChangeImageExpiration",
+		"CheckDirectory",
+		"CheckImage",
+		"ChownDirectory",
+		"DeleteImage",
+		"FindLatestImage",
+		"GetFilteredImageUpdates",
+		"GetImage",
+		"GetImageArchive",
+		"GetImageComputedFiles",
+		"GetImageExpiration",
+		"GetImageUpdates",
+		"GetReplicationMaster",
+		"ListDirectories",
+		"ListImages",
+		"ListSelectedImages",
+		"ListUnreferencedObjects",
+	}
+	var unauthenticatedMethods []string
+	if config.AllowUnauthenticatedReads {
+		unauthenticatedMethods = []string{
 			"CheckDirectory",
 			"CheckImage",
-			"ChownDirectory",
-			"DeleteImage",
 			"FindLatestImage",
 			"GetFilteredImageUpdates",
 			"GetImage",
@@ -97,8 +124,14 @@ func Setup(imdb *scanner.ImageDataBase, replicationMaster string,
 			"ListDirectories",
 			"ListImages",
 			"ListSelectedImages",
-		}})
-	if replicationMaster != "" {
+			"ListUnreferencedObjects",
+		}
+	}
+	srpc.RegisterNameWithOptions("ImageServer", srpcObj, srpc.ReceiverOptions{
+		PublicMethods:          publicMethods,
+		UnauthenticatedMethods: unauthenticatedMethods,
+	})
+	if config.ReplicationMaster != "" {
 		go srpcObj.replicator(finishedReplication)
 	} else {
 		close(finishedReplication)
