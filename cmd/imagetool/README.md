@@ -31,6 +31,8 @@ Some of the sub-commands available are:
               compressed tarfiles on top of existing files
 - **adds**: add an image using files from a running *subd* for image data (this
             allows "snapshotting" of a golden machine)
+- **analyse-file-system**: analyse the objects in a local file-system and
+                           generate a report
 - **bulk-addrep**: perform addrep operation for all images
 - **change-image-expiration**: change or remove the expiration time for an image
 - **check**: check if an image exists
