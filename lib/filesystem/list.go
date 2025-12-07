@@ -6,7 +6,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
@@ -16,11 +15,9 @@ const (
 		wsyscall.S_IRWXG | wsyscall.S_IRWXO
 )
 
-func (fs *FileSystem) list(w io.Writer, listSelector ListSelector,
-	filter *filter.Filter) error {
+func (fs *FileSystem) list(w io.Writer, params ListParams) error {
 	numLinksTable := buildNumLinksTable(fs)
-	return fs.DirectoryInode.list(w, "/", numLinksTable, 1, listSelector,
-		filter)
+	return fs.DirectoryInode.list(w, "/", numLinksTable, 1, params)
 }
 
 func buildNumLinksTable(fs *FileSystem) NumLinksTable {
@@ -40,19 +37,18 @@ func (inode *DirectoryInode) scanDirectory(fs *FileSystem,
 }
 
 func (inode *DirectoryInode) list(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
 	if err := listUntilName(w, inode.Mode, numLinks, inode.Uid, inode.Gid,
-		0, -1, -1, name, true, listSelector); err != nil {
+		0, -1, -1, name, true, params.ListSelector); err != nil {
 		return err
 	}
 	for _, dirent := range inode.EntryList {
 		pathname := path.Join(name, dirent.Name)
-		if filter != nil && filter.Match(pathname) {
+		if params.Filter != nil && params.Filter.Match(pathname) {
 			continue
 		}
 		err := dirent.inode.List(w, pathname, numLinksTable,
-			numLinksTable[dirent.InodeNumber], listSelector, filter)
+			numLinksTable[dirent.InodeNumber], params)
 		if err != nil {
 			return err
 		}
@@ -61,16 +57,20 @@ func (inode *DirectoryInode) list(w io.Writer, name string,
 }
 
 func (inode *RegularInode) list(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector) error {
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
 	if err := listUntilName(w, inode.Mode, numLinks, inode.Uid, inode.Gid,
 		inode.Size, inode.MtimeSeconds, inode.MtimeNanoSeconds, name, false,
-		listSelector); err != nil {
+		params.ListSelector); err != nil {
 		return err
 	}
 	var err error
-	if inode.Size > 0 && listSelector&ListSelectSkipData == 0 {
-		_, err = fmt.Fprintf(w, " %x\n", inode.Hash)
+	if inode.Size > 0 && params.ListSelector&ListSelectSkipData == 0 {
+		if params.FormatHash == nil {
+			_, err = fmt.Fprintf(w, " %x\n", inode.Hash)
+		} else {
+			_, err = fmt.Fprintf(w, " %s\n",
+				params.FormatHash(inode.Hash, inode.Size))
+		}
 	} else {
 		_, err = io.WriteString(w, "\n")
 	}
@@ -78,14 +78,13 @@ func (inode *RegularInode) list(w io.Writer, name string,
 }
 
 func (inode *ComputedRegularInode) list(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector) error {
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
 	if err := listUntilName(w, inode.Mode, numLinks, inode.Uid, inode.Gid,
-		0, -1, -1, name, false, listSelector); err != nil {
+		0, -1, -1, name, false, params.ListSelector); err != nil {
 		return err
 	}
 	var err error
-	if listSelector&ListSelectSkipData == 0 {
+	if params.ListSelector&ListSelectSkipData == 0 {
 		_, err = fmt.Fprintf(w, " <- %s\n", inode.Source)
 	} else {
 		_, err = io.WriteString(w, "\n")
@@ -94,14 +93,13 @@ func (inode *ComputedRegularInode) list(w io.Writer, name string,
 }
 
 func (inode *SymlinkInode) list(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector) error {
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
 	if err := listUntilName(w, symlinkMode, numLinks, inode.Uid, inode.Gid,
-		0, -1, -1, name, false, listSelector); err != nil {
+		0, -1, -1, name, false, params.ListSelector); err != nil {
 		return err
 	}
 	var err error
-	if listSelector&ListSelectSkipData == 0 {
+	if params.ListSelector&ListSelectSkipData == 0 {
 		_, err = fmt.Fprintf(w, " -> %s\n", inode.Symlink)
 	} else {
 		_, err = io.WriteString(w, "\n")
@@ -110,11 +108,10 @@ func (inode *SymlinkInode) list(w io.Writer, name string,
 }
 
 func (inode *SpecialInode) list(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector) error {
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
 	return listUntilName(w, inode.Mode, numLinks, inode.Uid, inode.Gid,
 		inode.Rdev, inode.MtimeSeconds, inode.MtimeNanoSeconds, name, true,
-		listSelector)
+		params.ListSelector)
 }
 
 func listUntilName(w io.Writer, mode FileMode, numLinks int, uid uint32,

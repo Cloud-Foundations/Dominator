@@ -18,11 +18,14 @@ func showImageInodeSubcommand(args []string, logger log.DebugLogger) error {
 
 func listInode(inode filesystem.GenericInode, inodePath string,
 	numLinks int) error {
-	filt, err := filter.New([]string{".*"})
+	filt, err := filter.New([]string{".*"}) // Do not descend directory.
 	if err != nil {
 		return err
 	}
-	return inode.List(os.Stdout, inodePath, nil, numLinks, listSelector, filt)
+	return inode.List(os.Stdout, inodePath, nil, numLinks,
+		filesystem.ListParams{Filter: filt,
+			ListSelector: listSelector,
+		})
 }
 
 func showImageInode(image, inodePath string) error {

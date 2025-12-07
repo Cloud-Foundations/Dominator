@@ -4,7 +4,18 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/hash"
 )
+
+func printHashLink(hashVal hash.Hash, size uint64) string {
+	if size > 1<<20 {
+		return fmt.Sprintf("%x", hashVal)
+	}
+	return fmt.Sprintf("<a href=\"getObject?%x\">%x</a>",
+		hashVal, hashVal)
+}
 
 func (s state) listImageHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
@@ -20,7 +31,11 @@ func (s state) listImageHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(writer, "File-system data for image: %s\n", imageName)
 		fmt.Fprintln(writer, "</h3>")
 		fmt.Fprintln(writer, "<pre>")
-		image.FileSystem.List(writer)
+		var listParams filesystem.ListParams
+		if s.allowUnauthenticatedReads {
+			listParams.FormatHash = printHashLink
+		}
+		image.FileSystem.ListWithParams(writer, listParams)
 		fmt.Fprintln(writer, "</pre>")
 	}
 	fmt.Fprintln(writer, "</body>")

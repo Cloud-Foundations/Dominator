@@ -35,7 +35,7 @@ type GenericInode interface {
 	GetGid() uint32
 	GetUid() uint32
 	List(w io.Writer, name string, numLinksTable NumLinksTable,
-		numLinks int, listSelector ListSelector, filter *filter.Filter) error
+		numLinks int, params ListParams) error
 	SetGid(gid uint32)
 	SetUid(uid uint32)
 	WriteMetadata(name string) error
@@ -56,6 +56,12 @@ type FileSystem struct {
 	numComputedRegularInodes *uint64
 	DirectoryCount           uint64
 	DirectoryInode
+}
+
+type ListParams struct {
+	Filter       *filter.Filter
+	FormatHash   func(hashVal hash.Hash, size uint64) string
+	ListSelector ListSelector
 }
 
 func Decode(reader io.Reader) (*FileSystem, error) {
@@ -116,12 +122,16 @@ func (fs *FileSystem) InodeToFilenamesTable() InodeToFilenamesTable {
 }
 
 func (fs *FileSystem) List(w io.Writer) error {
-	return fs.list(w, ListSelectAll, nil)
+	return fs.list(w, ListParams{ListSelector: ListSelectAll})
 }
 
 func (fs *FileSystem) Listf(w io.Writer, listSelector ListSelector,
 	filter *filter.Filter) error {
-	return fs.list(w, listSelector, filter)
+	return fs.list(w, ListParams{Filter: filter, ListSelector: listSelector})
+}
+
+func (fs *FileSystem) ListWithParams(w io.Writer, params ListParams) error {
+	return fs.list(w, params)
 }
 
 func (fs *FileSystem) NumComputedRegularInodes() uint64 {
@@ -160,9 +170,8 @@ func (inode *DirectoryInode) GetUid() uint32 {
 }
 
 func (inode *DirectoryInode) List(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
-	return inode.list(w, name, numLinksTable, numLinks, listSelector, filter)
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
+	return inode.list(w, name, numLinksTable, numLinks, params)
 }
 
 func (inode *DirectoryInode) RegisterStrings(registerFunc func(string)) {
@@ -227,8 +236,8 @@ func (inode *RegularInode) GetUid() uint32 {
 
 func (inode *RegularInode) List(w io.Writer, name string,
 	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
-	return inode.list(w, name, numLinksTable, numLinks, listSelector)
+	params ListParams) error {
+	return inode.list(w, name, numLinksTable, numLinks, params)
 }
 
 func (inode *RegularInode) SetGid(gid uint32) {
@@ -259,9 +268,8 @@ func (inode *ComputedRegularInode) GetUid() uint32 {
 }
 
 func (inode *ComputedRegularInode) List(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
-	return inode.list(w, name, numLinksTable, numLinks, listSelector)
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
+	return inode.list(w, name, numLinksTable, numLinks, params)
 }
 
 func (inode *ComputedRegularInode) SetGid(gid uint32) {
@@ -291,9 +299,8 @@ func (inode *SymlinkInode) GetUid() uint32 {
 }
 
 func (inode *SymlinkInode) List(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
-	return inode.list(w, name, numLinksTable, numLinks, listSelector)
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
+	return inode.list(w, name, numLinksTable, numLinks, params)
 }
 
 func (inode *SymlinkInode) SetGid(gid uint32) {
@@ -330,9 +337,8 @@ func (inode *SpecialInode) GetUid() uint32 {
 }
 
 func (inode *SpecialInode) List(w io.Writer, name string,
-	numLinksTable NumLinksTable, numLinks int,
-	listSelector ListSelector, filter *filter.Filter) error {
-	return inode.list(w, name, numLinksTable, numLinks, listSelector)
+	numLinksTable NumLinksTable, numLinks int, params ListParams) error {
+	return inode.list(w, name, numLinksTable, numLinks, params)
 }
 
 func (inode *SpecialInode) SetGid(gid uint32) {

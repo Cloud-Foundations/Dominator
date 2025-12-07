@@ -11,10 +11,11 @@ import (
 )
 
 type Config struct {
-	AllowPublicAddObjects   bool
-	AllowPublicCheckObjects bool
-	AllowPublicGetObjects   bool
-	ReplicationMaster       string
+	AllowPublicAddObjects     bool
+	AllowPublicCheckObjects   bool
+	AllowPublicGetObjects     bool
+	AllowUnauthenticatedReads bool
+	ReplicationMaster         string
 }
 
 type Params struct {
@@ -45,7 +46,7 @@ func Setup(config Config, params Params) *htmlWriter {
 		getSemaphore:      getSemaphore,
 		logger:            params.Logger,
 	}
-	var publicMethods []string
+	var publicMethods, unauthenticatedMethods []string
 	if config.AllowPublicAddObjects {
 		publicMethods = append(publicMethods, "AddObjects")
 	}
@@ -55,8 +56,17 @@ func Setup(config Config, params Params) *htmlWriter {
 	if config.AllowPublicGetObjects {
 		publicMethods = append(publicMethods, "GetObjects")
 	}
+	if config.AllowUnauthenticatedReads {
+		unauthenticatedMethods = append(unauthenticatedMethods,
+			"CheckObjects",
+			"GetObjects",
+		)
+	}
 	srpc.RegisterNameWithOptions("ObjectServer", srpcObj,
-		srpc.ReceiverOptions{PublicMethods: publicMethods})
+		srpc.ReceiverOptions{
+			PublicMethods:          publicMethods,
+			UnauthenticatedMethods: unauthenticatedMethods,
+		})
 	tricorder.RegisterMetric("/get-requests",
 		func() uint { return uint(len(getSemaphore)) },
 		units.None, "number of GetObjects() requests in progress")

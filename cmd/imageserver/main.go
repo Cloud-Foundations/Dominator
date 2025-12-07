@@ -28,6 +28,8 @@ var (
 		"If true, allow all users to call CheckObjects method")
 	allowPublicGetObjects = flag.Bool("allowPublicGetObjects", false,
 		"If true, allow all users to call GetObjects method")
+	allowUnauthenticatedReads = flag.Bool("allowUnauthenticatedReads", false,
+		"If true, allow unauthenticated access to read-only methods")
 	debug    = flag.Bool("debug", false, "If true, show debugging output")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
 		"Name of image server data directory.")
@@ -110,17 +112,26 @@ func main() {
 	tricorder.RegisterMetric("/image-count",
 		func() uint { return imdb.CountImages() },
 		units.None, "number of images")
-	imgSrvRpcHtmlWriter, err := imageserverRpcd.Setup(imdb, imageServerAddress,
-		objSrv, logger)
+	imgSrvRpcHtmlWriter, err := imageserverRpcd.Setup(
+		imageserverRpcd.Config{
+			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
+			ReplicationMaster:         imageServerAddress,
+		},
+		imageserverRpcd.Params{
+			ImageDataBase: imdb,
+			Logger:        logger,
+			ObjectServer:  objSrv,
+		})
 	if err != nil {
 		logger.Fatalln(err)
 	}
 	objSrvRpcHtmlWriter := objectserverRpcd.Setup(
 		objectserverRpcd.Config{
-			AllowPublicAddObjects:   *allowPublicAddObjects,
-			AllowPublicCheckObjects: *allowPublicCheckObjects,
-			AllowPublicGetObjects:   *allowPublicGetObjects,
-			ReplicationMaster:       imageServerAddress,
+			AllowPublicAddObjects:     *allowPublicAddObjects,
+			AllowPublicCheckObjects:   *allowPublicCheckObjects,
+			AllowPublicGetObjects:     *allowPublicGetObjects,
+			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
+			ReplicationMaster:         imageServerAddress,
 		},
 		objectserverRpcd.Params{
 			Logger:       logger,
@@ -133,7 +144,17 @@ func main() {
 	httpd.AddHtmlWriter(logger)
 	healthserver.SetReady()
 	logger.Printf("Service ready, opening listener on port: %d\n", *portNum)
-	if err = httpd.StartServer(*portNum, imdb, objSrv, false); err != nil {
+	err = httpd.StartServer(
+		httpd.Config{
+			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
+			PortNumber:                *portNum,
+		},
+		httpd.Params{
+			ImageDataBase: imdb,
+			Logger:        logger,
+			ObjectServer:  objSrv,
+		})
+	if err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
 }
