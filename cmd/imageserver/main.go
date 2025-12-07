@@ -144,7 +144,17 @@ func main() {
 	httpd.AddHtmlWriter(logger)
 	healthserver.SetReady()
 	logger.Printf("Service ready, opening listener on port: %d\n", *portNum)
-	if err = httpd.StartServer(*portNum, imdb, objSrv, false); err != nil {
+	err = httpd.StartServer(
+		httpd.Config{
+			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
+			PortNumber:                *portNum,
+		},
+		httpd.Params{
+			ImageDataBase: imdb,
+			Logger:        logger,
+			ObjectServer:  objSrv,
+		})
+	if err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
 }
