@@ -145,6 +145,11 @@ func WriteImageName(mountPoint, imageName string) error {
 	return writeImageName(mountPoint, imageName)
 }
 
+func WriteOverlayFiles(mountPoint string,
+	overlayFiles map[string][]byte) error {
+	return writeOverlayFiles(mountPoint, overlayFiles)
+}
+
 type WriteRawOptions struct {
 	AllocateBlocks       bool
 	DoChroot             bool

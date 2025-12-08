@@ -289,12 +289,8 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			return err
 		}
 	}
-	for filename, data := range options.OverlayFiles {
-		filename := filepath.Clean(filename) // Stop funny business.
-		err := writeFile(filepath.Join(rootMount, filename), data)
-		if err != nil {
-			return err
-		}
+	if err := writeOverlayFiles(rootMount, options.OverlayFiles); err != nil {
+		return err
 	}
 	if err := writeImageName(rootMount, options.InitialImageName); err != nil {
 		return err
@@ -433,6 +429,18 @@ func sanitiseInput(ch rune) rune {
 	} else {
 		return -1
 	}
+}
+
+func writeOverlayFiles(mountPoint string,
+	overlayFiles map[string][]byte) error {
+	for filename, data := range overlayFiles {
+		filename := filepath.Clean(filename) // Stop funny business.
+		err := writeFile(filepath.Join(mountPoint, filename), data)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
