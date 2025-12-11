@@ -33,6 +33,11 @@ func patchVmImageOnHypervisor(hypervisor string, ipAddr net.IP,
 		IpAddress:    ipAddr,
 		SkipBackup:   *skipBackup,
 	}
+	if overlayFiles, err := loadOverlayFiles(); err != nil {
+		return err
+	} else {
+		request.OverlayFiles = overlayFiles
+	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
 		return err
