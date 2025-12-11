@@ -61,6 +61,8 @@ Some of the sub-commands available are:
                       ends when the VM is stopped or (re)started
 - **delete-vm-volume**: delete a specified volume from a VM
 - **destroy-vm**: destroy a VM (all ephemeral data and metadata are lost)
+- **discard-vm-access-token**: discard the access token for a VM (use if a VM
+                               copy or migrate operation is interrupted)
 - **discard-vm-old-image**: discard the previous root image for a VM
 - **discard-vm-old-user-data**: discard the previous user data for a VM
 - **discard-vm-snapshot**: discard the previous snapshot for a VM

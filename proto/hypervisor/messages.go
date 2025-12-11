@@ -669,6 +669,7 @@ type PatchVmImageRequest struct {
 	ImageName    string
 	ImageTimeout time.Duration
 	IpAddress    net.IP
+	OverlayFiles map[string][]byte
 	SkipBackup   bool
 }
 

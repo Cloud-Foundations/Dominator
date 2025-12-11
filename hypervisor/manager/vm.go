@@ -3121,6 +3121,14 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err := sendVmPatchImageMessage(conn, msg); err != nil {
 		return err
 	}
+	if numFiles := len(request.OverlayFiles); numFiles > 0 {
+		vm.logger.Debugf(0, "writing %d overlay files\n", numFiles)
+		patchLogger.Printf("writing %d overlay files\n", numFiles)
+	}
+	err = util.WriteOverlayFiles(rootDir, request.OverlayFiles)
+	if err != nil {
+		return err
+	}
 	if writeBootloaderConfig {
 		err := bootInfo.WriteBootloaderConfig(rootDir, vm.logger)
 		if err != nil {

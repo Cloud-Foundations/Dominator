@@ -239,6 +239,7 @@ var subcommands = []commands.Command{
 	{"debug-vm-image", "IPaddr", 1, 1, debugVmImageSubcommand},
 	{"delete-vm-volume", "IPaddr", 1, 1, deleteVmVolumeSubcommand},
 	{"destroy-vm", "IPaddr", 1, 1, destroyVmSubcommand},
+	{"discard-vm-access-token", "IPaddr", 1, 1, discardVmAccessTokenSubcommand},
 	{"discard-vm-old-image", "IPaddr", 1, 1, discardVmOldImageSubcommand},
 	{"discard-vm-old-user-data", "IPaddr", 1, 1,
 		discardVmOldUserDataSubcommand},
