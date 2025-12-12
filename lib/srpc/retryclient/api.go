@@ -26,6 +26,7 @@ type Params struct {
 type RetryClient struct {
 	params       Params
 	client       *srpc.Client
+	closeError   error
 	lastGoodTime time.Time
 }
 
