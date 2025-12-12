@@ -1,6 +1,7 @@
 package retryclient
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -34,27 +35,28 @@ func (client *RetryClient) call(serviceMethod string) (*srpc.Conn, error) {
 }
 
 func (client *RetryClient) close() error {
-	if err := client.client.Close(); err != nil {
-		return err
+	if client.client != nil {
+		client.closeError = client.client.Close()
+		client.client = nil
 	}
-	client.client = nil
-	return nil
+	return client.closeError
 }
 
 func (client *RetryClient) dial() error {
-	return retry.Retry(func() bool {
+	err := retry.Retry(func() bool {
 		if err := client.dialOnce(); err == nil {
 			return true
 		}
 		return false
 	}, client.params.Params)
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("error dialing %s: %s", client.params.Address, err)
 }
 
 func (client *RetryClient) dialOnce() error {
-	if client.client != nil {
-		client.client.Close()
-		client.client = nil
-	}
+	client.Close()
 	rawClient, err := srpc.DialTlsHTTPWithDialer(client.params.Network,
 		client.params.Address, client.params.TlsConfig, client.params.Dialer)
 	if err != nil {
