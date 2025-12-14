@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"reflect"
 
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb/mdbd"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
@@ -17,7 +17,7 @@ var (
 	debug = flag.Bool("debug", false,
 		"If true, show debugging output")
 	mdbFile = flag.String("mdbFile", "/var/lib/Dominator/mdb",
-		"File to read MDB data from (default format is JSON)")
+		"File to read/write MDB data from/to (default format is JSON)")
 
 	numMachines int
 )
@@ -49,7 +49,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger := cmdlogger.New()
 	mdbChannel := mdbd.StartMdbDaemon(*mdbFile, logger)
 	oldMachines := make(map[string]mdb.Machine)
 	firstTime := true
