@@ -77,14 +77,17 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 			client.Close()
 			continue
 		}
+		newMdb := &mdb.Mdb{}
 		for {
 			var mdbUpdate mdbserver.MdbUpdate
 			if err := conn.Decode(&mdbUpdate); err != nil {
 				logger.Println(err)
 				break
 			} else {
-				newMdb := processUpdate(lastMdb, mdbUpdate)
+				newMdb = processUpdate(newMdb, mdbUpdate)
+				sortStartTime := time.Now()
 				sort.Sort(newMdb)
+				mdbSortTimeDistribution.Add(time.Since(sortStartTime))
 				compareStartTime := time.Now()
 				if lastMdb == nil || !reflect.DeepEqual(lastMdb, newMdb) {
 					if lastMdb != nil {
@@ -92,15 +95,17 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 							compareStartTime))
 					}
 					mdbChannel <- newMdb
-					lastMdb = newMdb
 					if err := writeFile(mdbFileName, newMdb); err != nil {
 						logger.Println(err)
 					} else {
-						logger.Debugf(0, "Wrote MDB data to: %s\n", mdbFileName)
+						logger.Debugf(0,
+							"Wrote MDB data (%d machines) to: %s\n",
+							len(newMdb.Machines), mdbFileName)
 					}
 				} else {
 					logger.Debugln(1, "MDB update made no changes")
 				}
+				lastMdb = newMdb // Always dereference old data.
 			}
 		}
 		conn.Close()
