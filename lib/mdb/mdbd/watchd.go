@@ -20,13 +20,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
-func startMdbDaemon(mdbFileName string, logger log.Logger) <-chan *mdb.Mdb {
+func startMdbDaemon(config Config, params Params) <-chan *mdb.Mdb {
 	mdbChannel := make(chan *mdb.Mdb, 1)
-	if *mdbServerHostname != "" && *mdbServerPortNum > 0 {
-		go serverWatchDaemon(*mdbServerHostname, *mdbServerPortNum, mdbFileName,
-			mdbChannel, logger)
+	if config.MdbServerHostname != "" && config.MdbServerPortNum > 0 {
+		go serverWatchDaemon(config.MdbServerHostname, config.MdbServerPortNum,
+			config.MdbFileName, mdbChannel, params.Logger)
 	} else {
-		go fileWatchDaemon(mdbFileName, mdbChannel, logger)
+		go fileWatchDaemon(config.MdbFileName, mdbChannel, params.Logger)
 	}
 	return mdbChannel
 }
@@ -36,34 +36,33 @@ type genericDecoder interface {
 }
 
 func fileWatchDaemon(mdbFileName string, mdbChannel chan<- *mdb.Mdb,
-	logger log.Logger) {
+	logger log.DebugLogger) {
 	var lastMdb *mdb.Mdb
 	for readCloser := range fsutil.WatchFile(mdbFileName, logger) {
-		mdb := loadFile(readCloser, mdbFileName, logger)
+		newMdb := loadFile(readCloser, mdbFileName, logger)
 		readCloser.Close()
-		if mdb == nil {
+		if newMdb == nil {
 			continue
 		}
 		compareStartTime := time.Now()
-		if lastMdb == nil || !reflect.DeepEqual(lastMdb, mdb) {
+		if lastMdb == nil || !reflect.DeepEqual(lastMdb, newMdb) {
 			if lastMdb != nil {
 				mdbCompareTimeDistribution.Add(time.Since(compareStartTime))
 			}
-			mdbChannel <- mdb
-			lastMdb = mdb
+			mdbChannel <- newMdb
+			lastMdb = newMdb
+		} else {
+			logger.Debugln(1, "MDB file contained no changes")
 		}
 	}
 }
 
 func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
-	mdbFileName string, mdbChannel chan<- *mdb.Mdb, logger log.Logger) {
-	if file, err := os.Open(mdbFileName); err == nil {
-		fileMdb := loadFile(file, mdbFileName, logger)
-		file.Close()
-		if fileMdb != nil {
-			sort.Sort(fileMdb)
-			mdbChannel <- fileMdb
-		}
+	mdbFileName string, mdbChannel chan<- *mdb.Mdb, logger log.DebugLogger) {
+	var lastMdb *mdb.Mdb
+	if mdbData := readFile(mdbFileName, logger); mdbData != nil {
+		mdbChannel <- mdbData
+		lastMdb = mdbData
 	}
 	address := fmt.Sprintf("%s:%d", mdbServerHostname, mdbServerPortNum)
 	for ; ; time.Sleep(time.Second) {
@@ -78,36 +77,29 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 			client.Close()
 			continue
 		}
-		lastMdb := &mdb.Mdb{}
 		for {
 			var mdbUpdate mdbserver.MdbUpdate
 			if err := conn.Decode(&mdbUpdate); err != nil {
 				logger.Println(err)
 				break
 			} else {
-				lastMdb = processUpdate(lastMdb, mdbUpdate)
-				sort.Sort(lastMdb)
-				mdbChannel <- lastMdb
-				if file, err := os.Create(mdbFileName + "~"); err != nil {
-					logger.Println(err)
-				} else {
-					writer := bufio.NewWriter(file)
-					var err error
-					if isGob(mdbFileName) {
-						encoder := gob.NewEncoder(writer)
-						err = encoder.Encode(lastMdb.Machines)
-					} else {
-						err = jsonwriter.WriteWithIndent(writer, "    ",
-							lastMdb.Machines)
+				newMdb := processUpdate(lastMdb, mdbUpdate)
+				sort.Sort(newMdb)
+				compareStartTime := time.Now()
+				if lastMdb == nil || !reflect.DeepEqual(lastMdb, newMdb) {
+					if lastMdb != nil {
+						mdbCompareTimeDistribution.Add(time.Since(
+							compareStartTime))
 					}
-					if err != nil {
+					mdbChannel <- newMdb
+					lastMdb = newMdb
+					if err := writeFile(mdbFileName, newMdb); err != nil {
 						logger.Println(err)
-						os.Remove(mdbFileName + "~")
 					} else {
-						writer.Flush()
-						file.Close()
-						os.Rename(mdbFileName+"~", mdbFileName)
+						logger.Debugf(0, "Wrote MDB data to: %s\n", mdbFileName)
 					}
+				} else {
+					logger.Debugln(1, "MDB update made no changes")
 				}
 			}
 		}
@@ -150,7 +142,7 @@ func getDecoder(reader io.Reader, filename string) genericDecoder {
 
 func processUpdate(oldMdb *mdb.Mdb, mdbUpdate mdbserver.MdbUpdate) *mdb.Mdb {
 	newMdb := &mdb.Mdb{}
-	if len(oldMdb.Machines) < 1 {
+	if oldMdb == nil || len(oldMdb.Machines) < 1 {
 		newMdb.Machines = mdbUpdate.MachinesToAdd
 		return newMdb
 	}
@@ -172,4 +164,33 @@ func processUpdate(oldMdb *mdb.Mdb, mdbUpdate mdbserver.MdbUpdate) *mdb.Mdb {
 		newMdb.Machines = append(newMdb.Machines, machine)
 	}
 	return newMdb
+}
+
+func readFile(filename string, logger log.Logger) *mdb.Mdb {
+	if filename != "" {
+		if file, err := os.Open(filename); err == nil {
+			mdbData := loadFile(file, filename, logger)
+			file.Close()
+			return mdbData
+		}
+	}
+	return nil
+}
+
+func writeFile(filename string, mdbData *mdb.Mdb) error {
+	if filename == "" {
+		return nil
+	}
+	file, err := fsutil.CreateRenamingWriter(filename, fsutil.PublicFilePerms)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	if isGob(filename) {
+		return gob.NewEncoder(writer).Encode(mdbData.Machines)
+	} else {
+		return jsonwriter.WriteWithIndent(writer, "    ", mdbData.Machines)
+	}
 }
