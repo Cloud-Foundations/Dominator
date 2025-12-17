@@ -424,7 +424,8 @@ func (imdb *ImageDataBase) findLatestImage(
 			continue
 		}
 		if request.BuildCommitId != "" &&
-			request.BuildCommitId != img.image.BuildCommitId {
+			request.BuildCommitId != img.image.BuildCommitId &&
+			request.BuildCommitId != img.image.BuildBranch {
 			continue
 		}
 		if !tagMatcher.MatchEach(img.image.Tags) {
