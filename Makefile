@@ -18,6 +18,9 @@ install-darwin:
 install-linux:
 	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
 
+install-linux-arm:
+	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install ./cmd/*)
+
 install-windows:
 	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
