@@ -1095,6 +1095,7 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	defer func() {
 		<-sub.herd.fastUpdateSemaphore
 	}()
+	fastUpdateQueueTimeDistribution.Add(queueTime)
 	startTime = time.Now()
 	if !sub.tryMakeBusy() {
 		sub.sendFastUpdateFullMessage(progressChannel,
@@ -1146,6 +1147,7 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 			statusUpdatesDisabled,
 			statusUnsafeUpdate,
 			statusRebootBlocked:
+			fastUpdateProcessingTimeDistribution.Add(time.Since(startTime))
 			return
 		default:
 		}
