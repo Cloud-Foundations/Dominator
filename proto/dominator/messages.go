@@ -46,7 +46,8 @@ type FastUpdateResponse struct { // Multiple responses are sent.
 	ProcessingTime  time.Duration // Time spent processing the update,<0:timeout
 	ProgressMessage string        // Status updates and errors.
 	QueueTime       time.Duration // Time spent waiting in the queue, <0:timeout
-	Synced          bool          // If true, the sub is synced with the image.
+	RebootBlocked   bool          // If true: failed because reboot blocked.
+	Synced          bool          // If true: the sub is synced with the image.
 }
 
 type ForceDisruptiveUpdateRequest struct {
