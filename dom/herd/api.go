@@ -27,7 +27,8 @@ type FastUpdateMessage struct {
 	Message        string        // Status updates and errors.
 	ProcessingTime time.Duration // Negative: timeout.
 	QueueTime      time.Duration // Negative: timeout.
-	Synced         bool          // If true, the sub is synced with the image.
+	RebootBlocked  bool          // If true: failed because reboot blocked.
+	Synced         bool          // If true: the sub is synced with the image.
 }
 
 type subStatus uint

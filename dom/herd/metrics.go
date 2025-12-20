@@ -1,6 +1,7 @@
 package herd
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/cpusharer"
@@ -15,6 +16,9 @@ var (
 	computeTimeDistribution              *tricorder.CumulativeDistribution
 	connectDistribution                  *tricorder.CumulativeDistribution
 	cycleTimeDistribution                *tricorder.CumulativeDistribution
+	fastUpdateMutex                      sync.Mutex // Protect the numbers.
+	fastUpdateNumProcessingTimeouts      uint64
+	fastUpdateNumQueueTimeouts           uint64
 	fastUpdateProcessingTimeDistribution *tricorder.CumulativeDistribution
 	fastUpdateQueueTimeDistribution      *tricorder.CumulativeDistribution
 	fullPollDistribution                 *tricorder.CumulativeDistribution
@@ -38,6 +42,12 @@ func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
 		"connect-latency", "connect duration")
 	cycleTimeDistribution = makeMetric(dir, latencyBucketer,
 		"cycle-time", "cycle time")
+	dir.RegisterMetric("fast-update/num-processing-timeouts",
+		&fastUpdateNumProcessingTimeouts, units.None,
+		"number of timeouts processing")
+	dir.RegisterMetric("fast-update/num-queue-timeouts",
+		&fastUpdateNumQueueTimeouts, units.None,
+		"number of timeouts waiting in the queue")
 	fastUpdateProcessingTimeDistribution = makeMetric(dir, latencyBucketer,
 		"fast-update/processing-time", "time processing fast updates")
 	fastUpdateQueueTimeDistribution = makeMetric(dir, latencyBucketer,
