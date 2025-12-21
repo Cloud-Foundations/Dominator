@@ -33,17 +33,21 @@ func (t *rpcType) FastUpdate(conn *srpc.Conn,
 		}
 		return nil
 	}
-	var synced bool
+	// The last message before progressChannel closes will contain the
+	// completion information, so retain outside loop.
+	var reply dominator.FastUpdateResponse
 	for {
 		progressMessage, ok := <-progressChannel
-		var reply dominator.FastUpdateResponse
 		if ok {
+			reply.ProcessingTime = progressMessage.ProcessingTime
 			reply.ProgressMessage = progressMessage.Message
-			synced = progressMessage.Synced
+			reply.QueueTime = progressMessage.QueueTime
+			reply.RebootBlocked = progressMessage.RebootBlocked
+			reply.Synced = progressMessage.Synced
 		} else {
 			reply.Final = true
+			reply.ProgressMessage = ""
 		}
-		reply.Synced = synced
 		if err := encoder.Encode(reply); err != nil {
 			return err
 		}
