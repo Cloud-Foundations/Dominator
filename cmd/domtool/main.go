@@ -42,12 +42,16 @@ var (
 		"Network speed as percentage of capacity")
 	pauseDuration = flag.Duration("pauseDuration", time.Hour,
 		"Duration to pause updates for sub")
+	queueTimeout = flag.Duration("queueTimeout", 0,
+		"Timeout for waiting in fast update queue")
 	removePaused = flag.Bool("removePaused", false,
 		"Remove paused sub from MDB rather than disable updates")
 	scanExcludeList  flagutil.StringList = constants.ScanExcludeList
 	scanSpeedPercent                     = flag.Uint("scanSpeedPercent",
 		constants.DefaultScanSpeedPercent,
 		"Scan speed as percentage of capacity")
+	showFastUpdateResult = flag.Bool("showFastUpdateResult", false,
+		"If true, write the fast-updat result to stdout in JSON format")
 	statusesToMatch flagutil.StringList
 	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")

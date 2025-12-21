@@ -40,7 +40,9 @@ Some of the sub-commands available are:
 - **enable-updates** *reason*: tell *dominator* to perform automatic updates of
                                *subs*. The given *reason* must be provided and
                                is logged
-- **fast-update** *sub*: perform a fast update for the specified *sub*
+- **fast-update** *sub*: perform a fast update for the specified *sub*. The
+                         command will exit 0 if the update succeeded, 1 if
+                         failed and 3 if rejected because reboot is blocked
 - **force-disruptive-update** *sub*: do a one-time clearing of the `disruption
                                      denied` condition for the specified *sub*,
 				     allowing the update to continue

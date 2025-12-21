@@ -26,6 +26,12 @@ func EnableUpdates(client srpc.ClientI, reason string) error {
 
 func FastUpdate(client srpc.ClientI, request proto.FastUpdateRequest,
 	logger log.DebugLogger) (bool, error) {
+	reply, err := fastUpdate(client, request, logger)
+	return reply.Synced, err
+}
+
+func FastUpdateDetailed(client srpc.ClientI, request proto.FastUpdateRequest,
+	logger log.DebugLogger) (proto.FastUpdateResponse, error) {
 	return fastUpdate(client, request, logger)
 }
 

@@ -281,7 +281,7 @@ func (sub *Sub) connectAndPoll2(swapImages, failOnReboot bool,
 	pollWaitTimeDistribution.Add(time.Since(waitStartTime))
 	if fastMessageChannel != nil {
 		if err := client.BoostCpuLimit(srpcClient); err != nil {
-			sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+			sendFastUpdateMessage(fastMessageChannel, err.Error())
 		}
 		sub.boostScanSpeed(srpcClient, fastMessageChannel)
 	}
@@ -303,23 +303,22 @@ func (sub *Sub) boostScanSpeed(srpcClient *srpc.Client,
 	if err := client.BoostScanLimit(srpcClient); err == nil {
 		return
 	} else {
-		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		sendFastUpdateMessage(fastMessageChannel, err.Error())
 	}
 	oldSubConfig, err := client.GetConfiguration(srpcClient)
 	if err != nil {
-		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		sendFastUpdateMessage(fastMessageChannel, err.Error())
 		return
 	}
 	newSubConfig := oldSubConfig
 	newSubConfig.NetworkSpeedPercent = 100
 	newSubConfig.ScanSpeedPercent = 100
 	if err := client.SetConfiguration(srpcClient, newSubConfig); err != nil {
-		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		sendFastUpdateMessage(fastMessageChannel, err.Error())
 		return
 	}
 	sub.configToRestore = &oldSubConfig
-	sub.sendFastUpdateMessage(fastMessageChannel,
-		"increased scan speed percent")
+	sendFastUpdateMessage(fastMessageChannel, "increased scan speed percent")
 }
 
 func (sub *Sub) restoreScanSpeed(fastMessageChannel chan<- FastUpdateMessage) {
@@ -332,16 +331,16 @@ func (sub *Sub) restoreScanSpeed(fastMessageChannel chan<- FastUpdateMessage) {
 	srpcClient, err := sub.clientResource.GetHTTPWithDialer(sub.cancelChannel,
 		sub.herd.dialer)
 	if err != nil {
-		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		sendFastUpdateMessage(fastMessageChannel, err.Error())
 		return
 	}
 	defer srpcClient.Put()
 	err = client.SetConfiguration(srpcClient, *sub.configToRestore)
 	if err != nil {
-		sub.sendFastUpdateMessage(fastMessageChannel, err.Error())
+		sendFastUpdateMessage(fastMessageChannel, err.Error())
 		return
 	}
-	sub.sendFastUpdateMessage(fastMessageChannel,
+	sendFastUpdateMessage(fastMessageChannel,
 		fmt.Sprintf("restored scan speed percent to %d%%",
 			sub.configToRestore.ScanSpeedPercent))
 	sub.configToRestore = nil
@@ -1048,29 +1047,67 @@ func (sub *Sub) sendCancel() {
 	}
 }
 
+// waitOnSemaphore will wait on the specified semaphore until the timeout is
+// reached. A zero or negative timeout will wait indefinitely.
+// It returns the time taken to get the semaphore, or a negative Duration
+// indicating it timed out.
+func waitOnSemaphore(semaphore chan<- struct{},
+	timeout time.Duration) time.Duration {
+	startTime := time.Now()
+	if timeout <= 0 {
+		semaphore <- struct{}{}
+		return time.Since(startTime)
+	}
+	timer := time.NewTimer(timeout)
+	select {
+	case semaphore <- struct{}{}:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return time.Since(startTime)
+	case <-timer.C:
+		return -1
+	}
+}
+
 func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	request domproto.FastUpdateRequest) {
 	defer close(progressChannel)
+	var queueTime time.Duration
+	var startTime time.Time
 	select {
 	case sub.herd.fastUpdateSemaphore <- struct{}{}:
-		sub.sendFastUpdateMessage(progressChannel, "got fast update slot")
+		sendFastUpdateMessage(progressChannel, "got fast update slot")
 	default:
-		sub.sendFastUpdateMessage(progressChannel,
-			"waiting for fast update slot")
-		sub.herd.fastUpdateSemaphore <- struct{}{}
-		sub.sendFastUpdateMessage(progressChannel,
-			"finished waiting for fast update slot")
+		sendFastUpdateMessage(progressChannel, "waiting for fast update slot")
+		queueTime = waitOnSemaphore(sub.herd.fastUpdateSemaphore,
+			request.QueueTimeout)
+		if queueTime < 0 {
+			sendFastUpdateFullMessage(progressChannel, "timed out in queue",
+				queueTime, startTime, statusWaitingToPoll)
+			fastUpdateMutex.Lock()
+			fastUpdateNumQueueTimeouts++
+			fastUpdateMutex.Unlock()
+			return
+		}
+		sendFastUpdateFullMessage(progressChannel,
+			"finished waiting for fast update slot", queueTime, startTime,
+			statusWaitingToPoll)
 	}
 	defer func() {
 		<-sub.herd.fastUpdateSemaphore
 	}()
+	fastUpdateQueueTimeDistribution.Add(queueTime)
+	startTime = time.Now()
 	if !sub.tryMakeBusy() {
-		sub.sendFastUpdateMessage(progressChannel,
-			"waiting for sub to not be busy")
+		sendFastUpdateFullMessage(progressChannel,
+			"waiting for sub to not be busy", queueTime, startTime,
+			statusWaitingToPoll)
 		sub.makeBusy()
 	}
 	defer sub.makeUnbusy()
-	sub.sendFastUpdateMessage(progressChannel, "made sub busy")
+	sendFastUpdateFullMessage(progressChannel, "made sub busy", queueTime,
+		startTime, statusWaitingToPoll)
 	sub.herd.cpuSharer.GrabCpu()
 	defer sub.herd.cpuSharer.ReleaseCpu()
 	if request.UsePlannedImage && sub.plannedImage != nil {
@@ -1095,13 +1132,16 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	if sub.status == statusSynced {
 		sub.status = statusWaitingToPoll
 	}
+	sub.generationCount = 0 // Force a full poll.
 	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
 		if sub.deleting {
-			sub.sendFastUpdateMessage(progressChannel, "deleting")
+			sendFastUpdateFullMessage(progressChannel, "deleting", queueTime,
+				startTime, statusWaitingToPoll)
 			return
 		}
 		if sub.status != prevStatus {
-			sub.sendFastUpdateMessage(progressChannel, sub.status.String())
+			sendFastUpdateFullMessage(progressChannel, sub.status.String(),
+				queueTime, startTime, sub.status)
 			prevStatus = sub.status
 			sleeper.Reset()
 		}
@@ -1110,6 +1150,7 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 			statusUpdatesDisabled,
 			statusUnsafeUpdate,
 			statusRebootBlocked:
+			fastUpdateProcessingTimeDistribution.Add(time.Since(startTime))
 			return
 		default:
 		}
@@ -1118,13 +1159,35 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 		sub.connectAndPoll2(request.UsePlannedImage, request.FailOnReboot,
 			progressChannel)
 	}
-	sub.sendFastUpdateMessage(progressChannel, "timed out")
+	progressChannel <- FastUpdateMessage{
+		Message:        "timed out updating",
+		ProcessingTime: -1,
+		QueueTime:      queueTime,
+	}
+	fastUpdateMutex.Lock()
+	fastUpdateNumProcessingTimeouts++
+	fastUpdateMutex.Unlock()
 }
 
-func (sub *Sub) sendFastUpdateMessage(ch chan<- FastUpdateMessage,
+func sendFastUpdateMessage(ch chan<- FastUpdateMessage,
 	message string) {
 	ch <- FastUpdateMessage{
 		Message: message,
-		Synced:  sub.status == statusSynced,
+	}
+}
+
+func sendFastUpdateFullMessage(ch chan<- FastUpdateMessage,
+	message string, queueTime time.Duration, startTime time.Time,
+	status subStatus) {
+	var processingTime time.Duration
+	if !startTime.IsZero() {
+		processingTime = time.Since(startTime)
+	}
+	ch <- FastUpdateMessage{
+		Message:        message,
+		ProcessingTime: processingTime,
+		QueueTime:      queueTime,
+		RebootBlocked:  status == statusRebootBlocked,
+		Synced:         status == statusSynced,
 	}
 }

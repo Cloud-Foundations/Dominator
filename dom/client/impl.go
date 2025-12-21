@@ -42,31 +42,32 @@ func enableUpdates(client srpc.ClientI, reason string) error {
 }
 
 func fastUpdate(client srpc.ClientI, request proto.FastUpdateRequest,
-	logger log.DebugLogger) (bool, error) {
+	logger log.DebugLogger) (proto.FastUpdateResponse, error) {
 	conn, err := client.Call("Dominator.FastUpdate")
 	if err != nil {
-		return false, err
+		return proto.FastUpdateResponse{}, err
 	}
 	defer conn.Close()
 	if err := conn.Encode(request); err != nil {
-		return false, err
+		return proto.FastUpdateResponse{}, err
 	}
 	if err := conn.Flush(); err != nil {
-		return false, err
+		return proto.FastUpdateResponse{}, err
 	}
 	for {
 		var reply proto.FastUpdateResponse
 		if err := conn.Decode(&reply); err != nil {
-			return false, fmt.Errorf("error decoding: %s", err)
+			return proto.FastUpdateResponse{},
+				fmt.Errorf("error decoding: %s", err)
 		}
 		if err := errors.New(reply.Error); err != nil {
-			return false, err
+			return proto.FastUpdateResponse{}, err
 		}
 		if reply.ProgressMessage != "" {
 			logger.Debugln(0, reply.ProgressMessage)
 		}
 		if reply.Final {
-			return reply.Synced, nil
+			return reply, nil
 		}
 	}
 }

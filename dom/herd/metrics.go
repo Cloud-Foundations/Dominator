@@ -1,6 +1,7 @@
 package herd
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/cpusharer"
@@ -9,16 +10,21 @@ import (
 )
 
 var (
-	cleanupComputeTimeDistribution *tricorder.CumulativeDistribution
-	cleanupTimeDistribution        *tricorder.CumulativeDistribution
-	computeCpuTimeDistribution     *tricorder.CumulativeDistribution
-	computeTimeDistribution        *tricorder.CumulativeDistribution
-	connectDistribution            *tricorder.CumulativeDistribution
-	cycleTimeDistribution          *tricorder.CumulativeDistribution
-	mdbUpdateTimeDistribution      *tricorder.CumulativeDistribution
-	fullPollDistribution           *tricorder.CumulativeDistribution
-	shortPollDistribution          *tricorder.CumulativeDistribution
-	pollWaitTimeDistribution       *tricorder.CumulativeDistribution
+	cleanupComputeTimeDistribution       *tricorder.CumulativeDistribution
+	cleanupTimeDistribution              *tricorder.CumulativeDistribution
+	computeCpuTimeDistribution           *tricorder.CumulativeDistribution
+	computeTimeDistribution              *tricorder.CumulativeDistribution
+	connectDistribution                  *tricorder.CumulativeDistribution
+	cycleTimeDistribution                *tricorder.CumulativeDistribution
+	fastUpdateMutex                      sync.Mutex // Protect the numbers.
+	fastUpdateNumProcessingTimeouts      uint64
+	fastUpdateNumQueueTimeouts           uint64
+	fastUpdateProcessingTimeDistribution *tricorder.CumulativeDistribution
+	fastUpdateQueueTimeDistribution      *tricorder.CumulativeDistribution
+	fullPollDistribution                 *tricorder.CumulativeDistribution
+	mdbUpdateTimeDistribution            *tricorder.CumulativeDistribution
+	pollWaitTimeDistribution             *tricorder.CumulativeDistribution
+	shortPollDistribution                *tricorder.CumulativeDistribution
 )
 
 func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
@@ -36,14 +42,24 @@ func (herd *Herd) setupMetrics(dir *tricorder.DirectorySpec) {
 		"connect-latency", "connect duration")
 	cycleTimeDistribution = makeMetric(dir, latencyBucketer,
 		"cycle-time", "cycle time")
-	mdbUpdateTimeDistribution = makeMetric(dir, latencyBucketer,
-		"mdb-update-time", "time to update Herd MDB data")
+	dir.RegisterMetric("fast-update/num-processing-timeouts",
+		&fastUpdateNumProcessingTimeouts, units.None,
+		"number of timeouts processing")
+	dir.RegisterMetric("fast-update/num-queue-timeouts",
+		&fastUpdateNumQueueTimeouts, units.None,
+		"number of timeouts waiting in the queue")
+	fastUpdateProcessingTimeDistribution = makeMetric(dir, latencyBucketer,
+		"fast-update/processing-time", "time processing fast updates")
+	fastUpdateQueueTimeDistribution = makeMetric(dir, latencyBucketer,
+		"fast-update/queue-time", "time waiting in fast update queue")
 	fullPollDistribution = makeMetric(dir, latencyBucketer,
 		"poll-full-latency", "full poll duration")
-	shortPollDistribution = makeMetric(dir, latencyBucketer,
-		"poll-short-latency", "short poll duration")
+	mdbUpdateTimeDistribution = makeMetric(dir, latencyBucketer,
+		"mdb-update-time", "time to update Herd MDB data")
 	pollWaitTimeDistribution = makeMetric(dir, latencyBucketer,
 		"poll-wait-time", "poll wait time")
+	shortPollDistribution = makeMetric(dir, latencyBucketer,
+		"poll-short-latency", "short poll duration")
 }
 
 func makeMetric(dir *tricorder.DirectorySpec, bucketer *tricorder.Bucketer,
