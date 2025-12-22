@@ -91,3 +91,12 @@ type ReplaceIdleSlavesRequest struct {
 type ReplaceIdleSlavesResponse struct {
 	Error string
 }
+
+type StartAutoBuildsRequest struct {
+	WaitForComplete bool
+	WaitToStart     bool
+}
+
+type StartAutoBuildsResponse struct {
+	Error string
+}
