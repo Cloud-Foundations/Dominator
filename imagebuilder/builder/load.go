@@ -124,9 +124,11 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 			return nil, err
 		}
 	}
+	autoRebuildTrigger := make(chan chan<- struct{}) // Unbuffered: busy block.
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
 	b := &Builder{
+		autoRebuildTrigger:          autoRebuildTrigger,
 		buildLogArchiver:            params.BuildLogArchiver,
 		bindMounts:                  masterConfiguration.BindMounts,
 		mtimesCopyFilter:            mtimesCopyFilter,
@@ -176,7 +178,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	}
 	go b.dependencyGeneratorLoop(generateDependencyTrigger)
 	go b.watchConfigLoop(imageStreamsConfigChannel, streamsLoadedChannel)
-	go b.rebuildImages(options.ImageRebuildInterval)
+	go b.rebuildImages(options.ImageRebuildInterval, autoRebuildTrigger)
 	return b, nil
 }
 

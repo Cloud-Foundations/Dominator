@@ -209,6 +209,7 @@ type BuildLocalOptions struct {
 }
 
 type Builder struct {
+	autoRebuildTrigger          chan<- chan<- struct{}
 	buildLogArchiver            logarchiver.BuildLogArchiver
 	bindMounts                  []string
 	createSlaveTimeout          time.Duration
@@ -341,6 +342,10 @@ func (b *Builder) ShowImageStream(writer io.Writer, streamName string) {
 
 func (b *Builder) ShowImageStreams(writer io.Writer) {
 	b.showImageStreams(writer)
+}
+
+func (b *Builder) StartAutoBuilds(request proto.StartAutoBuildsRequest) error {
+	return b.startAutoBuilds(request)
 }
 
 func (b *Builder) WaitForStreamsLoaded(timeout time.Duration) error {

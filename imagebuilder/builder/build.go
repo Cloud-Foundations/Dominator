@@ -519,25 +519,77 @@ func (b *Builder) rebuildImage(client srpc.ClientI, streamName string,
 	b.logger.Printf("Error building image: %s: %s\n", streamName, err)
 }
 
-func (b *Builder) rebuildImages(minInterval time.Duration) {
-	if minInterval < 1 {
-		return
-	}
+func (b *Builder) rebuildImages(rebuildInterval time.Duration,
+	autoRebuildTrigger <-chan chan<- struct{}) {
 	client, _ := dialServer(b.imageServerAddress, 0)
-	var sleepUntil time.Time
-	for ; ; time.Sleep(time.Until(sleepUntil)) {
-		startTime := time.Now()
-		sleepUntil = startTime.Add(minInterval)
-		var extendOnly bool
-		if err := b.WaitForStreamsLoaded(5 * time.Minute); err != nil {
-			extendOnly = true
+	timer := time.NewTimer(time.Hour)
+	var expiresIn time.Duration
+	if rebuildInterval < 1 {
+		expiresIn = time.Hour
+		timer.Stop()
+	} else {
+		expiresIn = 2 * rebuildInterval
+		timer.Reset(time.Second) // Start auto-building soon.
+	}
+	for {
+		var completionNotifier chan<- struct{}
+		select {
+		case completionNotifier = <-autoRebuildTrigger:
+		case <-timer.C:
 		}
-		b.logger.Println("Starting automatic image build cycle")
-		for _, streamName := range b.listStreamsToAutoRebuild() {
-			b.rebuildImage(client, streamName, minInterval*2, &extendOnly)
+		nextStartTime := time.Now().Add(rebuildInterval)
+		b.rebuildImagesOnce(client, expiresIn)
+		select {
+		case completionNotifier <- struct{}{}:
+		default:
 		}
-		b.logger.Printf("Completed automatic image build cycle in %s\n",
-			format.Duration(time.Since(startTime)))
+		if rebuildInterval > 0 {
+			timer.Stop()
+			select {
+			case <-timer.C:
+			default:
+			}
+			sleepTime := time.Until(nextStartTime)
+			if sleepTime < time.Second {
+				sleepTime = time.Second
+			}
+			timer.Reset(sleepTime)
+		}
+	}
+}
+
+func (b *Builder) rebuildImagesOnce(client srpc.ClientI,
+	expiresIn time.Duration) {
+	var extendOnly bool
+	if err := b.WaitForStreamsLoaded(5 * time.Minute); err != nil {
+		extendOnly = true
+	}
+	b.logger.Println("Starting automatic image build cycle")
+	startTime := time.Now()
+	for _, streamName := range b.listStreamsToAutoRebuild() {
+		b.rebuildImage(client, streamName, expiresIn, &extendOnly)
+	}
+	b.logger.Printf("Completed automatic image build cycle in %s\n",
+		format.Duration(time.Since(startTime)))
+}
+
+func (b *Builder) startAutoBuilds(request proto.StartAutoBuildsRequest) error {
+	completionNotifier := make(chan struct{}, 1)
+	if request.WaitToStart {
+		b.autoRebuildTrigger <- completionNotifier
+		if request.WaitForComplete {
+			<-completionNotifier
+		}
+		return nil
+	}
+	select {
+	case b.autoRebuildTrigger <- completionNotifier:
+		if request.WaitForComplete {
+			<-completionNotifier
+		}
+		return nil
+	default:
+		return errors.New("auto build busy")
 	}
 }
 
