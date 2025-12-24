@@ -38,3 +38,8 @@ func GetDirectedGraph(client *srpc.Client,
 func ReplaceIdleSlaves(client *srpc.Client, immediateGetNew bool) error {
 	return replaceIdleSlaves(client, immediateGetNew)
 }
+
+func StartAutoBuilds(client *srpc.Client,
+	request proto.StartAutoBuildsRequest) error {
+	return startAutoBuilds(client, request)
+}
