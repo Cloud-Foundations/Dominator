@@ -123,3 +123,16 @@ func replaceIdleSlaves(client *srpc.Client, immediateGetNew bool) error {
 	}
 	return errors.New(reply.Error)
 }
+
+func startAutoBuilds(client *srpc.Client,
+	request proto.StartAutoBuildsRequest) error {
+	var reply proto.StartAutoBuildsResponse
+	err := client.RequestReply("Imaginator.StartAutoBuilds", request, &reply)
+	if err != nil {
+		return err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return err
+	}
+	return nil
+}
