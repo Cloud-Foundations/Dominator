@@ -48,6 +48,10 @@ var (
 		"If true, show fetch log when getting directed graph")
 	variablesFilename = flag.String("variablesFilename", "",
 		"Name of file to read variables from to inject into builds")
+	waitForAutoRebuilds = flag.Bool("waitForAutoRebuilds", false,
+		"If true, start-auto-builds will wait for builds to complete")
+	waitToStartAutoRebuilds = flag.Bool("waitToStartAutoRebuilds", false,
+		"If true, wait to start for start-auto-builds, else error if busy")
 
 	minimumExpiration = 5 * time.Minute
 )
@@ -86,6 +90,7 @@ var subcommands = []commands.Command{
 	{"process-manifest", "manifestDir rootDir", 2, 2,
 		processManifestSubcommand},
 	{"replace-idle-slaves", "", 0, 0, replaceIdleSlavesSubcommand},
+	{"start-auto-builds", "", 0, 0, startAutoBuildsSubcommand},
 }
 
 var imaginatorSrpcClient *srpc.Client

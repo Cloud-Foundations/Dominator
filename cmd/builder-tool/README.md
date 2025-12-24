@@ -52,6 +52,7 @@ Some of the sub-commands available are:
 - **process-manifest**: process a manifest locally in the specified root
                         directory containing an already unpacked source image
 - **replace-idle-slaves**: replace build slaves which are idle
+- **start-auto-builds**: start automatic image building cycle
 
 ## Security
 *[Imaginator](../imaginator/README.md)* restricts RPC access using TLS client
