@@ -1129,10 +1129,8 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	var prevStatus subStatus
 	timeoutTime := time.Now().Add(request.Timeout)
 	defer sub.restoreScanSpeed(progressChannel)
-	if sub.status == statusSynced {
-		sub.status = statusWaitingToPoll
-	}
-	sub.generationCount = 0 // Force a full poll.
+	sub.status = statusWaitingToPoll // Force a poll before status check.
+	sub.generationCount = 0          // Force a full poll.
 	for ; time.Until(timeoutTime) > 0; sleeper.Sleep() {
 		if sub.deleting {
 			sendFastUpdateFullMessage(progressChannel, "deleting", queueTime,
