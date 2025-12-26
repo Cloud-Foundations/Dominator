@@ -63,7 +63,7 @@ func (g *fleetManagerGeneratorType) getUpdates(fleetManager string,
 	defer client.Close()
 	conn, err := client.Call("FleetManager.GetUpdates")
 	if err != nil {
-		return fmt.Errorf("error calling to: %s: %s", conn.RemoteAddr(), err)
+		return fmt.Errorf("error calling to: %s: %s", g.fleetManager, err)
 	}
 	defer conn.Close()
 	request := fm_proto.GetUpdatesRequest{Location: g.location}
