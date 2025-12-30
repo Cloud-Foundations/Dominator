@@ -102,6 +102,7 @@ type SubInfo struct {
 	LastNote            string              `json:",omitempty"`
 	LastDisruptionState sub.DisruptionState `json:",omitempty"`
 	LastScanDuration    time.Duration       `json:",omitempty"`
+	LastScanTime        time.Time           `json:",omitempty"`
 	LastSuccessfulImage string              `json:",omitempty"`
 	LastSyncTime        time.Time           `json:",omitempty"`
 	LastUpdateTime      time.Time           `json:",omitempty"`
