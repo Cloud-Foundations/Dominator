@@ -127,6 +127,7 @@ type Sub struct {
 	lastFullPollDuration         time.Duration
 	lastPollWasFull              bool
 	lastScanDuration             time.Duration
+	lastScanTime                 time.Time
 	lastComputeUpdateCpuDuration time.Duration
 	lastUpdateTime               time.Time
 	lastSyncTime                 time.Time

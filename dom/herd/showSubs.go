@@ -178,6 +178,7 @@ func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true, "Name", "Required Image",
 		"Planned Image", "Busy", "Status", "Uptime", "Last Scan Duration",
+		"Time Since Last Scan",
 		"Staleness", "Last Update", "Last Sync", "Connect", "Short Poll",
 		"Full Poll", "Update Compute")
 	subs := herd.getSelectedSubs(selectFunc)
@@ -213,6 +214,7 @@ func (sub *Sub) makeInfo() proto.SubInfo {
 		LastDisruptionState: sub.lastDisruptionState,
 		LastNote:            sub.lastNote,
 		LastScanDuration:    sub.lastScanDuration,
+		LastScanTime:        sub.lastScanTime,
 		LastSuccessfulImage: sub.lastSuccessfulImageName,
 		LastSyncTime:        sub.lastSyncTime,
 		LastUpdateTime:      sub.lastUpdateTime,
@@ -241,6 +243,7 @@ func showSub(tw *html.TableWriter, sub *Sub) {
 			sub.mdb.Hostname, sub.publishedStatus.html()))
 	showSince(tw, sub.pollTime, sub.startTime)
 	showDuration(tw, sub.lastScanDuration, false)
+	showDurationSince(tw, sub.lastScanTime, false)
 	showSince(tw, timeNow, sub.lastPollSucceededTime)
 	showSince(tw, timeNow, sub.lastUpdateTime)
 	showSince(tw, timeNow, sub.lastSyncTime)
@@ -332,6 +335,8 @@ func (herd *Herd) showSubHandler(writer http.ResponseWriter,
 	showSince(tw, sub.pollTime, sub.startTime)
 	newRow(w, "Last scan duration", false)
 	showDuration(tw, sub.lastScanDuration, false)
+	newRow(w, "Time since last scan", false)
+	showDurationSince(tw, sub.lastScanTime, false)
 	if sub.mdb.Location != "" {
 		newRow(w, "Location", false)
 		tw.WriteData("", sub.mdb.Location)
@@ -408,6 +413,19 @@ func showDuration(tw *html.TableWriter, duration time.Duration,
 		tw.WriteData("", "")
 	} else {
 		str := format.Duration(duration)
+		if highlight {
+			str = "<b>" + str + "</b>"
+		}
+		tw.WriteData("", str)
+	}
+}
+
+func showDurationSince(tw *html.TableWriter, sinceTime time.Time,
+	highlight bool) {
+	if sinceTime.IsZero() {
+		tw.WriteData("", "")
+	} else {
+		str := format.Duration(time.Since(sinceTime))
 		if highlight {
 			str = "<b>" + str + "</b>"
 		}
