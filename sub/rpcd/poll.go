@@ -59,6 +59,7 @@ func (t *rpcType) Poll(conn *srpc.Conn) error {
 	response.ScanCount = t.params.FileSystemHistory.ScanCount()
 	response.DurationOfLastScan =
 		t.params.FileSystemHistory.DurationOfLastScan()
+	response.TimeOfLastScan = t.params.FileSystemHistory.TimeOfLastScan()
 	response.GenerationCount = t.params.FileSystemHistory.GenerationCount()
 	response.SystemUptime = t.getSystemUptime()
 	fs := t.params.FileSystemHistory.FileSystem()

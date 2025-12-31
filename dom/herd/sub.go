@@ -519,6 +519,7 @@ func (sub *Sub) poll(srpcClient *srpc.Client, previousStatus subStatus,
 		sub.generationCount = 0
 	}
 	sub.lastScanDuration = reply.DurationOfLastScan
+	sub.lastScanTime = reply.TimeOfLastScan
 	if fs := reply.FileSystem; fs == nil {
 		sub.lastPollWasFull = false
 		sub.lastShortPollDuration =

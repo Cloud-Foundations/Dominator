@@ -90,6 +90,12 @@ func (fsh *FileSystemHistory) String() string {
 	return fmt.Sprintf("GenerationCount=%d\n", fsh.generationCount)
 }
 
+func (fsh *FileSystemHistory) TimeOfLastScan() time.Time {
+	fsh.rwMutex.RLock()
+	defer fsh.rwMutex.RUnlock()
+	return fsh.timeOfLastScan
+}
+
 func (fsh *FileSystemHistory) Update(newFS *FileSystem) {
 	fsh.update(newFS)
 }

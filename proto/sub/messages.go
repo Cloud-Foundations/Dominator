@@ -93,6 +93,7 @@ type PollResponse struct {
 	PollTime                     time.Time
 	ScanCount                    uint64
 	DurationOfLastScan           time.Duration
+	TimeOfLastScan               time.Time
 	GenerationCount              uint64
 	SystemUptime                 *time.Duration
 	DisruptionState              DisruptionState
