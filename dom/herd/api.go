@@ -83,6 +83,10 @@ type HtmlWriter interface {
 	WriteHtml(writer io.Writer)
 }
 
+type selectionDataType struct {
+	imagesByName map[string]*image.Image
+}
+
 type Sub struct {
 	herd                         *Herd
 	mdb                          mdb.Machine
@@ -173,7 +177,7 @@ type Herd struct {
 
 type subCounter struct {
 	counter    *uint64
-	selectFunc func(*Sub) bool
+	selectFunc func(*selectionDataType, *Sub) bool
 }
 
 func NewHerd(imageServerAddress string, objectServer objectserver.ObjectServer,

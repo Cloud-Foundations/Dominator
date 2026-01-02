@@ -19,12 +19,13 @@ func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	[]proto.SubInfo, error) {
 	selectFunc := makeSelector(request.LocationsToMatch,
 		request.StatusesToMatch, tagmatcher.New(request.TagsToMatch, false))
+	selectionData := herd.makeSelectionData()
 	if len(request.Hostnames) < 1 {
 		herd.RLock()
 		defer herd.RUnlock()
 		subInfos := make([]proto.SubInfo, 0, len(herd.subsByIndex))
 		for _, sub := range herd.subsByIndex {
-			if selectFunc(sub) {
+			if selectFunc(selectionData, sub) {
 				subInfos = append(subInfos, sub.makeInfo())
 			}
 		}
@@ -35,7 +36,7 @@ func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 	defer herd.RUnlock()
 	for _, hostname := range request.Hostnames {
 		if sub, ok := herd.subsByName[hostname]; ok {
-			if selectFunc(sub) {
+			if selectFunc(selectionData, sub) {
 				subInfos = append(subInfos, sub.makeInfo())
 			}
 		}
@@ -46,8 +47,9 @@ func (herd *Herd) getInfoForSubs(request proto.GetInfoForSubsRequest) (
 func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 	req *http.Request) {
 	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
-	selectFunc := func(sub *Sub) bool {
-		return selectAliveSub(sub) && querySelectFunc(sub)
+	selectFunc := func(selectionData *selectionDataType, sub *Sub) bool {
+		return selectAliveSub(selectionData, sub) &&
+			querySelectFunc(selectionData, sub)
 	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
@@ -68,13 +70,15 @@ func (herd *Herd) listImagesForSubsHandler(w http.ResponseWriter,
 
 func (herd *Herd) showImagesForSubsHandler(w io.Writer, req *http.Request) {
 	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
-	herd.showImagesForSubsHTML(w, func(sub *Sub) bool {
-		return selectAliveSub(sub) && querySelectFunc(sub)
+	herd.showImagesForSubsHTML(w, func(selectionData *selectionDataType,
+		sub *Sub) bool {
+		return selectAliveSub(selectionData, sub) &&
+			querySelectFunc(selectionData, sub)
 	})
 }
 
 func (herd *Herd) showImagesForSubsHTML(writer io.Writer,
-	selectFunc func(*Sub) bool) {
+	selectFunc func(*selectionDataType, *Sub) bool) {
 	fmt.Fprintf(writer, "<title>Dominator images for subs</title>")
 	fmt.Fprintln(writer, `<style>
                           table, th, td {

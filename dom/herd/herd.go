@@ -166,6 +166,7 @@ func (herd *Herd) pollNextSub() bool {
 }
 
 func (herd *Herd) countSelectedSubs(subCounters []subCounter) uint64 {
+	selectionData := herd.makeSelectionData()
 	herd.RLock()
 	defer herd.RUnlock()
 	if len(subCounters) < 1 {
@@ -173,7 +174,7 @@ func (herd *Herd) countSelectedSubs(subCounters []subCounter) uint64 {
 	}
 	for _, sub := range herd.subsByIndex {
 		for _, subCounter := range subCounters {
-			if subCounter.selectFunc(sub) {
+			if subCounter.selectFunc(selectionData, sub) {
 				*subCounter.counter++
 			}
 		}
@@ -181,12 +182,14 @@ func (herd *Herd) countSelectedSubs(subCounters []subCounter) uint64 {
 	return uint64(len(herd.subsByIndex))
 }
 
-func (herd *Herd) getSelectedSubs(selectFunc func(*Sub) bool) []*Sub {
+func (herd *Herd) getSelectedSubs(
+	selectFunc func(*selectionDataType, *Sub) bool) []*Sub {
+	selectionData := herd.makeSelectionData()
 	herd.RLock()
 	defer herd.RUnlock()
 	subs := make([]*Sub, 0, len(herd.subsByIndex))
 	for _, sub := range herd.subsByIndex {
-		if selectFunc == nil || selectFunc(sub) {
+		if selectFunc == nil || selectFunc(selectionData, sub) {
 			subs = append(subs, sub)
 		}
 	}
@@ -200,7 +203,7 @@ func (herd *Herd) getSub(name string) *Sub {
 }
 
 func (herd *Herd) getReachableSelector(parsedQuery url.ParsedQuery) (
-	func(*Sub) bool, error) {
+	func(*selectionDataType, *Sub) bool, error) {
 	duration, err := parsedQuery.Last()
 	if err != nil {
 		return nil, err
@@ -209,12 +212,18 @@ func (herd *Herd) getReachableSelector(parsedQuery url.ParsedQuery) (
 }
 
 func (herd *Herd) getUnreachableSelector(parsedQuery url.ParsedQuery) (
-	func(*Sub) bool, error) {
+	func(*selectionDataType, *Sub) bool, error) {
 	duration, err := parsedQuery.Last()
 	if err != nil {
 		return nil, err
 	}
 	return uDuration(duration).selector, nil
+}
+
+func (herd *Herd) makeSelectionData() *selectionDataType {
+	return &selectionDataType{
+		imagesByName: herd.imageManager.GetImages(),
+	}
 }
 
 func (herd *Herd) rLockWithTimeout(timeout time.Duration) {

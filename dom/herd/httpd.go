@@ -30,6 +30,8 @@ func (herd *Herd) startServer(portNum uint, daemon bool) error {
 		herd.makeShowSubsHandler(selectDeviantSub, "deviant "))
 	html.HandleFunc("/showImagesForSubs",
 		html.BenchmarkedHandler(herd.showImagesForSubsHandler))
+	html.HandleFunc("/showOutdatedImageSubs",
+		herd.makeShowSubsHandler(selectOutdatedImageSub, "outdated image "))
 	html.HandleFunc("/showReachableSubs", herd.showReachableSubsHandler)
 	html.HandleFunc("/showUnreachableSubs", herd.showUnreachableSubsHandler)
 	html.HandleFunc("/showSub", herd.showSubHandler)
