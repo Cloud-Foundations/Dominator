@@ -21,7 +21,7 @@ import (
 )
 
 func makeSelector(locationsToMatch []string, statusesToMatch []string,
-	tagsToMatch *tagmatcher.TagMatcher) func(sub *Sub) bool {
+	tagsToMatch *tagmatcher.TagMatcher) func(*selectionDataType, *Sub) bool {
 	if len(locationsToMatch) < 1 &&
 		len(statusesToMatch) < 1 &&
 		tagsToMatch == nil {
@@ -29,7 +29,7 @@ func makeSelector(locationsToMatch []string, statusesToMatch []string,
 	}
 	locationsToMatchMap := stringutil.ConvertListToMap(locationsToMatch, false)
 	statusesToMatchMap := stringutil.ConvertListToMap(statusesToMatch, false)
-	return func(sub *Sub) bool {
+	return func(selectionData *selectionDataType, sub *Sub) bool {
 		if len(locationsToMatch) > 0 {
 			subLocationLength := len(sub.mdb.Location)
 			if subLocationLength < 1 {
@@ -63,7 +63,8 @@ func makeSelector(locationsToMatch []string, statusesToMatch []string,
 	}
 }
 
-func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
+func makeUrlQuerySelector(queryValues map[string][]string) func(
+	*selectionDataType, *Sub) bool {
 	if len(queryValues) < 1 {
 		return selectAll
 	}
@@ -81,11 +82,12 @@ func makeUrlQuerySelector(queryValues map[string][]string) func(sub *Sub) bool {
 		tagmatcher.New(tagsToMatch, false))
 }
 
-func selectAll(sub *Sub) bool {
+func selectAll(_ *selectionDataType, sub *Sub) bool {
 	return true
 }
 
-func (herd *Herd) makeShowSubsHandler(selectFunc func(*Sub) bool,
+func (herd *Herd) makeShowSubsHandler(
+	selectFunc func(*selectionDataType, *Sub) bool,
 	subType string) func(http.ResponseWriter, *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		herd.showSubsHandler(writer, req, selectFunc, subType)
@@ -105,7 +107,7 @@ func (herd *Herd) showUnreachableSubsHandler(writer http.ResponseWriter,
 }
 
 func (herd *Herd) showSubsCSV(writer io.Writer,
-	selectFunc func(*Sub) bool) {
+	selectFunc func(*selectionDataType, *Sub) bool) {
 	subs := herd.getSelectedSubs(selectFunc)
 	w := csv.NewWriter(writer)
 	defer w.Flush()
@@ -130,11 +132,12 @@ func (herd *Herd) showSubsCSV(writer io.Writer,
 }
 
 func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
-	req *http.Request, _selectFunc func(*Sub) bool,
+	req *http.Request, _selectFunc func(*selectionDataType, *Sub) bool,
 	subType string) {
 	querySelectFunc := makeUrlQuerySelector(req.URL.Query())
-	selectFunc := func(sub *Sub) bool {
-		return _selectFunc(sub) && querySelectFunc(sub)
+	selectFunc := func(selectionData *selectionDataType, sub *Sub) bool {
+		return _selectFunc(selectionData, sub) &&
+			querySelectFunc(selectionData, sub)
 	}
 	writer := bufio.NewWriter(rWriter)
 	defer writer.Flush()
@@ -153,8 +156,8 @@ func (herd *Herd) showSubsHandler(rWriter http.ResponseWriter,
 	}
 }
 
-func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
-	subType string) {
+func (herd *Herd) showSubsHTML(writer *bufio.Writer,
+	selectFunc func(*selectionDataType, *Sub) bool, subType string) {
 	bd, _ := html.CreateBenchmarkData()
 	defer fmt.Fprintln(writer, "</body>")
 	fmt.Fprintf(writer, "<title>Dominator %s subs</title>", subType)
@@ -190,7 +193,7 @@ func (herd *Herd) showSubsHTML(writer *bufio.Writer, selectFunc func(*Sub) bool,
 }
 
 func (herd *Herd) showSubsJSON(writer io.Writer,
-	selectFunc func(*Sub) bool) {
+	selectFunc func(*selectionDataType, *Sub) bool) {
 	subs := herd.getSelectedSubs(selectFunc)
 	output := make([]proto.SubInfo, 0, len(subs))
 	for _, sub := range subs {
@@ -200,7 +203,7 @@ func (herd *Herd) showSubsJSON(writer io.Writer,
 }
 
 func (herd *Herd) showSubsText(writer io.Writer,
-	selectFunc func(*Sub) bool) {
+	selectFunc func(*selectionDataType, *Sub) bool) {
 	subs := herd.getSelectedSubs(selectFunc)
 	for _, sub := range subs {
 		fmt.Fprintln(writer, sub)

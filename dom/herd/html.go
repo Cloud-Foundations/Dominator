@@ -14,14 +14,14 @@ var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
 type rDuration time.Duration
 type uDuration time.Duration
 
-func (d rDuration) selector(sub *Sub) bool {
+func (d rDuration) selector(_ *selectionDataType, sub *Sub) bool {
 	if time.Since(sub.lastReachableTime) <= time.Duration(d) {
 		return true
 	}
 	return false
 }
 
-func (d uDuration) selector(sub *Sub) bool {
+func (d uDuration) selector(_ *selectionDataType, sub *Sub) bool {
 	if time.Since(sub.lastReachableTime) > time.Duration(d) {
 		return true
 	}
@@ -36,6 +36,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	herd.computedFilesManager.WriteHtml(writer)
 	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
 	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
+	var numOutdatedImageSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
 	var reachableDaySubs, reachableWeekSubs, reachableMonthSubs uint64
 	var unreachableMinuteSubs, unreachable10MinuteSubs uint64
@@ -47,6 +48,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		{&numDeviantSubs, selectDeviantSub},
 		{&numLikelyCompliantSubs, selectLikelyCompliantSub},
 		{&numDisruptionWaitingSubs, selectDisruptionWaitingSub},
+		{&numOutdatedImageSubs, selectOutdatedImageSub},
 		{&reachableMinuteSubs, rDuration(time.Minute).selector},
 		{&reachable10MinuteSubs, rDuration(10 * time.Minute).selector},
 		{&reachableHourSubs, rDuration(time.Hour).selector},
@@ -137,6 +139,15 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	fmt.Fprintf(writer,
 		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
 		numLikelyCompliantSubs)
+	fmt.Fprintf(writer,
+		"Number of outdated image subs: <a href=\"showOutdatedImageSubs\">%d</a>",
+		numOutdatedImageSubs)
+	fmt.Fprintf(writer,
+		" (<a href=\"showOutdatedImageSubs?output=text\">text</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showOutdatedImageSubs?output=json\">JSON</a>")
+	fmt.Fprintf(writer,
+		", <a href=\"showOutdatedImageSubs?output=csv\">CSV</a>)<br>\n")
 	if numDisruptionWaitingSubs > 0 {
 		fmt.Fprintf(writer,
 			"Number of subs waiting to disrupt: <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied\">%d</a>",
@@ -217,7 +228,7 @@ func (herd *Herd) writeUnreachableSubsLink(writer io.Writer,
 	}
 }
 
-func selectAliveSub(sub *Sub) bool {
+func selectAliveSub(_ *selectionDataType, sub *Sub) bool {
 	switch sub.publishedStatus {
 	case statusUnknown:
 		return false
@@ -239,7 +250,7 @@ func selectAliveSub(sub *Sub) bool {
 	return true
 }
 
-func selectDeviantSub(sub *Sub) bool {
+func selectDeviantSub(_ *selectionDataType, sub *Sub) bool {
 	switch sub.publishedStatus {
 	case statusWaitingToPoll:
 		return true
@@ -269,14 +280,14 @@ func selectDeviantSub(sub *Sub) bool {
 	return false
 }
 
-func selectCompliantSub(sub *Sub) bool {
+func selectCompliantSub(_ *selectionDataType, sub *Sub) bool {
 	if sub.publishedStatus == statusSynced {
 		return true
 	}
 	return false
 }
 
-func selectDisruptionWaitingSub(sub *Sub) bool {
+func selectDisruptionWaitingSub(_ *selectionDataType, sub *Sub) bool {
 	switch sub.publishedStatus {
 	case statusDisruptionRequested:
 		return true
@@ -286,7 +297,7 @@ func selectDisruptionWaitingSub(sub *Sub) bool {
 	return false
 }
 
-func selectLikelyCompliantSub(sub *Sub) bool {
+func selectLikelyCompliantSub(_ *selectionDataType, sub *Sub) bool {
 	switch sub.publishedStatus {
 	case statusWaitingToPoll, statusPolling:
 		return sub.lastSuccessfulImageName == sub.mdb.RequiredImage
@@ -296,6 +307,32 @@ func selectLikelyCompliantSub(sub *Sub) bool {
 		return true
 	}
 	return false
+}
+
+func selectOutdatedImageSub(selectionData *selectionDataType, sub *Sub) bool {
+	if sub.lastPollSucceededTime.IsZero() {
+		return false
+	}
+	var outdated bool
+	if sub.mdb.RequiredImage != "" {
+		img := selectionData.imagesByName[sub.mdb.RequiredImage]
+		if img != nil && img.Filter != nil {
+			if sub.lastSuccessfulImageName == sub.mdb.RequiredImage {
+				return false
+			}
+			outdated = true
+		}
+	}
+	if sub.mdb.PlannedImage != "" {
+		img := selectionData.imagesByName[sub.mdb.PlannedImage]
+		if img != nil && img.Filter != nil {
+			if sub.lastSuccessfulImageName == sub.mdb.PlannedImage {
+				return false
+			}
+			outdated = true
+		}
+	}
+	return outdated
 }
 
 func getConnectDurations(subs []*Sub) []time.Duration {

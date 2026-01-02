@@ -12,7 +12,8 @@ import (
 )
 
 func (herd *Herd) listSubsHandlerWithSelector(w http.ResponseWriter,
-	selectFunc func(*Sub) bool, parsedQuery url.ParsedQuery) {
+	selectFunc func(*selectionDataType, *Sub) bool,
+	parsedQuery url.ParsedQuery) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	subs := herd.getSelectedSubs(selectFunc)
@@ -60,12 +61,13 @@ func (herd *Herd) listSubs(request proto.ListSubsRequest) ([]string, error) {
 	if len(request.Hostnames) < 1 {
 		return herd.selectSubs(selectFunc), nil
 	}
+	selectionData := herd.makeSelectionData()
 	subNames := make([]string, 0, len(request.Hostnames))
 	herd.RLock()
 	defer herd.RUnlock()
 	for _, hostname := range request.Hostnames {
 		if sub, ok := herd.subsByName[hostname]; ok {
-			if selectFunc(sub) {
+			if selectFunc(selectionData, sub) {
 				subNames = append(subNames, hostname)
 			}
 		}
@@ -90,12 +92,14 @@ func (herd *Herd) listSubsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (herd *Herd) selectSubs(selectFunc func(sub *Sub) bool) []string {
+func (herd *Herd) selectSubs(
+	selectFunc func(*selectionDataType, *Sub) bool) []string {
+	selectionData := herd.makeSelectionData()
 	herd.RLock()
 	defer herd.RUnlock()
 	subNames := make([]string, 0, len(herd.subsByIndex))
 	for _, sub := range herd.subsByIndex {
-		if selectFunc(sub) {
+		if selectFunc(selectionData, sub) {
 			subNames = append(subNames, sub.mdb.Hostname)
 		}
 	}

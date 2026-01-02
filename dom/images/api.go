@@ -15,6 +15,7 @@ type Manager struct {
 	sync.RWMutex
 	deduper *stringutil.StringDeduplicator
 	// Protected by lock.
+	cachedImagesByName   map[string]*image.Image
 	imageInterestChannel chan<- map[string]struct{}
 	imageRequestChannel  chan<- string
 	imageExpireChannel   chan<- string
@@ -34,6 +35,10 @@ func (m *Manager) Get(name string, wait bool) (*image.Image, error) {
 		return m.getWait(name)
 	}
 	return m.getNoWait(name)
+}
+
+func (m *Manager) GetImages() map[string]*image.Image {
+	return m.getImages()
 }
 
 func (m *Manager) GetNoError(name string) *image.Image {

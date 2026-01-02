@@ -28,6 +28,27 @@ func newManager(imageServerAddress string, logger log.Logger) *Manager {
 	return m
 }
 
+func (m *Manager) getImages() map[string]*image.Image {
+	m.RLock()
+	if cachedImagesByName := m.cachedImagesByName; cachedImagesByName != nil {
+		m.RUnlock()
+		return cachedImagesByName // This should be the common case.
+	}
+	cachedImagesByName := make(map[string]*image.Image)
+	for name, img := range m.imagesByName {
+		cachedImagesByName[name] = img
+	}
+	m.RUnlock()
+	m.Lock()
+	if m.cachedImagesByName == nil {
+		m.cachedImagesByName = cachedImagesByName
+	} else { // Unlikely: someone else made a new map: use it instead.
+		cachedImagesByName = m.cachedImagesByName
+	}
+	m.Unlock()
+	return cachedImagesByName
+}
+
 func (m *Manager) getNoWait(name string) (*image.Image, error) {
 	m.RLock()
 	defer m.RUnlock()
@@ -75,6 +96,7 @@ func (m *Manager) manager(imageInterestChannel <-chan map[string]struct{},
 			imageClient = m.requestImage(imageClient, name)
 		case name := <-imageExpireChannel:
 			m.Lock()
+			m.cachedImagesByName = nil
 			delete(m.imagesByName, name)
 			m.missingImages[name] = nil // Try to get it again (expire extended)
 			m.Unlock()
@@ -109,6 +131,7 @@ func (m *Manager) setInterest(imageClient *srpc.Client,
 	for name := range m.imagesByName {
 		if _, ok := imageList[name]; !ok {
 			m.Lock()
+			m.cachedImagesByName = nil
 			delete(m.imagesByName, name)
 			m.Unlock()
 			deletedSome = true
@@ -137,6 +160,7 @@ func (m *Manager) requestImage(imageClient *srpc.Client,
 	imageClient, img, err = m.loadImage(imageClient, name)
 	m.Lock()
 	defer m.Unlock()
+	m.cachedImagesByName = nil
 	if img != nil && err == nil {
 		delete(m.missingImages, name)
 		m.imagesByName[name] = img
