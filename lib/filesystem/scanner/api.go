@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -50,6 +51,10 @@ type Params struct {
 	Hasher                  Hasher
 	OldFS                   *FileSystem
 }
+
+var (
+	ErrorScanDisabled = errors.New("DisableScan")
+)
 
 func MakeRegularInode(stat *wsyscall.Stat_t) *filesystem.RegularInode {
 	return makeRegularInode(stat)
