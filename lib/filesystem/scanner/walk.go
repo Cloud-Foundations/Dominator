@@ -51,7 +51,7 @@ func makeSpecialInode(stat *wsyscall.Stat_t) *filesystem.SpecialInode {
 func scanFileSystem(params Params) (*FileSystem, error) {
 	if params.CheckScanDisableRequest != nil &&
 		params.CheckScanDisableRequest() {
-		return nil, errors.New("DisableScan")
+		return nil, ErrorScanDisabled
 	}
 	if params.Hasher == nil {
 		params.Hasher = GetSimpleHasher(false)
@@ -139,7 +139,7 @@ func (fs *FileSystem) scanDirectory(directory *filesystem.DirectoryInode,
 		}
 		if fs.params.CheckScanDisableRequest != nil &&
 			fs.params.CheckScanDisableRequest() {
-			return errors.New("DisableScan"), false
+			return ErrorScanDisabled, false
 		}
 		dirent := new(filesystem.DirectoryEntry)
 		dirent.Name = name
