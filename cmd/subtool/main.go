@@ -31,6 +31,8 @@ var (
 		"If true, fail when pushing image if it would reboot the sub")
 	file = flag.String("file", "",
 		"Name of file to write encoded data to")
+	forceCleanup = flag.Bool("forceCleanup", false,
+		"If true, force cleanup regardless of object to cleanup")
 	forceDisruption = flag.Bool("forceDisruption", false,
 		"If true, force an upgrade regardless of DisruptionManager state")
 	forceImageChange = flag.Bool("forceImageChange", false,
