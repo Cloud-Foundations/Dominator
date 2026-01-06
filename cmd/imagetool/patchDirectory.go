@@ -64,6 +64,7 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 	if *ignoreFilters {
 		img.Filter = nil
 	}
+	img.FileSystem = img.FileSystem.Filter(img.Filter) // Apply filter.
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
 		return err
 	}
@@ -124,8 +125,9 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 		return err
 	}
 	defer objectsReader.Close()
-	logger.Debugf(0, "fetching %d objects", len(objectsToFetch))
+	logger.Debugf(0, "fetching %d objects\n", len(objectsToFetch))
 	for _, hashVal := range objectsToFetch {
+		logger.Debugf(1, "  %x\n", hashVal)
 		length, reader, err := objectsReader.NextObject()
 		if err != nil {
 			return err
@@ -136,7 +138,7 @@ func patchRoot(img *image.Image, objectsGetter objectserver.ObjectsGetter,
 			return err
 		}
 	}
-	logger.Debugf(0, "fetched %d objects in %s",
+	logger.Debugf(0, "fetched %d objects in %s\n",
 		len(objectsToFetch), format.Duration(time.Since(startTime)))
 	subObj.ObjectCache = append(subObj.ObjectCache, objectsToFetch...)
 	var subRequest subproto.UpdateRequest
