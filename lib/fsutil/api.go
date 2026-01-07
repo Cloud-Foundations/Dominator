@@ -134,6 +134,7 @@ func ForceRemoveAll(path string) error {
 // os.Rename and if that fails due to a permission error, it blindly calls
 // MakeMutable and then retries. If it fails because newpath is a directory, it
 // calls ForceRemoveAll(newpath) and tries again.
+// Unlike os.Rename, on success oldpath will be removed.
 func ForceRename(oldpath, newpath string) error {
 	return forceRename(oldpath, newpath)
 }
