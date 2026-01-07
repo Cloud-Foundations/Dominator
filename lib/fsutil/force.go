@@ -46,7 +46,11 @@ func forceRemoveAll(path string) error {
 func forceRename(oldpath, newpath string) error {
 	err := os.Rename(oldpath, newpath)
 	if err == nil {
-		return nil
+		if err = os.Remove(oldpath); err == nil {
+			return nil // Cleaned up after rename of same inode.
+		} else if os.IsNotExist(err) {
+			return nil // Rename removed oldpath.
+		}
 	}
 	if os.IsPermission(err) {
 		// Blindly attempt to remove immutable attributes.
@@ -60,5 +64,13 @@ func forceRename(oldpath, newpath string) error {
 			return err
 		}
 	}
-	return os.Rename(oldpath, newpath)
+	err = os.Rename(oldpath, newpath)
+	if err == nil {
+		if err = os.Remove(oldpath); err == nil {
+			return nil // Cleaned up after rename of same inode.
+		} else if os.IsNotExist(err) {
+			return nil // Rename removed oldpath.
+		}
+	}
+	return err
 }
