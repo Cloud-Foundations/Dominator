@@ -57,7 +57,9 @@ func (m *Manager) removeMachine(hostname string) {
 func (m *Manager) updateMachine(machine *machineType) {
 	hostname := machine.machine.Hostname
 	if mapMachine, ok := m.machineMap[hostname]; !ok {
-		panic(hostname + ": not present")
+		m.logger.Printf("filegen: updateMachine(%s): host not found\n",
+			hostname)
+		return
 	} else {
 		sendRequests := false
 		if !machine.machine.Compare(mapMachine.machine) {
