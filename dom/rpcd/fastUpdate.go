@@ -11,21 +11,25 @@ func (t *rpcType) FastUpdate(conn *srpc.Conn,
 	if err := decoder.Decode(&request); err != nil {
 		return err
 	}
+	authInfo := conn.GetAuthInformation()
+	err := updateAuth(conn, request.Hostname, authInfo)
+	if err != nil {
+		return encoder.Encode(dominator.FastUpdateResponse{Error: err.Error()})
+	}
 	var imageType string
 	if request.UsePlannedImage {
 		imageType = "Planned"
 	} else {
 		imageType = "Required"
 	}
-	if conn.Username() == "" {
-		t.logger.Printf("FastUpdate(%s) with %sImage\n",
-			request.Hostname, imageType)
+	if authInfo.Username == "" {
+		t.logger.Printf("FastUpdate(%s) with %sImage by: UNKNOWN@%s\n",
+			request.Hostname, imageType, conn.RemoteAddr())
 	} else {
-		t.logger.Printf("FastUpdate(%s) with %sImage: by %s\n",
-			request.Hostname, imageType, conn.Username())
+		t.logger.Printf("FastUpdate(%s) with %sImage by: %s\n",
+			request.Hostname, imageType, authInfo.Username)
 	}
-	progressChannel, err := t.herd.FastUpdate(request,
-		conn.GetAuthInformation())
+	progressChannel, err := t.herd.FastUpdate(request, authInfo)
 	if err != nil {
 		reply := dominator.FastUpdateResponse{Error: err.Error()}
 		if err := encoder.Encode(reply); err != nil {
