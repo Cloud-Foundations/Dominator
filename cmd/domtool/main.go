@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	allocateRootPort = flag.Bool("allocateRootPort", false,
+		"If true, allocate a privileged port when making SRPC connections")
 	cpuPercent = flag.Uint("cpuPercent", 0,
 		"CPU speed as percentage of capacity (default 50)")
 	disableSafetyCheck = flag.Bool("disableSafetyCheck", false,
@@ -61,6 +63,7 @@ var (
 	usePlannedImage = flag.Bool("usePlannedImage", false,
 		"If true, use the PlannedImage during a fast-update")
 
+	dialer              = &dialerType{}
 	dominatorSrpcClient *srpc.Client
 )
 
@@ -110,7 +113,7 @@ func getClient() *srpc.Client {
 		return dominatorSrpcClient
 	}
 	clientName := fmt.Sprintf("%s:%d", *domHostname, *domPortNum)
-	client, err := srpc.DialHTTP("tcp", clientName, 0)
+	client, err := srpc.DialHTTPWithDialer("tcp", clientName, dialer)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error dialing: %s: %s\n", clientName, err)
 		os.Exit(1)

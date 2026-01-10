@@ -27,6 +27,8 @@ import (
 const dirPerms = syscall.S_IRWXU
 
 var (
+	allowRootAuthentication = flag.Bool("allowRootAuthentication", false,
+		"If true, allow client running as root to authenticate to some methods (i.e. FastUpdate)")
 	debug = flag.Bool("debug", false,
 		"If true, show debugging output")
 	fdLimit = flag.Uint64("fdLimit", getFdLimit(),
@@ -134,7 +136,14 @@ func main() {
 	herd := herd.NewHerd(fmt.Sprintf("%s:%d", *imageServerHostname,
 		*imageServerPortNum), objectServer, metricsDir, logger)
 	herd.AddHtmlWriter(logger)
-	rpcd.Setup(herd, logger)
+	rpcd.Setup(
+		rpcd.Config{
+			AllowRootAuthentication: *allowRootAuthentication,
+		},
+		rpcd.Params{
+			Herd:   herd,
+			Logger: logger,
+		})
 	if err = herd.StartServer(*portNum, true); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to create http server: %s\n", err)
 		os.Exit(1)
