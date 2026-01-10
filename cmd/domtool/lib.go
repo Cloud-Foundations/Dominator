@@ -16,7 +16,7 @@ func getMdbdClient() (srpc.ClientI, error) {
 		return nil, errors.New("no MDB server hostname specified")
 	}
 	clientName := fmt.Sprintf("%s:%d", hostname, *mdbServerPortNum)
-	client, err := srpc.DialHTTP("tcp", clientName, 0)
+	client, err := srpc.DialHTTPWithDialer("tcp", clientName, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("error dialing: %s: %s", clientName, err)
 	}
