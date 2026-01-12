@@ -87,19 +87,22 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 	sort.Strings(streamNames)
 	fmt.Fprintln(writer, `<table border="1">`)
 	tw, _ := html.NewTableWriter(writer, true,
-		"Image Stream", "ManifestUrl", "ManifestDirectory")
+		"Image Stream", "ManifestUrl", "ManifestDirectory",
+		"Expanded ManifestDirectory")
 	autoRebuildStreams := stringutil.ConvertListToMap(
 		b.listStreamsToAutoRebuild(), false)
 	for _, streamName := range streamNames {
-		var manifestUrl, manifestDirectory string
+		var manifestUrl, manifestDirectory, expandedManifestDirectory string
 		if imageStream := b.getNormalStream(streamName); imageStream != nil {
 			manifestUrl = imageStream.ManifestUrl
-			manifestDirectory = imageStream.ManifestDirectory
+			manifestDirectory = imageStream.ManifestDirectory + "&nbsp;"
+			expandedManifestDirectory =
+				imageStream.getManifestLocation(nil, nil).directory
 		}
 		tw.WriteRow("", "",
 			fmt.Sprintf("<a href=\"showImageStream?%s\">%s</a>",
 				streamName, streamNameText(streamName, autoRebuildStreams)),
-			manifestUrl, manifestDirectory)
+			manifestUrl, manifestDirectory, expandedManifestDirectory)
 	}
 	tw.Close()
 	fmt.Fprintln(writer, "<br>")
