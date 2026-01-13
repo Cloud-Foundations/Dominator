@@ -30,6 +30,11 @@ import (
 
 var sysfsDirectory = "/sys/block"
 
+type createVmRequest struct {
+	hyper_proto.CreateVmRequest
+	imageReader io.ReadCloser
+}
+
 type volumeInitParams struct {
 	hyper_proto.VolumeInitialisationInfo
 	MountPoint string
@@ -172,45 +177,9 @@ func checkTags(logger log.DebugLogger) {
 }
 
 func createVm(logger log.DebugLogger) error {
-	if *vmHostname == "" {
-		if name := vmTags["Name"]; name == "" {
-			return errors.New("no hostname specified")
-		} else {
-			*vmHostname = name
-		}
-	} else {
-		if name := vmTags["Name"]; name == "" {
-			if vmTags == nil {
-				vmTags = make(tags.Tags)
-			}
-			vmTags["Name"] = *vmHostname
-		}
-	}
-	checkTags(logger)
-	vmInfo, err := createVmInfoFromFlags()
+	request, err := makeVmCreateRequest(logger)
 	if err != nil {
 		return err
-	}
-	request := hyper_proto.CreateVmRequest{
-		DhcpTimeout:      *dhcpTimeout,
-		DoNotStart:       *doNotStart,
-		EnableNetboot:    *enableNetboot,
-		MinimumFreeBytes: uint64(minFreeBytes),
-		RoundupPower:     *roundupPower,
-		SkipMemoryCheck:  *skipMemoryCheck,
-		StorageIndices:   storageIndices,
-		VmInfo:           *vmInfo,
-	}
-	if request.VmInfo.MemoryInMiB < 1 {
-		request.VmInfo.MemoryInMiB = 1024
-	}
-	if request.VmInfo.MilliCPUs < 1 {
-		request.VmInfo.MilliCPUs = 250
-	}
-	minimumCPUs := request.VmInfo.MilliCPUs / 1000
-	if request.VmInfo.VirtualCPUs > 0 &&
-		request.VmInfo.VirtualCPUs < minimumCPUs {
-		return fmt.Errorf("vCPUs must be at least %d", minimumCPUs)
 	}
 	tmpVmInfo, err := approximateVolumesForCreateRequest(request.VmInfo)
 	if err != nil {
@@ -220,7 +189,7 @@ func createVm(logger log.DebugLogger) error {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		return createVmOnHypervisor(hypervisor, request, logger)
+		return createVmOnHypervisor(hypervisor, *request, logger)
 	}
 }
 
@@ -301,96 +270,11 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 }
 
 func createVmOnHypervisor(hypervisor string,
-	request hyper_proto.CreateVmRequest, logger log.DebugLogger) error {
-	secondaryFstab := &bytes.Buffer{}
-	var vinitParams []volumeInitParams
-	if *secondaryVolumesInitParams == "" {
-		vinitParams = makeVolumeInitParams(uint(len(secondaryVolumeSizes)))
-	} else {
-		err := json.ReadFromFile(*secondaryVolumesInitParams, &vinitParams)
-		if err != nil {
-			return err
-		}
+	request createVmRequest, logger log.DebugLogger) error {
+	if request.imageReader != nil {
+		defer request.imageReader.Close()
 	}
-	for index, size := range secondaryVolumeSizes {
-		volume := hyper_proto.Volume{Size: uint64(size)}
-		if index+1 < len(volumeInterfaces) {
-			volume.Interface = volumeInterfaces[index+1]
-		}
-		if index+1 < len(volumeTypes) {
-			volume.Type = volumeTypes[index+1]
-		}
-		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
-		if *initialiseSecondaryVolumes &&
-			index < len(vinitParams) {
-			vinit := vinitParams[index]
-			if vinit.Label == "" {
-				return fmt.Errorf("VolumeInit[%d] missing Label", index)
-			}
-			if vinit.MountPoint == "" {
-				return fmt.Errorf("VolumeInit[%d] missing MountPoint", index)
-			}
-			request.OverlayDirectories = append(request.OverlayDirectories,
-				vinit.MountPoint)
-			request.SecondaryVolumesInit = append(request.SecondaryVolumesInit,
-				vinit.VolumeInitialisationInfo)
-			util.WriteFstabEntry(secondaryFstab, "LABEL="+vinit.Label,
-				vinit.MountPoint, "ext4", "discard", 0, 2)
-		}
-	}
-	if *identityName != "" {
-		if *identityCertFile != "" {
-			return errors.New(
-				"must not specify identityCertFile when specifying identityName")
-		}
-		if *identityKeyFile != "" {
-			return errors.New(
-				"must not specify identityKeyFile when specifying identityName")
-		}
-		request.DoNotStart = true
-	} else if *identityCertFile != "" && *identityKeyFile != "" {
-		identityCert, err := ioutil.ReadFile(*identityCertFile)
-		if err != nil {
-			return err
-		}
-		identityKey, err := ioutil.ReadFile(*identityKeyFile)
-		if err != nil {
-			return err
-		}
-		request.IdentityCertificate = identityCert
-		request.IdentityKey = identityKey
-	}
-	var imageReader, userDataReader io.Reader
-	if *imageName != "" {
-		request.ImageName = *imageName
-		request.ImageTimeout = *imageTimeout
-		request.SkipBootloader = *skipBootloader
-		if overlayFiles, err := loadOverlayFiles(); err != nil {
-			return err
-		} else {
-			request.OverlayFiles = overlayFiles
-		}
-		secondaryFstab.Write(request.OverlayFiles["/etc/fstab"])
-		if secondaryFstab.Len() > 0 {
-			if request.OverlayFiles == nil {
-				request.OverlayFiles = make(map[string][]byte)
-			}
-			request.OverlayFiles["/etc/fstab"] = secondaryFstab.Bytes()
-		}
-	} else if *imageURL != "" {
-		request.ImageURL = *imageURL
-	} else if *imageFile != "" {
-		file, size, err := getReader(*imageFile)
-		if err != nil {
-			return err
-		} else {
-			defer file.Close()
-			request.ImageDataSize = uint64(size)
-			imageReader = file
-		}
-	} else {
-		return errors.New("no image specified")
-	}
+	var userDataReader io.Reader
 	if *userDataFile != "" {
 		file, size, err := getReader(*userDataFile)
 		if err != nil {
@@ -407,8 +291,9 @@ func createVmOnHypervisor(hypervisor string,
 	}
 	defer client.Close()
 	var reply hyper_proto.CreateVmResponse
-	err = callCreateVm(client, request, &reply, imageReader, userDataReader,
-		int64(request.ImageDataSize), int64(request.UserDataSize), logger)
+	err = callCreateVm(client, request.CreateVmRequest, &reply,
+		request.imageReader, userDataReader, int64(request.ImageDataSize),
+		int64(request.UserDataSize), logger)
 	if err != nil {
 		return err
 	}
@@ -476,6 +361,146 @@ func loadOverlayFiles() (map[string][]byte, error) {
 		return nil, nil
 	}
 	return fsutil.ReadFileTree(*overlayDirectory, *overlayPrefix)
+}
+
+func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
+	if *requestFile != "" {
+		var request createVmRequest
+		if err := json.ReadFromFile(*requestFile, &request); err != nil {
+			return nil, err
+		}
+		return &request, nil
+	}
+	if *vmHostname == "" {
+		if name := vmTags["Name"]; name == "" {
+			return nil, errors.New("no hostname specified")
+		} else {
+			*vmHostname = name
+		}
+	} else {
+		if name := vmTags["Name"]; name == "" {
+			if vmTags == nil {
+				vmTags = make(tags.Tags)
+			}
+			vmTags["Name"] = *vmHostname
+		}
+	}
+	checkTags(logger)
+	vmInfo, err := createVmInfoFromFlags()
+	if err != nil {
+		return nil, err
+	}
+	request := createVmRequest{
+		CreateVmRequest: hyper_proto.CreateVmRequest{
+			DhcpTimeout:      *dhcpTimeout,
+			DoNotStart:       *doNotStart,
+			EnableNetboot:    *enableNetboot,
+			MinimumFreeBytes: uint64(minFreeBytes),
+			RoundupPower:     *roundupPower,
+			SkipMemoryCheck:  *skipMemoryCheck,
+			StorageIndices:   storageIndices,
+			VmInfo:           *vmInfo,
+		}}
+	if request.VmInfo.MemoryInMiB < 1 {
+		request.VmInfo.MemoryInMiB = 1024
+	}
+	if request.VmInfo.MilliCPUs < 1 {
+		request.VmInfo.MilliCPUs = 250
+	}
+	minimumCPUs := request.VmInfo.MilliCPUs / 1000
+	if request.VmInfo.VirtualCPUs > 0 &&
+		request.VmInfo.VirtualCPUs < minimumCPUs {
+		return nil, fmt.Errorf("vCPUs must be at least %d", minimumCPUs)
+	}
+	secondaryFstab := &bytes.Buffer{}
+	var vinitParams []volumeInitParams
+	if *secondaryVolumesInitParams == "" {
+		vinitParams = makeVolumeInitParams(uint(len(secondaryVolumeSizes)))
+	} else {
+		err := json.ReadFromFile(*secondaryVolumesInitParams, &vinitParams)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for index, size := range secondaryVolumeSizes {
+		volume := hyper_proto.Volume{Size: uint64(size)}
+		if index+1 < len(volumeInterfaces) {
+			volume.Interface = volumeInterfaces[index+1]
+		}
+		if index+1 < len(volumeTypes) {
+			volume.Type = volumeTypes[index+1]
+		}
+		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
+		if *initialiseSecondaryVolumes &&
+			index < len(vinitParams) {
+			vinit := vinitParams[index]
+			if vinit.Label == "" {
+				return nil, fmt.Errorf("VolumeInit[%d] missing Label", index)
+			}
+			if vinit.MountPoint == "" {
+				return nil,
+					fmt.Errorf("VolumeInit[%d] missing MountPoint", index)
+			}
+			request.OverlayDirectories = append(request.OverlayDirectories,
+				vinit.MountPoint)
+			request.SecondaryVolumesInit = append(request.SecondaryVolumesInit,
+				vinit.VolumeInitialisationInfo)
+			util.WriteFstabEntry(secondaryFstab, "LABEL="+vinit.Label,
+				vinit.MountPoint, "ext4", "discard", 0, 2)
+		}
+	}
+	if *identityName != "" {
+		if *identityCertFile != "" {
+			return nil, errors.New(
+				"must not specify identityCertFile when specifying identityName")
+		}
+		if *identityKeyFile != "" {
+			return nil, errors.New(
+				"must not specify identityKeyFile when specifying identityName")
+		}
+		request.DoNotStart = true
+	} else if *identityCertFile != "" && *identityKeyFile != "" {
+		identityCert, err := ioutil.ReadFile(*identityCertFile)
+		if err != nil {
+			return nil, err
+		}
+		identityKey, err := ioutil.ReadFile(*identityKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		request.IdentityCertificate = identityCert
+		request.IdentityKey = identityKey
+	}
+	if *imageName != "" {
+		request.ImageName = *imageName
+		request.ImageTimeout = *imageTimeout
+		request.SkipBootloader = *skipBootloader
+		if overlayFiles, err := loadOverlayFiles(); err != nil {
+			return nil, err
+		} else {
+			request.OverlayFiles = overlayFiles
+		}
+		secondaryFstab.Write(request.OverlayFiles["/etc/fstab"])
+		if secondaryFstab.Len() > 0 {
+			if request.OverlayFiles == nil {
+				request.OverlayFiles = make(map[string][]byte)
+			}
+			request.OverlayFiles["/etc/fstab"] = secondaryFstab.Bytes()
+		}
+	} else if *imageURL != "" {
+		request.ImageURL = *imageURL
+	} else if *imageFile != "" {
+		file, size, err := getReader(*imageFile)
+		if err != nil {
+			return nil, err
+		} else {
+			request.ImageDataSize = uint64(size)
+			request.imageReader = file
+		}
+	} else {
+		return nil, errors.New("no image specified")
+	}
+	return &request, nil
 }
 
 func makeVolumeInitParams(numVolumes uint) []volumeInitParams {

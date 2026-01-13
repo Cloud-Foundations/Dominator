@@ -103,6 +103,8 @@ var (
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
+	requestFile = flag.String("requestFile", "",
+		"If specified, use the JSON-encoded request file when creating a VM")
 	retain = flag.Bool("retain", false,
 		"If true, retain the old snapshot after restoring VM")
 	secondarySubnetIDs         flagutil.StringList
@@ -262,6 +264,7 @@ var subcommands = []commands.Command{
 	{"list-hypervisors", "", 0, 0, listHypervisorsSubcommand},
 	{"list-locations", "[TopLocation]", 0, 1, listLocationsSubcommand},
 	{"list-vms", "", 0, 0, listVMsSubcommand},
+	{"make-create-vm-request", "", 0, 0, makeCreateVmRequestSubcommand},
 	{"migrate-vm", "IPaddr", 1, 1, migrateVmSubcommand},
 	{"parse-virsh-xml", "filename", 1, 1, parseVirshXmlSubcommand},
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
