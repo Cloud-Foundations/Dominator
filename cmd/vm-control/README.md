@@ -75,7 +75,9 @@ Some of the sub-commands available are:
                        location
 - **get-ip-info**: get and show the *Hypervisor* that an IP address is
                    registered to and whether it's used (allocated to VM)
-- **get-vm-create-request**: get create request used when a VM was created
+- **get-vm-create-request**: get create request used when a VM was created (may
+                             be used later with the *-requestFile* option for
+                             **create-vm**
 - **get-vm-hypervisor**: get and show the *Hypervisor* for a VM
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
@@ -90,6 +92,9 @@ Some of the sub-commands available are:
 - **list-hypervisors**: list healthy Hypervisors in the specified location
 - **list-locations**: list locations within the specified top location
 - **list-vms**: list the IP addresses for all VMs
+- **make-create-vm-request**: make a VM create request message (may be used
+                              later with the *-requestFile* option for
+                              **create-vm**
 - **migrate-vm**: migrate a VM to another Hypervisor
 - **parse-virsh-xml**: parse the XML for a virsh VM
 - **patch-vm-image**: patch the root image for a VM. Files listed in the image
