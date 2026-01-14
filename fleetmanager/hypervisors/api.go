@@ -80,6 +80,7 @@ type Manager struct {
 	migratingIPs     map[string]struct{}        // Key: VM IP address.
 	notifiers        map[<-chan fm_proto.Update]*locationType
 	topology         *topology.Topology
+	topologyLoaded   chan struct{}          // Full at start, empty when loaded.
 	subnets          map[string]*subnetType // Key: Gateway IP.
 	vms              map[string]*vmInfoType // Key: VM IP address.
 }
