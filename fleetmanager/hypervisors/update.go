@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
@@ -190,6 +191,9 @@ func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
 
 func (m *Manager) makeUpdateChannel(
 	request fm_proto.GetUpdatesRequest) <-chan fm_proto.Update {
+	// Wait for topology loaded.
+	m.topologyLoaded <- struct{}{}
+	<-m.topologyLoaded
 	channel := make(chan fm_proto.Update, 16)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -225,6 +229,8 @@ func (m *Manager) makeUpdateChannel(
 			vmToHypervisor[addr] = h.Machine.Hostname
 		}
 	}
+	m.logger.Debugf(0, "makeUpdateChannel(): sending %d machines and %d VMs\n",
+		len(machines), len(vms))
 	channel <- fm_proto.Update{
 		ChangedMachines: machines,
 		ChangedVMs:      vms,
@@ -280,15 +286,22 @@ func (m *Manager) updateTopology(t *topology.Topology) {
 		m.logger.Println(err)
 		return
 	}
-	deleteList := m.updateTopologyLocked(t, machines)
+	var waitGroup sync.WaitGroup
+	deleteList := m.updateTopologyLocked(t, machines, &waitGroup)
 	for _, hypervisor := range deleteList {
 		m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
 		hypervisor.delete()
 	}
+	waitGroup.Wait()
+	// Signal topology loaded.
+	select {
+	case <-m.topologyLoaded:
+	default:
+	}
 }
 
 func (m *Manager) updateTopologyLocked(t *topology.Topology,
-	machines []*fm_proto.Machine) []*hypervisorType {
+	machines []*fm_proto.Machine, waitGroup *sync.WaitGroup) []*hypervisorType {
 	hypervisorsToDelete := make(map[string]struct{}, len(machines))
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -322,7 +335,8 @@ func (m *Manager) updateTopologyLocked(t *topology.Topology,
 			}
 			m.hypervisorsByIP[machine.HostIpAddress.String()] = hypervisor
 			hypersToChange = append(hypersToChange, hypervisor)
-			go m.manageHypervisorLoop(hypervisor)
+			waitGroup.Add(1)
+			go m.manageHypervisorLoop(hypervisor, waitGroup)
 		}
 	}
 	deleteList := make([]*hypervisorType, 0, len(hypervisorsToDelete))
@@ -388,7 +402,15 @@ func (h *hypervisorType) isDeleteScheduled() bool {
 	return h.deleteScheduled
 }
 
-func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
+// manageHypervisorLoop loads information about the Hypervisor and then manages
+// it until it is scheduled for deletion. The WaitGroup is decremented after
+// loading completes.
+func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
+	defer func() { // Ensure the WaitGroup is decremented.
+		if wg != nil {
+			wg.Done()
+		}
+	}()
 	vmList, err := m.storer.ListVMs(h.Machine.HostIpAddress)
 	if err != nil {
 		h.logger.Printf("error reading VMs, not managing hypervisor: %s", err)
@@ -421,6 +443,8 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType) {
 		m.vms[vmIpAddr] = vmInfo
 		m.mutex.Unlock()
 	}
+	wg.Done() // Loading completed: notify.
+	wg = nil
 	for !h.isDeleteScheduled() {
 		sleepTime := m.manageHypervisor(h)
 		time.Sleep(sleepTime)

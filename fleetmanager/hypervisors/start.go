@@ -31,8 +31,10 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		hypervisorsBySN:  make(map[string]*hypervisorType),
 		migratingIPs:     make(map[string]struct{}),
 		subnets:          make(map[string]*subnetType),
+		topologyLoaded:   make(chan struct{}, 1),
 		vms:              make(map[string]*vmInfoType),
 	}
+	manager.topologyLoaded <- struct{}{} // Signal topology not yet loaded.
 	html.HandleFunc("/listHypervisors", manager.listHypervisorsHandler)
 	html.HandleFunc("/listLocations", manager.listLocationsHandler)
 	html.HandleFunc("/listVMs", manager.listVMsHandler)
