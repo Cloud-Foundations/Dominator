@@ -196,6 +196,7 @@ func (g *fleetManagerGeneratorType) updateWithMaps(update fm_proto.Update,
 		delete(vmsToDelete, ipAddr)
 	}
 	for _, ipAddr := range update.DeletedVMs {
+		delete(g.vmToHypervisor, ipAddr)
 		delete(g.vms, ipAddr)
 	}
 	for ipAddr := range vmsToDelete {
