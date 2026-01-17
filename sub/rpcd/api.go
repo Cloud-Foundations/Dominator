@@ -30,6 +30,7 @@ type Config struct {
 	ObjectsDirectoryName     string
 	OldTriggersFilename      string
 	RootDirectoryName        string
+	ShellCommand             []string
 	SubConfiguration         proto.Configuration
 }
 
