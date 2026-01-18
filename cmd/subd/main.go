@@ -62,6 +62,7 @@ var (
 	rootDir                  = flag.String("rootDir", "/",
 		"Name of root of directory tree to manage")
 	scanExcludeList flagutil.StringList
+	shellCommand    flagutil.StringList
 	showStats       = flag.Bool("showStats", false,
 		"If true, show statistics after each cycle")
 	subdDir = flag.String("subdDir", ".subd",
@@ -77,6 +78,8 @@ func init() {
 		"Fallback root device speed (default 0)")
 	flag.Var(&scanExcludeList, "scanExcludeList",
 		`Comma separated list of patterns to exclude from scanning (default `+strings.Join(constants.ScanExcludeList, ",")+`")`)
+	flag.Var(&shellCommand, "shellCommand",
+		"Shell command with optional comma separated arguments (i.e. /bin/bash, --posix, -i)")
 }
 
 func sanityCheck() bool {
@@ -387,6 +390,7 @@ func main() {
 				ObjectsDirectoryName:     objectsDir,
 				OldTriggersFilename:      oldTriggersFilename,
 				RootDirectoryName:        workingRootDir,
+				ShellCommand:             shellCommand,
 				SubConfiguration:         configParams,
 			},
 			rpcd.Params{
