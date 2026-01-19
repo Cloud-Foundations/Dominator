@@ -143,6 +143,7 @@ var subcommands = []commands.Command{
 	{"push-missing-objects", "image", 1, 1, pushMissingObjectsSubcommand},
 	{"restart-service", "name", 1, 1, restartServiceSubcommand},
 	{"set-config", "", 0, 0, setConfigSubcommand},
+	{"shell", "", 0, 0, shellSubcommand},
 	{"show-update-request", "image", 1, 1, showUpdateRequestSubcommand},
 	{"wait-for-image", "image", 1, 1, waitForImageSubcommand},
 }
