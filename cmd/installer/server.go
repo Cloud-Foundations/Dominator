@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 package main
 
@@ -20,6 +19,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/teelogger"
+	tserver "github.com/Cloud-Foundations/Dominator/lib/net/terminal/server"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 )
@@ -55,43 +55,6 @@ var (
 	newline               = []byte("\n")
 	carriageReturnNewline = []byte("\r\n")
 )
-
-func copyFromPty(conn *srpc.Conn, pty io.Reader, killed *bool,
-	logger log.Logger) {
-	buffer := make([]byte, 256)
-	for {
-		if nRead, err := pty.Read(buffer); err != nil {
-			if *killed {
-				break
-			}
-			logger.Printf("error reading from pty: %s", err)
-			break
-		} else if _, err := conn.Write(buffer[:nRead]); err != nil {
-			logger.Printf("error writing to connection: %s\n", err)
-			break
-		}
-		if err := conn.Flush(); err != nil {
-			logger.Printf("error flushing connection: %s\n", err)
-			break
-		}
-	}
-}
-
-func copyToPty(pty io.Writer, reader io.Reader) error {
-	buffer := make([]byte, 256)
-	for {
-		if nRead, err := reader.Read(buffer); err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		} else {
-			if _, err := pty.Write(buffer[:nRead]); err != nil {
-				return fmt.Errorf("error writing to pty: %w", err)
-			}
-		}
-	}
-}
 
 func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
 	logBuffer dumper, logger log.DebugLogger) (log.DebugLogger, error) {
@@ -174,7 +137,7 @@ func (s state) writeDashboard(writer io.Writer) {
 func (t *srpcType) Shell(conn *srpc.Conn) error {
 	t.remoteShellWaitGroup.Add(1)
 	defer t.remoteShellWaitGroup.Done()
-	pty, tty, err := openPty()
+	pty, tty, err := tserver.OpenPty()
 	if err != nil {
 		return err
 	}
@@ -206,33 +169,15 @@ func (t *srpcType) Shell(conn *srpc.Conn) error {
 	t.mutex.Lock()
 	t.connections[conn] = session
 	t.mutex.Unlock()
+	fmt.Fprintf(conn, "Starting shell on: %s...\r\n", tty.Name())
 	conn.Flush() // Try to delay I/O until connections table is updated.
 	cmd := exec.Command(shellCommand[0], shellCommand[1:]...)
 	cmd.Env = make([]string, 0)
-	cmd.Stdin = tty
-	cmd.Stdout = tty
-	cmd.Stderr = tty
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
-	if err := cmd.Start(); err != nil {
-		t.mutex.Lock()
-		delete(t.connections, conn)
-		t.mutex.Unlock()
-		return err
-	}
-	fmt.Fprintf(conn, "Starting shell on: %s...\r\n", tty.Name())
-	conn.Flush()
-	killed := false
-	go func() { // Read from pty until killed.
-		copyFromPty(conn, pty, &killed, t.logger)
-		t.mutex.Lock()
-		delete(t.connections, conn)
-		t.mutex.Unlock()
-	}()
-	// Read from connection, write to pty.
-	err = copyToPty(pty, conn)
-	killed = true
-	cmd.Process.Kill()
-	cmd.Wait()
+	err = tserver.RunCommand(nil, conn, pty, tty, cmd, t.logger)
+	t.mutex.Lock()
+	delete(t.connections, conn)
+	t.mutex.Unlock()
 	if err == nil {
 		t.logger.Printf(
 			"shell on SRPC connection exited for user: %s with tty: %s\n",
