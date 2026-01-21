@@ -14,6 +14,18 @@ var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
 type rDuration time.Duration
 type uDuration time.Duration
 
+func writeDashboardEntry(writer io.Writer, numSubs uint64, subType string,
+	urlPath string) {
+	if numSubs < 1 {
+		return
+	}
+	fmt.Fprintf(writer, "Number of %s: <a href=\"%s\">%d</a>",
+		subType, urlPath, numSubs)
+	fmt.Fprintf(writer, " (<a href=\"%s?output=text\">text</a>", urlPath)
+	fmt.Fprintf(writer, ", <a href=\"%s?output=json\">JSON</a>", urlPath)
+	fmt.Fprintf(writer, ", <a href=\"%s?output=csv\">CSV</a>)<br>\n", urlPath)
+}
+
 func (d rDuration) selector(_ *selectionDataType, sub *Sub) bool {
 	if time.Since(sub.lastReachableTime) <= time.Duration(d) {
 		return true
@@ -35,8 +47,9 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 	}
 	herd.computedFilesManager.WriteHtml(writer)
 	var numAliveSubs, numCompliantSubs, numDeviantSubs uint64
-	var numLikelyCompliantSubs, numDisruptionWaitingSubs uint64
-	var numOutdatedImageSubs uint64
+	var numDisruptionWaitingSubs, numExpiringImageSubs uint64
+	var numLikelyCompliantSubs uint64
+	var numMissingImageSubs, numOutdatedImageSubs uint64
 	var reachableMinuteSubs, reachable10MinuteSubs, reachableHourSubs uint64
 	var reachableDaySubs, reachableWeekSubs, reachableMonthSubs uint64
 	var unreachableMinuteSubs, unreachable10MinuteSubs uint64
@@ -46,8 +59,10 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		{&numAliveSubs, selectAliveSub},
 		{&numCompliantSubs, selectCompliantSub},
 		{&numDeviantSubs, selectDeviantSub},
-		{&numLikelyCompliantSubs, selectLikelyCompliantSub},
 		{&numDisruptionWaitingSubs, selectDisruptionWaitingSub},
+		{&numExpiringImageSubs, selectExpiringImageSub},
+		{&numLikelyCompliantSubs, selectLikelyCompliantSub},
+		{&numMissingImageSubs, selectMissingImageSub},
 		{&numOutdatedImageSubs, selectOutdatedImageSub},
 		{&reachableMinuteSubs, rDuration(time.Minute).selector},
 		{&reachable10MinuteSubs, rDuration(10 * time.Minute).selector},
@@ -93,13 +108,7 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		" (<a href=\"showAllSubs?output=json\">JSON</a>")
 	fmt.Fprintf(writer,
 		", <a href=\"showAllSubs?output=csv\">CSV</a>)<br>\n")
-	fmt.Fprintf(writer,
-		"Number of alive subs: <a href=\"showAliveSubs\">%d</a>",
-		numAliveSubs)
-	fmt.Fprintf(writer,
-		" (<a href=\"showAliveSubs?output=json\">JSON</a>")
-	fmt.Fprintf(writer,
-		", <a href=\"showAliveSubs?output=csv\">CSV</a>)<br>\n")
+	writeDashboardEntry(writer, numAliveSubs, "alive subs", "showAliveSubs")
 	fmt.Fprint(writer, "Number of reachable subs in last: ")
 	herd.writeReachableSubsLink(writer, reachableMinuteSubs, "1 min", "1m",
 		true)
@@ -124,39 +133,22 @@ func (herd *Herd) writeHtml(writer io.Writer) {
 		true)
 	herd.writeUnreachableSubsLink(writer, unreachableMonthSubs, "1 month", "1M",
 		false)
-	fmt.Fprintf(writer,
-		"Number of deviant subs: <a href=\"showDeviantSubs\">%d</a>",
-		numDeviantSubs)
-	fmt.Fprintf(writer,
-		" (<a href=\"showDeviantSubs?output=text\">text</a>")
-	fmt.Fprintf(writer,
-		", <a href=\"showDeviantSubs?output=json\">JSON</a>")
-	fmt.Fprintf(writer,
-		", <a href=\"showDeviantSubs?output=csv\">CSV</a>)<br>\n")
+	writeDashboardEntry(writer, numDeviantSubs, "deviant subs",
+		"showDeviantSubs")
 	fmt.Fprintf(writer,
 		"Number of compliant subs: <a href=\"showCompliantSubs\">%d</a>(verified)",
 		numCompliantSubs)
 	fmt.Fprintf(writer,
 		", <a href=\"showLikelyCompliantSubs\">%d</a>(likely)<br>\n",
 		numLikelyCompliantSubs)
-	fmt.Fprintf(writer,
-		"Number of outdated image subs: <a href=\"showOutdatedImageSubs\">%d</a>",
-		numOutdatedImageSubs)
-	fmt.Fprintf(writer,
-		" (<a href=\"showOutdatedImageSubs?output=text\">text</a>")
-	fmt.Fprintf(writer,
-		", <a href=\"showOutdatedImageSubs?output=json\">JSON</a>")
-	fmt.Fprintf(writer,
-		", <a href=\"showOutdatedImageSubs?output=csv\">CSV</a>)<br>\n")
-	if numDisruptionWaitingSubs > 0 {
-		fmt.Fprintf(writer,
-			"Number of subs waiting to disrupt: <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied\">%d</a>",
-			numDisruptionWaitingSubs)
-		fmt.Fprintf(writer,
-			" (<a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied&output=json\">JSON</a>")
-		fmt.Fprintf(writer,
-			", <a href=\"showAllSubs?status=disruption%%20requested&status=disruption%%20denied&output=csv\">CSV</a>)<br>\n")
-	}
+	writeDashboardEntry(writer, numExpiringImageSubs,
+		"subs with expiring image", "showExpiringImageSubs")
+	writeDashboardEntry(writer, numMissingImageSubs,
+		"subs with missing image", "showMissingImageSubs")
+	writeDashboardEntry(writer, numOutdatedImageSubs,
+		"subs with outdated image", "showOutdatedImageSubs")
+	writeDashboardEntry(writer, numDisruptionWaitingSubs, "waiting to disrupt",
+		"showAllSubs?status=disruption%%20requested&status=disruption%%20denied")
 	fmt.Fprintf(writer,
 		"Image status for subs: <a href=\"showImagesForSubs\">dashboard</a>")
 	fmt.Fprintf(writer,
@@ -297,6 +289,22 @@ func selectDisruptionWaitingSub(_ *selectionDataType, sub *Sub) bool {
 	return false
 }
 
+func selectExpiringImageSub(selectionData *selectionDataType, sub *Sub) bool {
+	if sub.mdb.RequiredImage != "" {
+		img := selectionData.imagesByName[sub.mdb.RequiredImage]
+		if img != nil && !img.ExpiresAt.IsZero() {
+			return true
+		}
+	}
+	if sub.mdb.PlannedImage != "" {
+		img := selectionData.imagesByName[sub.mdb.PlannedImage]
+		if img != nil && !img.ExpiresAt.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
 func selectLikelyCompliantSub(_ *selectionDataType, sub *Sub) bool {
 	switch sub.publishedStatus {
 	case statusWaitingToPoll, statusPolling:
@@ -305,6 +313,20 @@ func selectLikelyCompliantSub(_ *selectionDataType, sub *Sub) bool {
 		return true
 	case statusSynced:
 		return true
+	}
+	return false
+}
+
+func selectMissingImageSub(selectionData *selectionDataType, sub *Sub) bool {
+	if sub.mdb.RequiredImage != "" {
+		if selectionData.imagesByName[sub.mdb.RequiredImage] == nil {
+			return true
+		}
+	}
+	if sub.mdb.PlannedImage != "" {
+		if selectionData.imagesByName[sub.mdb.PlannedImage] == nil {
+			return true
+		}
 	}
 	return false
 }
