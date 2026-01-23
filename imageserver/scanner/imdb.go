@@ -507,6 +507,16 @@ func (imdb *ImageDataBase) getImageComputedFiles(name string) (
 	return img.computedFiles, true
 }
 
+func (imdb *ImageDataBase) getImageUsageEstimate(name string) (uint64, bool) {
+	imdb.RLock()
+	defer imdb.RUnlock()
+	img, _ := imdb.imageMap[name]
+	if img == nil {
+		return 0, false
+	}
+	return img.usageEstimate, true
+}
+
 func (imdb *ImageDataBase) getSecret() ([]byte, error) {
 	imdb.secretLock.Lock()
 	defer imdb.secretLock.Unlock()
@@ -753,6 +763,7 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	exclusive bool) error {
 	computedFiles := img.FileSystem.GetComputedFiles()
+	usageEstimate := img.FileSystem.EstimateUsage(0)
 	filename := filepath.Join(imdb.BaseDirectory, name)
 	fileChecksum, err := writeImage(filename, img, exclusive)
 	if err != nil {
@@ -764,6 +775,7 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 		computedFiles: computedFiles,
 		fileChecksum:  fileChecksum,
 		image:         img,
+		usageEstimate: usageEstimate,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 	imdb.Unlock()
