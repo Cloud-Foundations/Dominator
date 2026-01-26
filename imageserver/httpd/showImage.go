@@ -27,10 +27,13 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	checksum := s.imageDataBase.GetImageFileChecksum(imageName)
+	usageEstimate, _ := s.imageDataBase.GetImageUsageEstimate(imageName)
 	fmt.Fprintf(writer, "Information for image: %s<br>\n", imageName)
 	fmt.Fprintln(writer, "</h3>")
-	fmt.Fprintf(writer, "Data size: <a href=\"listImage?%s\">%s</a><br>\n",
+	fmt.Fprintf(writer, "Data size: <a href=\"listImage?%s\">%s</a>",
 		imageName, format.FormatBytes(img.FileSystem.TotalDataBytes))
+	fmt.Fprintf(writer, " (%s estimated usage when unpacked)<br>\n",
+		format.FormatBytes(usageEstimate))
 	fmt.Fprintf(writer, "Number of data inodes: %d<br>\n",
 		img.FileSystem.NumRegularInodes)
 	if numInodes := img.FileSystem.NumComputedRegularInodes(); numInodes > 0 {

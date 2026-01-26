@@ -32,22 +32,26 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintln(writer, "<h3>")
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true,
-		"Name", "Data Size", "Data Inodes", "Computed Inodes", "Filter Lines",
-		"Triggers", "Branch", "Commit")
+		"Name", "Data Size", "Estimated Usage", "Data Inodes",
+		"Computed Inodes", "Filter Lines", "Triggers", "Branch", "Commit")
 	for _, name := range imageNames {
 		if img := s.imageDataBase.GetImage(name); img != nil {
-			writeImage(tw, name, img)
+			usageEstimate, _ := s.imageDataBase.GetImageUsageEstimate(name)
+			writeImage(tw, name, img, usageEstimate)
 		}
 	}
 	tw.Close()
 	fmt.Fprintln(writer, "</body>")
 }
 
-func writeImage(tw *html.TableWriter, name string, img *image.Image) {
+func writeImage(tw *html.TableWriter, name string, img *image.Image,
+	usageEstimate uint64) {
 	tw.WriteRow("", "",
 		fmt.Sprintf("<a href=\"showImage?%s\">%s</a>", name, name),
 		fmt.Sprintf("<a href=\"listImage?%s\">%s</a>",
 			name, format.FormatBytes(img.FileSystem.TotalDataBytes)),
+		fmt.Sprintf("<a href=\"listImage?%s\">%s</a>",
+			name, format.FormatBytes(usageEstimate)),
 		fmt.Sprintf("<a href=\"listImage?%s\">%d</a>",
 			name, img.FileSystem.NumRegularInodes),
 		func() string {
