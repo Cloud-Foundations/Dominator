@@ -49,30 +49,55 @@ func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
 }
 
+func approximateImageUsage() (uint64, error) {
+	size, err := getImageUsage()
+	if err != nil {
+		return 0, err
+	}
+	size += size >> 3 // 12% extra for good luck.
+	size += uint64(minFreeBytes)
+	imageUnits := size >> *roundupPower
+	if imageUnits<<*roundupPower < size {
+		imageUnits++
+	}
+	return imageUnits << *roundupPower, nil
+}
+
 // approximateVolumesForCreateRequest will make a modified copy of a VmInfo,
 // filling in approximate volume sizes. This may be used for placement
 // decisions.
 func approximateVolumesForCreateRequest(
 	vmInfo hyper_proto.VmInfo) (*hyper_proto.VmInfo, error) {
 	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
-	vmInfo.Volumes[0] = hyper_proto.Volume{Size: uint64(minFreeBytes) + 2<<30}
 	for _, size := range secondaryVolumeSizes {
 		vmInfo.Volumes = append(vmInfo.Volumes, hyper_proto.Volume{
 			Size: uint64(size),
 		})
 	}
 	if *imageName != "" {
-		return &vmInfo, nil
-	}
-	if *imageFile != "" && volumeFormat == hyper_proto.VolumeFormatQCOW2 {
-		qcow2Header, err := qcow2.ReadHeaderFromFile(*imageFile)
+		imageSize, err := approximateImageUsage()
 		if err != nil {
 			return nil, err
 		}
-		vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
+		vmInfo.Volumes[0] = hyper_proto.Volume{Size: imageSize}
 		return &vmInfo, nil
 	}
-	if *imageURL != "" && volumeFormat == hyper_proto.VolumeFormatQCOW2 {
+	if *imageFile != "" {
+		fi, err := os.Stat(*imageFile)
+		if err != nil {
+			return nil, err
+		}
+		vmInfo.Volumes[0].Size = uint64(fi.Size())
+		if volumeFormat == hyper_proto.VolumeFormatQCOW2 {
+			qcow2Header, err := qcow2.ReadHeaderFromFile(*imageFile)
+			if err != nil {
+				return nil, err
+			}
+			vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
+		}
+		return &vmInfo, nil
+	}
+	if *imageURL != "" {
 		httpResponse, err := http.Get(*imageURL)
 		if err != nil {
 			return nil, err
@@ -84,11 +109,14 @@ func approximateVolumesForCreateRequest(
 		if httpResponse.ContentLength < 0 {
 			return nil, errors.New("ContentLength from: " + *imageURL)
 		}
-		qcow2Header, err := qcow2.ReadHeader(httpResponse.Body)
-		if err != nil {
-			return nil, err
+		vmInfo.Volumes[0].Size = uint64(httpResponse.ContentLength)
+		if volumeFormat == hyper_proto.VolumeFormatQCOW2 {
+			qcow2Header, err := qcow2.ReadHeader(httpResponse.Body)
+			if err != nil {
+				return nil, err
+			}
+			vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
 		}
-		vmInfo.Volumes[0].VirtualSize = qcow2Header.Size
 		return &vmInfo, nil
 	}
 	return &vmInfo, nil
@@ -147,21 +175,18 @@ func callCreateVm(client *srpc.Client, request hyper_proto.CreateVmRequest,
 }
 
 func checkTags(logger log.DebugLogger) {
-	if *imageServerHostname == "" {
-		return
-	}
 	imageName := vmTags["RequiredImage"]
 	if imageName == "" {
 		return
 	}
-	imageServer := fmt.Sprintf("%s:%d",
-		*imageServerHostname, *imageServerPortNum)
-	client, err := dialImageServer(imageServer)
+	client, err := getImageServerClient()
 	if err != nil {
 		logger.Println(err)
 		return
 	}
-	defer client.Close()
+	if client == nil {
+		return
+	}
 	expiresAt, err := imgclient.GetImageExpiration(client, imageName)
 	if err != nil {
 		logger.Println(err)
@@ -354,6 +379,44 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 			return nil, -1, errors.New("unsupported file type")
 		}
 	}
+}
+
+func getImageUsage() (uint64, error) {
+	client, err := getImageServerClient()
+	if err != nil {
+		logger.Printf(
+			"error connecting to imageserver: %s, guessing image size\n", err)
+		return 2 << 30, nil
+	}
+	if client == nil {
+		logger.Printf("no imageserver specified, guessing image size\n")
+		return 2 << 30, nil
+	}
+	var name string
+	if isDir, err := imgclient.CheckDirectory(client, *imageName); err != nil {
+		return 0, err
+	} else if isDir {
+		name, err = imgclient.FindLatestImage(client, *imageName, false)
+		if err != nil {
+			return 0, err
+		}
+		if name == "" {
+			return 0, errors.New("no images in directory: " + *imageName)
+		}
+	} else {
+		name = *imageName
+	}
+	usage, exists, err := imgclient.GetImageUsageEstimate(client, name)
+	if err != nil {
+		logger.Printf(
+			"error getting usage for image: %s, guessing image size\n", err)
+		return 2 << 30, nil
+	}
+	if exists {
+		return usage, nil
+	}
+	logger.Printf("image: %s not found, guessing image size\n", name)
+	return 2 << 30, nil
 }
 
 func loadOverlayFiles() (map[string][]byte, error) {
