@@ -122,6 +122,15 @@ const (
 // The client sends no information to the server.
 // The server sends a stream of ImageUpdate messages.
 
+type GetImageUsageEstimateRequest struct {
+	ImageName string
+}
+
+type GetImageUsageEstimateResponse struct {
+	ImageExists   bool
+	UsageEstimate uint64
+}
+
 // The GetFilteredImageUpdates() RPC is fully streamed.
 // The client sends a GetFilteredImageUpdatesRequest message to the server.
 // The server sends a stream of ImageUpdate messages.

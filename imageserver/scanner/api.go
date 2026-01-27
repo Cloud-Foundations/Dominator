@@ -55,6 +55,7 @@ type imageType struct {
 	fileChecksum  []byte
 	image         *image.Image
 	modifying     bool
+	usageEstimate uint64
 }
 
 type Params struct {
@@ -153,6 +154,12 @@ func (imdb *ImageDataBase) GetImageFileChecksum(name string) []byte {
 func (imdb *ImageDataBase) GetImageComputedFiles(name string) (
 	[]filesystem.ComputedFile, bool) {
 	return imdb.getImageComputedFiles(name)
+}
+
+// GetImageUsageEstimate will return the usage estimate for the specified image
+// and true if found, else it will return 0, false.
+func (imdb *ImageDataBase) GetImageUsageEstimate(name string) (uint64, bool) {
+	return imdb.getImageUsageEstimate(name)
 }
 
 func (imdb *ImageDataBase) GetUnreferencedObjectsStatistics() (uint64, uint64) {

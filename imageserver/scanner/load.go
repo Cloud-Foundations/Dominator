@@ -191,13 +191,15 @@ func (imdb *ImageDataBase) loadFile(filename string) error {
 		return err
 	}
 	imdb.scheduleExpiration(img, filename)
-	imdb.Lock()
-	defer imdb.Unlock()
-	imdb.imageMap[filename] = &imageType{
+	imageEntry := &imageType{
 		computedFiles: img.FileSystem.GetComputedFiles(),
 		fileChecksum:  checksum,
 		image:         img,
+		usageEstimate: img.FileSystem.EstimateUsage(0),
 	}
+	imdb.Lock()
+	defer imdb.Unlock()
+	imdb.imageMap[filename] = imageEntry
 	return nil
 }
 
