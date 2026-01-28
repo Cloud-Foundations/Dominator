@@ -12,6 +12,7 @@ import (
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	"github.com/Cloud-Foundations/Dominator/lib/concurrent"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
+	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
@@ -62,7 +63,7 @@ func patchDirectory(imageName, dirName string, logger log.DebugLogger) error {
 		return err
 	}
 	if *ignoreFilters {
-		img.Filter = nil
+		img.Filter = &filter.Filter{}
 	}
 	img.FileSystem = img.FileSystem.Filter(img.Filter) // Apply filter.
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
