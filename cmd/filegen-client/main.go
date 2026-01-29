@@ -17,6 +17,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 )
 
@@ -105,12 +106,14 @@ func handleUpdates(hostname string, updateChannel <-chan []proto.FileInfo,
 }
 
 func main() {
+	checkVersion := version.AddFlags("filegen-client")
 	if err := loadflags.LoadForCli("filegen-client"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() != 2 {
 		printUsage()
 		os.Exit(2)

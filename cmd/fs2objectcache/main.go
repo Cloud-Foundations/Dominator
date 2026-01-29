@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -31,11 +32,13 @@ func init() {
 }
 
 func main() {
+	checkVersion := version.AddFlags("fs2objectcache")
 	if err := loadflags.LoadForCli("fs2objectcache"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
+	checkVersion()
 	if *rootDir == "" {
 		fmt.Fprintln(os.Stderr, "rootDir unspecified")
 		os.Exit(1)

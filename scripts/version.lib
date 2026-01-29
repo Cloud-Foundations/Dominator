@@ -1,0 +1,41 @@
+# Version calculation library
+# Source this file to get VERSION and LDFLAGS variables
+#
+# Usage:
+#   . ./scripts/version.lib
+#   go build -ldflags "$LDFLAGS" ./cmd/...
+
+# Get version info from git
+GO_MODULE=$(head -1 go.mod | awk '{print $2}')
+VERSION_PKG="${GO_MODULE}/lib/version"
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Calculate version from git tags
+GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+COMMITS_SINCE=$(git rev-list "${GIT_TAG}..HEAD" --count 2>/dev/null || echo "0")
+
+if [ "$COMMITS_SINCE" = "0" ]; then
+    # On a tag - check for dirty
+    if git diff --quiet 2>/dev/null; then
+        VERSION="$GIT_TAG"
+    else
+        VERSION="${GIT_TAG}-dirty"
+    fi
+else
+    # After a tag - add prerelease info
+    if [ "$GIT_BRANCH" = "main" ] || [ "$GIT_BRANCH" = "master" ]; then
+        PRERELEASE="dev"
+    else
+        # Sanitize branch name for semver
+        PRERELEASE=$(echo "$GIT_BRANCH" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20)
+    fi
+    VERSION="${GIT_TAG}-${PRERELEASE}.${COMMITS_SINCE}+${GIT_COMMIT}"
+    if ! git diff --quiet 2>/dev/null; then
+        VERSION="${VERSION}-dirty"
+    fi
+fi
+
+LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.GitCommit=${GIT_COMMIT} -X ${VERSION_PKG}.GitBranch=${GIT_BRANCH} -X ${VERSION_PKG}.BuildDate=${BUILD_DATE}"
+
