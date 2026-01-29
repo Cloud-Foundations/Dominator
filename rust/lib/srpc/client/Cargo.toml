@@ -1,6 +1,6 @@
 [package]
 name = "srpc_client"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -8,29 +8,48 @@ name = "srpc_client"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
 openssl = "0.10"
-serde_json = "1.0"
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
 tokio-openssl = "0.6"
+tokio-util = { version = "0.7", features = ["codec"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dependencies.pyo3]
-version = "0.18"
+version = "0.23"
 features = ["extension-module"]
 optional = true
 
-[dependencies.pyo3-asyncio]
-version = "0.18"
-features = ["tokio-runtime"]
+[dependencies.pyo3-async-runtimes]
+version = "0.23"
+features = ["attributes", "tokio-runtime"]
 optional = true
 
 [features]
 default = []
-python = ["pyo3", "pyo3-asyncio"]
+python = ["pyo3", "pyo3-async-runtimes"]
 
 [[example]]
 name = "rust_client_example"
 path = "examples/rust_client_example.rs"
 required-features = []
 
+[[example]]
+name = "rust_client_example2"
+path = "examples/rust_client_example2.rs"
+required-features = []
+
+[[example]]
+name = "rust_client_example3"
+path = "examples/rust_client_example3.rs"
+required-features = []
+
 [dev-dependencies]
-tokio = { version = "1.0", features = ["full", "macros"] }
+rstest = "0.23.0"
+test-log = { version = "0.2.16", features = ["trace", "color"] }
+tokio = { version = "1", features = ["full", "macros", "test-util"] }
