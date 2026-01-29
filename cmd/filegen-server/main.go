@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -35,6 +36,7 @@ func printUsage() {
 }
 
 func main() {
+	checkVersion := version.AddFlags("filegen-server")
 	if os.Geteuid() == 0 {
 		fmt.Fprintln(os.Stderr, "Do not run the filegen server as root")
 		os.Exit(1)
@@ -45,6 +47,7 @@ func main() {
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)

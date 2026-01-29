@@ -8,7 +8,10 @@ shift
 readonly bin="$GOPATH/bin/$command"
 readonly target="/tmp/$LOGNAME/$command.tar.gz"
 
-CGO_ENABLED=0 go install ./cmd/$command
+# Source version library for LDFLAGS
+. ./scripts/version.lib
+
+CGO_ENABLED=0 go install -ldflags "$LDFLAGS" ./cmd/$command
 
 strip -o "$bin~" "$bin"
 if cmp -s "$bin~" "$bin"; then

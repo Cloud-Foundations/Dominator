@@ -17,6 +17,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -292,12 +293,14 @@ var subcommands = []commands.Command{
 }
 
 func doMain() int {
+	checkVersion := version.AddFlags("vm-control")
 	if err := loadflags.LoadForCli("vm-control"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

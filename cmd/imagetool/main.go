@@ -23,6 +23,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 type objectsFlushGetter interface {
@@ -323,12 +324,14 @@ func makeListSelector(arg string) filesystem.ListSelector {
 var listFilter *filter.Filter
 
 func doMain() int {
+	checkVersion := version.AddFlags("imagetool")
 	if err := loadflags.LoadForCli("imagetool"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

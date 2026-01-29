@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	libtags "github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -126,6 +127,7 @@ var subcommands = []commands.Command{
 }
 
 func doMain() int {
+	checkVersion := version.AddFlags("ami-publisher")
 	if err := loadflags.LoadForCli("ami-publisher"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -133,6 +135,7 @@ func doMain() int {
 	cmdlogger.SetDatestampsDefault(true)
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

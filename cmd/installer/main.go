@@ -27,6 +27,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -338,12 +339,14 @@ func processCommand(args []string) {
 }
 
 func main() {
+	checkVersion := version.AddFlags("installer")
 	if err := loadflags.LoadForDaemon("installer"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	processCommand(flag.Args())
 }
 

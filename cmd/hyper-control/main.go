@@ -17,6 +17,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -182,12 +183,14 @@ func loadCerts() error {
 }
 
 func doMain() int {
+	checkVersion := version.AddFlags("hyper-control")
 	if err := loadflags.LoadForCli("hyper-control"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2
