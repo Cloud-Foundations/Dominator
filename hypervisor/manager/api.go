@@ -329,12 +329,8 @@ func (m *Manager) Flush() error {
 	return m.flush()
 }
 
-func (m *Manager) GetCapacity() proto.GetCapacityResponse {
-	return proto.GetCapacityResponse{
-		MemoryInMiB:      m.memTotalInMiB,
-		NumCPUs:          m.numCPUs,
-		TotalVolumeBytes: m.totalVolumeBytes,
-	}
+func (m *Manager) GetCapacity() (proto.GetCapacityResponse, error) {
+	return m.getCapacity()
 }
 
 func (m *Manager) GetHealthStatus() string {
