@@ -39,11 +39,17 @@ type GetHypervisorsInLocationResponse struct {
 }
 
 type Hypervisor struct {
-	AllocatedMilliCPUs   uint64 `json:",omitempty"`
-	AllocatedMemory      uint64 `json:",omitempty"` // MiB.
-	AllocatedVolumeBytes uint64 `json:",omitempty"`
+	HypervisorData
 	Machine
 	VMs []proto.VmInfo `json:",omitempty"`
+}
+
+type HypervisorData struct {
+	AllocatedMilliCPUs   uint64          `json:",omitempty"`
+	AllocatedMemory      uint64          `json:",omitempty"` // MiB.
+	AllocatedVolumeBytes uint64          `json:",omitempty"`
+	AvailableMemory      uint64          `json:",omitempty"` // MiB.
+	NumFreeAddresses     map[string]uint `json:",omitempty"` // Key: subnet ID.
 }
 
 type GetIpInfoRequest struct {
@@ -79,12 +85,13 @@ type GetUpdatesRequest struct {
 }
 
 type Update struct {
-	ChangedMachines []*Machine               `json:",omitempty"`
-	ChangedVMs      map[string]*proto.VmInfo `json:",omitempty"` // Key: IPaddr
-	DeletedMachines []string                 `json:",omitempty"` // Hostname
-	DeletedVMs      []string                 `json:",omitempty"` // IPaddr
-	Error           string                   `json:",omitempty"`
-	VmToHypervisor  map[string]string        `json:",omitempty"` // IP:hostname
+	ChangedHypervisors map[string]HypervisorData `json:",omitempty"` // Key: hostname.
+	ChangedMachines    []*Machine                `json:",omitempty"`
+	ChangedVMs         map[string]*proto.VmInfo  `json:",omitempty"` // Key: IPaddr
+	DeletedMachines    []string                  `json:",omitempty"` // Hostname
+	DeletedVMs         []string                  `json:",omitempty"` // IPaddr
+	Error              string                    `json:",omitempty"`
+	VmToHypervisor     map[string]string         `json:",omitempty"` // IP:hostname
 }
 
 type HardwareAddr net.HardwareAddr
