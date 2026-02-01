@@ -217,6 +217,7 @@ func (m *Manager) makeUpdateChannel(
 	location.notifiers[channel] = channel
 	m.notifiers[channel] = location
 	machines := make([]*fm_proto.Machine, 0)
+	hypervisorDatas := make(map[string]fm_proto.HypervisorData)
 	vms := make(map[string]*hyper_proto.VmInfo, len(m.vms))
 	vmToHypervisor := make(map[string]string, len(m.vms))
 	for _, h := range m.hypervisors {
@@ -224,6 +225,7 @@ func (m *Manager) makeUpdateChannel(
 			continue
 		}
 		machines = append(machines, h.getMachine())
+		hypervisorDatas[h.Hostname] = h.HypervisorData
 		for addr, vm := range h.vms {
 			vms[addr] = &vm.VmInfo
 			vmToHypervisor[addr] = h.Machine.Hostname
@@ -232,9 +234,10 @@ func (m *Manager) makeUpdateChannel(
 	m.logger.Debugf(0, "makeUpdateChannel(): sending %d machines and %d VMs\n",
 		len(machines), len(vms))
 	channel <- fm_proto.Update{
-		ChangedMachines: machines,
-		ChangedVMs:      vms,
-		VmToHypervisor:  vmToHypervisor,
+		ChangedHypervisors: hypervisorDatas,
+		ChangedMachines:    machines,
+		ChangedVMs:         vms,
+		VmToHypervisor:     vmToHypervisor,
 	}
 	return channel
 }
@@ -657,7 +660,13 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 
 func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	update hyper_proto.Update, firstUpdate bool) {
+	h.logger.Debugln(1, "processHypervisorUpdate()")
 	h.mutex.Lock()
+	oldData := h.HypervisorData
+	oldMachine := h.Machine
+	if update.AvailableMemoryInMiB != nil {
+		h.AvailableMemory = *update.AvailableMemoryInMiB
+	}
 	if update.HaveDisabled {
 		h.disabled = update.Disabled
 	}
@@ -666,6 +675,9 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	}
 	if update.NumCPUs != nil {
 		h.NumCPUs = *update.NumCPUs
+	}
+	if update.NumFreeAddresses != nil {
+		h.NumFreeAddresses = update.NumFreeAddresses
 	}
 	if update.TotalVolumeBytes != nil {
 		h.TotalVolumeBytes = *update.TotalVolumeBytes
@@ -704,17 +716,26 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 			h.mutex.Unlock()
 		}
 	}
+	var updateToSend fm_proto.Update
 	if update.HaveVMs {
 		if firstUpdate {
-			m.processInitialVMs(h, update.VMs)
+			m.processInitialVMs(h, update.VMs, &updateToSend)
 		} else {
-			m.processVmUpdates(h, update.VMs)
+			m.processVmUpdates(h, update.VMs, &updateToSend)
 		}
 	}
+	if !h.Machine.Equal(&oldMachine) {
+		updateToSend.ChangedMachines = []*fm_proto.Machine{&h.Machine}
+	}
+	if !h.HypervisorData.Equal(&oldData) {
+		updateToSend.ChangedHypervisors = map[string]fm_proto.HypervisorData{
+			h.Hostname: h.HypervisorData}
+	}
+	m.sendUpdate(h.location, &updateToSend)
 }
 
 func (m *Manager) processInitialVMs(h *hypervisorType,
-	vms map[string]*hyper_proto.VmInfo) {
+	vms map[string]*hyper_proto.VmInfo, updateToSend *fm_proto.Update) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for ipAddr := range h.vms {
@@ -727,7 +748,7 @@ func (m *Manager) processInitialVMs(h *hypervisorType,
 			vms[ipAddr] = nil
 		}
 	}
-	m.processVmUpdatesWithLock(h, vms)
+	m.processVmUpdatesWithLock(h, vms, updateToSend)
 }
 
 func (m *Manager) processSubnetsUpdates(h *hypervisorType,
@@ -789,7 +810,7 @@ func (m *Manager) processSubnetsUpdates(h *hypervisorType,
 }
 
 func (m *Manager) processVmUpdates(h *hypervisorType,
-	updateVMs map[string]*hyper_proto.VmInfo) {
+	updateVMs map[string]*hyper_proto.VmInfo, updateToSend *fm_proto.Update) {
 	for ipAddr, vm := range updateVMs {
 		if len(vm.Volumes) < 1 {
 			updateVMs[ipAddr] = nil
@@ -797,15 +818,13 @@ func (m *Manager) processVmUpdates(h *hypervisorType,
 	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.processVmUpdatesWithLock(h, updateVMs)
+	m.processVmUpdatesWithLock(h, updateVMs, updateToSend)
 }
 
 func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
-	updateVMs map[string]*hyper_proto.VmInfo) {
-	update := fm_proto.Update{
-		ChangedVMs:     make(map[string]*hyper_proto.VmInfo),
-		VmToHypervisor: make(map[string]string),
-	}
+	updateVMs map[string]*hyper_proto.VmInfo, updateToSend *fm_proto.Update) {
+	updateToSend.ChangedVMs = make(map[string]*hyper_proto.VmInfo)
+	updateToSend.VmToHypervisor = make(map[string]string)
 	vmsToDelete := make(map[string]struct{})
 	for ipAddr, protoVm := range updateVMs {
 		if protoVm == nil {
@@ -836,8 +855,8 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 					}
 				}
 				vm.VmInfo = *protoVm
-				update.ChangedVMs[ipAddr] = protoVm
-				update.VmToHypervisor[ipAddr] = h.Machine.Hostname
+				updateToSend.ChangedVMs[ipAddr] = protoVm
+				updateToSend.VmToHypervisor[ipAddr] = h.Machine.Hostname
 			} else {
 				if _, ok := h.migratingVms[ipAddr]; ok {
 					delete(h.migratingVms, ipAddr)
@@ -854,7 +873,8 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				} else {
 					h.logger.Debugf(0, "wrote VM: %s\n", ipAddr)
 				}
-				update.ChangedVMs[ipAddr] = protoVm
+				updateToSend.ChangedVMs[ipAddr] = protoVm
+				updateToSend.VmToHypervisor[ipAddr] = h.Machine.Hostname
 			}
 		}
 	}
@@ -867,7 +887,7 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 		} else {
 			h.logger.Debugf(0, "deleted VM: %s\n", ipAddr)
 		}
-		update.DeletedVMs = append(update.DeletedVMs, ipAddr)
+		updateToSend.DeletedVMs = append(updateToSend.DeletedVMs, ipAddr)
 	}
 	h.AllocatedMilliCPUs = 0
 	h.AllocatedMemory = 0
@@ -877,7 +897,6 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 		h.AllocatedMemory += vm.MemoryInMiB
 		h.AllocatedVolumeBytes += vm.TotalStorage()
 	}
-	m.sendUpdate(h.location, &update)
 }
 
 func (m *Manager) splitChanges(hypersToChange []*hypervisorType,
@@ -907,8 +926,12 @@ func (m *Manager) splitChanges(hypersToChange []*hypervisorType,
 }
 
 func (m *Manager) sendUpdate(hyperLocation string, update *fm_proto.Update) {
-	if len(update.ChangedMachines) < 1 && len(update.ChangedVMs) < 1 &&
-		len(update.DeletedMachines) < 1 && len(update.DeletedVMs) < 1 {
+	if len(update.ChangedHypervisors) < 1 &&
+		len(update.ChangedMachines) < 1 &&
+		len(update.ChangedVMs) < 1 &&
+		len(update.DeletedMachines) < 1 &&
+		len(update.DeletedVMs) < 1 &&
+		len(update.VmToHypervisor) < 1 {
 		return
 	}
 	for locationStr, location := range m.locations {
