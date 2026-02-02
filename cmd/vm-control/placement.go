@@ -56,6 +56,45 @@ func init() {
 	}
 }
 
+// Returns true if the Hypervisor has capacity.
+func checkHypervisorCapacity(h fm_proto.Hypervisor,
+	vmInfo hyper_proto.VmInfo) bool {
+	if vmInfo.MemoryInMiB+h.AllocatedMemory > h.MemoryInMiB {
+		return false
+	}
+	if uint64(vmInfo.MilliCPUs)+h.AllocatedMilliCPUs > uint64(h.NumCPUs*1000) {
+		return false
+	}
+	if h.AvailableMemory > 0 &&
+		vmInfo.MemoryInMiB >= h.AvailableMemory {
+		return false
+	}
+	var totalVolumeSize uint64
+	for _, volume := range vmInfo.Volumes {
+		totalVolumeSize += volume.EffectiveSize()
+	}
+	if totalVolumeSize+h.AllocatedVolumeBytes > h.TotalVolumeBytes {
+		return false
+	}
+	if !checkHypervisorSubnetCapacity(h, vmInfo.SubnetId) {
+		return false
+	}
+	for _, subnetId := range vmInfo.SecondarySubnetIDs {
+		if !checkHypervisorSubnetCapacity(h, subnetId) {
+			return false
+		}
+	}
+	return true
+}
+
+// Returns true if the subnet on the Hypervisor has capacity.
+func checkHypervisorSubnetCapacity(h fm_proto.Hypervisor, subnet string) bool {
+	if numFree, ok := h.NumFreeAddresses[subnet]; ok && numFree < 1 {
+		return false
+	}
+	return true
+}
+
 // Returns true if [i] has less free CPU than [j].
 func compareCPU(hypervisors []fm_proto.Hypervisor, i, j int) bool {
 	return freeCPU(hypervisors[i]) < freeCPU(hypervisors[j])
@@ -75,18 +114,7 @@ func findHypervisorsWithCapacity(inputHypervisors []fm_proto.Hypervisor,
 	vmInfo hyper_proto.VmInfo) []fm_proto.Hypervisor {
 	outputHypervisors := make([]fm_proto.Hypervisor, 0, len(inputHypervisors))
 	for _, h := range inputHypervisors {
-		if vmInfo.MemoryInMiB+h.AllocatedMemory > h.MemoryInMiB {
-			continue
-		}
-		if uint64(vmInfo.MilliCPUs)+h.AllocatedMilliCPUs >
-			uint64(h.NumCPUs*1000) {
-			continue
-		}
-		var totalVolumeSize uint64
-		for _, volume := range vmInfo.Volumes {
-			totalVolumeSize += volume.EffectiveSize()
-		}
-		if totalVolumeSize+h.AllocatedVolumeBytes > h.TotalVolumeBytes {
+		if !checkHypervisorCapacity(h, vmInfo) {
 			continue
 		}
 		outputHypervisors = append(outputHypervisors, h)
@@ -109,8 +137,10 @@ func freeStorage(hypervisor fm_proto.Hypervisor) uint64 {
 	return hypervisor.TotalVolumeBytes - hypervisor.AllocatedVolumeBytes
 }
 
-func getHypervisorAddress(vmInfo hyper_proto.VmInfo,
-	logger log.DebugLogger) (string, error) {
+// getHypervisorAddress returns the Hypervisor address where the VM may be
+// created.
+func getHypervisorAddress(vmInfo hyper_proto.VmInfo, logger log.DebugLogger) (
+	string, error) {
 	if *hypervisorHostname != "" {
 		return fmt.Sprintf("%s:%d", *hypervisorHostname, *hypervisorPortNum),
 			nil

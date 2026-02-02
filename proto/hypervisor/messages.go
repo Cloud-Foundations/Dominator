@@ -420,9 +420,11 @@ type FirmwareType uint
 type GetCapacityRequest struct{}
 
 type GetCapacityResponse struct {
-	MemoryInMiB      uint64 `json:",omitempty"`
-	NumCPUs          uint   `json:",omitempty"`
-	TotalVolumeBytes uint64 `json:",omitempty"`
+	Error                string `json:",omitempty"`
+	AvailableMemoryInMiB uint64 `json:",omitempty"`
+	MemoryInMiB          uint64 `json:",omitempty"`
+	NumCPUs              uint   `json:",omitempty"`
+	TotalVolumeBytes     uint64 `json:",omitempty"`
 }
 
 type GetIdentityProviderRequest struct{}
@@ -455,21 +457,22 @@ type GetUpdatesRequest struct {
 }
 
 type Update struct {
-	HaveAddressPool  bool               `json:",omitempty"`
-	AddressPool      []Address          `json:",omitempty"` // Used & free.
-	HaveDisabled     bool               `json:",omitempty"`
-	Disabled         bool               `json:",omitempty"`
-	MemoryInMiB      *uint64            `json:",omitempty"`
-	NumCPUs          *uint              `json:",omitempty"`
-	NumFreeAddresses map[string]uint    `json:",omitempty"` // Key: subnet ID.
-	HealthStatus     string             `json:",omitempty"`
-	HaveSerialNumber bool               `json:",omitempty"`
-	SerialNumber     string             `json:",omitempty"`
-	HaveSubnets      bool               `json:",omitempty"`
-	Subnets          []Subnet           `json:",omitempty"`
-	TotalVolumeBytes *uint64            `json:",omitempty"`
-	HaveVMs          bool               `json:",omitempty"`
-	VMs              map[string]*VmInfo `json:",omitempty"` // Key: IP address.
+	HaveAddressPool      bool               `json:",omitempty"`
+	AddressPool          []Address          `json:",omitempty"` // Used & free.
+	AvailableMemoryInMiB *uint64            `json:",omitempty"`
+	HaveDisabled         bool               `json:",omitempty"`
+	Disabled             bool               `json:",omitempty"`
+	MemoryInMiB          *uint64            `json:",omitempty"`
+	NumCPUs              *uint              `json:",omitempty"`
+	NumFreeAddresses     map[string]uint    `json:",omitempty"` // Key: subnet ID.
+	HealthStatus         string             `json:",omitempty"`
+	HaveSerialNumber     bool               `json:",omitempty"`
+	SerialNumber         string             `json:",omitempty"`
+	HaveSubnets          bool               `json:",omitempty"`
+	Subnets              []Subnet           `json:",omitempty"`
+	TotalVolumeBytes     *uint64            `json:",omitempty"`
+	HaveVMs              bool               `json:",omitempty"`
+	VMs                  map[string]*VmInfo `json:",omitempty"` // Key: IP address.
 }
 
 type GetVmAccessTokenRequest struct {

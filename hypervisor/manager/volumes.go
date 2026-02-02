@@ -512,10 +512,10 @@ func (m *Manager) findFreeSpace(size uint64,
 	}
 }
 
-// getCapacity returns the capacity for a specified storage index and accounts
-// for the object cache and extra reserved space on the root file-system (if
-// applicable) in the UsableBytes field.
-func (m *Manager) getCapacity(storageIndex uint) (
+// getStorageCapacity returns the capacity for a specified storage index and
+// accounts for the object cache and extra reserved space on the root
+// file-system (if applicable) in the UsableBytes field.
+func (m *Manager) getStorageCapacity(storageIndex uint) (
 	proto.StorageInfo, error) {
 	rawCapacity, err := getCapacity(m.volumeDirectories[storageIndex])
 	if err != nil {
@@ -557,7 +557,7 @@ func (m *Manager) getCapacities() ([]proto.StorageInfo, error) {
 	//               add rate limiting on system calls.
 	capacities := make([]proto.StorageInfo, 0, len(m.volumeDirectories))
 	for storageIndex := range m.volumeDirectories {
-		capacity, err := m.getCapacity(uint(storageIndex))
+		capacity, err := m.getStorageCapacity(uint(storageIndex))
 		if err != nil {
 			return nil, err
 		}
