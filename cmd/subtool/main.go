@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -149,12 +150,14 @@ var subcommands = []commands.Command{
 }
 
 func doMain() int {
+	checkVersion := version.AddFlags("subtool")
 	if err := loadflags.LoadForCli("subtool"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
+	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

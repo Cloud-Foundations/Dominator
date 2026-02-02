@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/Dominator/proto/test"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
@@ -42,11 +43,13 @@ func doMain(logger log.DebugLogger) error {
 }
 
 func main() {
+	checkVersion := version.AddFlags("srpc-test")
 	if err := loadflags.LoadForDaemon("srpc-test"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
+	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
