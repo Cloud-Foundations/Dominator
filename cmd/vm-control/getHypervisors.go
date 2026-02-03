@@ -28,7 +28,7 @@ func getHypervisors(logger log.DebugLogger) error {
 	request := proto.GetHypervisorsInLocationRequest{
 		HypervisorTagsToMatch: hypervisorTagsToMatch,
 		IncludeUnhealthy:      *includeUnhealthy,
-		IncludeVMs:            true,
+		IncludeVMs:            *includeVMs,
 		Location:              *location,
 		SubnetId:              *subnetId,
 	}
