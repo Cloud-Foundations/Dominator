@@ -17,7 +17,7 @@ func (m *Manager) writeHtml(writer io.Writer) {
 			`Hypervisors <font color="green">are</font> being managed by this instance<br>`)
 	} else {
 		fmt.Fprintln(writer,
-			`<font color="grey">Hypervisors are not being managed by this instance</font><br>`)
+			`<font color="grey">Hypervisors are <font color="#800000">not</font> being managed by this instance</font><br>`)
 	}
 	numMachines := t.GetNumMachines()
 	var numConnected, numDisabled, numOff, numOK uint
