@@ -569,6 +569,9 @@ func getCapacity(client srpc.ClientI) (proto.GetCapacityResponse, error) {
 	if err != nil {
 		return proto.GetCapacityResponse{}, err
 	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.GetCapacityResponse{}, err
+	}
 	return reply, nil
 }
 
