@@ -1,13 +1,13 @@
 package lib
 
 import (
-	"container/list"
 	"encoding/gob"
 	"fmt"
 	"io"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	oclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
@@ -306,7 +306,7 @@ func newOutgoingQueue() (chan<- <-chan proto.AddObjectResponse,
 
 func manageOutgoingQueue(send <-chan <-chan proto.AddObjectResponse,
 	receive chan<- <-chan proto.AddObjectResponse) {
-	queue := list.New()
+	queue := list.New[<-chan proto.AddObjectResponse]()
 	for {
 		if front := queue.Front(); front == nil {
 			if send == nil {
@@ -321,8 +321,8 @@ func manageOutgoingQueue(send <-chan <-chan proto.AddObjectResponse,
 			queue.PushBack(response)
 		} else {
 			select {
-			case receive <- front.Value.(<-chan proto.AddObjectResponse):
-				queue.Remove(front)
+			case receive <- front.Value():
+				front.Remove()
 			case response, ok := <-send:
 				if ok {
 					queue.PushBack(response)
@@ -344,7 +344,7 @@ func newMasterQueue() (chan<- chan<- proto.AddObjectResponse,
 
 func manageMasterQueue(send <-chan chan<- proto.AddObjectResponse,
 	receive chan<- chan<- proto.AddObjectResponse) {
-	queue := list.New()
+	queue := list.New[chan<- proto.AddObjectResponse]()
 	for {
 		if front := queue.Front(); front == nil {
 			if send == nil {
@@ -359,8 +359,8 @@ func manageMasterQueue(send <-chan chan<- proto.AddObjectResponse,
 			queue.PushBack(response)
 		} else {
 			select {
-			case receive <- front.Value.(chan<- proto.AddObjectResponse):
-				queue.Remove(front)
+			case receive <- front.Value():
+				front.Remove()
 			case response, ok := <-send:
 				if ok {
 					queue.PushBack(response)
