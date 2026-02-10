@@ -31,8 +31,8 @@ func TestQueueSimple(t *testing.T) {
 	receiveLoopValue(queue, 2, t)
 	receiveLoopValue(queue, 3, t)
 	receiveLoopValue(queue, 4, t)
-	if length := queue.queue.Len(); length != 0 {
-		value := queue.queue.Front().Value.(int)
+	if length := queue.queue.Length(); length != 0 {
+		value := queue.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 }
@@ -43,7 +43,7 @@ func TestQueueMany(t *testing.T) {
 	for count := 0; count < numLoops; count++ {
 		queue.Send(count)
 	}
-	t.Logf("queue length: %d", queue.queue.Len())
+	t.Logf("queue length: %d", queue.queue.Length())
 	for count := 0; count < numLoops; count++ {
 		receiveLoopValue(queue, count, t)
 		if count%13 == 0 {
@@ -51,8 +51,8 @@ func TestQueueMany(t *testing.T) {
 		}
 	}
 	time.Sleep(time.Millisecond)
-	if length := queue.queue.Len(); length != 0 {
-		value := queue.queue.Front().Value.(int)
+	if length := queue.queue.Length(); length != 0 {
+		value := queue.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 }
@@ -68,9 +68,9 @@ func TestQueuePulsing(t *testing.T) {
 			receiveLoopValue(queue, count*pulseCount, t)
 		}
 	}
-	t.Logf("queue length: %d", queue.queue.Len())
-	if length := queue.queue.Len(); length != 0 {
-		value := queue.queue.Front().Value.(int)
+	t.Logf("queue length: %d", queue.queue.Length())
+	if length := queue.queue.Length(); length != 0 {
+		value := queue.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 }
@@ -93,8 +93,8 @@ func TestQueueConcurrent(t *testing.T) {
 		}
 	}
 	time.Sleep(time.Millisecond)
-	if length := queue.queue.Len(); length != 0 {
-		value := queue.queue.Front().Value.(int)
+	if length := queue.queue.Length(); length != 0 {
+		value := queue.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 }

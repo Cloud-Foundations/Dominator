@@ -1,6 +1,6 @@
 package queue
 
-import "container/list"
+import "github.com/Cloud-Foundations/Dominator/lib/list"
 
 func newDataQueue() (chan<- interface{}, <-chan interface{}) {
 	send := make(chan interface{}, 1)
@@ -10,7 +10,7 @@ func newDataQueue() (chan<- interface{}, <-chan interface{}) {
 }
 
 func manageDataQueue(send <-chan interface{}, receive chan<- interface{}) {
-	queue := list.New()
+	queue := list.New[interface{}]()
 	for {
 		if front := queue.Front(); front == nil {
 			if send == nil {
@@ -25,8 +25,8 @@ func manageDataQueue(send <-chan interface{}, receive chan<- interface{}) {
 			queue.PushBack(value)
 		} else {
 			select {
-			case receive <- front.Value:
-				queue.Remove(front)
+			case receive <- front.Value():
+				front.Remove()
 			case value, ok := <-send:
 				if ok {
 					queue.PushBack(value)
