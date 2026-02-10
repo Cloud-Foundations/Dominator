@@ -26,8 +26,8 @@ func TestReceiveSimple(t *testing.T) {
 	receiveValue(channel, 2, t)
 	receiveValue(channel, 3, t)
 	receiveValue(channel, 4, t)
-	if length := sender.queue.Len(); length != 0 {
-		value := sender.queue.Front().Value.(int)
+	if length := sender.queue.Length(); length != 0 {
+		value := sender.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 	if len(channel) != 0 {
@@ -42,7 +42,7 @@ func TestReceiveMany(t *testing.T) {
 		sender.Send(count)
 	}
 	t.Logf("channel size: %d, queue length: %d",
-		len(channel), sender.queue.Len())
+		len(channel), sender.queue.Length())
 	for count := 0; count < numLoops; count++ {
 		receiveValue(channel, count, t)
 		if count%13 == 0 {
@@ -50,8 +50,8 @@ func TestReceiveMany(t *testing.T) {
 		}
 	}
 	time.Sleep(time.Millisecond)
-	if length := sender.queue.Len(); length != 0 {
-		value := sender.queue.Front().Value.(int)
+	if length := sender.queue.Length(); length != 0 {
+		value := sender.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 	if len(channel) != 0 {
@@ -71,9 +71,9 @@ func TestReceivePulsing(t *testing.T) {
 		}
 	}
 	t.Logf("channel size: %d, queue length: %d",
-		len(channel), sender.queue.Len())
-	if length := sender.queue.Len(); length != 0 {
-		value := sender.queue.Front().Value.(int)
+		len(channel), sender.queue.Length())
+	if length := sender.queue.Length(); length != 0 {
+		value := sender.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 	if len(channel) != 0 {
@@ -99,8 +99,8 @@ func TestReceiveConcurrent(t *testing.T) {
 		}
 	}
 	time.Sleep(time.Millisecond)
-	if length := sender.queue.Len(); length != 0 {
-		value := sender.queue.Front().Value.(int)
+	if length := sender.queue.Length(); length != 0 {
+		value := sender.queue.Front().Value()
 		t.Errorf("queue has %d stuck entries, first: %d", length, value)
 	}
 	if len(channel) != 0 {

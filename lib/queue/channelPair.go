@@ -1,6 +1,6 @@
 package queue
 
-import "container/list"
+import "github.com/Cloud-Foundations/Dominator/lib/list"
 
 func dummyLengthRecorder(length uint) {}
 
@@ -16,9 +16,9 @@ func newChannelPair[T any](lengthRecorder LengthRecorder) (chan<- T, <-chan T) {
 
 func manageQueue[T any](send <-chan T, receive chan<- T,
 	lengthRecorder LengthRecorder) {
-	queue := list.New()
+	queue := list.New[T]()
 	for {
-		lengthRecorder(uint(queue.Len()))
+		lengthRecorder(uint(queue.Length()))
 		if front := queue.Front(); front == nil {
 			if send == nil {
 				close(receive)
@@ -32,8 +32,8 @@ func manageQueue[T any](send <-chan T, receive chan<- T,
 			queue.PushBack(value)
 		} else {
 			select {
-			case receive <- front.Value.(T):
-				queue.Remove(front)
+			case receive <- front.Value():
+				front.Remove()
 			case value, ok := <-send:
 				if ok {
 					queue.PushBack(value)

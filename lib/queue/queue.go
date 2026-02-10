@@ -1,14 +1,15 @@
 package queue
 
 import (
-	"container/list"
 	"sync"
+
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 )
 
 type queueType[T any] struct {
 	lengthRecorder LengthRecorder
 	mutex          sync.Mutex // Protect everything below.
-	queue          *list.List
+	queue          *list.List[T]
 }
 
 func newQueue[T any](lengthRecorder LengthRecorder) *queueType[T] {
@@ -17,7 +18,7 @@ func newQueue[T any](lengthRecorder LengthRecorder) *queueType[T] {
 	}
 	return &queueType[T]{
 		lengthRecorder: lengthRecorder,
-		queue:          list.New(),
+		queue:          list.New[T](),
 	}
 }
 
@@ -29,11 +30,11 @@ func (s *queueType[T]) Receive() (T, bool) {
 		var empty T
 		return empty, false
 	}
-	s.queue.Remove(entry)
-	length := uint(s.queue.Len())
+	entry.Remove()
+	length := uint(s.queue.Length())
 	s.mutex.Unlock()
 	s.lengthRecorder(length)
-	return entry.Value.(T), true
+	return entry.Value(), true
 }
 
 func (s *queueType[T]) ReceiveAll() []T {
@@ -46,15 +47,15 @@ func (s *queueType[T]) ReceiveAll() []T {
 			s.lengthRecorder(0)
 			return retval
 		}
-		retval = append(retval, entry.Value.(T))
-		s.queue.Remove(entry)
+		retval = append(retval, entry.Value())
+		entry.Remove()
 	}
 }
 
 func (s *queueType[T]) Send(value T) {
 	s.mutex.Lock()
 	s.queue.PushBack(value)
-	length := uint(s.queue.Len())
+	length := uint(s.queue.Length())
 	s.mutex.Unlock()
 	s.lengthRecorder(length)
 }

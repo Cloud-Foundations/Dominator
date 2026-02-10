@@ -1,7 +1,6 @@
 package slavedriver
 
 import (
-	"container/list"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
@@ -80,7 +80,7 @@ func newSlaveDriver(options SlaveDriverOptions, slaveTrader SlaveTrader,
 		databaseDriver:      databaseDriver,
 		getSlaveChannel:     getSlaveChannel,
 		getSlavesChannel:    getSlavesChannel,
-		getterList:          list.New(),
+		getterList:          list.New[requestSlaveMessage](),
 		logger:              logger,
 		pingResponseChannel: make(chan pingResponseMessage, 1),
 		publicDriver:        publicDriver,
@@ -297,12 +297,12 @@ func (driver *slaveDriver) loadSlaves() error {
 // goroutine.
 func (driver *slaveDriver) rollCall() {
 	driver.logger.Debugf(0, "rollCall(): %d idle, %d getters\n",
-		len(driver.idleSlaves), driver.getterList.Len())
+		len(driver.idleSlaves), driver.getterList.Length())
 	// First: if there is an idle slave, dispatch to a getter.
-	if len(driver.idleSlaves) > 0 && driver.getterList.Len() > 0 {
+	if len(driver.idleSlaves) > 0 && driver.getterList.Length() > 0 {
 		entry := driver.getterList.Front()
-		request := entry.Value.(requestSlaveMessage)
-		driver.getterList.Remove(entry)
+		request := entry.Value()
+		entry.Remove()
 		if time.Since(request.timeout) > 0 {
 			request.slaveChannel <- nil // Getter wanted to give up by now.
 			close(request.slaveChannel)
@@ -323,19 +323,19 @@ func (driver *slaveDriver) rollCall() {
 	}
 	// Clean up expired getters and set timeout on when to next check.
 	wakeTimeout := time.Hour
-	var nextEntry *list.Element
+	var nextEntry *list.ListEntry[requestSlaveMessage]
 	for entry := driver.getterList.Front(); entry != nil; entry = nextEntry {
 		nextEntry = entry.Next()
-		request := entry.Value.(requestSlaveMessage)
+		request := entry.Value()
 		if timeout := time.Until(request.timeout); timeout <= 0 {
 			request.slaveChannel <- nil // Getter wanted to give up by now.
 			close(request.slaveChannel)
-			driver.getterList.Remove(entry)
+			entry.Remove()
 		} else if timeout < wakeTimeout {
 			wakeTimeout = timeout
 		}
 	}
-	if driver.getterList.Len() > 0 ||
+	if driver.getterList.Length() > 0 ||
 		uint(len(driver.idleSlaves)) < driver.options.MinimumIdleSlaves {
 		if driver.createdSlaveChannel == nil {
 			ch := make(chan *Slave, 1)
@@ -344,7 +344,7 @@ func (driver *slaveDriver) rollCall() {
 		}
 	}
 	if uint(len(driver.idleSlaves)) > driver.options.MaximumIdleSlaves &&
-		driver.getterList.Len() < 1 {
+		driver.getterList.Length() < 1 {
 		for slave := range driver.idleSlaves {
 			if uint(len(driver.idleSlaves)) <=
 				driver.options.MaximumIdleSlaves {

@@ -1,11 +1,11 @@
 package slavedriver
 
 import (
-	"container/list"
 	"io"
 	"net"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
@@ -127,7 +127,7 @@ type slaveDriver struct {
 	databaseDriver        databaseLoadSaver
 	getSlaveChannel       <-chan requestSlaveMessage
 	getSlavesChannel      <-chan chan<- slaveRoll
-	getterList            *list.List
+	getterList            *list.List[requestSlaveMessage]
 	idleSlaves            map[*Slave]struct{}
 	logger                log.DebugLogger
 	pingResponseChannel   chan pingResponseMessage
