@@ -2771,10 +2771,10 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 	if err != nil {
 		return err
 	}
+	defer userData.Close()
 	if size < 1 {
 		return nil
 	}
-	defer userData.Close()
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		fsutil.PrivateFilePerms)
 	if err != nil {
