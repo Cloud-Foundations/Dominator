@@ -107,11 +107,13 @@ func (vm *vmInfoType) scanStorage() error {
 
 // setupVolumes will allocate space for the VM volumes. It measures the
 // available storage capacity and ensures the requested volume sizes will fit.
-func (vm *vmInfoType) setupVolumes(rootSize uint64,
-	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
-	spreadVolumes bool, storageIndices []uint) error {
-	volumeDirectories, err := vm.manager.getVolumeDirectories(rootSize,
-		rootVolumeType, secondaryVolumes, spreadVolumes, storageIndices)
+// This will grab and release the Manager read lock and each VM read lock, and
+// later the VM write lock.
+func (vm *vmInfoType) setupVolumes(rootVolume proto.Volume,
+	secondaryVolumes []proto.Volume, spreadVolumes bool,
+	storageIndices []uint) error {
+	volumeDirectories, err := vm.manager.getVolumeDirectories(rootVolume,
+		secondaryVolumes, spreadVolumes, storageIndices)
 	if err != nil {
 		return err
 	}
@@ -121,9 +123,12 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 		return err
 	}
 	filename := filepath.Join(volumeDirectory, "root")
+	vm.mutex.Lock()
+	defer vm.mutex.Unlock()
+	vm.Volumes = append(vm.Volumes, rootVolume)
 	vm.VolumeLocations = append(vm.VolumeLocations,
 		proto.LocalVolume{volumeDirectory, filename})
-	for index := range secondaryVolumes {
+	for index, volume := range secondaryVolumes {
 		volumeDirectory := filepath.Join(volumeDirectories[index+1],
 			vm.ipAddress)
 		os.RemoveAll(volumeDirectory)
@@ -131,6 +136,7 @@ func (vm *vmInfoType) setupVolumes(rootSize uint64,
 			return err
 		}
 		filename := filepath.Join(volumeDirectory, indexToName(index+1))
+		vm.Volumes = append(vm.Volumes, volume)
 		vm.VolumeLocations = append(vm.VolumeLocations,
 			proto.LocalVolume{volumeDirectory, filename})
 	}
