@@ -362,27 +362,25 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 }
 
 // calculateStorageAllocations returns a table of the VM volume allocations
-// (effective sizes) for each storage backend. This will grab and release the
-// Manager lock.
+// (effective sizes) for each storage backend. This will grab the Manager read
+// lock, then grab and release each VM read lock and finally release the Manager
+// read lock.
 func (m *Manager) calculateStorageAllocations() map[uint]uint64 {
 	// TODO(rgooch): maintain this dynamically as VMs are mutated.
-	// Collect VM infos.
-	var vmInfos []proto.LocalVmInfo
-	m.iterateOverVMs(0, nil, nil, nil, func(ipAddr string, vm *vmInfoType) {
-		vmInfos = append(vmInfos, vm.LocalVmInfo)
-	})
 	allocationTable := make(map[uint]uint64) // Key: storage index.
-	for _, vmInfo := range vmInfos {
-		for volumeIndex, lv := range vmInfo.VolumeLocations {
+	m.iterateOverVMs(0, nil, nil, nil, func(ipAddr string, vm *vmInfoType) {
+		vm.mutex.RLock()
+		defer vm.mutex.RUnlock()
+		for volumeIndex, lv := range vm.VolumeLocations {
 			storageIndex, err := m.nameToIndex(lv.DirectoryToCleanup)
 			if err != nil {
 				m.Logger.Println(err)
 				continue
 			}
 			allocationTable[storageIndex] +=
-				vmInfo.Volumes[volumeIndex].EffectiveSize()
+				vm.Volumes[volumeIndex].EffectiveSize()
 		}
-	}
+	})
 	return allocationTable
 }
 
@@ -568,13 +566,14 @@ func (m *Manager) getCapacities() ([]proto.StorageInfo, error) {
 
 // getVolumeDirectories will return a list of volume directories in which VM
 // volumes may be created, one per specified volume. It measures the available
-// storage capacity and ensures the requested volume sizes will fit.
-func (m *Manager) getVolumeDirectories(rootSize uint64,
-	rootVolumeType proto.VolumeType, secondaryVolumes []proto.Volume,
-	spreadVolumes bool, storageIndices []uint) ([]string, error) {
+// storage capacity and ensures the requested volume sizes will fit. This will
+// grab and release the Manager read lock and each VM read lock.
+func (m *Manager) getVolumeDirectories(rootVolume proto.Volume,
+	secondaryVolumes []proto.Volume, spreadVolumes bool,
+	storageIndices []uint) ([]string, error) {
 	sizes := make([]uint64, 0, len(secondaryVolumes)+1)
-	if rootSize > 0 {
-		sizes = append(sizes, rootSize)
+	if rootVolume.EffectiveSize() > 0 {
+		sizes = append(sizes, rootVolume.EffectiveSize())
 	}
 	for _, volume := range secondaryVolumes {
 		if volume.Size > 0 {
@@ -616,7 +615,7 @@ func (m *Manager) getVolumeDirectories(rootSize uint64,
 		}
 	}
 	for index := range directoriesToUse {
-		if (index == 0 && rootVolumeType == proto.VolumeTypeMemory) ||
+		if (index == 0 && rootVolume.Type == proto.VolumeTypeMemory) ||
 			(index > 0 && index <= len(secondaryVolumes) &&
 				secondaryVolumes[index-1].Type == proto.VolumeTypeMemory) {
 			if dirname, err := getMemoryVolumeDirectory(m.Logger); err != nil {
