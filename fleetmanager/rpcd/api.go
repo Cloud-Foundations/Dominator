@@ -9,6 +9,14 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
 )
 
+type Config struct {
+}
+
+type Params struct {
+	HypervisorsManager *hypervisors.Manager
+	Logger             log.DebugLogger
+}
+
 type srpcType struct {
 	hypervisorsManager *hypervisors.Manager
 	logger             log.DebugLogger
@@ -21,11 +29,11 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
 }
 
-func Setup(hypervisorsManager *hypervisors.Manager, logger log.DebugLogger) (
+func Setup(config Config, params Params) (
 	*htmlWriter, error) {
 	srpcObj := &srpcType{
-		hypervisorsManager: hypervisorsManager,
-		logger:             logger,
+		hypervisorsManager: params.HypervisorsManager,
+		logger:             params.Logger,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
 				"GetMachineInfo": 1,
