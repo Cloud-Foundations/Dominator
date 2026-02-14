@@ -376,7 +376,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		}
 	}
 	sizeString := strconv.FormatUint(params.Size>>10, 10)
-	var options []string
+	var featureOptions []string
 	if len(params.UnsupportedOptions) > 0 {
 		defaultFeatures, err := getDefaultMkfsFeatures(deviceName, sizeString,
 			logger)
@@ -385,7 +385,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		}
 		for _, option := range params.UnsupportedOptions {
 			if _, ok := defaultFeatures[option]; ok {
-				options = append(options, "^"+option)
+				featureOptions = append(featureOptions, "^"+option)
 			}
 		}
 	}
@@ -401,11 +401,20 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		cmd.Args = append(cmd.Args, "-m",
 			strconv.FormatUint(uint64(params.ReservedBlocksPercentage), 10))
 	}
+	var extendedOptions []string
 	if params.NoDiscard {
-		cmd.Args = append(cmd.Args, "-E", "nodiscard")
+		extendedOptions = append(extendedOptions, "nodiscard")
 	}
-	if len(options) > 0 {
-		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
+	if params.RootGroupId != 0 || params.RootUserId != 0 {
+		extendedOptions = append(extendedOptions,
+			fmt.Sprintf("root_owner=%d:%d",
+				params.RootUserId, params.RootGroupId))
+	}
+	if len(extendedOptions) > 0 {
+		cmd.Args = append(cmd.Args, "-E", strings.Join(extendedOptions, ","))
+	}
+	if len(featureOptions) > 0 {
+		cmd.Args = append(cmd.Args, "-O", strings.Join(featureOptions, ","))
 	}
 	cmd.Args = append(cmd.Args, deviceName, sizeString)
 	startTime := time.Now()
