@@ -50,6 +50,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"flag"
+	"io"
 	stdlog "log"
 	"net"
 	"os"
@@ -116,6 +117,14 @@ func GetClientTlsConfig() *tls.Config {
 	return clientTlsConfig.Clone()
 }
 
+// GetServerTlsConfig returns a clone of the server TLS config.
+func GetServerTlsConfig() *tls.Config {
+	if serverTlsConfig == nil {
+		return nil
+	}
+	return serverTlsConfig.Clone()
+}
+
 // GetEarliestClientCertExpiration returns the earliest expiration time of any
 // certificate registered with RegisterClientTlsConfig. The zero value is
 // returned if there are no certificates with an expiration time.
@@ -174,6 +183,24 @@ type Decoder interface {
 
 type Encoder interface {
 	Encode(e interface{}) error
+}
+
+// AuthConn defines the interface for authorization checks.
+type AuthConn interface {
+	GetAuthInformation() *AuthInformation
+	GetPermittedMethods() map[string]struct{}
+	AllowMethodPowers() bool
+}
+
+// StreamingConn defines the interface for a streaming RPC connection.
+type StreamingConn interface {
+	Decoder
+	Encoder
+	Flush() error
+	GetAuthInformation() *AuthInformation
+	Username() string
+	io.Reader
+	Peek(n int) ([]byte, error)
 }
 
 type FakeClientOptions struct{}
@@ -267,6 +294,11 @@ type ClientResource struct {
 func SetDefaultGrantMethod(grantMethod func(serviceMethod string,
 	authInfo *AuthInformation) bool) {
 	defaultGrantMethod = grantMethod
+}
+
+// GetDefaultGrantMethod returns the default grant method for all receivers.
+func GetDefaultGrantMethod() func(serviceMethod string, authInfo *AuthInformation) bool {
+	return defaultGrantMethod
 }
 
 // SetDefaultLogger will override the default logger used.
@@ -538,6 +570,16 @@ func (conn *Conn) RequestReply(request interface{}, reply interface{}) error {
 // connection, then Username will panic.
 func (conn *Conn) Username() string {
 	return conn.getUsername()
+}
+
+// GetPermittedMethods returns the methods permitted by the client certificate.
+func (conn *Conn) GetPermittedMethods() map[string]struct{} {
+	return conn.permittedMethods
+}
+
+// AllowMethodPowers returns true if the client has method powers.
+func (conn *Conn) AllowMethodPowers() bool {
+	return conn.allowMethodPowers
 }
 
 type ReceiverOptions struct {
