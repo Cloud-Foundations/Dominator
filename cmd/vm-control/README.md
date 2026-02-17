@@ -211,15 +211,20 @@ requested.
         "Label":                    "/data/0",
         "MountPoint":               "/data/0"
         "ReservedBlocksPercentage": 5,
+        "RootGroupId":              0,
+        "RootUserId":               0,
     },
     {
         "BytesPerInode":            0,
         "Label":                    "/data/1",
         "MountPoint":               "/data/1"
         "ReservedBlocksPercentage": 5,
+        "RootGroupId":              0,
+        "RootUserId":               0,
     }
 ]
 ```
+Note that the default `BytesPerInode` varies depending on file-system size.
 
 ## VM Placement Command
 An optional local command to be used when making VM placement decisions (when
