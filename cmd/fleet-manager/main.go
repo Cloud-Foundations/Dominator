@@ -115,7 +115,12 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Cannot create hypervisors manager: %s\n", err)
 	}
-	rpcHtmlWriter, err := rpcd.Setup(hyperManager, logger)
+	rpcHtmlWriter, err := rpcd.Setup(
+		rpcd.Config{},
+		rpcd.Params{
+			HypervisorsManager: hyperManager,
+			Logger:             logger},
+	)
 	if err != nil {
 		logger.Fatalf("Cannot start rpcd: %s\n", err)
 	}

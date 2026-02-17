@@ -47,6 +47,33 @@ func parseMAC(text []byte) (HardwareAddr, error) {
 	return addr, nil
 }
 
+func (left *HypervisorData) Equal(right *HypervisorData) bool {
+	if left.AllocatedMilliCPUs != right.AllocatedMilliCPUs {
+		return false
+	}
+	if left.AllocatedMemory != right.AllocatedMemory {
+		return false
+	}
+	if left.AllocatedVolumeBytes != right.AllocatedVolumeBytes {
+		return false
+	}
+	if left.AllocatedMilliCPUs != right.AllocatedMilliCPUs {
+		return false
+	}
+	if left.AvailableMemory != right.AvailableMemory {
+		return false
+	}
+	if len(left.NumFreeAddresses) != len(right.NumFreeAddresses) {
+		return false
+	}
+	for subnetId, leftValue := range left.NumFreeAddresses {
+		if leftValue != right.NumFreeAddresses[subnetId] {
+			return false
+		}
+	}
+	return true
+}
+
 func (left *Machine) Equal(right *Machine) bool {
 	if left.GatewaySubnetId != right.GatewaySubnetId {
 		return false

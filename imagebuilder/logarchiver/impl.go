@@ -1,7 +1,6 @@
 package logarchiver
 
 import (
-	"container/list"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
@@ -21,7 +21,7 @@ type buildLogArchiver struct {
 	params            BuildLogArchiveParams
 	fileSizeIncrement uint64
 	mutex             sync.Mutex                  // Lock everything below.
-	ageList           list.List                   // Oldest first.
+	ageList           *list.List[*imageType]      // Oldest first.
 	imageStreams      map[string]*imageStreamType // Key: stream name.
 	totalSize         uint64
 }
@@ -32,12 +32,11 @@ type imageStreamType struct {
 }
 
 type imageType struct {
-	ageListElement *list.Element
-	buildInfo      BuildInfo
-	imageStream    *imageStreamType
-	logSize        uint64 // Rounded up.
-	modTime        time.Time
-	name           string // Leaf name.
+	buildInfo   BuildInfo
+	imageStream *imageStreamType
+	logSize     uint64 // Rounded up.
+	modTime     time.Time
+	name        string // Leaf name.
 }
 
 func roundUp(value, increment uint64) uint64 {
@@ -91,7 +90,7 @@ func (a *buildLogArchiver) addEntry(image *imageType, name string,
 	imageStream.images[image.name] = image
 	a.totalSize += a.imageTotalSize(image)
 	if addToAgeList {
-		image.ageListElement = a.ageList.PushBack(image)
+		a.ageList.PushBack(image)
 	}
 }
 
@@ -113,11 +112,11 @@ func (a *buildLogArchiver) addEntryWithCheck(image *imageType,
 	var deletedLogs uint
 	origTotalSize := a.totalSize
 	for a.totalSize > targetSize {
-		oldestElement := a.ageList.Front()
-		if err := a.deleteEntry(oldestElement); err != nil {
+		oldestEntry := a.ageList.Front()
+		if err := a.deleteEntry(oldestEntry.Value()); err != nil {
 			return err
 		}
-		a.ageList.Remove(oldestElement)
+		oldestEntry.Remove()
 		deletedLogs++
 	}
 	a.params.Logger.Printf("Deleted %d archived build logs consuming %s\n",
@@ -191,8 +190,7 @@ func (a *buildLogArchiver) computeFileSizeIncrement() error {
 	return nil
 }
 
-func (a *buildLogArchiver) deleteEntry(element *list.Element) error {
-	image := element.Value.(*imageType)
+func (a *buildLogArchiver) deleteEntry(image *imageType) error {
 	imageStream := image.imageStream
 	dirname := filepath.Join(a.options.Topdir, imageStream.name, image.name)
 	if err := os.RemoveAll(dirname); err != nil {
@@ -247,6 +245,7 @@ func (a *buildLogArchiver) load(dirname string) error {
 }
 
 func (a *buildLogArchiver) makeAgeList() {
+	a.ageList = list.New[*imageType]()
 	var imageList []*imageType
 	for _, imageStream := range a.imageStreams {
 		for _, image := range imageStream.images {
@@ -258,7 +257,7 @@ func (a *buildLogArchiver) makeAgeList() {
 		return imageList[i].modTime.Before(imageList[j].modTime)
 	})
 	for _, image := range imageList {
-		image.ageListElement = a.ageList.PushBack(image)
+		a.ageList.PushBack(image)
 	}
 }
 
