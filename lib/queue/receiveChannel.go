@@ -1,8 +1,9 @@
 package queue
 
 import (
-	"container/list"
 	"sync"
+
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 )
 
 type senderType[T any] struct {
@@ -10,7 +11,7 @@ type senderType[T any] struct {
 	lengthRecorder LengthRecorder
 	mutex          sync.Mutex // Protect everything below.
 	closing        bool
-	queue          *list.List
+	queue          *list.List[T]
 }
 
 func newReceiveChannel[T any](size uint,
@@ -22,14 +23,14 @@ func newReceiveChannel[T any](size uint,
 	return &senderType[T]{
 		channel:        channel,
 		lengthRecorder: lengthRecorder,
-		queue:          list.New(),
+		queue:          list.New[T](),
 	}, channel
 }
 
 func (s *senderType[T]) Close() {
 	s.mutex.Lock()
 	s.closing = true
-	if s.queue.Len() < 1 {
+	if s.queue.Length() < 1 {
 		close(s.channel)
 	}
 	s.mutex.Unlock()
@@ -41,9 +42,9 @@ func (s *senderType[T]) Send(value T) {
 		s.mutex.Unlock()
 		panic("cannot Send() on a closed channel")
 	}
-	if s.queue.Len() > 0 {
+	if s.queue.Length() > 0 {
 		s.queue.PushBack(value)
-		length := uint(s.queue.Len())
+		length := uint(s.queue.Length())
 		s.mutex.Unlock()
 		s.lengthRecorder(length)
 		return
@@ -55,7 +56,7 @@ func (s *senderType[T]) Send(value T) {
 	default:
 	}
 	s.queue.PushBack(value)
-	length := uint(s.queue.Len())
+	length := uint(s.queue.Length())
 	s.mutex.Unlock()
 	s.lengthRecorder(length)
 	go s.processQueue()
@@ -84,10 +85,10 @@ func (s *senderType[T]) processQueueEntry() uint {
 		return 0
 	}
 	s.mutex.Unlock()
-	s.channel <- entry.Value.(T)
+	s.channel <- entry.Value()
 	s.mutex.Lock()
-	s.queue.Remove(entry)
-	length := s.queue.Len()
+	entry.Remove()
+	length := s.queue.Length()
 	if s.closing && length < 1 {
 		close(s.channel)
 	}

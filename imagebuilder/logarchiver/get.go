@@ -11,19 +11,19 @@ func (a *buildLogArchiver) GetBuildInfos(includeGood bool,
 	buildInfos := &BuildInfos{Builds: make(map[string]BuildInfo)}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	for element := a.ageList.Front(); element != nil; element = element.Next() {
-		image := element.Value.(*imageType)
+	a.ageList.IterateValues(func(image *imageType) bool {
 		imageStream := image.imageStream
 		if image.buildInfo.Error == "" && !includeGood {
-			continue
+			return true
 		}
 		if image.buildInfo.Error != "" && !includeBad {
-			continue
+			return true
 		}
 		imageName := filepath.Join(imageStream.name, image.name)
 		buildInfos.Builds[imageName] = image.buildInfo
 		buildInfos.ImagesByAge = append(buildInfos.ImagesByAge, imageName)
-	}
+		return true
+	})
 	return buildInfos
 }
 

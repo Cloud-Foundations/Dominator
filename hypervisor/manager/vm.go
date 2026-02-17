@@ -328,7 +328,12 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	if err != nil {
 		return err
 	}
-	defer vm.mutex.Unlock()
+	vm.blockMutations = true
+	vm.mutex.Unlock()
+	var haveLock bool
+	defer func() {
+		vm.allowMutationsAndUnlock(haveLock)
+	}()
 	if vm.State != proto.StateStopped {
 		return errors.New("VM is not stopped")
 	}
@@ -336,8 +341,8 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	for _, size := range volumeSizes {
 		volumes = append(volumes, proto.Volume{Size: size})
 	}
-	volumeDirectories, err := vm.manager.getVolumeDirectories(0, 0, volumes,
-		vm.SpreadVolumes, nil)
+	volumeDirectories, err := vm.manager.getVolumeDirectories(proto.Volume{},
+		volumes, vm.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -370,6 +375,8 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 		}
 		volumeLocations = append(volumeLocations, volumeLocation)
 	}
+	vm.mutex.Lock()
+	haveLock = true
 	vm.VolumeLocations = append(vm.VolumeLocations, volumeLocations...)
 	volumeLocations = nil // Prevent cleanup. Thunderbirds are Go!
 	vm.Volumes = append(vm.Volumes, volumes...)
@@ -377,6 +384,8 @@ func (m *Manager) addVmVolumes(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+// allocateVm will allocate a VM. It is added to the list of VMs. The VM is
+// returned in an unlocked state and blockMutations=true.
 func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	authInfo *srpc.AuthInformation) (*vmInfoType, error) {
 	if err := validateHostname(req.Hostname); err != nil {
@@ -494,7 +503,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				SpreadVolumes:      req.SpreadVolumes,
 				SecondaryAddresses: secondaryAddresses,
 				SecondarySubnetIDs: req.SecondarySubnetIDs,
-				State:              proto.StateStarting,
+				State:              proto.StateStopped,
 				SubnetId:           subnetId,
 				Tags:               req.Tags,
 				VirtualCPUs:        req.VirtualCPUs,
@@ -502,6 +511,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 				WatchdogModel:      req.WatchdogModel,
 			},
 		},
+		blockMutations:   true,
 		manager:          m,
 		dirname:          filepath.Join(dirname, ipAddress),
 		ipAddress:        ipAddress,
@@ -1257,11 +1267,17 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		vm.cleanup()
 	}()
 	vm.OwnerUsers, vm.ownerUsers = stringutil.DeduplicateList(ownerUsers, false)
-	vm.Volumes = vmInfo.Volumes
 	if !request.SkipMemoryCheck {
 		if err := <-tryAllocateMemory(vmInfo.MemoryInMiB); err != nil {
 			return err
 		}
+	}
+	rootVolume := proto.Volume{
+		Format:      vmInfo.Volumes[0].Format,
+		Interface:   vmInfo.Volumes[0].Interface,
+		Size:        vmInfo.Volumes[0].Size,
+		Type:        vmInfo.Volumes[0].Type,
+		VirtualSize: vmInfo.Volumes[0].VirtualSize,
 	}
 	var secondaryVolumes []proto.Volume
 	for index, volume := range vmInfo.Volumes {
@@ -1269,8 +1285,8 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 			secondaryVolumes = append(secondaryVolumes, volume)
 		}
 	}
-	err = vm.setupVolumes(vmInfo.Volumes[0].Size, vmInfo.Volumes[0].Type,
-		secondaryVolumes, vmInfo.SpreadVolumes, nil)
+	err = vm.setupVolumes(rootVolume, secondaryVolumes, vmInfo.SpreadVolumes,
+		nil)
 	if err != nil {
 		return err
 	}
@@ -1333,6 +1349,7 @@ func (m *Manager) copyVm(conn *srpc.Conn, request proto.CopyVmRequest) error {
 		return err
 	}
 	vm.setupLockWatcher()
+	vm.blockMutations = false
 	vm = nil // Cancel cleanup.
 	m.Logger.Debugln(1, "CopyVm() finished")
 	return nil
@@ -1431,9 +1448,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		}
 		return sendError(conn, err)
 	}
-	var rootVolumeType proto.VolumeType
+	var rootVolume proto.Volume
 	if len(request.Volumes) > 0 {
-		rootVolumeType = request.Volumes[0].Type
+		rootVolume.Interface = request.Volumes[0].Interface
+		rootVolume.Type = request.Volumes[0].Type
 	}
 	if request.ImageName != "" {
 		if err := drainingReader.Drain(); err != nil {
@@ -1450,9 +1468,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		defer client.Close()
 		fs := img.FileSystem
 		vm.ImageName = imageName
-		size := computeSize(request.MinimumFreeBytes, request.RoundupPower,
-			fs.EstimateUsage(0))
-		err = vm.setupVolumes(size, rootVolumeType, request.SecondaryVolumes,
+		rootVolume.Size = computeSize(request.MinimumFreeBytes,
+			request.RoundupPower, fs.EstimateUsage(0))
+		err = vm.setupVolumes(rootVolume, request.SecondaryVolumes,
 			request.SpreadVolumes, request.StorageIndices)
 		if err != nil {
 			return sendError(conn, err)
@@ -1476,12 +1494,17 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		}
 		if fi, err := os.Stat(vm.VolumeLocations[0].Filename); err != nil {
 			return sendError(conn, err)
-		} else {
-			vm.Volumes = []proto.Volume{{Size: uint64(fi.Size())}}
+		} else if vm.Volumes[0].Size != uint64(fi.Size()) {
+			vm.logger.Printf("Changing root volume size from: %s to: %s\n",
+				format.FormatBytes(vm.Volumes[0].Size),
+				format.FormatBytes(uint64(fi.Size())))
+			vm.mutex.Lock()
+			vm.Volumes[0] = proto.Volume{Size: uint64(fi.Size())}
+			vm.mutex.Unlock()
 		}
 	} else if request.ImageDataSize > 0 {
 		err := vm.copyRootVolume(request, drainingReader, request.ImageDataSize,
-			rootVolumeType)
+			rootVolume.Type)
 		if err != nil {
 			if err := drainingReader.Drain(); err != nil {
 				return err
@@ -1505,23 +1528,19 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 				errors.New("ContentLength from: "+request.ImageURL))
 		}
 		err = vm.copyRootVolume(request, bufio.NewReader(httpResponse.Body),
-			uint64(httpResponse.ContentLength), rootVolumeType)
+			uint64(httpResponse.ContentLength), rootVolume.Type)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else if request.MinimumFreeBytes > 0 { // Create empty root volume.
 		err = vm.copyRootVolume(request, nil, request.MinimumFreeBytes,
-			rootVolumeType)
+			rootVolume.Type)
 		if err != nil {
 			return sendError(conn, err)
 		}
 	} else {
 		return sendError(conn, errors.New("no image specified"))
 	}
-	if len(request.Volumes) > 0 {
-		vm.Volumes[0].Interface = request.Volumes[0].Interface
-	}
-	vm.Volumes[0].Type = rootVolumeType
 	if request.UserDataSize > 0 {
 		filename := filepath.Join(vm.dirname, UserDataFile)
 		err := copyData(filename, conn, request.UserDataSize, vm.logger)
@@ -1558,7 +1577,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 					return sendError(conn, err)
 				}
 			}
-			vm.Volumes = append(vm.Volumes, volume)
 		}
 	}
 	if memoryError != nil {
@@ -1575,6 +1593,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	if request.DoNotStart {
 		vm.setState(proto.StateStopped)
 	} else {
+		vm.setState(proto.StateStarting)
 		if vm.ipAddress == "" {
 			ipAddressToSend = net.ParseIP(vm.ipAddress)
 			if err := sendUpdate(conn, "starting VM"); err != nil {
@@ -1608,6 +1627,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		vm.logger.Println(err)
 	}
 	vm.setupLockWatcher()
+	vm.blockMutations = false
 	m.Logger.Debugf(1, "CreateVm(%s) finished, IP=%s\n",
 		conn.Username(), vm.ipAddress)
 	vm = nil // Cancel cleanup.
@@ -2567,8 +2587,8 @@ func (m *Manager) migrateVm(conn *srpc.Conn) error {
 	if err := m.migrateVmChecks(vmInfo, request.SkipMemoryCheck); err != nil {
 		return err
 	}
-	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0].Size,
-		vmInfo.Volumes[0].Type, vmInfo.Volumes[1:], vmInfo.SpreadVolumes, nil)
+	volumeDirectories, err := m.getVolumeDirectories(vmInfo.Volumes[0],
+		vmInfo.Volumes[1:], vmInfo.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -2771,10 +2791,10 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 	if err != nil {
 		return err
 	}
+	defer userData.Close()
 	if size < 1 {
 		return nil
 	}
-	defer userData.Close()
 	writer, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		fsutil.PrivateFilePerms)
 	if err != nil {
@@ -4145,7 +4165,10 @@ func (vm *vmInfoType) cleanup() {
 
 func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	reader peekingReader, dataSize uint64, volumeType proto.VolumeType) error {
-	volume := proto.Volume{Size: dataSize}
+	volume := proto.Volume{
+		Size: dataSize,
+		Type: volumeType,
+	}
 	if len(request.Volumes) > 0 {
 		volume.Format = request.Volumes[0].Format
 	}
@@ -4156,8 +4179,8 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 		}
 		volume.VirtualSize = qcow2Header.Size
 	}
-	err := vm.setupVolumes(volume.EffectiveSize(), volumeType,
-		request.SecondaryVolumes, request.SpreadVolumes, nil)
+	err := vm.setupVolumes(volume, request.SecondaryVolumes,
+		request.SpreadVolumes, nil)
 	if err != nil {
 		return err
 	}
@@ -4165,7 +4188,6 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	vm.Volumes = []proto.Volume{volume}
 	return nil
 }
 

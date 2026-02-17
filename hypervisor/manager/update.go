@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -38,7 +39,7 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 	defer m.notifiersMutex.Unlock()
 	m.notifiers[channel] = channel
 	// Initial update: give everything.
-	channel <- proto.Update{
+	update := proto.Update{
 		HaveAddressPool:  true,
 		AddressPool:      m.addressPool.Registered,
 		HaveDisabled:     true,
@@ -55,11 +56,26 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 		HaveVMs:          true,
 		VMs:              vms,
 	}
+	memInfo, err := meminfo.GetMemInfo()
+	if err != nil {
+		m.Logger.Println(err)
+	} else {
+		mem := memInfo.Available >> 20
+		update.AvailableMemoryInMiB = &mem
+	}
+	channel <- update
 	return channel
 }
 
 func (m *Manager) sendUpdate(update proto.Update) {
 	update.HealthStatus = m.getHealthStatus()
+	memInfo, err := meminfo.GetMemInfo()
+	if err != nil {
+		m.Logger.Println(err)
+	} else {
+		mem := memInfo.Available >> 20
+		update.AvailableMemoryInMiB = &mem
+	}
 	m.notifiersMutex.Lock()
 	defer m.notifiersMutex.Unlock()
 	for readChannel, writeChannel := range m.notifiers {

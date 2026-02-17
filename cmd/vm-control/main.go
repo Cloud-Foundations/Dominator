@@ -61,6 +61,8 @@ var (
 		"Identity name for requesting role certificates from IdentityProvider")
 	includeUnhealthy = flag.Bool("includeUnhealthy", false,
 		"If true, list connected but unhealthy hypervisors")
+	includeVMs = flag.Bool("includeVMs", true,
+		"If true, include VMs when getting Hypervisors")
 	imageFile = flag.String("imageFile", "",
 		"Name of RAW image file to boot with")
 	imageName = flag.String("imageName", "",

@@ -8,6 +8,11 @@ import (
 func (t *srpcType) GetCapacity(conn *srpc.Conn,
 	request hypervisor.GetCapacityRequest,
 	reply *hypervisor.GetCapacityResponse) error {
-	*reply = t.manager.GetCapacity()
+	response, err := t.manager.GetCapacity()
+	if err != nil {
+		*reply = hypervisor.GetCapacityResponse{Error: err.Error()}
+	} else {
+		*reply = response
+	}
 	return nil
 }

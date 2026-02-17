@@ -187,7 +187,7 @@ func (s state) listVMsHandler(w http.ResponseWriter, req *http.Request) {
 			format.FormatBytes(allocatedVolumeSize),
 			"",
 		)
-		capacity := s.manager.GetCapacity()
+		capacity, _ := s.manager.GetCapacity()
 		tw.WriteRow("", "",
 			"<b>CAPACITY</b>",
 			"",
