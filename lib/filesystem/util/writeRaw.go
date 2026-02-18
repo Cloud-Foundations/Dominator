@@ -284,8 +284,15 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	for _, dirname := range options.OverlayDirectories {
 		dirname := filepath.Clean(dirname) // Stop funny business.
-		err := os.MkdirAll(filepath.Join(rootMount, dirname), fsutil.DirPerms)
-		if err != nil {
+		pathname := filepath.Join(rootMount, dirname)
+		if err := os.MkdirAll(pathname, fsutil.DirPerms); err != nil {
+			return err
+		}
+		// Set permissions for what are likely to be mount points.
+		if err := os.Lchown(pathname, 0, 0); err != nil {
+			return err
+		}
+		if err := os.Chmod(pathname, fsutil.DirPerms); err != nil {
 			return err
 		}
 	}
