@@ -5,9 +5,7 @@
 package version
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -144,39 +142,4 @@ func getVCSInfo() vcsInfo {
 	}
 
 	return info
-}
-
-// Flag variables for version command-line handling
-var (
-	showVersion *bool
-	showShort   *bool
-)
-
-// AddFlags registers -version and -short flags. Call this before flag.Parse().
-// Returns a function that should be called after flag.Parse() to handle
-// the version flags (prints version and exits if -version was passed).
-//
-// Usage:
-//
-//	func main() {
-//	    checkVersion := version.AddFlags("myapp")
-//	    // ... other flag setup ...
-//	    flag.Parse()
-//	    checkVersion()
-//	    // ... rest of main ...
-//	}
-func AddFlags(binaryName string) func() {
-	showVersion = flag.Bool("version", false, "Print version information and exit")
-	showShort = flag.Bool("short", false, "Print short version (use with -version)")
-
-	return func() {
-		if *showVersion {
-			if *showShort {
-				fmt.Println(Get().Short())
-			} else {
-				fmt.Println(Get().Full(binaryName))
-			}
-			os.Exit(0)
-		}
-	}
 }
