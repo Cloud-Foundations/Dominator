@@ -16,7 +16,11 @@ const systemDir = "/etc/config"
 
 func registerVersionFlag(name string) {
 	flag.BoolFunc("version", "Print version information and exit", func(string) error {
-		fmt.Println(version.Get().Full(name))
+		info := version.Get()
+		fmt.Printf("%s %s\n", name, info.Version)
+		fmt.Printf("  Commit: %s\n", info.GitCommit)
+		fmt.Printf("  Built:  %s\n", info.BuildDate)
+		fmt.Printf("  Go:     %s\n", info.GoVersion)
 		os.Exit(0)
 		return nil
 	})

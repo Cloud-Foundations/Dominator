@@ -1,31 +1,28 @@
-# Get version LDFLAGS from scripts/version.lib
-LDFLAGS := $(shell . ./scripts/version.lib && echo "$$LDFLAGS")
-
 all:
-	CGO_ENABLED=0 go install -ldflags '$(LDFLAGS)' ./cmd/*
+	CGO_ENABLED=0 go install ./cmd/*
 	@cd c; make
 	go vet -composites=false ./cmd/*
 
 build-darwin:
-	CGO_ENABLED=0 GOOS=darwin go build -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
 
 build-linux:
-	CGO_ENABLED=0 GOOS=linux go build -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=linux go build ./cmd/*)
 
 build-windows:
-	CGO_ENABLED=0 GOOS=windows go build -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=windows go build ./cmd/*)
 
 install-darwin:
-	CGO_ENABLED=0 GOOS=darwin go install -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=darwin go install ./cmd/*)
 
 install-linux:
-	CGO_ENABLED=0 GOOS=linux go install -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
 
 install-linux-arm:
-	CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install ./cmd/*)
 
 install-windows:
-	CGO_ENABLED=0 GOOS=windows go install -ldflags '$(LDFLAGS)' ./cmd/*
+	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
 disruption-manager.tarball:
 	@./scripts/make-tarball disruption-manager -C $(ETCDIR) ssl
