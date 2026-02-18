@@ -28,7 +28,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/rateio"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	"github.com/Cloud-Foundations/Dominator/proto/sub"
 	"github.com/Cloud-Foundations/Dominator/sub/httpd"
@@ -244,13 +243,11 @@ func writePidfile() {
 func main() {
 	// Ensure the startup thread is reserved for the main function.
 	runtime.LockOSThread()
-	checkVersion := version.AddFlags("subd")
 	if err := loadflags.LoadForDaemon("subd"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	if *testExternallyPatchable {
 		runTestAndExit(checkExternallyPatchable)
 	}

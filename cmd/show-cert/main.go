@@ -22,7 +22,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/sshutil"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 )
 
@@ -298,14 +297,12 @@ func showX509Cert(data []byte, logger log.DebugLogger) {
 }
 
 func doMain() int {
-	checkVersion := version.AddFlags("show-cert")
 	err := loadflags.LoadForCli("show-cert")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Parse()
-	checkVersion()
 	logger := cmdlogger.New()
 	if err := loadX509CAs(*caFile, x509CaPoolMap); err != nil {
 		fmt.Fprintln(os.Stderr, err)

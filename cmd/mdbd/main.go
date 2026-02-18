@@ -18,7 +18,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -217,7 +216,6 @@ func showErrorAndDie(err error) {
 }
 
 func main() {
-	checkVersion := version.AddFlags("mdbd")
 	if os.Geteuid() == 0 {
 		fmt.Fprintln(os.Stderr, "Do not run the MDB daemon as root")
 		os.Exit(1)
@@ -228,7 +226,6 @@ func main() {
 	}
 	flag.Usage = printUsage
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	if *debug { // Backwards compatibility.

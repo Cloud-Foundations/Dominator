@@ -1,4 +1,3 @@
-//go:build linux
 // +build linux
 
 package main
@@ -17,7 +16,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -39,13 +37,11 @@ var (
 )
 
 func main() {
-	checkVersion := version.AddFlags("image-unpacker")
 	if err := loadflags.LoadForDaemon("image-unpacker"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	if os.Geteuid() != 0 {
 		fmt.Fprintln(os.Stderr, "Must run the Image Unpacker as root")

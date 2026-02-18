@@ -15,7 +15,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	objectserverRpcd "github.com/Cloud-Foundations/Dominator/objectserver/rpcd"
 	"github.com/Cloud-Foundations/tricorder/go/healthserver"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
@@ -58,7 +57,6 @@ var (
 )
 
 func main() {
-	checkVersion := version.AddFlags("imageserver")
 	if os.Geteuid() == 0 {
 		fmt.Fprintln(os.Stderr, "Do not run the Image Server as root")
 		os.Exit(1)
@@ -68,7 +66,6 @@ func main() {
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)

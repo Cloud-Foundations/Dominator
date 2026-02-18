@@ -8,9 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 const systemDir = "/etc/config"
+
+func registerVersionFlag(name string) {
+	flag.BoolFunc("version", "Print version information and exit", func(string) error {
+		fmt.Println(version.Get().Full(name))
+		os.Exit(0)
+		return nil
+	})
+}
 
 func loadFlags(dirname string) error {
 	err := loadFlagsFromFile(filepath.Join(dirname, "flags.default"))

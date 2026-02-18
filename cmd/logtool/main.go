@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -70,14 +69,12 @@ func dialAll(addrs []string) ([]*srpc.Client, error) {
 }
 
 func doMain() int {
-	checkVersion := version.AddFlags("logtool")
 	if err := loadflags.LoadForCli("logtool"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
-	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

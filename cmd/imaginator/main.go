@@ -19,7 +19,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -70,13 +69,11 @@ func init() {
 }
 
 func main() {
-	checkVersion := version.AddFlags("imaginator")
 	if err := loadflags.LoadForDaemon("imaginator"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	if os.Geteuid() != 0 {
 		fmt.Fprintln(os.Stderr, "Must run the Image Builder as root")

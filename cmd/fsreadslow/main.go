@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,17 +10,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsbench"
 	"github.com/Cloud-Foundations/Dominator/lib/fsrateio"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 // Benchmark the read speed of the underlying block device for a given file.
 func main() {
-	checkVersion := version.AddFlags("fsreadslow")
-	flag.Parse()
-	checkVersion()
 	pathname := "/"
-	if flag.NArg() == 1 {
-		pathname = flag.Arg(0)
+	if len(os.Args) == 2 {
+		pathname = os.Args[1]
 	}
 	bytesPerSecond, blocksPerSecond, err := fsbench.GetReadSpeed(pathname)
 	if err != nil {

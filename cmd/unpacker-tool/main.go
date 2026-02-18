@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -59,14 +58,12 @@ func getClient() *srpc.Client {
 }
 
 func doMain() int {
-	checkVersion := version.AddFlags("unpacker-tool")
 	if err := loadflags.LoadForCli("unpacker-tool"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
-	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb/mdbd"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -36,14 +35,12 @@ func showMdb(mdb *mdb.Mdb) {
 }
 
 func main() {
-	checkVersion := version.AddFlags("mdb-relayd")
 	if err := loadflags.LoadForDaemon("mdb-relayd"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Usage = printUsage
 	flag.Parse()
-	checkVersion()
 	if flag.NArg() != 0 {
 		printUsage()
 		os.Exit(2)

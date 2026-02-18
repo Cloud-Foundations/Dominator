@@ -21,7 +21,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/proxy"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -64,13 +63,11 @@ func doCheck(logger log.DebugLogger) {
 }
 
 func main() {
-	checkVersion := version.AddFlags("fleet-manager")
 	if err := loadflags.LoadForDaemon("fleet-manager"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)

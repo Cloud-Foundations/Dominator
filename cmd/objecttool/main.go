@@ -14,7 +14,6 @@ import (
 	objectclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 var (
@@ -57,14 +56,12 @@ func getObjectServer() objectserver.ObjectServer {
 }
 
 func doMain() int {
-	checkVersion := version.AddFlags("objecttool")
 	if err := loadflags.LoadForCli("objecttool"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	flag.Usage = printUsage
 	flag.Parse()
-	checkVersion()
 	if flag.NArg() < 1 {
 		printUsage()
 		return 2

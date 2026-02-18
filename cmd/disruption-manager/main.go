@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -31,7 +30,6 @@ func showErrorAndDie(err error) {
 }
 
 func main() {
-	checkVersion := version.AddFlags("disruption-manager")
 	if os.Geteuid() == 0 {
 		fmt.Fprintln(os.Stderr, "Do not run the Disruption Manager as root")
 		os.Exit(1)
@@ -41,7 +39,6 @@ func main() {
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	tricorder.RegisterFlags()
 	logger := serverlogger.New("")
 	dm, err := newDisruptionManager(filepath.Join(*stateDir, "state.json"),

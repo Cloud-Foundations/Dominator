@@ -19,7 +19,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsrateio"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/memstats"
-	"github.com/Cloud-Foundations/Dominator/lib/version"
 	"github.com/Cloud-Foundations/Dominator/sub/scanner"
 )
 
@@ -42,13 +41,11 @@ var (
 )
 
 func main() {
-	checkVersion := version.AddFlags("scan")
 	if err := loadflags.LoadForCli("scan"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	flag.Parse()
-	checkVersion()
 	var err error
 	var configuration scanner.Configuration
 	configuration.ScanFilter, err = filter.New(nil)
