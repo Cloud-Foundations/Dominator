@@ -73,6 +73,16 @@ type FindLatestImageResponse struct {
 	Error     string
 }
 
+type GetImageArchiveRequest struct {
+	ImageName string
+}
+
+type GetImageArchiveResponse struct {
+	ArchiveData       []byte // GOB encoding of ImageArchive followed by HMAC.
+	Error             string
+	ReplicationMaster string // If not empty, go here instead.
+}
+
 type GetImageComputedFilesRequest struct {
 	ImageName string
 }
@@ -91,14 +101,17 @@ type GetImageExpirationResponse struct {
 	ExpiresAt time.Time
 }
 
-type GetImageArchiveRequest struct {
+type GetImageInodesRequest struct {
+	Filenames []filesystem.Filename
 	ImageName string
 }
 
-type GetImageArchiveResponse struct {
-	ArchiveData       []byte // GOB encoding of ImageArchive followed by HMAC.
-	Error             string
-	ReplicationMaster string // If not empty, go here instead.
+type GetImageInodesResponse struct {
+	Error        string
+	ImageExists  bool
+	InodeNumbers map[filesystem.Filename]filesystem.InodeNumber
+	Inodes       map[filesystem.InodeNumber]filesystem.GenericInode
+	NumLinks     map[filesystem.InodeNumber]uint
 }
 
 type GetImageRequest struct {
