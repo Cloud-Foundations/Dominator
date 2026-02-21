@@ -225,6 +225,8 @@ requested.
 ]
 ```
 Note that the default `BytesPerInode` varies depending on file-system size.
+If `RootGroupId` and `RootUserId` are left at the default values of zero, if
+the image contains mount points, the IDs are taken from those inodes.
 
 ## VM Placement Command
 An optional local command to be used when making VM placement decisions (when
