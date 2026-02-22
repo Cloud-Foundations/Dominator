@@ -1570,6 +1570,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 					BytesPerInode:            vinit.BytesPerInode,
 					Label:                    vinit.Label,
 					ReservedBlocksPercentage: vinit.ReservedBlocksPercentage,
+					RootGroupId:              util.GroupId(vinit.RootGroupId),
+					RootUserId:               util.UserId(vinit.RootUserId),
 					Size:                     volume.Size,
 				},
 					vm.logger)
