@@ -1,13 +1,17 @@
 package setupserver
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -31,6 +35,10 @@ var (
 	keyFile = flag.String("keyFile",
 		filepath.Join("/etc/ssl", getDirname(), "key.pem"),
 		"Name of file containing the SSL key")
+
+	certGenerationError error
+	generatedTlsCert    *tls.Certificate
+	generateCertOnce    sync.Once
 )
 
 // CheckFile returns true if the file exists and has size greater than zero,
@@ -50,6 +58,48 @@ func checkFile(filename string, params Params) bool {
 	return true
 }
 
+func generateTlsCert(params Params) (*tls.Certificate, error) {
+	generateCertOnce.Do(func() {
+		generatedTlsCert, certGenerationError = generateTlsCertOnce(params)
+	})
+	return generatedTlsCert, certGenerationError
+}
+
+func generateTlsCertOnce(params Params) (*tls.Certificate, error) {
+	startTime := time.Now()
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return nil, err
+	}
+	year := 365*24*time.Hour + 6*time.Hour // Factor in leap years.
+	templateCert := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    startTime,
+		NotAfter:     startTime.Add(30 * year),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"any-server"},
+	}
+	x509CertDER, err := x509.CreateCertificate(rand.Reader, templateCert,
+		templateCert, publicKey, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	x509Certs, err := x509.ParseCertificates(x509CertDER)
+	if err != nil {
+		return nil, err
+	}
+	tlsCert := &tls.Certificate{
+		Certificate: [][]byte{x509CertDER},
+		Leaf:        x509Certs[0],
+		PrivateKey:  privateKey,
+	}
+	params.Logger.Printf(
+		"Generated self-signed webcert in %s, expires in 30 years\n",
+		format.Duration(time.Since(startTime)))
+	return tlsCert, nil
+}
+
 func getDirname() string {
 	return filepath.Base(os.Args[0])
 }
@@ -57,6 +107,9 @@ func getDirname() string {
 func getSleepInterval(cert *x509.Certificate) time.Duration {
 	day := 24 * time.Hour
 	week := 7 * day
+	if cert == nil {
+		return day
+	}
 	lifetime := cert.NotAfter.Sub(cert.NotBefore)
 	refreshIn := time.Until(cert.NotBefore.Add(7 * lifetime >> 3))
 	if refreshIn > 0 {
@@ -94,7 +147,7 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 			cert, e := srpc.LoadCertificatesFromMetadata(100*time.Millisecond,
 				true, false)
 			if e != nil {
-				return nil, err
+				return nil, srpc.ErrorMissingCertificate
 			}
 			params.Logger.Debugln(0,
 				"Loaded certifcate and key from metadata service")
@@ -143,10 +196,37 @@ func setupTls(params Params) error {
 }
 
 func setupTlsOnce(params Params) (*x509.Certificate, error) {
-	// Setup client.
+	var x509Cert *x509.Certificate
+	tlsCert, err := setupClientTlsOnce(params)
+	if err != nil {
+		if err != srpc.ErrorMissingCertificate {
+			return nil, err
+		}
+		if params.ClientOnly {
+			return nil, err
+		}
+		if !params.GenerateIfMissing {
+			return nil, err
+		}
+		tlsCert, err = generateTlsCert(params)
+	} else {
+		x509Cert = tlsCert.Leaf
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !params.ClientOnly {
+		if err := setupServerTlsOnce(params, tlsCert); err != nil {
+			return nil, err
+		}
+	}
+	return x509Cert, nil
+}
+
+func setupClientTlsOnce(params Params) (*tls.Certificate, error) {
 	tlsCert, err := loadClientCert(params)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load keypair: %s", err)
+		return nil, err
 	}
 	now := time.Now()
 	x509Cert := tlsCert.Leaf
@@ -174,67 +254,69 @@ func setupTlsOnce(params Params) (*x509.Certificate, error) {
 	clientConfig.MinVersion = tls.VersionTLS12
 	clientConfig.Certificates = append(clientConfig.Certificates, *tlsCert)
 	srpc.RegisterClientTlsConfig(clientConfig)
-	if !params.ClientOnly {
-		if *caFile == "" {
-			if params.PermitInsecure {
-				params.Logger.Println("no CA file specified: unauthenticated connections permitted")
-				return tlsCert.Leaf, nil
-			}
-			return nil, srpc.ErrorMissingCA
+	return tlsCert, nil
+}
+
+func setupServerTlsOnce(params Params, serverCert *tls.Certificate) error {
+	if *caFile == "" {
+		if params.PermitInsecure {
+			params.Logger.Println(
+				"no CA file specified: unauthenticated connections permitted")
+			return nil
 		}
-		caCertPool := x509.NewCertPool()
-		identityCertPool := x509.NewCertPool()
-		var earliestCertExpiration time.Time
-		if certs, _, err := x509util.LoadCertificatePEMs(*caFile); err != nil {
-			if os.IsNotExist(err) {
-				if params.PermitInsecure {
-					params.Logger.Printf(
-						"%s not found: unauthenticated connections permitted\n",
-						*caFile)
-					return tlsCert.Leaf, nil
-				}
-				return nil, srpc.ErrorMissingCA
+		return srpc.ErrorMissingCA
+	}
+	caCertPool := x509.NewCertPool()
+	identityCertPool := x509.NewCertPool()
+	var earliestCertExpiration time.Time
+	if certs, _, err := x509util.LoadCertificatePEMs(*caFile); err != nil {
+		if os.IsNotExist(err) {
+			if params.PermitInsecure {
+				params.Logger.Printf(
+					"%s not found: unauthenticated connections permitted\n",
+					*caFile)
+				return nil
 			}
-			return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
-				*caFile, err)
+			return srpc.ErrorMissingCA
+		}
+		return fmt.Errorf("unable to load CA file: \"%s\": %s", *caFile, err)
+	} else {
+		for _, cert := range certs {
+			caCertPool.AddCert(cert)
+			identityCertPool.AddCert(cert)
+			if earliestCertExpiration.IsZero() ||
+				cert.NotAfter.Before(earliestCertExpiration) {
+				earliestCertExpiration = cert.NotAfter
+			}
+		}
+	}
+	serverConfig := new(tls.Config)
+	serverConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	serverConfig.MinVersion = tls.VersionTLS12
+	serverConfig.ClientCAs = caCertPool
+	if *identityCaFile != "" {
+		certs, _, err := x509util.LoadCertificatePEMs(*identityCaFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("unable to load CA file: \"%s\": %s",
+					*caFile, err)
+			}
 		} else {
+			srpc.RegisterFullAuthCA(caCertPool)
 			for _, cert := range certs {
-				caCertPool.AddCert(cert)
 				identityCertPool.AddCert(cert)
 				if earliestCertExpiration.IsZero() ||
 					cert.NotAfter.Before(earliestCertExpiration) {
 					earliestCertExpiration = cert.NotAfter
 				}
 			}
+			serverConfig.ClientCAs = identityCertPool
 		}
-		serverConfig := new(tls.Config)
-		serverConfig.ClientAuth = tls.RequireAndVerifyClientCert
-		serverConfig.MinVersion = tls.VersionTLS12
-		serverConfig.ClientCAs = caCertPool
-		serverConfig.Certificates = append(serverConfig.Certificates, *tlsCert)
-		if *identityCaFile != "" {
-			certs, _, err := x509util.LoadCertificatePEMs(*identityCaFile)
-			if err != nil {
-				if !os.IsNotExist(err) {
-					return nil, fmt.Errorf("unable to load CA file: \"%s\": %s",
-						*caFile, err)
-				}
-			} else {
-				srpc.RegisterFullAuthCA(caCertPool)
-				for _, cert := range certs {
-					identityCertPool.AddCert(cert)
-					if earliestCertExpiration.IsZero() ||
-						cert.NotAfter.Before(earliestCertExpiration) {
-						earliestCertExpiration = cert.NotAfter
-					}
-				}
-				serverConfig.ClientCAs = identityCertPool
-			}
-		}
-		srpc.RegisterServerTlsConfig(serverConfig, true)
-		tricorder.RegisterMetric("/srpc/server/earliest-ca-expiration",
-			&earliestCertExpiration, units.None,
-			"expiration time of the CA which will expire the soonest")
 	}
-	return tlsCert.Leaf, nil
+	serverConfig.Certificates = append(serverConfig.Certificates, *serverCert)
+	srpc.RegisterServerTlsConfig(serverConfig, true)
+	tricorder.RegisterMetric("/srpc/server/earliest-ca-expiration",
+		&earliestCertExpiration, units.None,
+		"expiration time of the CA which will expire the soonest")
+	return nil
 }
