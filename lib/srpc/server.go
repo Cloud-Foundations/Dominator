@@ -489,7 +489,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		}
 		myConn.isEncrypted = true
 		myConn.username, myConn.permittedMethods, myConn.groupList, err =
-			getAuth(tlsConn.ConnectionState())
+			GetAuth(tlsConn.ConnectionState())
 		if err != nil {
 			logger.Println(err)
 			return
@@ -525,7 +525,9 @@ func checkVerifiedChains(verifiedChains [][]*x509.Certificate,
 	return false
 }
 
-func getAuth(state tls.ConnectionState) (string, map[string]struct{},
+// GetAuth extracts authentication information from a TLS connection state.
+// Returns username, permitted methods, group list, and any error.
+func GetAuth(state tls.ConnectionState) (string, map[string]struct{},
 	map[string]struct{}, error) {
 	var username string
 	permittedMethods := make(map[string]struct{})
@@ -638,18 +640,13 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	if !ok {
 		return nil, errors.New(serviceName + ": unknown method: " + methodName)
 	}
-	if conn.allowMethodPowers &&
-		conn.checkMethodAccess(serviceMethod) {
-		conn.haveMethodAccess = true
-	} else if conn.allowMethodPowers &&
-		receiver.grantMethod(serviceName, conn.GetAuthInformation()) {
-		conn.haveMethodAccess = true
-	} else if method.public && conn.username != "" {
-		conn.haveMethodAccess = false
-	} else if method.unauthenticatedPermitted {
-		conn.haveMethodAccess = false
-	} else {
-		conn.haveMethodAccess = false
+	grantMethod := func(_ string, auth *AuthInformation) bool {
+		return receiver.grantMethod(serviceName, auth)
+	}
+	var authorized bool
+	authorized, conn.haveMethodAccess = CheckAuthorization(serviceMethod, conn,
+		grantMethod, method.public, method.unauthenticatedPermitted)
+	if !authorized {
 		method.numDeniedCalls++
 		return nil, ErrorAccessToMethodDenied
 	}
@@ -664,39 +661,63 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 
 // checkMethodAccess implements the built-in authorisation checks. It returns
 // true if the method is permitted, else false if denied.
-func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
-	if conn.permittedMethods == nil {
+func checkMethodAccess(methodName string, conn AuthConn) bool {
+	permittedMethods := conn.GetPermittedMethods()
+	if permittedMethods == nil {
 		return true
 	}
-	for sm := range conn.permittedMethods {
-		if matched, _ := filepath.Match(sm, serviceMethod); matched {
+	for sm := range permittedMethods {
+		if matched, _ := filepath.Match(sm, methodName); matched {
 			return true
 		}
 	}
-	if conn.username != "" {
-		if _, ok := srpcTrustedUsers[conn.username]; ok {
+	authInfo := conn.GetAuthInformation()
+	if authInfo != nil && authInfo.Username != "" {
+		if _, ok := srpcTrustedUsers[authInfo.Username]; ok {
 			return true
 		}
 		if len(srpcTrustedGroups) > 0 {
 			for _, group := range srpcTrustedGroups {
-				if _, ok := conn.groupList[group]; ok {
+				if _, ok := authInfo.GroupList[group]; ok {
 					return true
 				}
 			}
 		}
 		smallStackOwners := getSmallStackOwners()
 		if smallStackOwners != nil {
-			if _, ok := smallStackOwners.users[conn.username]; ok {
+			if _, ok := smallStackOwners.users[authInfo.Username]; ok {
 				return true
 			}
 			for _, group := range smallStackOwners.groups {
-				if _, ok := conn.groupList[group]; ok {
+				if _, ok := authInfo.GroupList[group]; ok {
 					return true
 				}
 			}
 		}
 	}
 	return false
+}
+
+// CheckAuthorization checks if access should be granted.
+func CheckAuthorization(methodName string, conn AuthConn,
+	grantMethod func(string, *AuthInformation) bool,
+	isPublic, isUnauthenticated bool) (authorized, haveMethodAccess bool) {
+
+	authInfo := conn.GetAuthInformation()
+	if conn.AllowMethodPowers() && checkMethodAccess(methodName, conn) {
+		return true, true
+	}
+	if conn.AllowMethodPowers() &&
+		grantMethod != nil && grantMethod(methodName, authInfo) {
+		return true, true
+	}
+	if isPublic && authInfo != nil && authInfo.Username != "" {
+		return true, false
+	}
+	if isUnauthenticated {
+		return true, false
+	}
+	return false, false
 }
 
 func listMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {
