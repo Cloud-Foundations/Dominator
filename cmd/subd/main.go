@@ -48,6 +48,8 @@ var (
 		"Scan speed as percentage of capacity (default 2)")
 	disruptionManager = flag.String("disruptionManager", "",
 		"Path to DisruptionManager tool")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	maxThreads = flag.Uint("maxThreads", 1,
 		"Maximum number of parallel OS threads to use")
 	noteGenerator = flag.String("noteGenerator", "",
@@ -286,8 +288,9 @@ func main() {
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
 	params := setupserver.Params{
-		Logger:         logger,
-		PermitInsecure: *permitInsecureMode,
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+		PermitInsecure:    *permitInsecureMode,
 	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
