@@ -1,5 +1,11 @@
 #! /bin/bash --posix
 
+# Do this before 'set -eu'.
+extra_args=
+if [ -n "$ETCDIR" ]; then
+    extra_args="-C $ETCDIR ssl"
+fi
+
 set -eu
 
 readonly command="$1"
@@ -38,10 +44,11 @@ EOF
     chmod a+rx "$tmpdir/install"
 fi
 
-tar --owner=0 --group=0 -czf $target \
-    init.d/$command.* \
-    scripts/install.lib \
-    "$@" \
+tar --owner=0 --group=0 -czf $target      \
+    init.d/$command.*                     \
+    scripts/install.lib                   \
+    "$@"                                  \
+    $extra_args                           \
     -C $PWD/cmd/$command health-check.yml \
-    -C "$tmpdir" install \
+    -C "$tmpdir" install                  \
     -C $GOPATH bin/$command
