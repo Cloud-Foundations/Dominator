@@ -1,15 +1,18 @@
 #! /bin/bash --posix
 
-# Do this before 'set -eu'.
-extra_args=
-if [ -n "$ETCDIR" ]; then
-    extra_args="-C $ETCDIR ssl"
-fi
-
 set -eu
 
 readonly command="$1"
 shift
+
+extra_args=
+if [ -n "${ETCDIR:-}" ]; then
+    extra_args="-C $ETCDIR"
+    extra_args="$extra_args $(cd $ETCDIR; find ssl -maxdepth 1 -type f)"
+    if [ -d "$ETCDIR/$command" ]; then
+	extra_args="$extra_args ssl/$command"
+    fi
+fi
 
 readonly bin="$GOPATH/bin/$command"
 readonly target="/tmp/$LOGNAME/$command.tar.gz"
