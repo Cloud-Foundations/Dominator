@@ -173,7 +173,7 @@ func defaultMethodGranter(serviceMethod string,
 func registerServerTlsConfig(config *tls.Config, requireTls bool) {
 	serverTlsConfig = config
 	tlsRequired = requireTls
-	setupCertExpirationMetric(setupServerExpirationMetric, config,
+	setupCertExpirationMetric(setupServerExpirationMetric, &serverTlsConfig,
 		serverMetricsDir)
 }
 
