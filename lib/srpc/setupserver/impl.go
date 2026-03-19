@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -104,31 +105,6 @@ func getDirname() string {
 	return filepath.Base(os.Args[0])
 }
 
-func getSleepInterval(cert *x509.Certificate) time.Duration {
-	day := 24 * time.Hour
-	week := 7 * day
-	if cert == nil {
-		return day
-	}
-	lifetime := cert.NotAfter.Sub(cert.NotBefore)
-	refreshIn := time.Until(cert.NotBefore.Add(7 * lifetime >> 3))
-	if refreshIn > 0 {
-		return refreshIn
-	}
-	expiresIn := time.Until(cert.NotAfter)
-	if expiresIn > 2*week {
-		return week
-	} else if expiresIn > 2*day {
-		return day
-	} else if expiresIn > 2*time.Hour {
-		return time.Hour
-	} else if expiresIn > 2*time.Minute {
-		return time.Minute
-	} else {
-		return 5 * time.Second
-	}
-}
-
 func loadClientCert(params Params) (*tls.Certificate, error) {
 	// Load certificate and key.
 	if !checkFile(*certFile, params) || !checkFile(*keyFile, params) {
@@ -169,8 +145,9 @@ func loadClientCert(params Params) (*tls.Certificate, error) {
 
 func loadLoop(params Params, cert *x509.Certificate) {
 	params.FailIfExpired = true
+	refresher := newRefresher(cert)
 	for {
-		sleepInterval := getSleepInterval(cert)
+		sleepInterval := refresher.WaitInterval()
 		params.Logger.Printf("Certificate refetch at: %s (%s)\n",
 			time.Now().Add(sleepInterval).Format(dateTime),
 			format.Duration(sleepInterval))
@@ -179,8 +156,16 @@ func loadLoop(params Params, cert *x509.Certificate) {
 			params.Logger.Println(err)
 		} else {
 			cert = c
+			refresher.SetDeadline(cert.NotAfter)
 		}
 	}
+}
+
+func newRefresher(cert *x509.Certificate) *backoffdelay.Refresher {
+	if cert != nil {
+		return backoffdelay.NewRefresher(cert.NotAfter, time.Minute, 0)
+	}
+	return backoffdelay.NewRefresher(time.Now().Add(time.Hour), time.Minute, 0)
 }
 
 func setupTls(params Params) error {
