@@ -9,7 +9,7 @@ extra_args=
 if [ -n "${ETCDIR:-}" ]; then
     extra_args="-C $ETCDIR"
     extra_args="$extra_args $(cd $ETCDIR; find ssl -maxdepth 1 -type f)"
-    if [ -d "$ETCDIR/$command" ]; then
+    if [ -d "$ETCDIR/ssl/$command" ]; then
 	extra_args="$extra_args ssl/$command"
     fi
 fi
