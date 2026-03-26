@@ -348,7 +348,11 @@ func doMain() int {
 			return 2
 		}
 	}
-	if err := setupclient.SetupTls(true); err != nil {
+	err = setupclient.SetupTlsWithParams(setupclient.Params{
+		IgnoreMissingCerts: true,
+		Logger:             logger,
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
