@@ -316,11 +316,11 @@ func doMain() int {
 	}
 	logger = cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
-	if err := setupclient.SetupTls(false); err != nil {
+	err := setupclient.SetupTlsWithParams(setupclient.Params{Logger: logger})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	var err error
 	rrDialer, err = rrdialer.New(&net.Dialer{Timeout: time.Second * 10}, "",
 		logger)
 	if err != nil {
