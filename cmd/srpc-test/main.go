@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	permitInsecureMode = flag.Bool("permitInsecureMode", false,
 		"If true, run in insecure mode. This gives remote access to all")
 	portNum = flag.Uint("portNum", 12345,
@@ -27,8 +29,9 @@ type serverType struct{}
 
 func doMain(logger log.DebugLogger) error {
 	params := setupserver.Params{
-		Logger:         logger,
-		PermitInsecure: *permitInsecureMode,
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+		PermitInsecure:    *permitInsecureMode,
 	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		return err

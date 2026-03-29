@@ -288,7 +288,7 @@ func registerClientTlsConfig(config *tls.Config) {
 	if config == nil {
 		return
 	}
-	setupCertExpirationMetric(setupClientExpirationMetric, config,
+	setupCertExpirationMetric(setupClientExpirationMetric, &clientTlsConfig,
 		clientMetricsDir)
 }
 

@@ -175,7 +175,11 @@ func doMain() int {
 		logger.Fatalln(os.Stderr,
 			"Cannot specify both -triggersFile and -triggersString")
 	}
-	if err := setupclient.SetupTls(true); err != nil {
+	err := setupclient.SetupTlsWithParams(setupclient.Params{
+		IgnoreMissingCerts: true,
+		Logger:             logger,
+	})
+	if err != nil {
 		logger.Fatalln(os.Stderr, err)
 	}
 	timeoutTime = time.Now().Add(*timeout)

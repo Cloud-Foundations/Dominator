@@ -115,12 +115,16 @@ func main() {
 		printUsage()
 		os.Exit(2)
 	}
-	if err := setupclient.SetupTls(true); err != nil {
+	logger := cmdlogger.New()
+	err := setupclient.SetupTlsWithParams(setupclient.Params{
+		IgnoreMissingCerts: true,
+		Logger:             logger,
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	objectServer := memory.NewObjectServer()
-	logger := cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
 	hostnameSet := stringutil.ConvertListToMap(hostnames, false)
 	manager := client.New(objectServer, logger)

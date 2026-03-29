@@ -25,16 +25,16 @@ install-windows:
 	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
 disruption-manager.tarball:
-	@./scripts/make-tarball disruption-manager -C $(ETCDIR) ssl
+	@./scripts/make-tarball disruption-manager
 
 dominator.tarball:
-	@./scripts/make-tarball dominator -C $(ETCDIR) ssl
+	@./scripts/make-tarball dominator
 
 filegen-server.tarball:
-	@./scripts/make-tarball filegen-server -C $(ETCDIR) ssl
+	@./scripts/make-tarball filegen-server
 
 fleet-manager.tarball:
-	@./scripts/make-tarball fleet-manager -C $(ETCDIR) ssl
+	@./scripts/make-tarball fleet-manager
 
 hypervisor.tarball:
 	@./scripts/make-tarball hypervisor init.d/virtual-machines.* \
@@ -42,26 +42,25 @@ hypervisor.tarball:
 
 image-unpacker.tarball:
 	@./scripts/make-tarball image-unpacker \
-		scripts/image-pusher/export-image -C $(ETCDIR) ssl
+		scripts/image-pusher/export-image
 
 installer.tarball:
-	@cmd/installer/make-tarball installer -C $(ETCDIR) ssl
+	@cmd/installer/make-tarball installer
 
 imageserver.tarball:
-	@./scripts/make-tarball imageserver -C $(ETCDIR) ssl
+	@./scripts/make-tarball imageserver
 
 imaginator.tarball:
-	@./scripts/make-tarball imaginator -C $(ETCDIR) ssl
+	@./scripts/make-tarball imaginator
 
 mdbd.tarball:
-	@./scripts/make-tarball mdbd -C $(ETCDIR) ssl
+	@./scripts/make-tarball mdbd
 
 subd.tarball:
 	@cd c; make
 	@./scripts/make-tarball subd           \
 		-C cmd/subd  set-owner         \
-		-C $(GOPATH) bin/run-in-mntns  \
-		-C $(ETCDIR) ssl
+		-C $(GOPATH) bin/run-in-mntns
 
 
 format:

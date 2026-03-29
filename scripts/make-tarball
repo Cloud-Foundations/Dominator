@@ -5,6 +5,15 @@ set -eu
 readonly command="$1"
 shift
 
+extra_args=
+if [ -n "${ETCDIR:-}" ]; then
+    extra_args="-C $ETCDIR"
+    extra_args="$extra_args $(cd $ETCDIR; find ssl -maxdepth 1 -type f)"
+    if [ -d "$ETCDIR/ssl/$command" ]; then
+	extra_args="$extra_args ssl/$command"
+    fi
+fi
+
 readonly bin="$GOPATH/bin/$command"
 readonly target="/tmp/$LOGNAME/$command.tar.gz"
 
@@ -38,10 +47,11 @@ EOF
     chmod a+rx "$tmpdir/install"
 fi
 
-tar --owner=0 --group=0 -czf $target \
-    init.d/$command.* \
-    scripts/install.lib \
-    "$@" \
+tar --owner=0 --group=0 -czf $target      \
+    init.d/$command.*                     \
+    scripts/install.lib                   \
+    "$@"                                  \
+    $extra_args                           \
     -C $PWD/cmd/$command health-check.yml \
-    -C "$tmpdir" install \
+    -C "$tmpdir" install                  \
     -C $GOPATH bin/$command

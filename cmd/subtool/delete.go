@@ -21,6 +21,7 @@ func deleteSubcommand(args []string, logger log.DebugLogger) error {
 func deletePaths(srpcClient *srpc.Client, pathnames []string) error {
 	return client.CallUpdate(srpcClient, sub.UpdateRequest{
 		PathsToDelete: pathnames,
+		SparseImage:   true,
 		Wait:          true},
 		&sub.UpdateResponse{})
 }

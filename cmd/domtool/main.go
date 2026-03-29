@@ -135,7 +135,11 @@ func doMain() int {
 	}
 	logger := cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
-	if err := setupclient.SetupTls(true); err != nil {
+	err := setupclient.SetupTlsWithParams(setupclient.Params{
+		IgnoreMissingCerts: true,
+		Logger:             logger,
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
