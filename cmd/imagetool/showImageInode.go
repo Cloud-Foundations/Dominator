@@ -82,6 +82,9 @@ func showImageInodeFast(imageName string, inodePath filesystem.Filename) (
 	if err != nil {
 		return false, nil // Fall back to the slow way.
 	}
+	if !response.ImageExists {
+		return false, errors.New(imageName + ": not found")
+	}
 	if inum, ok := response.InodeNumbers[inodePath]; !ok {
 		return false, fmt.Errorf("path: \"%s\" not present in image", inodePath)
 	} else if inode, ok := response.Inodes[inum]; !ok {
