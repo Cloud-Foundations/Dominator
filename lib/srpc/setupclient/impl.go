@@ -75,6 +75,9 @@ func setupTls(params Params) error {
 		params.Logger = nulllogger.New()
 	}
 	if err := setupTlsOnce(params); err != nil {
+		if err == srpc.ErrorMissingCertificate && params.IgnoreMissingCerts {
+			return nil
+		}
 		return err
 	}
 	go loadLoop(params)
@@ -87,9 +90,6 @@ func setupTlsOnce(params Params) error {
 		return err
 	}
 	if certs == nil {
-		if params.IgnoreMissingCerts {
-			return nil
-		}
 		return srpc.ErrorMissingCertificate
 	}
 	// Setup client.
