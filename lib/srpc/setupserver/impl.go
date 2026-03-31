@@ -175,8 +175,9 @@ func setupTls(params Params) error {
 	cert, err := setupTlsOnce(params)
 	if err != nil {
 		return err
+	} else if cert != nil {
+		go loadLoop(params, cert)
 	}
-	go loadLoop(params, cert)
 	return nil
 }
 
