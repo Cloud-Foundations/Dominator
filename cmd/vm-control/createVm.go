@@ -16,6 +16,7 @@ import (
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -485,6 +486,9 @@ func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
 			return nil, err
 		}
 	}
+	if err := updateVolumeInitParams(vinitParams); err != nil {
+		return nil, err
+	}
 	for index, size := range secondaryVolumeSizes {
 		volume := hyper_proto.Volume{Size: uint64(size)}
 		if index+1 < len(volumeInterfaces) {
@@ -616,6 +620,65 @@ func setupVmWithIdentity(client *srpc.Client, hypervisorAddress string,
 		return nil
 	}
 	return hyperclient.StartVm(client, vmIP, nil)
+}
+
+func updateVolumeInitParams(vinitParams []volumeInitParams) error {
+	filenames := make([]filesystem.Filename, 0, len(vinitParams))
+	allSpecified := true
+	for _, vinit := range vinitParams {
+		if vinit.RootGroupId == 0 && vinit.RootUserId == 0 {
+			allSpecified = false
+		}
+		filenames = append(filenames, filesystem.Filename(vinit.MountPoint))
+	}
+	if allSpecified {
+		return nil
+	}
+	client, err := getImageServerClient()
+	if err != nil {
+		return err
+	}
+	if client == nil {
+		return nil
+	}
+	// TODO(rgooch): pass this in somehow to reduce duplication.
+	var name string
+	if isDir, err := imgclient.CheckDirectory(client, *imageName); err != nil {
+		return err
+	} else if isDir {
+		name, err = imgclient.FindLatestImage(client, *imageName, false)
+		if err != nil {
+			return err
+		}
+		if name == "" {
+			return errors.New("no images in directory: " + *imageName)
+		}
+	} else {
+		name = *imageName
+	}
+	response, err := imgclient.GetImageInodes(client, name, filenames)
+	if err != nil {
+		logger.Println(err)
+		return nil // Might not be supported, so don't fail.
+	}
+	if !response.ImageExists {
+		return nil
+	}
+	for index, vinit := range vinitParams {
+		if vinit.RootGroupId != 0 || vinit.RootUserId != 0 {
+			continue // User-specified: leave it alone.
+		}
+		if inum, ok := response.InodeNumbers[filenames[index]]; !ok {
+			continue
+		} else if inode, ok := response.Inodes[inum]; !ok {
+			continue
+		} else {
+			vinit.RootGroupId = hyper_proto.GroupId(inode.GetGid())
+			vinit.RootUserId = hyper_proto.UserId(inode.GetUid())
+			vinitParams[index] = vinit
+		}
+	}
+	return nil
 }
 
 func (r *wrappedReadCloser) Close() error {

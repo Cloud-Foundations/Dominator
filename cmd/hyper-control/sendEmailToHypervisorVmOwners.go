@@ -11,7 +11,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/net/smtp"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/text"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
@@ -64,10 +63,7 @@ func sendEmailToHypervisorVmOwners(logger log.DebugLogger) error {
 	if len(body) < 1 {
 		return fmt.Errorf("no message body")
 	}
-	tlsCerts, err := srpc.LoadCertificates(setupclient.GetCertDirectory())
-	if err != nil {
-		return err
-	}
+	tlsCerts := srpc.GetClientTlsConfig().Certificates
 	username, err := x509util.GetUsername(tlsCerts[0].Leaf)
 	if err != nil {
 		return err

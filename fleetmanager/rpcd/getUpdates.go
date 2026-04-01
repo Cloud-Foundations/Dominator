@@ -15,7 +15,10 @@ func (t *srpcType) GetUpdates(conn *srpc.Conn) error {
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	closeChannel := conn.GetCloseNotifier()
+	var closeChannel <-chan error
+	if request.MaxUpdates == 0 {
+		closeChannel = conn.GetCloseNotifier()
+	}
 	updateChannel := t.hypervisorsManager.MakeUpdateChannel(request)
 	defer t.hypervisorsManager.CloseUpdateChannel(updateChannel)
 	flushTimer := time.NewTimer(flushDelay)

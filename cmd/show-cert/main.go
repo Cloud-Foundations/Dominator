@@ -173,7 +173,14 @@ func logIpRestrictions(value []byte, logger log.DebugLogger) {
 }
 
 func showCertFile(filename string, logger log.DebugLogger) {
-	data, err := ioutil.ReadFile(filename)
+	var data []byte
+	var err error
+	if filename == "-" {
+		data, err = ioutil.ReadAll(os.Stdin)
+		filename = "stdin"
+	} else {
+		data, err = ioutil.ReadFile(filename)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to read certfile: %s\n", err)
 		return

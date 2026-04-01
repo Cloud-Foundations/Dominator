@@ -53,12 +53,12 @@ func rolloutImageSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func checkCertificates(predictedDuration time.Duration) error {
+func checkCertificates(predictedDuration time.Duration, logger log.Logger) {
 	predictedFinish := time.Now().Add(predictedDuration)
 	if srpc.GetEarliestClientCertExpiration().Before(predictedFinish) {
-		return fmt.Errorf("a certificate expires before: %s", predictedFinish)
+		logger.Printf("WARNING: a certificate expires before: %s",
+			predictedFinish)
 	}
-	return nil
 }
 
 func extendImageLifetime(imageServerClientResource *srpc.ClientResource,
@@ -185,9 +185,7 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 	numSteps := math.Sqrt(float64(len(unusedHypervisors)*2)) +
 		math.Sqrt(float64(len(usedHypervisors)*2))
 	predictedDuration := time.Minute * 5 * time.Duration(numSteps)
-	if err := checkCertificates(predictedDuration); err != nil {
-		return err
-	}
+	checkCertificates(predictedDuration, logger)
 	err = extendImageLifetime(imageServerClientResource, imageName, expiresAt,
 		predictedDuration, logger)
 	if err != nil {

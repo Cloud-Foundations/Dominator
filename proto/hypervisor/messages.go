@@ -560,6 +560,8 @@ type GetVmVolumeStorageConfigurationResponse struct {
 	VolumeStorageIndices []uint        `json:",omitempty"`
 }
 
+type GroupId uint
+
 type HoldLockRequest struct {
 	Timeout   time.Duration
 	WriteLock bool
@@ -910,6 +912,8 @@ type UpdateSubnetsResponse struct {
 	Error string
 }
 
+type UserId uint
+
 type VmInfo struct {
 	Address             Address
 	ChangedStateOn      time.Time    `json:",omitempty"`
@@ -963,6 +967,8 @@ type VolumeInitialisationInfo struct {
 	BytesPerInode            uint64
 	Label                    string
 	ReservedBlocksPercentage uint16
+	RootGroupId              GroupId
+	RootUserId               UserId
 }
 
 type VolumeType uint

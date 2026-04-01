@@ -32,11 +32,16 @@ type ComputedFilesData struct {
 	RootDirectory string
 }
 
+type GroupId uint
+type UserId uint
+
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
 	Label                    string
 	NoDiscard                bool
 	ReservedBlocksPercentage uint16
+	RootGroupId              GroupId
+	RootUserId               UserId
 	Size                     uint64
 	UnsupportedOptions       []string
 }

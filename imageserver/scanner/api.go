@@ -55,6 +55,7 @@ type imageType struct {
 	fileChecksum  []byte
 	image         *image.Image
 	modifying     bool
+	numLinksTable filesystem.NumLinksTable
 	usageEstimate uint64
 }
 
@@ -154,6 +155,13 @@ func (imdb *ImageDataBase) GetImageFileChecksum(name string) []byte {
 func (imdb *ImageDataBase) GetImageComputedFiles(name string) (
 	[]filesystem.ComputedFile, bool) {
 	return imdb.getImageComputedFiles(name)
+}
+
+// GetImageInodes will get inode information for a list of filenames for the
+// specified image.
+func (imdb *ImageDataBase) GetImageInodes(imageName string,
+	filenames []filesystem.Filename) (proto.GetImageInodesResponse, error) {
+	return imdb.getImageInodes(imageName, filenames)
 }
 
 // GetImageUsageEstimate will return the usage estimate for the specified image

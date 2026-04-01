@@ -61,6 +61,11 @@ func GetImage(client srpc.ClientI, name string) (*image.Image, error) {
 	return getImage(client, name, 0)
 }
 
+func GetImageArchive(client srpc.ClientI, name string) (
+	proto.GetImageArchiveResponse, error) {
+	return getImageArchive(client, name)
+}
+
 func GetImageComputedFiles(client srpc.ClientI, name string) (
 	[]filesystem.ComputedFile, bool, error) {
 	return getImageComputedFiles(client, name)
@@ -70,13 +75,10 @@ func GetImageExpiration(client srpc.ClientI, name string) (time.Time, error) {
 	return getImageExpiration(client, name)
 }
 
-func GetImageArchive(client srpc.ClientI, name string) (
-	proto.GetImageArchiveResponse, error) {
-	return getImageArchive(client, name)
-}
-
-func GetReplicationMaster(client srpc.ClientI) (string, error) {
-	return getReplicationMaster(client)
+func GetImageInodes(client srpc.ClientI, imageName string,
+	filenames []filesystem.Filename) (
+	proto.GetImageInodesResponse, error) {
+	return getImageInodes(client, imageName, filenames)
 }
 
 func GetImageUsageEstimate(client srpc.ClientI, name string) (
@@ -87,6 +89,10 @@ func GetImageUsageEstimate(client srpc.ClientI, name string) (
 func GetImageWithTimeout(client srpc.ClientI, name string,
 	timeout time.Duration) (*image.Image, error) {
 	return getImage(client, name, timeout)
+}
+
+func GetReplicationMaster(client srpc.ClientI) (string, error) {
+	return getReplicationMaster(client)
 }
 
 func ListDirectories(client srpc.ClientI) ([]image.Directory, error) {

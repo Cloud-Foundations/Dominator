@@ -99,6 +99,9 @@ func readMetadataFile(filename string, timeout time.Duration) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrorMissingCertificate
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}

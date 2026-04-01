@@ -507,6 +507,42 @@ func (imdb *ImageDataBase) getImageComputedFiles(name string) (
 	return img.computedFiles, true
 }
 
+func (imdb *ImageDataBase) getImageInodes(imageName string,
+	filenames []filesystem.Filename) (proto.GetImageInodesResponse, error) {
+	imdb.Lock()
+	_img, _ := imdb.imageMap[imageName]
+	if _img == nil || _img.image == nil {
+		imdb.Unlock()
+		return proto.GetImageInodesResponse{}, nil
+	}
+	img := _img.image
+	filenameToInodeTable := img.FileSystem.FilenameToInodeTable()
+	if _img.numLinksTable == nil {
+		_img.numLinksTable = img.FileSystem.BuildNumLinksTable()
+	}
+	imdb.Unlock()
+	inodeNumbers := make(map[filesystem.Filename]filesystem.InodeNumber,
+		len(filenames))
+	inodeTable := make(map[filesystem.InodeNumber]filesystem.GenericInode)
+	numLinksTable := make(map[filesystem.InodeNumber]uint)
+	for _, filename := range filenames {
+		inum, ok := filenameToInodeTable[string(filename)]
+		if !ok {
+			continue
+		}
+		inodeNumber := filesystem.InodeNumber(inum)
+		inodeNumbers[filename] = inodeNumber
+		inodeTable[inodeNumber] = img.FileSystem.InodeTable[inum]
+		numLinksTable[inodeNumber] = uint(_img.numLinksTable[inum])
+	}
+	return proto.GetImageInodesResponse{
+		ImageExists:  true,
+		InodeNumbers: inodeNumbers,
+		Inodes:       inodeTable,
+		NumLinks:     numLinksTable,
+	}, nil
+}
+
 func (imdb *ImageDataBase) getImageUsageEstimate(name string) (uint64, bool) {
 	imdb.RLock()
 	defer imdb.RUnlock()
