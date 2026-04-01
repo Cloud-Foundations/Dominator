@@ -27,39 +27,39 @@ install-linux-arm: generate
 install-windows: generate
 	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
-disruption-manager.tarball:
+disruption-manager.tarball: generate
 	@./scripts/make-tarball disruption-manager
 
-dominator.tarball:
+dominator.tarball: generate
 	@./scripts/make-tarball dominator
 
-filegen-server.tarball:
+filegen-server.tarball: generate
 	@./scripts/make-tarball filegen-server
 
-fleet-manager.tarball:
+fleet-manager.tarball: generate
 	@./scripts/make-tarball fleet-manager
 
-hypervisor.tarball:
+hypervisor.tarball: generate
 	@./scripts/make-tarball hypervisor init.d/virtual-machines.* \
 		-C $(ETCDIR) ssl
 
-image-unpacker.tarball:
+image-unpacker.tarball: generate
 	@./scripts/make-tarball image-unpacker \
 		scripts/image-pusher/export-image
 
-installer.tarball:
+installer.tarball: generate
 	@cmd/installer/make-tarball installer
 
-imageserver.tarball:
+imageserver.tarball: generate
 	@./scripts/make-tarball imageserver
 
-imaginator.tarball:
+imaginator.tarball: generate
 	@./scripts/make-tarball imaginator
 
-mdbd.tarball:
+mdbd.tarball: generate
 	@./scripts/make-tarball mdbd
 
-subd.tarball:
+subd.tarball: generate
 	@cd c; make
 	@./scripts/make-tarball subd           \
 		-C cmd/subd  set-owner         \
