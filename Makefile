@@ -1,62 +1,65 @@
-all:
+generate:
+	@git describe --tags --always --match 'v[0-9]*.[0-9]*.[0-9]*' > lib/version/VERSION
+
+all: generate
 	CGO_ENABLED=0 go install ./cmd/*
 	@cd c; make
 	go vet -composites=false ./cmd/*
 
-build-darwin:
+build-darwin: generate
 	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
 
-build-linux:
+build-linux: generate
 	(CGO_ENABLED=0 GOOS=linux go build ./cmd/*)
 
-build-windows:
+build-windows: generate
 	(CGO_ENABLED=0 GOOS=windows go build ./cmd/*)
 
-install-darwin:
+install-darwin: generate
 	(CGO_ENABLED=0 GOOS=darwin go install ./cmd/*)
 
-install-linux:
+install-linux: generate
 	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
 
-install-linux-arm:
+install-linux-arm: generate
 	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install ./cmd/*)
 
-install-windows:
+install-windows: generate
 	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
 
-disruption-manager.tarball:
+disruption-manager.tarball: generate
 	@./scripts/make-tarball disruption-manager
 
-dominator.tarball:
+dominator.tarball: generate
 	@./scripts/make-tarball dominator
 
-filegen-server.tarball:
+filegen-server.tarball: generate
 	@./scripts/make-tarball filegen-server
 
-fleet-manager.tarball:
+fleet-manager.tarball: generate
 	@./scripts/make-tarball fleet-manager
 
-hypervisor.tarball:
+hypervisor.tarball: generate
 	@./scripts/make-tarball hypervisor init.d/virtual-machines.* \
 		-C $(ETCDIR) ssl
 
-image-unpacker.tarball:
+image-unpacker.tarball: generate
 	@./scripts/make-tarball image-unpacker \
 		scripts/image-pusher/export-image
 
-installer.tarball:
+installer.tarball: generate
 	@cmd/installer/make-tarball installer
 
-imageserver.tarball:
+imageserver.tarball: generate
 	@./scripts/make-tarball imageserver
 
-imaginator.tarball:
+imaginator.tarball: generate
 	@./scripts/make-tarball imaginator
 
-mdbd.tarball:
+mdbd.tarball: generate
 	@./scripts/make-tarball mdbd
 
-subd.tarball:
+subd.tarball: generate
 	@cd c; make
 	@./scripts/make-tarball subd           \
 		-C cmd/subd  set-owner         \

@@ -1,2 +1,5 @@
+# Generated version file
+lib/version/VERSION
+
 go.work
 go.work.sum
