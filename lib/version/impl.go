@@ -11,20 +11,15 @@ import (
 //go:embed VERSION
 var baseVersion string
 
-type Info struct {
-	Version   string `json:"version"`
-	GitCommit string `json:"gitCommit"`
-	BuildDate string `json:"buildDate"`
-	GoVersion string `json:"goVersion"`
-	Dirty     bool   `json:"dirty"`
+type vcsInfo struct {
+	revision  string
+	buildTime string
+	dirty     bool
 }
 
-func Get() Info {
+func get() Info {
 	vcs := getVCSInfo()
 	version := strings.TrimSpace(baseVersion)
-	if vcs.revision != "unknown" {
-		version += "+" + vcs.revision
-	}
 	if vcs.dirty {
 		version += "-dirty"
 	}
@@ -37,14 +32,8 @@ func Get() Info {
 	}
 }
 
-func (i Info) String() string {
+func infoString(i Info) string {
 	return fmt.Sprintf("%s (built: %s)", i.Version, i.BuildDate)
-}
-
-type vcsInfo struct {
-	revision  string
-	buildTime string
-	dirty     bool
 }
 
 func getVCSInfo() vcsInfo {
@@ -52,12 +41,10 @@ func getVCSInfo() vcsInfo {
 		revision:  "unknown",
 		buildTime: "unknown",
 	}
-
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		return info
 	}
-
 	for _, s := range buildInfo.Settings {
 		switch s.Key {
 		case "vcs.revision":
@@ -72,6 +59,5 @@ func getVCSInfo() vcsInfo {
 			info.dirty = s.Value == "true"
 		}
 	}
-
 	return info
 }

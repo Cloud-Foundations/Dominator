@@ -25,7 +25,6 @@ func registerVersionFlag(name string) {
 		return nil
 	})
 }
-
 func loadFlags(dirname string) error {
 	err := loadFlagsFromFile(filepath.Join(dirname, "flags.default"))
 	if err != nil {
