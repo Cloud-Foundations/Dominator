@@ -88,6 +88,7 @@ used to connect to the remote shell interface, using this command:
 hyper-control installer-shell $hostname
 ```
 where `$hostname` is the name/address of the machine running the *installer*.
+To disconnect from the remote shell use escape sequence `Ctrl-\`.
 
 ## Security
 RPC access is restricted using TLS client authentication. The *installer*
