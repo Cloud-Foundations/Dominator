@@ -60,7 +60,7 @@ Some of the sub-commands available are:
                     *-lock-timeout* *-writeLock* specifies whether to hold a
 		    write lock
 - **installer-shell**: start a remote shell (via SRPC) to the installer running
-                       on a machine
+                       on a machine (disconnect with `Ctrl-\`)
 - **list-volume-directories**: list the volume directories for a specific
                                *Hypervisor*
 - **make-installer-iso**: make a bootable installation ISO (CD-ROM) image for a
