@@ -1,0 +1,54 @@
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.0.0  # MUST be v2+ to read the config file above
+    hooks:
+      # 1. RUN FIRST: Dedicated Line Length Check
+      # This ensures you always see length issues even if logic errors exist.
+      - id: golangci-lint
+        name: check-line-length
+        entry: bash -c 'GOOS=linux golangci-lint run --new-from-rev=master --timeout=5m --enable-only=lll'
+        pass_filenames: false
+
+      # 2. RUN SECOND: All other linters
+      - id: golangci-lint
+        name: lint-my-changes
+        entry: bash -c 'GOOS=linux golangci-lint run --new-from-rev=master --timeout=5m --disable lll'
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: clean-go-code
+        name: fix-blank-lines-and-imports
+        language: system
+        files: \.go$
+        pass_filenames: true
+        entry: |
+          bash -c '
+          # 0. Ensure binaries are in PATH and install if missing
+          export PATH=$PATH:$(go env GOPATH)/bin
+          
+          if ! which goimports-reviser &> /dev/null; then
+              echo "Installing goimports-reviser..."
+              go install github.com/incu6us/goimports-reviser/v3@latest
+          fi
+
+          if ! which golines &> /dev/null; then
+              echo "Installing golines..."
+              go install ://github.com
+          fi
+
+          for file in "$@"; do
+            # 1. DENSITY PASS: Remove internal blank lines
+            perl -i -0777 -pe "s/\{(\s*\n){2,}/{\n/g; s/(\n\s*\n)+\s*\}/\n\}/g; s/(\n\s+[^\n]+)(\n\s*\n)+/\1\n/g" "$file"
+
+            # 2. ORDERING PASS: 3-group layout (StdLib, 3rd-Party, Local)
+            # Use the actual module prefix for the company group
+            goimports-reviser -rm-unused -format -project-name "://github.com" "$file"
+
+            # 3. Format using golines from golangci-lint
+            golangci-lint fmt "$file"
+
+            # 4. FINAL PASS: Canonical formatting
+            gofmt -w "$file"
+            git add "$file"
+          done' --
