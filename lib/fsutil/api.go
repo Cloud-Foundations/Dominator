@@ -21,7 +21,6 @@ const (
 
 var (
 	ErrorChecksumMismatch = errors.New("checksum mismatch")
-	ErrNotASymlink        = errors.New("path is not a symlink")
 )
 
 // AppendFile will append data from the sourceFilename to destFilename.

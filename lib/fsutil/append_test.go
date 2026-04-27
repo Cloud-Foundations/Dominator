@@ -18,6 +18,7 @@ func createBaseDirectory(t *testing.T, path string, perms os.FileMode) {
 		if !info.IsDir() {
 			t.Fatalf("path exists but is a file: %s", dir)
 		}
+		return
 	}
 	if !os.IsNotExist(err) {
 		t.Fatal(err.Error())
