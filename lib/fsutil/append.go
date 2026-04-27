@@ -29,8 +29,8 @@ func appendToFile(destFilename string, reader io.Reader,
 	return nil
 }
 
-func appendFile(destFilename, sourceFilename string) error {
-	if _, err := os.Stat(destFilename); err != nil {
+func appendFile(destDir, destFilename, sourceFilename string) error {
+	if _, err := os.Lstat(destFilename); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Dest file doesn't exist, so just copy the file.
 			var err error
@@ -40,6 +40,14 @@ func appendFile(destFilename, sourceFilename string) error {
 			}
 			return copyFile(destFilename, sourceFilename, mode, false)
 		}
+		return err
+	}
+	// File exists but that can be a symlink and target is dangling,
+	// or resolved symlink path is outside of destDir, which result in
+	// writes to wrong location on host.
+	destFilename, err := resolveSymlinkWithInRoot(destDir, destFilename)
+	if err != nil {
+		return err
 	}
 	sourceFile, err := os.Open(sourceFilename)
 	if err != nil {
@@ -51,7 +59,7 @@ func appendFile(destFilename, sourceFilename string) error {
 }
 
 func appendTree(destDir, sourceDir string,
-	appendFunc func(dest, src string) error) error {
+	appendFunc func(destDir, dest, src string) error) error {
 	return filepath.WalkDir(sourceDir,
 		func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -65,13 +73,20 @@ func appendTree(destDir, sourceDir string,
 			fileType := d.Type()
 			switch {
 			case fileType.IsDir():
+				// Reject if the directory is a symlink and targetPath exists
+				// outside of destDir.
+				_, err := resolveSymlinkWithInRoot(destDir,
+					destFilename)
+				if err != nil {
+					return err
+				}
 				// If path is a directory, create directory and return.
 				// WalkDir will automatically visit the children next.
 				if err := os.MkdirAll(destFilename, DirPerms); err != nil {
 					return err
 				}
 			case fileType.IsRegular():
-				if err := appendFunc(destFilename, path); err != nil {
+				if err := appendFunc(destDir, destFilename, path); err != nil {
 					return err
 				}
 			case fileType&fs.ModeSymlink != 0:

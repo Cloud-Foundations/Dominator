@@ -21,6 +21,7 @@ const (
 
 var (
 	ErrorChecksumMismatch = errors.New("checksum mismatch")
+	ErrNotASymlink        = errors.New("path is not a symlink")
 )
 
 // AppendFile will append data from the sourceFilename to destFilename.
@@ -28,15 +29,22 @@ var (
 // copied from sourceFilename. If there are any errors, then destFilename
 // may have partial data appended.
 // AppendFile is not safe to call concurrently for the same file.
-func AppendFile(destFilename, sourceFilename string) error {
-	return appendFile(destFilename, sourceFilename)
+func AppendFile(destDir, destFilename, sourceFilename string) error {
+	return appendFile(destDir, destFilename, sourceFilename)
 }
 
 // AppendTree recursively merges sourceDir into destDir.
 // It appends contents to existing files or copies new ones
 // while preserving permissions.
 // Directory structures are mirrored.
-// Returns an error if symlinks or non-regular files are encountered.
+// Returns an error if symlinks or non-regular files
+// are encountered in sourceDir.
+// If destination path is a symlink, behavior is as follows
+//  1. If symlink points to a dangling target, it fails with error.
+//  2. If symlink target resolves to a path outside destDir,
+//     it fails with error.
+//  3. If symlink points to a valid path inside destDir, content will be
+//     appended to target file.
 func AppendTree(destDir, sourceDir string) error {
 	return appendTree(destDir, sourceDir, AppendFile)
 }
