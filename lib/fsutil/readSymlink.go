@@ -19,6 +19,7 @@ func resolveSymlinkWithInRoot(root, path string) (string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return path, nil
 		}
+		return "", err
 	}
 	if fileInfo.Mode()&os.ModeSymlink == 0 {
 		return path, nil
