@@ -30,6 +30,13 @@ func appendToFile(destFilename string, reader io.Reader,
 }
 
 func appendFile(destDir, destFilename, sourceFilename string) error {
+	// Resolve the destination path to ensure it stays within destDir.
+	// This also safely computes the final path for new files and prevents
+	// intermediate directory symlinks for escaping the root boundary.
+	destFilename, err := resolveSymlinkWithInRoot(destDir, destFilename)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Lstat(destFilename); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Dest file doesn't exist, so just copy the file.
@@ -40,13 +47,6 @@ func appendFile(destDir, destFilename, sourceFilename string) error {
 			}
 			return copyFile(destFilename, sourceFilename, mode, false)
 		}
-		return err
-	}
-	// File exists but that can be a symlink and target is dangling,
-	// or resolved symlink path is outside of destDir, which result in
-	// writes to wrong location on host.
-	destFilename, err := resolveSymlinkWithInRoot(destDir, destFilename)
-	if err != nil {
 		return err
 	}
 	sourceFile, err := os.Open(sourceFilename)

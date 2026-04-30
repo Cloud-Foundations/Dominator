@@ -35,7 +35,7 @@ func AppendFile(destDir, destFilename, sourceFilename string) error {
 // AppendTree recursively merges sourceDir into destDir.
 // Existing regular files will have data appended. Files which do not exist in
 // destDir will be copied with the source file permissions.
-// Directory structures will be mirrored. An error is returned if symilinks or
+// Directory structures will be mirrored. An error is returned if symlinks or
 // non-regular files are encountered in sourceDir. If a destination path is a
 // symlink, it is resolved within destDir using chroot-style semantics:
 // absolute targets are anchored at destDir and ".." is clamped at its root.
