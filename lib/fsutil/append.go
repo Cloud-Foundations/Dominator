@@ -73,16 +73,16 @@ func appendTree(destDir, sourceDir string,
 			fileType := d.Type()
 			switch {
 			case fileType.IsDir():
-				// Reject if the directory is a symlink and targetPath exists
-				// outside of destDir.
-				_, err := resolveSymlinkWithInRoot(destDir,
+				// Resolve the path to ensure any pre-existing symlinks in the
+				// destination are safely clamped to the chroot boundary.
+				safeDir, err := resolveSymlinkWithInRoot(destDir,
 					destFilename)
 				if err != nil {
 					return err
 				}
 				// If path is a directory, create directory and return.
 				// WalkDir will automatically visit the children next.
-				if err := os.MkdirAll(destFilename, DirPerms); err != nil {
+				if err := os.MkdirAll(safeDir, DirPerms); err != nil {
 					return err
 				}
 			case fileType.IsRegular():

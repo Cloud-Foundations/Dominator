@@ -208,7 +208,9 @@ func TestAppendFileWithDanglingDestSymlinks(t *testing.T) {
 			}
 			defer func() {
 				err := os.Remove(destFilePath)
-				t.Fatalf("error removing symlink: %s", err)
+				if err != nil {
+					t.Fatalf("error removing symlink: %s", err)
+				}
 			}()
 			err := AppendTree(destTmp, sourceTmp)
 			if err == nil {
