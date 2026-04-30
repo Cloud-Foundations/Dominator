@@ -26,50 +26,79 @@ func resolveSymlinkWithInRoot(root, path string) (string, error) {
 	if rel == ".." || strings.HasPrefix(rel, ".."+sep) {
 		return "", fmt.Errorf("path %q escapes root %q", path, root)
 	}
-	curr := rel
-	for nlinks := 0; nlinks <= maxLinks; nlinks++ {
+	var curr string
+	linksWalked := 0
+	unprocessed := strings.Split(filepath.ToSlash(rel), "/")
+	symlinkDepth := 0
+	for len(unprocessed) > 0 {
+		comp := unprocessed[0]
+		unprocessed = unprocessed[1:]
+		isFromSymlink := symlinkDepth > 0
+		if isFromSymlink {
+			symlinkDepth--
+		}
+		if comp == "" || comp == "." {
+			continue
+		}
+		if comp == ".." {
+			curr = filepath.Dir(curr)
+			if curr == "." || curr == sep {
+				curr = ""
+			}
+			continue
+		}
+		curr = filepath.Join(curr, comp)
 		hostCurr := filepath.Join(root, curr)
 		info, err := os.Lstat(hostCurr)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				if nlinks == 0 {
-					return hostCurr, nil
+				if isFromSymlink {
+					fullTarget := hostCurr
+					if symlinkDepth > 0 {
+						remainder := unprocessed[:symlinkDepth]
+						fullTarget = filepath.Join(
+							hostCurr,
+							filepath.Join(remainder...),
+						)
+					}
+					return "",
+						fmt.Errorf(
+							"dangling symlink: %q resolves to missing target %q",
+							path,
+							fullTarget,
+						)
 				}
-				return "",
-					fmt.Errorf(
-						"dangling symlink: %q resolves to missing target %q",
-						path,
-						hostCurr,
-					)
+				if len(unprocessed) > 0 {
+					curr = filepath.Join(curr, filepath.Join(unprocessed...))
+				}
+				break
 			}
 			return "", fmt.Errorf("lstat %q: %w", hostCurr, err)
 		}
 		// If it's not a symlink, we've found our final destination.
 		if info.Mode()&os.ModeSymlink == 0 {
-			return hostCurr, nil
+			continue
+		}
+		linksWalked++
+		if linksWalked > maxLinks {
+			return "", errors.New("too many symlinks (loop detected)")
 		}
 		// Read the symlink target.
 		target, err := os.Readlink(hostCurr)
 		if err != nil {
 			return "", err
 		}
-		// Rebase the target as if root were "/" and let Clean's "/..->/" rule
-		// clamp leading ".." segments at root, before they could otherwise
-		// collapse against the host filesystem when joined with root on the
-		// next iteration.
-		var abs string
+		// Rebase the target based on absolute vs relative links.
 		if filepath.IsAbs(target) {
 			volLen := len(filepath.VolumeName(target))
-			abs = filepath.Clean(target[volLen:])
+			curr = "" // Absolute links reset back to virtual root.
+			target = filepath.Clean(target[volLen:])
 		} else {
-			abs = filepath.Clean(
-				sep + filepath.Join(filepath.Dir(curr), target),
-			)
+			curr = filepath.Dir(curr)
 		}
-		curr = strings.TrimPrefix(abs, sep)
-		if curr == "" {
-			curr = "."
-		}
+		targetComps := strings.Split(filepath.ToSlash(target), "/")
+		unprocessed = append(targetComps, unprocessed...)
+		symlinkDepth += len(targetComps)
 	}
-	return "", errors.New("too many symlinks (loop detected)")
+	return filepath.Join(root, curr), nil
 }
