@@ -37,9 +37,11 @@ func AppendFile(destDir, destFilename, sourceFilename string) error {
 // destDir will be copied with the source file permissions.
 // Directory structures will be mirrored. An error is returned if symilinks or
 // non-regular files are encountered in sourceDir. If a destination path is a
-// symlink, it must resolve to an existing location within destDir.
-// Dangling symlinks, or a symilinks that resolve outside destDir,
-// cause an error.
+// symlink, it is resolved within destDir using chroot-style semantics:
+// absolute targets are anchored at destDir and ".." is clamped at its root.
+// Dangling symlinks cause an error.
+// Valid symlink targets within destDir will have data appended
+// to the resolved file; the symlink itself is preserved.
 func AppendTree(destDir, sourceDir string) error {
 	return appendTree(destDir, sourceDir, AppendFile)
 }
