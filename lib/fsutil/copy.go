@@ -78,6 +78,12 @@ func copyToWriter(writer io.Writer, filename string, reader io.Reader,
 func copyTree(destDir, sourceDir string, allTypes bool,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
+	return copyTreeWithRoot(destDir, destDir, sourceDir, allTypes, copyFunc)
+}
+
+func copyTreeWithRoot(rootDir, destDir, sourceDir string, allTypes bool,
+	copyFunc func(destFilename, sourceFilename string,
+		mode os.FileMode) error) error {
 	file, err := os.Open(sourceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -99,12 +105,22 @@ func copyTree(destDir, sourceDir string, allTypes bool,
 		}
 		switch stat.Mode & wsyscall.S_IFMT {
 		case wsyscall.S_IFDIR:
-			if err := os.Mkdir(destFilename, DirPerms); err != nil {
+			safeDir, err := resolveSymlinkWithInRoot(rootDir, destFilename)
+			if err != nil {
+				return err
+			}
+			if err := os.Mkdir(safeDir, DirPerms); err != nil {
 				if !os.IsExist(err) {
 					return err
 				}
 			}
-			err := copyTree(destFilename, sourceFilename, allTypes, copyFunc)
+			err = copyTreeWithRoot(
+				rootDir,
+				safeDir,
+				sourceFilename,
+				allTypes,
+				copyFunc,
+			)
 			if err != nil {
 				return err
 			}
