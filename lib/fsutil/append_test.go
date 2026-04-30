@@ -149,13 +149,44 @@ func TestAppendFileWithDanglingDestSymlinks(t *testing.T) {
 	sourceTmp := t.TempDir()
 	destTmp := t.TempDir()
 	var (
-		sourceDir           = filepath.Join(sourceTmp, "source/dir1")
-		destDir             = filepath.Join(destTmp, "dest/dir2/dir3")
-		filename            = "test.txt"
-		sourceFilePath      = filepath.Join(sourceDir, filename)
-		destFilePath        = filepath.Join(destDir, filename)
-		danglingSymlinkPath = "../run/systemd/test-service.txt"
+		sourceDir      = filepath.Join(sourceTmp, "etc/config")
+		destDir        = filepath.Join(destTmp, "etc/config")
+		filename       = "test.txt"
+		sourceFilePath = filepath.Join(sourceDir, filename)
+		destFilePath   = filepath.Join(destDir, filename)
 	)
+	danglingSymlinkPaths :=
+		[]struct {
+			name,
+			danglingSymlinkPath,
+			// Resolved path in root with clamping.
+			resolvedDanglingSymlinkPath string
+		}{
+			{
+				name:                "relative_path_1",
+				danglingSymlinkPath: "../run/systemd/test-service.txt",
+				resolvedDanglingSymlinkPath: filepath.Join(
+					destTmp,
+					"etc/run/systemd/test-service.txt",
+				),
+			},
+			{
+				name:                "relative_path_2",
+				danglingSymlinkPath: "../../run/systemd/test-service.txt",
+				resolvedDanglingSymlinkPath: filepath.Join(
+					destTmp,
+					"run/systemd/test-service.txt",
+				),
+			},
+			{
+				name:                "relative_path_clamp_root",
+				danglingSymlinkPath: "../../../../../../run/systemd/test-service.txt",
+				resolvedDanglingSymlinkPath: filepath.Join(
+					destTmp,
+					"run/systemd/test-service.txt",
+				),
+			},
+		}
 	createBaseDirectory(t, sourceFilePath, 0755)
 	createBaseDirectory(t, destFilePath, 0755)
 	// Create source file with data.
@@ -168,51 +199,70 @@ func TestAppendFileWithDanglingDestSymlinks(t *testing.T) {
 		t.Fatalf("error creating source file %s: %s\n",
 			sourceFilePath, err.Error())
 	}
-	// Setup dangling symlink at destFile.
-	if err := os.Symlink(danglingSymlinkPath, destFilePath); err != nil {
-		t.Fatalf("error creating dangling symlink: %s", err)
-	}
-	err := AppendTree(filepath.Dir(destFilePath), filepath.Dir(sourceFilePath))
-	if err == nil {
-		t.Fatalf("expected error for dangling symlinks")
-	}
-	fmt.Println(err.Error())
-	if !strings.EqualFold(err.Error(),
-		fmt.Sprintf(
-			"dangling symlink: %q resolves to missing target %q",
-			destFilePath, filepath.Clean(
-				filepath.Join(
-					filepath.Dir(destFilePath), danglingSymlinkPath,
+	for _, danglingSymlink := range danglingSymlinkPaths {
+		t.Run(danglingSymlink.name, func(t *testing.T) {
+			// Setup dangling symlink at destFile.
+			if err := os.Symlink(danglingSymlink.danglingSymlinkPath,
+				destFilePath); err != nil {
+				t.Fatalf("error creating dangling symlink: %s", err)
+			}
+			defer func() {
+				err := os.Remove(destFilePath)
+				t.Fatalf("error removing symlink: %s", err)
+			}()
+			err := AppendTree(destTmp, sourceTmp)
+			if err == nil {
+				t.Fatalf("expected error for dangling symlinks")
+			}
+			fmt.Println(err.Error())
+			if !strings.EqualFold(err.Error(),
+				fmt.Sprintf(
+					"dangling symlink: %q resolves to missing target %q",
+					destFilePath,
+					danglingSymlink.resolvedDanglingSymlinkPath,
 				),
-			),
-		),
-	) {
-		t.Fatalf("unexpected error")
+			) {
+				t.Fatalf("unexpected error")
+			}
+		})
 	}
 }
 
-func TestAppendFileWithEscapingTargetSymlinks(t *testing.T) {
+func TestAppendFileWithClampingTargetSymlinks(t *testing.T) {
 	sourceTmp := t.TempDir()
 	destTmp := t.TempDir()
 	var (
-		sourceDir           = filepath.Join(sourceTmp, "etc/config")
-		destDir             = filepath.Join(destTmp, "etc/config")
-		filename            = "test.txt"
-		sourceFilePath      = filepath.Join(sourceDir, filename)
+		sourceDir      = filepath.Join(sourceTmp, "etc/config")
+		destDir        = filepath.Join(destTmp, "etc/config")
+		filename       = "test.txt"
+		sourceFilePath = filepath.Join(sourceDir, filename)
+		sourceData     = []byte(
+			"#/usr/bin/bash\n\tThis is test data from source\n",
+		)
+		destData = []byte(
+			"#/usr/bin/bash\n\tThis is test data from dest\n",
+		)
 		destFilePath        = filepath.Join(destDir, filename)
 		danglingSymlinkPath = "../../../run/systemd/test-service.txt"
+		expectedData        = append(destData, sourceData...)
 	)
 	createBaseDirectory(t, sourceFilePath, 0755)
 	createBaseDirectory(t, destFilePath, 0755)
 	symlinkTargetFullPath := filepath.Clean(
-		filepath.Join(destDir, danglingSymlinkPath),
+		filepath.Join(destDir,
+			strings.TrimPrefix(
+				danglingSymlinkPath,
+				".."+string(filepath.Separator),
+			),
+		),
 	)
+	fmt.Println(symlinkTargetFullPath)
 	createBaseDirectory(t, symlinkTargetFullPath, 0755)
 	// Create source file with data.
 	if err := copyToFile(
 		sourceFilePath,
 		PublicFilePerms,
-		bytes.NewReader([]byte{}),
+		bytes.NewReader(sourceData),
 		0,
 	); err != nil {
 		t.Fatalf("error creating source file %s: %s\n",
@@ -221,7 +271,7 @@ func TestAppendFileWithEscapingTargetSymlinks(t *testing.T) {
 	if err := copyToFile(
 		symlinkTargetFullPath,
 		PublicFilePerms,
-		bytes.NewReader([]byte{}),
+		bytes.NewReader(destData),
 		0,
 	); err != nil {
 		t.Fatalf("error creating symlink target file %s: %s\n",
@@ -231,23 +281,35 @@ func TestAppendFileWithEscapingTargetSymlinks(t *testing.T) {
 		t.Fatalf("error creating dangling symlink: %s", err)
 	}
 	err := AppendTree(destTmp, sourceTmp)
-	if err == nil {
-		t.Fatalf("expected error for dangling symlinks")
+	if err != nil {
+		t.Fatalf("unexpected error in AppendTree: %s", err)
 	}
-	relSymlinkDir, _ := filepath.Rel(destTmp, filepath.Dir(destFilePath))
-	expectedEvaluatedPath := filepath.Clean(
-		filepath.Join(relSymlinkDir, danglingSymlinkPath),
-	)
-	expectedErr := fmt.Sprintf(
-		"path %q evaluates to %q which escapes root %q",
-		destFilePath,
-		expectedEvaluatedPath,
-		destTmp,
-	)
-	if !strings.EqualFold(err.Error(), expectedErr) {
-		t.Fatalf("unexpected error.\nGot:      %s\nExpected: %s",
-			err.Error(), expectedErr,
+	f, err := os.OpenFile(symlinkTargetFullPath, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatalf("error opening %s: %s", symlinkTargetFullPath, err)
+	}
+	d, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatalf("error reading data from %s: %s", symlinkTargetFullPath, err)
+	}
+	t.Logf("file content is \n%s\n", string(d))
+	same, err := compareFile(expectedData, symlinkTargetFullPath)
+	if err != nil {
+		t.Fatalf("error comparing to file %s: %s", symlinkTargetFullPath, err)
+	}
+	if !same {
+		t.Fatalf(
+			"mismatched contents, present: %s\nexpected: %s",
+			expectedData, d,
 		)
+	}
+	//Check if symlink is intact.
+	expectedSymlinkPath, err := os.Readlink(destFilePath)
+	if err != nil {
+		t.Fatalf("unexpected error with symlink %s: %s", destFilePath, err)
+	}
+	if expectedSymlinkPath != danglingSymlinkPath {
+		t.Fatalf("symlink is broken.")
 	}
 }
 
