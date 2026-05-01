@@ -25,7 +25,6 @@ import (
 )
 
 // Private interface types.
-
 type buildLogger interface {
 	Bytes() []byte
 	io.Writer
@@ -41,7 +40,6 @@ type imageBuilder interface {
 }
 
 // Other private types.
-
 type argList []string
 
 type bindMountType struct {
@@ -215,11 +213,12 @@ type BuildErrorType struct {
 }
 
 type BuildLocalOptions struct {
-	BindMounts           []string
-	ManifestDirectory    string
-	MaximumBuildDuration time.Duration // Default/maximum: 24 hours.
-	MtimesCopyFilter     *filter.Filter
-	Variables            map[string]string
+	BindMounts               []string
+	EnableDefaultInheritance bool
+	ManifestDirectory        string
+	MaximumBuildDuration     time.Duration // Default/maximum: 24 hours.
+	MtimesCopyFilter         *filter.Filter
+	Variables                map[string]string
 }
 
 type Builder struct {
@@ -231,6 +230,7 @@ type Builder struct {
 	disableLock                 sync.RWMutex
 	disableAutoBuildsUntil      time.Time
 	disableBuildRequestsUntil   time.Time
+	enableDefaultInheritance    bool
 	generateDependencyTrigger   chan<- chan<- struct{}
 	stateDir                    string
 	imageRebuildInterval        time.Duration
@@ -266,6 +266,7 @@ type Builder struct {
 type BuilderOptions struct {
 	ConfigurationURL                    string
 	CreateSlaveTimeout                  time.Duration
+	EnableDefaultInheritance            bool // Default: false.
 	ImageRebuildInterval                time.Duration
 	ImageServerAddress                  string
 	MaximumBuildDuration                time.Duration // Default/max: 24 hours.
@@ -372,14 +373,16 @@ func (b *Builder) WriteHtml(writer io.Writer) {
 }
 
 func BuildImageFromManifest(client *srpc.Client, manifestDir, streamName string,
-	expiresIn time.Duration, bindMounts []string, buildLog buildLogger,
+	expiresIn time.Duration, bindMounts []string, enableDefaultInheritance bool,
+	buildLog buildLogger,
 	logger log.Logger) (
 	string, error) {
 	return BuildImageFromManifestWithOptions(
 		client,
 		BuildLocalOptions{
-			BindMounts:        bindMounts,
-			ManifestDirectory: manifestDir,
+			BindMounts:               bindMounts,
+			ManifestDirectory:        manifestDir,
+			EnableDefaultInheritance: enableDefaultInheritance,
 		},
 		streamName,
 		expiresIn,

@@ -33,6 +33,8 @@ var (
 	buildLogQuota    = flagutil.Size(100 << 20)
 	configurationUrl = flag.String("configurationUrl",
 		"file:///etc/imaginator/conf.json", "URL containing configuration")
+	enableDefaultInheritance = flag.Bool("enableDefaultInheritance", false,
+		"Enables inheritance of computed-files, filters and triggers")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -118,9 +120,10 @@ func main() {
 	}
 	builderObj, err := builder.LoadWithOptionsAndParams(
 		builder.BuilderOptions{
-			ConfigurationURL:     *configurationUrl,
-			CreateSlaveTimeout:   createSlaveTimeout,
-			ImageRebuildInterval: *imageRebuildInterval,
+			ConfigurationURL:         *configurationUrl,
+			CreateSlaveTimeout:       createSlaveTimeout,
+			EnableDefaultInheritance: *enableDefaultInheritance,
+			ImageRebuildInterval:     *imageRebuildInterval,
 			ImageServerAddress: fmt.Sprintf("%s:%d",
 				*imageServerHostname, *imageServerPortNum),
 			MaximumExpirationDuration:           *maximumExpirationDuration,
