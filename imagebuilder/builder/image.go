@@ -350,30 +350,24 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 			}
 		}
 	}
-	if !enableDefaultInheritance {
-		fmt.Fprintln(
-			buildLog,
-			`[WARNING] Inheritance disabled: Skipping inheritance-based 
-			configurations (computed-files.add, computed-files.add.json, 
-			filters.add, triggers.add).`,
-		)
-	} else {
-		if addComputedFiles {
-			computedFilesList = util.MergeComputedFiles(
-				manifest.sourceImageInfo.computedFiles, computedFilesList)
-		}
-		if addFilter {
-			mergeableFilter := &filter.MergeableFilter{}
-			mergeableFilter.Merge(manifest.sourceImageInfo.filter)
-			mergeableFilter.Merge(imageFilter)
-			imageFilter = mergeableFilter.ExportFilter()
-		}
-		if addTriggers {
-			mergeableTriggers := &triggers.MergeableTriggers{}
-			mergeableTriggers.Merge(manifest.sourceImageInfo.triggers)
-			mergeableTriggers.Merge(imageTriggers)
-			imageTriggers = mergeableTriggers.ExportTriggers()
-		}
+	addComputedFiles = addComputedFiles || enableDefaultInheritance
+	addFilter = addFilter || enableDefaultInheritance
+	addTriggers = addTriggers || enableDefaultInheritance
+	if addComputedFiles {
+		computedFilesList = util.MergeComputedFiles(
+			manifest.sourceImageInfo.computedFiles, computedFilesList)
+	}
+	if addFilter {
+		mergeableFilter := &filter.MergeableFilter{}
+		mergeableFilter.Merge(manifest.sourceImageInfo.filter)
+		mergeableFilter.Merge(imageFilter)
+		imageFilter = mergeableFilter.ExportFilter()
+	}
+	if addTriggers {
+		mergeableTriggers := &triggers.MergeableTriggers{}
+		mergeableTriggers.Merge(manifest.sourceImageInfo.triggers)
+		mergeableTriggers.Merge(imageTriggers)
+		imageTriggers = mergeableTriggers.ExportTriggers()
 	}
 	if manifest.mtimesCopyFilter != nil {
 		mtimesCopyFilter = manifest.mtimesCopyFilter
