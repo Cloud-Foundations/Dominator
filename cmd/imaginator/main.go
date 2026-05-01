@@ -34,7 +34,7 @@ var (
 	configurationUrl = flag.String("configurationUrl",
 		"file:///etc/imaginator/conf.json", "URL containing configuration")
 	enableDefaultInheritance = flag.Bool("enableDefaultInheritance", false,
-		"Enables inheritance of computed-files, filters and triggers")
+		"If true, enables inheritance of computed-files, filters and triggers")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
