@@ -350,24 +350,30 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 			}
 		}
 	}
-	addComputedFiles = addComputedFiles || enableDefaultInheritance
-	addFilter = addFilter || enableDefaultInheritance
-	addTriggers = addTriggers || enableDefaultInheritance
+	// With enableDefaultInheritance, the sourceImage value is inherited only
+	// when no local file is present. An explicit file still overrides, and
+	// .add files merge as before.
 	if addComputedFiles {
 		computedFilesList = util.MergeComputedFiles(
 			manifest.sourceImageInfo.computedFiles, computedFilesList)
+	} else if enableDefaultInheritance && computedFilesList == nil {
+		computedFilesList = manifest.sourceImageInfo.computedFiles
 	}
 	if addFilter {
 		mergeableFilter := &filter.MergeableFilter{}
 		mergeableFilter.Merge(manifest.sourceImageInfo.filter)
 		mergeableFilter.Merge(imageFilter)
 		imageFilter = mergeableFilter.ExportFilter()
+	} else if enableDefaultInheritance && imageFilter == nil {
+		imageFilter = manifest.sourceImageInfo.filter
 	}
 	if addTriggers {
 		mergeableTriggers := &triggers.MergeableTriggers{}
 		mergeableTriggers.Merge(manifest.sourceImageInfo.triggers)
 		mergeableTriggers.Merge(imageTriggers)
 		imageTriggers = mergeableTriggers.ExportTriggers()
+	} else if enableDefaultInheritance && imageTriggers == nil {
+		imageTriggers = manifest.sourceImageInfo.triggers
 	}
 	if manifest.mtimesCopyFilter != nil {
 		mtimesCopyFilter = manifest.mtimesCopyFilter

@@ -373,16 +373,14 @@ func (b *Builder) WriteHtml(writer io.Writer) {
 }
 
 func BuildImageFromManifest(client *srpc.Client, manifestDir, streamName string,
-	expiresIn time.Duration, bindMounts []string, enableDefaultInheritance bool,
-	buildLog buildLogger,
+	expiresIn time.Duration, bindMounts []string, buildLog buildLogger,
 	logger log.Logger) (
 	string, error) {
 	return BuildImageFromManifestWithOptions(
 		client,
 		BuildLocalOptions{
-			BindMounts:               bindMounts,
-			ManifestDirectory:        manifestDir,
-			EnableDefaultInheritance: enableDefaultInheritance,
+			BindMounts:        bindMounts,
+			ManifestDirectory: manifestDir,
 		},
 		streamName,
 		expiresIn,
