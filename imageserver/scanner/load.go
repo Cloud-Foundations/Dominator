@@ -50,6 +50,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 		deleteNotifiers: make(notifiers),
 		mkdirNotifiers:  make(makeDirectoryNotifiers),
 	}
+	imdb.imageNameIndex = NewImageSortedIndex(&imdb.RWMutex)
 	imdb.lockWatcher = lockwatcher.New(&imdb.RWMutex,
 		lockwatcher.LockWatcherOptions{
 			CheckInterval: config.LockCheckInterval,

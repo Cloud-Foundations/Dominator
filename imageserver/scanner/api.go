@@ -30,6 +30,7 @@ type Config struct {
 }
 
 type notifiers map[<-chan string]chan<- string
+
 type makeDirectoryNotifiers map[<-chan image.Directory]chan<- image.Directory
 
 type ImageDataBase struct {
@@ -42,6 +43,7 @@ type ImageDataBase struct {
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
 	imageMap        map[string]*imageType // nil: write in progress.
+	imageNameIndex  ImageIndex            // sorted keys of image names.
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
@@ -62,6 +64,15 @@ type imageType struct {
 type Params struct {
 	Logger       log.DebugLogger
 	ObjectServer objectserver.FullObjectServer
+}
+
+// ImageIndex supports efficient retrieval of image names,
+// including prefix-based searches.
+type ImageIndex interface {
+	Add(name string)
+	Delete(name string)
+	Get(name string) (string, bool)
+	GetByPrefix(prefix string) []string
 }
 
 func Load(config Config, params Params) (*ImageDataBase, error) {
@@ -185,6 +196,11 @@ func (imdb *ImageDataBase) ListImages() []string {
 func (imdb *ImageDataBase) ListSelectedImages(
 	request proto.ListSelectedImagesRequest) []string {
 	return imdb.listImages(request)
+}
+
+func (imdb *ImageDataBase) ListImagesInDirectory(
+	directoryName string) []string {
+	return imdb.listImagesInDirectory(directoryName)
 }
 
 // ListUnreferencedObjects will return a map listing all the objects and their

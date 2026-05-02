@@ -32,8 +32,23 @@ func (s state) listDirectoriesHandler(w http.ResponseWriter,
 	fmt.Fprintln(writer, `<table border="1" style="width:100%">`)
 	tw, _ := html.NewTableWriter(writer, true, "Name", "Owner Group")
 	for _, directory := range directories {
-		tw.WriteRow("", "", directory.Name, directory.Metadata.OwnerGroup)
+		writeDirectory(tw, directory)
 	}
 	tw.Close()
 	fmt.Fprintln(writer, "</body>")
+}
+
+func writeDirectory(tw *html.TableWriter, directory image.Directory) {
+	name := directory.Name
+	ownerGroup := directory.Metadata.OwnerGroup
+	tw.WriteRow(
+		"",
+		"",
+		fmt.Sprintf(
+			"<a href=\"listImages?directoryName=%s\">%s</a>",
+			name,
+			name,
+		),
+		ownerGroup,
+	)
 }

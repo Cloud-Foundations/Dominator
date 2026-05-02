@@ -93,6 +93,7 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 			imdb.Lock()
 			delete(imdb.imageMap, name)
 			imdb.Unlock()
+			imdb.imageNameIndex.Delete(name)
 		}
 	}()
 	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
@@ -392,6 +393,7 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 		return
 	}
 	delete(imdb.imageMap, name)
+	imdb.imageNameIndex.Delete(name)
 	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
@@ -612,6 +614,11 @@ func (imdb *ImageDataBase) listImages(
 	return names
 }
 
+func (imdb *ImageDataBase) listImagesInDirectory(
+	directoryName string) []string {
+	return imdb.imageNameIndex.GetByPrefix(directoryName)
+}
+
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
 	authInfo *srpc.AuthInformation, userRpc bool) error {
 	imdb.Lock()
@@ -744,6 +751,7 @@ func (imdb *ImageDataBase) restoreImageFromArchive(
 			imdb.Lock()
 			delete(imdb.imageMap, imageArchive.ImageName)
 			imdb.Unlock()
+			imdb.imageNameIndex.Delete(imageArchive.ImageName)
 		}
 	}()
 	providedMac, err := io.ReadAll(archive)
@@ -815,6 +823,7 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 	imdb.Unlock()
+	imdb.imageNameIndex.Add(name)
 	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 }
 
