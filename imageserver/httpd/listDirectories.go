@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+	"net/url"
+	"text/template"
 
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
@@ -41,13 +43,10 @@ func (s state) listDirectoriesHandler(w http.ResponseWriter,
 func writeDirectory(tw *html.TableWriter, directory image.Directory) {
 	name := directory.Name
 	ownerGroup := directory.Metadata.OwnerGroup
-	tw.WriteRow(
-		"",
-		"",
+	tw.WriteRow("", "",
 		fmt.Sprintf(
 			"<a href=\"listImages?directoryName=%s\">%s</a>",
-			name,
-			name,
+			url.QueryEscape(name), template.HTMLEscapeString(name),
 		),
 		ownerGroup,
 	)

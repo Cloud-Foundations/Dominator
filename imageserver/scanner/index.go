@@ -3,33 +3,21 @@ package scanner
 import (
 	"sort"
 	"strings"
-	"sync"
 )
 
+// imageSortedIndex is an ImageIndex backed by a sorted slice of image names.
 type imageSortedIndex struct {
-	mu    *sync.RWMutex
 	index []string // sorted image names only.
 }
 
-func NewImageSortedIndex(mu *sync.RWMutex) *imageSortedIndex {
-	if mu == nil {
-		panic("imageSortedIndex requires a non-nil shared mutex")
-	}
-	return &imageSortedIndex{
-		mu:    mu,
-		index: make([]string, 0),
-	}
+func NewImageSortedIndex() *imageSortedIndex {
+	return &imageSortedIndex{index: make([]string, 0)}
 }
 
-// Check if imageSortedIndex implements ImageIndex.
 var _ ImageIndex = &imageSortedIndex{}
 
-// Add inserts a name while keeping slice sorted.
 func (s *imageSortedIndex) Add(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	i := sort.SearchStrings(s.index, name)
-	// avoid duplicates.
 	if i < len(s.index) && s.index[i] == name {
 		return
 	}
@@ -38,20 +26,14 @@ func (s *imageSortedIndex) Add(name string) {
 	s.index[i] = name
 }
 
-// Delete removes a name from the index.
 func (s *imageSortedIndex) Delete(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	i := sort.SearchStrings(s.index, name)
 	if i < len(s.index) && s.index[i] == name {
 		s.index = append(s.index[:i], s.index[i+1:]...)
 	}
 }
 
-// GetByPrefix returns all names under a directory-like prefix.
 func (s *imageSortedIndex) GetByPrefix(prefix string) []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
@@ -64,10 +46,7 @@ func (s *imageSortedIndex) GetByPrefix(prefix string) []string {
 	return out
 }
 
-// Get returns exact match.
 func (s *imageSortedIndex) Get(name string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	i := sort.SearchStrings(s.index, name)
 	if i < len(s.index) && s.index[i] == name {
 		return s.index[i], true

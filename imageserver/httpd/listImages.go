@@ -14,17 +14,16 @@ import (
 func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
+	query := req.URL.Query()
 	var imageNames []string
-	if directoryName := req.URL.Query().Get(
-		"directoryName"); directoryName != "" {
-		// If DirectoryName is available use ImageIndex to query by prefix.
+	if directoryName := query.Get("directoryName"); directoryName != "" {
 		// Output is already sorted.
 		imageNames = s.imageDataBase.ListImagesInDirectory(directoryName)
 	} else {
 		imageNames = s.imageDataBase.ListImages()
 		verstr.Sort(imageNames)
 	}
-	if req.URL.RawQuery == "output=text" {
+	if query.Get("output") == "text" {
 		for _, name := range imageNames {
 			fmt.Fprintln(writer, name)
 		}

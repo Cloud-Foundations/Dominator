@@ -66,8 +66,9 @@ type Params struct {
 	ObjectServer objectserver.FullObjectServer
 }
 
-// ImageIndex supports efficient retrieval of image names,
-// including prefix-based searches.
+// ImageIndex provides exact and prefix lookups over image names.
+// Implementations are not safe for concurrent use; callers must hold the
+// main lock.
 type ImageIndex interface {
 	Add(name string)
 	Delete(name string)
