@@ -72,6 +72,8 @@ func loadComputedFiles(filename string) ([]ComputedFile, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Return empty slice if empty file.
+		computedFileList = []ComputedFile{}
 		for _, line := range lines {
 			fields := strings.Fields(line)
 			if len(fields) != 2 {
