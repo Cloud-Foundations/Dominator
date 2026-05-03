@@ -46,7 +46,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 		Params:          params,
 		directoryMap:    make(map[string]image.DirectoryMetadata),
 		imageMap:        make(map[string]*imageType),
-		imageNameIndex:  NewImageSortedIndex(),
+		imageNameIndex:  newImageSortedIndex(),
 		addNotifiers:    make(notifiers),
 		deleteNotifiers: make(notifiers),
 		mkdirNotifiers:  make(makeDirectoryNotifiers),

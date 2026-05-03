@@ -43,7 +43,7 @@ type ImageDataBase struct {
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
 	imageMap        map[string]*imageType // nil: write in progress.
-	imageNameIndex  ImageIndex            // sorted keys of image names.
+	imageNameIndex  imageIndex            // sorted keys of image names.
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
@@ -66,10 +66,10 @@ type Params struct {
 	ObjectServer objectserver.FullObjectServer
 }
 
-// ImageIndex provides exact and prefix lookups over image names.
+// imageIndex provides exact and prefix lookups over image names.
 // Implementations are not safe for concurrent use; callers must hold the
 // main lock.
-type ImageIndex interface {
+type imageIndex interface {
 	Add(name string)
 	Delete(name string)
 	Get(name string) (string, bool)

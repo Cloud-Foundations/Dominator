@@ -1,55 +1,62 @@
 package scanner
 
 import (
-	"sort"
+	"slices"
 	"strings"
 )
 
-// imageSortedIndex is an ImageIndex backed by a sorted slice of image names.
-type imageSortedIndex struct {
+// sortedImageIndex is an imageIndex backed by a sorted slice of image names.
+type sortedImageIndex struct {
 	index []string // sorted image names only.
 }
 
-func NewImageSortedIndex() *imageSortedIndex {
-	return &imageSortedIndex{index: make([]string, 0)}
+func newImageSortedIndex() *sortedImageIndex {
+	return &sortedImageIndex{index: make([]string, 0)}
 }
 
-var _ ImageIndex = &imageSortedIndex{}
+var _ imageIndex = &sortedImageIndex{}
 
-func (s *imageSortedIndex) Add(name string) {
-	i := sort.SearchStrings(s.index, name)
-	if i < len(s.index) && s.index[i] == name {
+func (s *sortedImageIndex) Add(name string) {
+	i, found := slices.BinarySearch(s.index, name)
+	if found {
 		return
 	}
-	s.index = append(s.index, "")
-	copy(s.index[i+1:], s.index[i:])
-	s.index[i] = name
+	s.index = slices.Insert(s.index, i, name)
 }
 
-func (s *imageSortedIndex) Delete(name string) {
-	i := sort.SearchStrings(s.index, name)
-	if i < len(s.index) && s.index[i] == name {
-		s.index = append(s.index[:i], s.index[i+1:]...)
+func (s *sortedImageIndex) Delete(name string) {
+	i, found := slices.BinarySearch(s.index, name)
+	if !found {
+		return
 	}
+	s.index = slices.Delete(s.index, i, i+1)
 }
 
-func (s *imageSortedIndex) GetByPrefix(prefix string) []string {
+func (s *sortedImageIndex) GetByPrefix(prefix string) []string {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
-	start := sort.SearchStrings(s.index, prefix)
-	end := start + sort.Search(len(s.index)-start, func(i int) bool {
-		return !strings.HasPrefix(s.index[start+i], prefix)
-	})
-	out := make([]string, end-start)
-	copy(out, s.index[start:end])
-	return out
+	start, _ := slices.BinarySearch(s.index, prefix)
+	if start == len(s.index) || !strings.HasPrefix(s.index[start], prefix) {
+		return nil
+	}
+	relativeEnd, _ := slices.BinarySearchFunc(s.index[start:], prefix,
+		func(e, t string) int {
+			if strings.HasPrefix(e, t) {
+				// Move the search outside of prefix block.
+				return -1
+			}
+			return strings.Compare(e, t)
+		},
+	)
+	end := start + relativeEnd
+	return slices.Clone(s.index[start:end])
 }
 
-func (s *imageSortedIndex) Get(name string) (string, bool) {
-	i := sort.SearchStrings(s.index, name)
-	if i < len(s.index) && s.index[i] == name {
-		return s.index[i], true
+func (s *sortedImageIndex) Get(name string) (string, bool) {
+	i, found := slices.BinarySearch(s.index, name)
+	if !found {
+		return "", false
 	}
-	return "", false
+	return s.index[i], true
 }
