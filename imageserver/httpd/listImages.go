@@ -16,7 +16,8 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	defer writer.Flush()
 	query := req.URL.Query()
 	var imageNames []string
-	if directoryName := query.Get("directoryName"); directoryName != "" {
+	if directoryName := query.Get("directoryName"); directoryName != "" &&
+		directoryName != "." {
 		// Output is already sorted.
 		imageNames = s.imageDataBase.ListImagesInDirectory(directoryName)
 	} else {

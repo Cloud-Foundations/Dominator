@@ -38,8 +38,8 @@ func (s *imageSortedIndex) GetByPrefix(prefix string) []string {
 		prefix += "/"
 	}
 	start := sort.SearchStrings(s.index, prefix)
-	end := sort.Search(len(s.index), func(i int) bool {
-		return !strings.HasPrefix(s.index[i], prefix)
+	end := start + sort.Search(len(s.index)-start, func(i int) bool {
+		return !strings.HasPrefix(s.index[start+i], prefix)
 	})
 	out := make([]string, end-start)
 	copy(out, s.index[start:end])
