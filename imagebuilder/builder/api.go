@@ -25,6 +25,7 @@ import (
 )
 
 // Private interface types.
+
 type buildLogger interface {
 	Bytes() []byte
 	io.Writer
@@ -40,6 +41,7 @@ type imageBuilder interface {
 }
 
 // Other private types.
+
 type argList []string
 
 type bindMountType struct {

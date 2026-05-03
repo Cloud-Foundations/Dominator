@@ -23,6 +23,9 @@ var (
 	digraphIncludes flagutil.StringList
 	disableFor      = flag.Duration("disableFor", 5*time.Minute,
 		"How long to disable")
+	enableDefaultInheritance = flag.Bool("enableDefaultInheritance", false,
+		"If true, computed-files, filters and triggers are inherited from the "+
+			"SourceImage when no local file is present in the manifest")
 	expiresIn = flag.Duration("expiresIn", time.Hour,
 		"How long before the image expires (auto deletes)")
 	imaginatorHostname = flag.String("imaginatorHostname", "localhost",
