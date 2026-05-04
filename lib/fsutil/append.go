@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/sys/unix"
 )
 
 func appendToFile(destFilename string, reader io.Reader,
@@ -29,15 +31,8 @@ func appendToFile(destFilename string, reader io.Reader,
 	return nil
 }
 
-func appendFile(destDir, destFilename, sourceFilename string) error {
-	// Resolve the destination path to ensure it stays within destDir.
-	// This also safely computes the final path for new files and prevents
-	// intermediate directory symlinks for escaping the root boundary.
-	destFilename, err := resolveSymlinkWithInRoot(destDir, destFilename)
-	if err != nil {
-		return err
-	}
-	if _, err := os.Lstat(destFilename); err != nil {
+func appendFile(destFilename, sourceFilename string) error {
+	if _, err := os.Stat(destFilename); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Dest file doesn't exist, so just copy the file.
 			var err error
@@ -58,35 +53,54 @@ func appendFile(destDir, destFilename, sourceFilename string) error {
 	return appendToFile(destFilename, sourceFile, 0)
 }
 
+func appendFileWithRoot(rootFd int, destRelPath, sourcePath string) error {
+	mode, err := getFilePerms(sourcePath)
+	if err != nil {
+		return err
+	}
+	destFile, err := secureOpenFile(rootFd, destRelPath, uint32(mode))
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return errors.New(sourcePath + ": " + err.Error())
+	}
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf(
+			"error copying contents from source %q to dest %q: %w",
+			sourcePath, destRelPath, err)
+	}
+	return nil
+}
+
 func appendTree(destDir, sourceDir string,
-	appendFunc func(destDir, dest, src string) error) error {
+	appendFunc func(rootFd int, destRelPath, sourcePath string) error) error {
+	rootFd, err := openRoot(destDir)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(rootFd)
 	return filepath.WalkDir(sourceDir,
 		func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
+			if path == sourceDir {
+				return nil
+			}
 			relPath, err := filepath.Rel(sourceDir, path)
 			if err != nil {
 				return err
 			}
-			destFilename := filepath.Join(destDir, relPath)
 			fileType := d.Type()
 			switch {
 			case fileType.IsDir():
-				// Resolve the path to ensure any pre-existing symlinks in the
-				// destination are safely clamped to the chroot boundary.
-				safeDir, err := resolveSymlinkWithInRoot(destDir,
-					destFilename)
-				if err != nil {
-					return err
-				}
-				// If path is a directory, create directory and return.
-				// WalkDir will automatically visit the children next.
-				if err := os.MkdirAll(safeDir, DirPerms); err != nil {
-					return err
-				}
+				return secureMkdir(rootFd, relPath, DirPerms)
 			case fileType.IsRegular():
-				if err := appendFunc(destDir, destFilename, path); err != nil {
+				if err := appendFunc(rootFd, relPath, path); err != nil {
 					return err
 				}
 			case fileType&fs.ModeSymlink != 0:

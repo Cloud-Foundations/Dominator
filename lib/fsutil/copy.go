@@ -7,6 +7,8 @@ import (
 	"os"
 	"path"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
@@ -78,10 +80,14 @@ func copyToWriter(writer io.Writer, filename string, reader io.Reader,
 func copyTree(destDir, sourceDir string, allTypes bool,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
-	return copyTreeWithRoot(destDir, destDir, sourceDir, allTypes, copyFunc)
+	rootFd, err := openRoot(destDir)
+	if err != nil {
+		return err
+	}
+	return copyTreeWithRoot(rootFd, ".", sourceDir, allTypes, copyFunc)
 }
 
-func copyTreeWithRoot(rootDir, destDir, sourceDir string, allTypes bool,
+func copyTreeWithRoot(rootFd int, destRelDir, sourceDir string, allTypes bool,
 	copyFunc func(destFilename, sourceFilename string,
 		mode os.FileMode) error) error {
 	file, err := os.Open(sourceDir)
@@ -98,25 +104,21 @@ func copyTreeWithRoot(rootDir, destDir, sourceDir string, allTypes bool,
 	}
 	for _, name := range names {
 		sourceFilename := path.Join(sourceDir, name)
-		destFilename := path.Join(destDir, name)
+		destFilename := path.Join(destRelDir, name)
 		var stat wsyscall.Stat_t
 		if err := wsyscall.Lstat(sourceFilename, &stat); err != nil {
 			return errors.New(sourceFilename + ": " + err.Error())
 		}
 		switch stat.Mode & wsyscall.S_IFMT {
 		case wsyscall.S_IFDIR:
-			safeDir, err := resolveSymlinkWithInRoot(rootDir, destFilename)
-			if err != nil {
-				return err
-			}
-			if err := os.Mkdir(safeDir, DirPerms); err != nil {
-				if !os.IsExist(err) {
+			if err := secureMkdir(rootFd, destFilename, DirPerms); err != nil {
+				if err != unix.ENOENT || !os.IsExist(err) {
 					return err
 				}
 			}
 			err = copyTreeWithRoot(
-				rootDir,
-				safeDir,
+				rootFd,
+				destFilename,
 				sourceFilename,
 				allTypes,
 				copyFunc,

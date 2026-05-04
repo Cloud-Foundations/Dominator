@@ -29,14 +29,14 @@ var (
 // may have partial data appended.
 // AppendFile is not safe to call concurrently for the same file.
 func AppendFile(destFilename, sourceFilename string) error {
-	return appendFile("/", destFilename, sourceFilename)
+	return appendFile(destFilename, sourceFilename)
 }
 
 // AppendFileWithRoot extends AppendFile with safe symlink evaluation. Relative
 // symlinks are clamped to the root boundary, and absolute symlinks are rebased
 // against the root using chroot-style semantics.
-func AppendFileWithRoot(root, destFilename, sourceFilename string) error {
-	return appendFile(root, destFilename, sourceFilename)
+func AppendFileWithRoot(rootFd int, destRelPath, sourcePath string) error {
+	return appendFileWithRoot(rootFd, destRelPath, sourcePath)
 }
 
 // AppendTree recursively merges sourceDir into destDir.
