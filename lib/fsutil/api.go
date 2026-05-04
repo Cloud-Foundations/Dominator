@@ -28,8 +28,15 @@ var (
 // copied from sourceFilename. If there are any errors, then destFilename
 // may have partial data appended.
 // AppendFile is not safe to call concurrently for the same file.
-func AppendFile(destDir, destFilename, sourceFilename string) error {
-	return appendFile(destDir, destFilename, sourceFilename)
+func AppendFile(destFilename, sourceFilename string) error {
+	return appendFile("/", destFilename, sourceFilename)
+}
+
+// AppendFileWithRoot extends AppendFile with safe symlink evaluation. Relative
+// symlinks are clamped to the root boundary, and absolute symlinks are rebased
+// against the root using chroot-style semantics.
+func AppendFileWithRoot(root, destFilename, sourceFilename string) error {
+	return appendFile(root, destFilename, sourceFilename)
 }
 
 // AppendTree recursively merges sourceDir into destDir.
@@ -43,7 +50,7 @@ func AppendFile(destDir, destFilename, sourceFilename string) error {
 // Valid symlink targets within destDir will have data appended
 // to the resolved file; the symlink itself is preserved.
 func AppendTree(destDir, sourceDir string) error {
-	return appendTree(destDir, sourceDir, AppendFile)
+	return appendTree(destDir, sourceDir, AppendFileWithRoot)
 }
 
 // CompareFile will read and compare the content of a file and buffer and will
