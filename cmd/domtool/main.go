@@ -57,8 +57,10 @@ var (
 	statusesToMatch flagutil.StringList
 	subsList        = flag.String("subsList", "",
 		"Name of file containing list of subs")
-	tagsToMatch tags.MatchTags
-	timeout     = flag.Duration("timeout", 15*time.Minute,
+	tagsToMatch      tags.MatchTags
+	templateFilename = flag.String("templateFilename", "",
+		"Name of file containing template to use to process MDB data")
+	timeout = flag.Duration("timeout", 15*time.Minute,
 		"Timeout for long operations")
 	usePlannedImage = flag.Bool("usePlannedImage", false,
 		"If true, use the PlannedImage during a fast-update")
@@ -104,6 +106,7 @@ var subcommands = []commands.Command{
 	{"get-subs-configuration", "", 0, 0, getSubsConfigurationSubcommand},
 	{"list-subs", "", 0, 0, listSubsSubcommand},
 	{"pause-sub-updates", "sub reason", 2, 2, pauseSubUpdatesSubcommand},
+	{"process-mdb-template", "", 0, 0, processMdbTemplateSubcommand},
 	{"resume-sub-updates", "sub", 1, 1, resumeSubUpdatesSubcommand},
 	{"set-default-image", "", 1, 1, setDefaultImageSubcommand},
 }

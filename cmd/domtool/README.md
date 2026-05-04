@@ -64,6 +64,8 @@ Some of the sub-commands available are:
 - **pause-sub-updates** *sub* *reason*: pause updates for the specified *sub*.
                                         The given *reason* must be provided and
 					is logged
+- **process-mdb-template**: get MDB data and process each machine using a
+                            template
 - **resume-sub-updates** *sub*: resume updates for the specified *sub*
 - **set-default-image**: set the default image that will be pushed to and *sub*
                          which does not have a `RequiredImage` specified in the
@@ -96,3 +98,11 @@ To enable automated updates, issue the following command:
 This will restart automated updates. The reason for the restart (typically an
 explanation of why the emergency stop is no longer needed) along with the
 username of the person issuing the restart is logged.
+
+## Template file format
+The *process-mdb-template* subcommand reads the template file specified by the
+`-templateFilename` option. This template file uses the go
+[text/template](https://pkg.go.dev/text/template@go1.24.5) standard package.
+Each `Machine` as defined in the
+[lib/mdb](https://github.com/Cloud-Foundations/Dominator/blob/master/lib/mdb/)
+package is processed with the template.
