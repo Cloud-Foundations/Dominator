@@ -243,6 +243,36 @@ func (m *Manager) removeAddressesFromPool(addresses []proto.Address) error {
 	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	// Check if removed addresess are in use by VMs. First loop over addresses
+	// to remove, because that's usually a short list and reduces later checks
+	// when looping over VMs.
+	for ip := range ipsToRemoveFree {
+		if _, ok := m.vms[ip]; ok {
+			return fmt.Errorf(
+				"cannot remove %s from free list because it is used", ip)
+		}
+	}
+	for ip := range ipsToRemoveRegistered {
+		if _, ok := m.vms[ip]; ok {
+			return fmt.Errorf(
+				"cannot remove %s from registered list because it is used", ip)
+		}
+	}
+	// Now loop over the VMs checking secondary addresses.
+	for _, vm := range m.vms {
+		for _, addr := range vm.SecondaryAddresses {
+			ip := addr.IpAddress.String()
+			if _, ok := ipsToRemoveFree[ip]; ok {
+				return fmt.Errorf(
+					"cannot remove %s from free list because it is used", ip)
+			}
+			if _, ok := ipsToRemoveRegistered[ip]; ok {
+				return fmt.Errorf(
+					"cannot remove %s from registered list because it is used",
+					ip)
+			}
+		}
+	}
 	freeAddresses, err := removeAddresses(m.addressPool.Free, ipsToRemoveFree,
 		macsToRemoveFree, "not in free pool")
 	if err != nil {
