@@ -23,8 +23,8 @@ func (s *Storer) getIPsForHypervisor(hypervisor net.IP) ([]net.IP, error) {
 		return nil, err
 	} else {
 		s.mutex.RLock()
+		defer s.mutex.RUnlock()
 		ipList, ok := s.hypervisorToIPs[hypervisorIP]
-		s.mutex.RUnlock()
 		if !ok {
 			return nil, nil
 		}
