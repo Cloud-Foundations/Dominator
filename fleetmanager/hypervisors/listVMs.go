@@ -121,7 +121,7 @@ func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 }
 
 func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
-	capacity *hyper_proto.GetCapacityResponse,
+	ipMap map[string]struct{}, capacity *hyper_proto.GetCapacityResponse,
 	locationFilter, primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
@@ -166,6 +166,8 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 			} else if topology.CheckIfIpIsHost(vm.ipAddr) ||
 				topology.CheckIfIpIsReserved(vm.ipAddr) {
 				background = "orange"
+			} else if _, found := ipMap[vm.ipAddr]; !found && ipMap != nil {
+				background = "red"
 			}
 			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,
 				vm.VirtualCPUs)))
@@ -325,7 +327,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "<body>")
 	}
 	vms := m.getVMs(true)
-	err := m.listVMs(writer, vms, nil, parsedQuery.Table["location"],
+	err := m.listVMs(writer, vms, nil, nil, parsedQuery.Table["location"],
 		parsedQuery.Table["primaryOwner"], parsedQuery.OutputType())
 	if err != nil {
 		fmt.Fprintln(writer, err)
