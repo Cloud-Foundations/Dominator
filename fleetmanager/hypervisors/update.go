@@ -448,6 +448,22 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 	}
 	wg.Done() // Loading completed: notify.
 	wg = nil
+	// Check that the VM primary IPs are registered to this Hypervisor.
+	if ips, err := m.getIPsForHypervisor(h.Machine.HostIpAddress); err != nil {
+		h.logger.Println(err)
+	} else {
+		ipMap := make(map[string]struct{}, len(ips))
+		for _, ip := range ips {
+			ipMap[ip] = struct{}{}
+		}
+		for _, vmIpAddr := range vmList {
+			if _, found := ipMap[vmIpAddr]; !found {
+				h.logger.Printf(
+					"WARNING: VM primary IP: %s not registered to me\n",
+					vmIpAddr)
+			}
+		}
+	}
 	for !h.isDeleteScheduled() {
 		sleepTime := m.manageHypervisor(h)
 		time.Sleep(sleepTime)
