@@ -873,6 +873,11 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				vm.VmInfo = *protoVm
 				updateToSend.ChangedVMs[ipAddr] = protoVm
 				updateToSend.VmToHypervisor[ipAddr] = h.Machine.Hostname
+				if _vm, ok := m.vms[ipAddr]; !ok {
+					h.logger.Printf("VM: %s not in global map\n", ipAddr)
+				} else if _vm == nil {
+					h.logger.Printf("VM: %s is nil in global map\n", ipAddr)
+				}
 			} else {
 				if _, ok := h.migratingVms[ipAddr]; ok {
 					delete(h.migratingVms, ipAddr)
