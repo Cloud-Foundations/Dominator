@@ -126,6 +126,12 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 	return errorNoAccessToResource
 }
 
+func (h *hypervisorType) getMachine() *fm_proto.Machine {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.getMachineLocked()
+}
+
 func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	machine := h.Machine
 	if len(h.localTags) < 1 {
@@ -134,6 +140,41 @@ func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	machine.Tags = h.Machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
 	return &machine
+}
+
+// deleteStaleHypervisors deletes stored Hypervisors which are not in the
+// specified list of machines. If the initial topology has been loaded,
+// deleteStaleHypervisors does nothing.
+func (m *Manager) deleteStaleHypervisors(machines []*fm_proto.Machine) error {
+	if len(m.topologyLoaded) < 1 {
+		return nil // Already loaded and processed topology.
+	}
+	hypervisorIPs, err := m.storer.ListHypervisors()
+	if err != nil {
+		return err
+	}
+	hypervisorsToDelete := make(map[string]net.IP, len(hypervisorIPs))
+	for _, ip := range hypervisorIPs {
+		hypervisorsToDelete[ip.String()] = ip
+	}
+	for _, machine := range machines {
+		ip := machine.HostIpAddress.String()
+		if _, ok := hypervisorsToDelete[ip]; ok {
+			delete(hypervisorsToDelete, ip)
+		}
+	}
+	if len(hypervisorsToDelete) < 1 {
+		return nil
+	}
+	m.logger.Printf("Deleting stale data for %d old Hypervisors\n",
+		len(hypervisorsToDelete))
+	for ipAddr, netIP := range hypervisorsToDelete {
+		m.logger.Printf("Deleting stale data for old Hypervisor: %s\n", ipAddr)
+		if err := m.storer.UnregisterHypervisor(netIP); err != nil {
+			m.logger.Println(err)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) changeMachineTags(hostname string,
@@ -172,12 +213,6 @@ func (m *Manager) changeMachineTags(hostname string,
 		m.sendUpdate(location, update)
 		return nil
 	}
-}
-
-func (h *hypervisorType) getMachine() *fm_proto.Machine {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return h.getMachineLocked()
 }
 
 func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
@@ -289,10 +324,17 @@ func (m *Manager) updateTopology(t *topology.Topology) {
 		m.logger.Println(err)
 		return
 	}
+	if err := m.deleteStaleHypervisors(machines); err != nil {
+		m.logger.Println(err)
+		return
+	}
 	var waitGroup sync.WaitGroup
 	deleteList := m.updateTopologyLocked(t, machines, &waitGroup)
 	for _, hypervisor := range deleteList {
-		m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
+		err := m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
+		if err != nil {
+			m.logger.Println(err)
+		}
 		hypervisor.delete()
 	}
 	waitGroup.Wait()

@@ -56,6 +56,7 @@ type ipStorer interface {
 	CheckIpIsRegistered(addr net.IP) (bool, error)
 	GetHypervisorForIp(addr net.IP) (net.IP, error)
 	GetIPsForHypervisor(hypervisor net.IP) ([]net.IP, error)
+	ListHypervisors() ([]net.IP, error)
 	SetIPsForHypervisor(hypervisor net.IP, addrs []net.IP) error
 	UnregisterHypervisor(hypervisor net.IP) error
 }
