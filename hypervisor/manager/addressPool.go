@@ -58,37 +58,64 @@ func (m *Manager) addAddressesToPool(addresses []proto.Address) error {
 			return err
 		}
 	}
-	existingIpAddresses := make(map[string]struct{})
-	existingMacAddresses := make(map[string]struct{})
+	freeAddressesToAdd := make([]proto.Address, 0, len(addresses))
+	registeredAddressesToAdd := make([]proto.Address, 0, len(addresses))
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	registeredIpAddresses := make(map[string]struct{},
+		len(m.addressPool.Registered))
+	registeredMacAddresses := make(map[string]struct{},
+		len(m.addressPool.Registered))
 	for _, address := range m.addressPool.Registered {
 		if address.IpAddress != nil {
-			existingIpAddresses[address.IpAddress.String()] = struct{}{}
+			registeredIpAddresses[address.IpAddress.String()] = struct{}{}
 		}
-		existingMacAddresses[address.MacAddress] = struct{}{}
+		registeredMacAddresses[address.MacAddress] = struct{}{}
 	}
+	ipAddressToVm := make(map[string]*vmInfoType, len(m.vms))
+	macAddressToVm := make(map[string]*vmInfoType, len(m.vms))
 	for ipAddress, vm := range m.vms {
-		existingIpAddresses[ipAddress] = struct{}{}
-		existingMacAddresses[vm.Address.MacAddress] = struct{}{}
+		ipAddressToVm[ipAddress] = vm
+		macAddressToVm[vm.Address.MacAddress] = vm
 	}
 	for _, address := range addresses {
 		ipAddr := address.IpAddress
+		var used *vmInfoType
 		if ipAddr != nil {
 			if m.getMatchingSubnet(ipAddr) == "" {
 				return fmt.Errorf("no subnet matching: %s", address.IpAddress)
 			}
-			if _, ok := existingIpAddresses[ipAddr.String()]; ok {
+			ipAddrString := ipAddr.String()
+			if _, ok := registeredIpAddresses[ipAddrString]; ok {
 				return fmt.Errorf("duplicate IP address: %s", address.IpAddress)
 			}
+			if vm := ipAddressToVm[ipAddrString]; vm != nil {
+				if address.MacAddress != vm.Address.MacAddress {
+					return fmt.Errorf(
+						"VM %s has different MAC address: %s than is being added: %s",
+						ipAddrString, vm.Address.MacAddress, address.MacAddress)
+				}
+				used = vm
+			}
 		}
-		if _, ok := existingMacAddresses[address.MacAddress]; ok {
+		if _, ok := registeredMacAddresses[address.MacAddress]; ok {
 			return fmt.Errorf("duplicate MAC address: %s", address.MacAddress)
 		}
+		if vm := macAddressToVm[address.MacAddress]; vm != nil {
+			if vm != used {
+				return fmt.Errorf("VM for MAC address: %s does not have IP",
+					address.MacAddress)
+			}
+		} else {
+			freeAddressesToAdd = append(freeAddressesToAdd, address)
+		}
+		registeredAddressesToAdd = append(registeredAddressesToAdd, address)
 	}
-	m.Logger.Debugf(0, "adding %d addresses to pool\n", len(addresses))
-	m.addressPool.Free = append(m.addressPool.Free, addresses...)
-	m.addressPool.Registered = append(m.addressPool.Registered, addresses...)
+	m.Logger.Debugf(0, "adding %d addresses (%d free) to pool\n",
+		len(registeredAddressesToAdd), len(freeAddressesToAdd))
+	m.addressPool.Free = append(m.addressPool.Free, freeAddressesToAdd...)
+	m.addressPool.Registered = append(m.addressPool.Registered,
+		registeredAddressesToAdd...)
 	return m.writeAddressPoolWithLock(m.addressPool, true)
 }
 
