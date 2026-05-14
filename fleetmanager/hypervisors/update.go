@@ -475,6 +475,7 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 		h.logger.Printf("error reading tags, not managing hypervisor: %s", err)
 		return
 	}
+	vms := make([]*vmInfoType, 0, len(vmList))
 	for _, vmIpAddr := range vmList {
 		pVmInfo, err := m.storer.ReadVm(h.Machine.HostIpAddress, vmIpAddr)
 		if err != nil {
@@ -487,10 +488,11 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 		m.mutex.Lock()
 		m.vms[vmIpAddr] = vmInfo
 		m.mutex.Unlock()
+		vms = append(vms, vmInfo)
 	}
 	wg.Done() // Loading completed: notify.
 	wg = nil
-	// Check that the VM primary IPs are registered to this Hypervisor.
+	// Check that the VM IPs are registered to this Hypervisor.
 	if ips, err := m.getIPsForHypervisor(h.Machine.HostIpAddress); err != nil {
 		h.logger.Println(err)
 	} else {
@@ -498,11 +500,19 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 		for _, ip := range ips {
 			ipMap[ip] = struct{}{}
 		}
-		for _, vmIpAddr := range vmList {
-			if _, found := ipMap[vmIpAddr]; !found {
+		for _, vm := range vms {
+			if _, found := ipMap[vm.ipAddr]; !found {
 				h.logger.Printf(
 					"WARNING: VM primary IP: %s not registered to me\n",
-					vmIpAddr)
+					vm.ipAddr)
+			}
+			for _, address := range vm.SecondaryAddresses {
+				ipAddr := address.IpAddress.String()
+				if _, found := ipMap[ipAddr]; !found {
+					h.logger.Printf(
+						"WARNING: VM secondary IP: %s not registered to me\n",
+						ipAddr)
+				}
 			}
 		}
 	}
