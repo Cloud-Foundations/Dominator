@@ -149,8 +149,14 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 func listPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(ctx, g, nil, w, w, rootDir, nil, packagerPathname,
-			cmd)
+		stderr := new(bytes.Buffer)
+		err := runInTarget(ctx, g, nil, w, stderr, rootDir, nil,
+			packagerPathname, cmd)
+		if err == nil || stderr.Len() < 1 {
+			return err
+		}
+		return fmt.Errorf("%s: %s",
+			err, string(bytes.TrimSpace(stderr.Bytes())))
 	})
 }
 
