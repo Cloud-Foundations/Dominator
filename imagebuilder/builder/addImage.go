@@ -193,14 +193,6 @@ func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 	if cache == nil {
 		cache = &treeCache{}
 	}
-	if g == nil {
-		var err error
-		g, err = newNamespaceTarget()
-		if err != nil {
-			return nil, err
-		}
-		defer g.Quit()
-	}
 	packages, err := listPackages(ctx, g, dirname)
 	if err != nil {
 		return nil, fmt.Errorf("error listing packages: %s", err)

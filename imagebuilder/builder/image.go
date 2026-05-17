@@ -351,7 +351,12 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		mf.Merge(manifest.mtimesCopyAddFilter)
 		mtimesCopyFilter = mf.ExportFilter()
 	}
-	img, err := packImage(ctx, nil, client, request, rootDir, manifest.filter,
+	g, err := newNamespaceTargetWithMounts(rootDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer g.Quit()
+	img, err := packImage(ctx, g, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
 		tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
