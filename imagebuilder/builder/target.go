@@ -78,11 +78,11 @@ func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
 func setupMounts(rootDir string, bindMounts []string) error {
 	err := wsyscall.Mount("none", filepath.Join(rootDir, "proc"), "proc", 0, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("error mounting proc: %s", err)
 	}
 	err = wsyscall.Mount("none", filepath.Join(rootDir, "sys"), "sysfs", 0, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("error mounting sysfs: %s", err)
 	}
 	for _, bindMount := range bindMounts {
 		err := wsyscall.Mount(bindMount,
