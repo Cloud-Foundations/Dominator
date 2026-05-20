@@ -289,10 +289,6 @@ func runTests(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	if len(testProgrammes) < 1 {
 		return nil
 	}
-	g.Run(func() { err = setupMounts(rootDir, nil) })
-	if err != nil {
-		return err
-	}
 	fmt.Fprintf(buildLog, "Running %d tests\n", len(testProgrammes))
 	results := make(chan testResultType, 1)
 	for _, prog := range testProgrammes {
