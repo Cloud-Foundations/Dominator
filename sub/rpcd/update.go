@@ -38,12 +38,13 @@ func (t *rpcType) Update(conn *srpc.Conn, request sub.UpdateRequest,
 		t.params.Logger.Println(err)
 		return err
 	}
-	t.params.Logger.Printf("Update(%s)\n", conn.Username())
+	username := conn.Username()
+	t.params.Logger.Printf("Update(%s)\n", username)
 	fs := t.params.FileSystemHistory.FileSystem()
 	if request.Wait {
-		return t.updateAndUnlock(request, fs.RootDirectoryName())
+		return t.updateAndUnlock(request, fs.RootDirectoryName(), username)
 	}
-	go t.updateAndUnlock(request, fs.RootDirectoryName())
+	go t.updateAndUnlock(request, fs.RootDirectoryName(), username)
 	return nil
 }
 
@@ -73,7 +74,7 @@ func (t *rpcType) getUpdateLock(conn *srpc.Conn) error {
 }
 
 func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
-	rootDirectoryName string) error {
+	rootDirectoryName, username string) error {
 	defer t.clearUpdateInProgress()
 	defer t.params.ScannerConfiguration.BoostCpuLimit(t.params.Logger)
 	t.params.DisableScannerFunction(true)
@@ -148,8 +149,19 @@ func (t *rpcType) updateAndUnlock(request sub.UpdateRequest,
 		}
 		t.rwLock.Unlock()
 	}
-	t.params.Logger.Printf("Update() completed in %s (change window: %s)\n",
-		timeTaken, fsChangeDuration)
+	if request.ImageName == "" {
+		t.params.Logger.Printf(
+			"Update(%s) completed in %s (change window: %s)\n",
+			username, timeTaken, fsChangeDuration)
+	} else if request.SparseImage {
+		t.params.Logger.Printf(
+			"Update(%s) completed in %s (change window: %s) with sparse image: %s\n",
+			username, timeTaken, fsChangeDuration, request.ImageName)
+	} else {
+		t.params.Logger.Printf(
+			"Update(%s) completed in %s (change window: %s) with full image: %s\n",
+			username, timeTaken, fsChangeDuration, request.ImageName)
+	}
 	return t.lastUpdateError
 }
 
