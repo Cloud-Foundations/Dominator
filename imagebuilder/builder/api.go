@@ -43,6 +43,12 @@ type imageBuilder interface {
 
 type argList []string
 
+type bindMountType struct {
+	source   string
+	target   string
+	writable bool
+}
+
 type bootstrapStream struct {
 	builder          *Builder
 	name             string
@@ -63,6 +69,11 @@ type buildResultType struct {
 	finishTime time.Time
 	buildLog   []byte
 	error      error
+}
+
+type cacheConfigurationType struct {
+	BaseDirectory string // The image stream name is appended to this path.
+	MountPoint    string // Where in build environment to mount it.
 }
 
 type currentBuildInfo struct {
@@ -131,6 +142,7 @@ type manifestConfigType struct {
 type masterConfigurationType struct {
 	BindMounts                []string                      `json:",omitempty"`
 	BootstrapStreams          map[string]*bootstrapStream   `json:",omitempty"`
+	Cache                     cacheConfigurationType        `json:",omitempty"`
 	ImageStreamsCheckInterval uint                          `json:",omitempty"`
 	ImageStreamsToAutoRebuild []string                      `json:",omitempty"`
 	ImageStreamsUrl           string                        `json:",omitempty"`
@@ -212,6 +224,7 @@ type Builder struct {
 	autoRebuildTrigger          chan<- chan<- struct{}
 	buildLogArchiver            logarchiver.BuildLogArchiver
 	bindMounts                  []string
+	cache                       cacheConfigurationType
 	createSlaveTimeout          time.Duration
 	disableLock                 sync.RWMutex
 	disableAutoBuildsUntil      time.Time
@@ -405,8 +418,8 @@ func ProcessManifest(manifestDir, rootDir string, bindMounts []string,
 	buildLog io.Writer) error {
 	ctx, cancel := makeContext(0)
 	defer cancel()
-	return processManifest(ctx, manifestDir, rootDir, bindMounts,
-		nil, buildLog)
+	return processManifest(ctx, manifestDir, rootDir,
+		convertBindMounts(bindMounts), nil, buildLog)
 }
 
 func ProcessManifestWithOptions(options BuildLocalOptions,
@@ -414,7 +427,8 @@ func ProcessManifestWithOptions(options BuildLocalOptions,
 	ctx, cancel := makeContext(options.MaximumBuildDuration)
 	defer cancel()
 	return processManifest(ctx, options.ManifestDirectory, rootDir,
-		options.BindMounts, variablesGetter(options.Variables), buildLog)
+		convertBindMounts(options.BindMounts),
+		variablesGetter(options.Variables), buildLog)
 }
 
 func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
@@ -422,7 +436,8 @@ func UnpackImageAndProcessManifest(client *srpc.Client, manifestDir string,
 	ctx, cancel := makeContext(0)
 	defer cancel()
 	_, err := unpackImageAndProcessManifest(ctx, client, manifestDir, 0,
-		rootDir, bindMounts, true, nil, buildLog, stdlog.New(buildLog, "", 0))
+		rootDir, convertBindMounts(bindMounts), true, nil, buildLog,
+		stdlog.New(buildLog, "", 0))
 	return err
 }
 
@@ -431,7 +446,8 @@ func UnpackImageAndProcessManifestWithOptions(client *srpc.Client,
 	ctx, cancel := makeContext(options.MaximumBuildDuration)
 	defer cancel()
 	_, err := unpackImageAndProcessManifest(ctx, client,
-		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
+		options.ManifestDirectory, 0, rootDir,
+		convertBindMounts(options.BindMounts), true,
 		variablesGetter(options.Variables), buildLog,
 		stdlog.New(buildLog, "", 0))
 	return err

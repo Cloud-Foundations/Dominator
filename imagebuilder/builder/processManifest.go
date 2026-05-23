@@ -70,17 +70,18 @@ func makeDirectory(directory string, directoriesToDelete []string,
 	}
 }
 
-func makeMountPoints(rootDir string, bindMounts []string,
+func makeMountPoints(rootDir string, bindMounts []bindMountType,
 	buildLog io.Writer) ([]string, error) {
 	var directoriesToDelete []string
 	directoriesWhichExist := make(map[string]struct{})
 	defer deleteDirectories(directoriesToDelete)
 	bindMountDirectories := make(map[string]struct{}, len(bindMounts))
 	for _, bindMount := range bindMounts {
-		bindMountDirectories[filepath.Join(rootDir, bindMount)] = struct{}{}
+		directory := filepath.Join(rootDir, bindMount.target)
+		bindMountDirectories[directory] = struct{}{}
 	}
 	for _, bindMount := range bindMounts {
-		directory := filepath.Join(rootDir, bindMount)
+		directory := filepath.Join(rootDir, bindMount.target)
 		var err error
 		directoriesToDelete, err = makeDirectory(directory, directoriesToDelete,
 			directoriesWhichExist, bindMountDirectories, buildLog)
@@ -145,7 +146,7 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 
 func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 	manifestDir string, maxSourceAge time.Duration, rootDir string,
-	bindMounts []string, applyFilter bool, envGetter environmentGetter,
+	bindMounts []bindMountType, applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer, logger log.Logger) (manifestType, error) {
 	manifestConfig, err := readManifestFile(manifestDir, envGetter)
 	if err != nil {
@@ -201,7 +202,7 @@ func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 }
 
 func processManifest(ctx context.Context, manifestDir, rootDir string,
-	bindMounts []string, envGetter environmentGetter,
+	bindMounts []bindMountType, envGetter environmentGetter,
 	buildLog io.Writer) error {
 	// Copy in system /etc/resolv.conf
 	file, err := os.Open("/etc/resolv.conf")
@@ -210,7 +211,8 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	}
 	defer file.Close()
 	for index, bindMount := range bindMounts {
-		bindMounts[index] = filepath.Clean(bindMount)
+		bindMounts[index].source = filepath.Clean(bindMount.source)
+		bindMounts[index].target = filepath.Clean(bindMount.target)
 	}
 	directoriesToDelete, err := makeMountPoints(rootDir, bindMounts, buildLog)
 	if err != nil {

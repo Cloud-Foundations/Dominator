@@ -14,6 +14,17 @@ func (b *Builder) replaceIdleSlaves(immediateGetNew bool) error {
 	return nil
 }
 
+func convertBindMounts(bindMounts []string) []bindMountType {
+	fullBindMounts := make([]bindMountType, 0, len(bindMounts))
+	for _, bindMount := range bindMounts {
+		fullBindMounts = append(fullBindMounts, bindMountType{
+			source: bindMount,
+			target: bindMount,
+		})
+	}
+	return fullBindMounts
+}
+
 func makeContext(deadline time.Duration) (context.Context, context.CancelFunc) {
 	if deadline < time.Second {
 		deadline = 24 * time.Hour

@@ -127,10 +127,22 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	autoRebuildTrigger := make(chan chan<- struct{}) // Unbuffered: busy block.
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
+	if masterConfiguration.Cache.BaseDirectory != "" {
+		fi, err := os.Stat(masterConfiguration.Cache.BaseDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("error stating: %s: %s",
+				masterConfiguration.Cache.BaseDirectory, err)
+		}
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("%s is not a directory",
+				masterConfiguration.Cache.BaseDirectory)
+		}
+	}
 	b := &Builder{
 		autoRebuildTrigger:          autoRebuildTrigger,
 		buildLogArchiver:            params.BuildLogArchiver,
 		bindMounts:                  masterConfiguration.BindMounts,
+		cache:                       masterConfiguration.Cache,
 		mtimesCopyFilter:            mtimesCopyFilter,
 		createSlaveTimeout:          options.CreateSlaveTimeout,
 		generateDependencyTrigger:   generateDependencyTrigger,
