@@ -20,6 +20,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/sshutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imaginator"
 )
 
@@ -74,6 +75,7 @@ type buildResultType struct {
 type cacheConfigurationType struct {
 	BaseDirectory string // The image stream name is appended to this path.
 	MountPoint    string // Where in build environment to mount it.
+	SizeLimit     types.Bytes
 }
 
 type currentBuildInfo struct {

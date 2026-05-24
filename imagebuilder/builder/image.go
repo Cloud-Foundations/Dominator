@@ -69,6 +69,14 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	if err != nil {
 		return nil, err
 	}
+	if b.cache.BaseDirectory != "" && b.cache.MountPoint != "" {
+		sourceDir := filepath.Join(b.cache.BaseDirectory,
+			filepath.Clean(request.StreamName))
+		err := trimDirectory(sourceDir, b.cache.SizeLimit, buildLog)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return img, nil
 }
 
