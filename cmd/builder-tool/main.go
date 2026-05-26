@@ -25,7 +25,9 @@ var (
 		"How long to disable")
 	enableDefaultInheritance = flag.Bool("enableDefaultInheritance", false,
 		"If true, computed-files, filters and triggers are inherited from the "+
-			"SourceImage when no local file is present in the manifest")
+			"SourceImage when no local file is present in the manifest "+
+			"For build-from-manifest subcommand to replicate Imaginator "+
+			"behaviour locally")
 	expiresIn = flag.Duration("expiresIn", time.Hour,
 		"How long before the image expires (auto deletes)")
 	imaginatorHostname = flag.String("imaginatorHostname", "localhost",
