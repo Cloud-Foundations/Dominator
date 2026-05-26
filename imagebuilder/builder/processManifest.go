@@ -404,6 +404,7 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
+	scriptsToRun := make([]string, 0, len(names))
 	for _, name := range names {
 		if len(name) > 0 && name[0] == '.' {
 			continue // Skip hidden paths.
@@ -414,15 +415,9 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		if err != nil {
 			return err
 		}
+		scriptsToRun = append(scriptsToRun, name)
 	}
-	if g == nil {
-		g, err = newNamespaceTargetWithMounts(rootDir, nil)
-		if err != nil {
-			return err
-		}
-		defer g.Quit()
-	}
-	for _, name := range names {
+	for _, name := range scriptsToRun {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
 		err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,

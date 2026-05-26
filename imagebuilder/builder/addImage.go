@@ -149,8 +149,14 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 func listPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(ctx, g, nil, w, w, rootDir, nil, packagerPathname,
-			cmd)
+		stderr := new(bytes.Buffer)
+		err := runInTarget(ctx, g, nil, w, stderr, rootDir, nil,
+			packagerPathname, cmd)
+		if err == nil || stderr.Len() < 1 {
+			return err
+		}
+		return fmt.Errorf("%s: %s",
+			err, string(bytes.TrimSpace(stderr.Bytes())))
 	})
 }
 
@@ -186,14 +192,6 @@ func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 	*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
-	}
-	if g == nil {
-		var err error
-		g, err = newNamespaceTarget()
-		if err != nil {
-			return nil, err
-		}
-		defer g.Quit()
 	}
 	packages, err := listPackages(ctx, g, dirname)
 	if err != nil {
@@ -290,10 +288,6 @@ func runTests(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	}
 	if len(testProgrammes) < 1 {
 		return nil
-	}
-	g.Run(func() { err = setupMounts(rootDir, nil) })
-	if err != nil {
-		return err
 	}
 	fmt.Fprintf(buildLog, "Running %d tests\n", len(testProgrammes))
 	results := make(chan testResultType, 1)

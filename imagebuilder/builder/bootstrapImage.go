@@ -128,6 +128,10 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	if err != nil {
 		return nil, err
 	} else {
+		g.Run(func() { err = setupMounts(rootDir, nil) })
+		if err != nil {
+			return nil, err
+		}
 		packager := b.packagerTypes[stream.PackagerType]
 		if err := packager.writePackageInstaller(rootDir); err != nil {
 			return nil, err
