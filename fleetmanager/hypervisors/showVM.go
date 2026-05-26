@@ -54,5 +54,7 @@ func (m *Manager) showVmHandler(w http.ResponseWriter,
 	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
-	json.WriteWithIndent(writer, "    ", vmInfo)
+	if err := json.WriteWithIndent(writer, "    ", vmInfo); err != nil {
+		fmt.Fprintln(writer, err)
+	}
 }

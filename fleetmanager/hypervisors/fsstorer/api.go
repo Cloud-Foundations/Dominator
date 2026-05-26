@@ -20,16 +20,7 @@ type Storer struct {
 }
 
 func New(topDir string, logger log.DebugLogger) (*Storer, error) {
-	storer := &Storer{
-		topDir:          topDir,
-		logger:          logger,
-		hypervisorToIPs: make(map[IP][]IP),
-		ipToHypervisor:  make(map[IP]IP),
-	}
-	if err := storer.load(); err != nil {
-		return nil, err
-	}
-	return storer, nil
+	return newStorer(topDir, logger)
 }
 
 func (ip IP) String() string {
@@ -55,6 +46,10 @@ func (s *Storer) GetHypervisorForIp(addr net.IP) (net.IP, error) {
 
 func (s *Storer) GetIPsForHypervisor(hypervisor net.IP) ([]net.IP, error) {
 	return s.getIPsForHypervisor(hypervisor)
+}
+
+func (s *Storer) ListHypervisors() ([]net.IP, error) {
+	return s.listHypervisors()
 }
 
 func (s *Storer) ListVMs(hypervisor net.IP) ([]string, error) {

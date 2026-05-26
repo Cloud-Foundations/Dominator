@@ -26,6 +26,19 @@ type hypervisorSubnetsType struct {
 	Subnets    []*topology.Subnet
 }
 
+func (m *Manager) getIPsForHypervisor(hIP net.IP) ([]string, error) {
+	if ips, err := m.storer.GetIPsForHypervisor(hIP); err != nil {
+		return nil, fmt.Errorf("Error getting IPs for Hypervisor: %s: %s",
+			hIP, err)
+	} else {
+		ipList := make([]string, 0, len(ips))
+		for _, ip := range ips {
+			ipList = append(ipList, ip.String())
+		}
+		return ipList, nil
+	}
+}
+
 func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 	req *http.Request) {
 	parsedQuery := url.ParseQuery(req.URL)
@@ -116,42 +129,40 @@ func (m *Manager) showHypervisorHandler(w http.ResponseWriter,
 		"Number of VMs known: %d (<a href=\"http://%s:%d/listVMs\">live view</a>)<br>\n",
 		numVMs, hostname, constants.HypervisorPortNumber)
 	fmt.Fprintln(writer, "<br>")
-	m.showVMsForHypervisor(writer, h)
-	fmt.Fprintln(writer, "<br>")
-	m.showIPsForHypervisor(writer, h.Machine.HostIpAddress)
+	if ips, err := m.getIPsForHypervisor(h.Machine.HostIpAddress); err != nil {
+		fmt.Fprintf(writer, "%s<br>\n", err)
+	} else {
+		m.showVMsForHypervisor(writer, h, ips)
+		fmt.Fprintln(writer, "<br>")
+		m.showIPsForHypervisor(writer, ips)
+	}
 	fmt.Fprintln(writer, "</body>")
 }
 
-func (m *Manager) showIPsForHypervisor(writer io.Writer, hIP net.IP) {
-	if ips, err := m.storer.GetIPsForHypervisor(hIP); err != nil {
-		fmt.Fprintf(writer, "Error getting IPs for Hypervisor: %s: %s<br>\n",
-			hIP, err)
-		return
-	} else {
-		fmt.Fprintln(writer, "Registered addresses:<br>")
-		ipList := make([]string, 0, len(ips))
-		for _, ip := range ips {
-			ipList = append(ipList, ip.String())
-		}
-		verstr.Sort(ipList)
-		for _, ip := range ipList {
-			fmt.Fprintln(writer, ip, "<br>")
-		}
+func (m *Manager) showIPsForHypervisor(writer io.Writer, ipList []string) {
+	fmt.Fprintln(writer, "Registered addresses:<br>")
+	verstr.Sort(ipList)
+	for _, ip := range ipList {
+		fmt.Fprintln(writer, ip, "<br>")
 	}
 }
 
 func (m *Manager) showVMsForHypervisor(writer *bufio.Writer,
-	h *hypervisorType) {
+	h *hypervisorType, ipList []string) {
 	fmt.Fprintln(writer, "VMs as of last update:<br>")
 	capacity := hyper_proto.GetCapacityResponse{
 		MemoryInMiB:      h.MemoryInMiB,
 		NumCPUs:          h.NumCPUs,
 		TotalVolumeBytes: h.TotalVolumeBytes,
 	}
+	ipMap := make(map[string]struct{}, len(ipList))
+	for _, ip := range ipList {
+		ipMap[ip] = struct{}{}
+	}
 	h.mutex.RLock()
 	vms := getVmListFromMap(h.vms, true)
 	h.mutex.RUnlock()
-	err := m.listVMs(writer, vms, &capacity, "", "", url.OutputTypeHtml)
+	err := m.listVMs(writer, vms, ipMap, &capacity, "", "", url.OutputTypeHtml)
 	if err != nil {
 		fmt.Fprintln(writer, err)
 		return

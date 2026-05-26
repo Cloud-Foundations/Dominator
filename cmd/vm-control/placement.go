@@ -185,6 +185,17 @@ func getHypervisorAddress(vmInfo hyper_proto.VmInfo, logger log.DebugLogger) (
 		hypervisor.Hostname, constants.HypervisorPortNumber), nil
 }
 
+func logHypervisors(hypervisors []fm_proto.Hypervisor, logger log.DebugLogger) {
+	for _, hypervisor := range hypervisors {
+		logger.Debugf(2, "  %s: free CPU: %d, memory: %d MiB, storage: %s\n",
+			hypervisor.Hostname,
+			freeCPU(hypervisor),
+			freeMemory(hypervisor),
+			format.FormatBytes(freeStorage(hypervisor)),
+		)
+	}
+}
+
 func selectAnyHypervisor(client *srpc.Client) (string, error) {
 	request := fm_proto.ListHypervisorsInLocationRequest{
 		HypervisorTagsToMatch: hypervisorTagsToMatch,
@@ -213,6 +224,8 @@ func selectHypervisor(client *srpc.Client, hypervisors []fm_proto.Hypervisor,
 	vmInfo hyper_proto.VmInfo,
 	logger log.DebugLogger) (*fm_proto.Hypervisor, error) {
 	numHyper := len(hypervisors)
+	logger.Debugln(2, "Unsorted Hypervisors:")
+	logHypervisors(hypervisors, logger)
 	if numHyper < 1 {
 		return nil, errors.New("no Hypervisors in location with capacity")
 	} else if numHyper < 2 {
@@ -280,14 +293,7 @@ func sortHypervisors(hypervisors []fm_proto.Hypervisor,
 		return compareCPU(hypervisors, i, j)
 	})
 	logger.Debugln(2, "Sorted Hypervisors (emptiest to fullest):")
-	for _, hypervisor := range hypervisors {
-		logger.Debugf(2, "  %s: free CPU: %d, memory: %d MiB, storage: %s\n",
-			hypervisor.Hostname,
-			freeCPU(hypervisor),
-			freeMemory(hypervisor),
-			format.FormatBytes(freeStorage(hypervisor)),
-		)
-	}
+	logHypervisors(hypervisors, logger)
 }
 
 func (p *placementType) Set(value string) error {
