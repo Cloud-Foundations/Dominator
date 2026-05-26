@@ -127,11 +127,15 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	for _, ipAddr := range names {
 		vmDirname := filepath.Join(dirname, ipAddr)
 		filename := filepath.Join(vmDirname, "info.json")
-		var vmInfo vmInfoType
+		vmInfo := vmInfoType{
+			logger: prefixlogger.New(ipAddr+": ", manager.Logger),
+		}
 		if err := json.ReadFromFile(filename, &vmInfo); err != nil {
-			manager.Logger.Println(err)
-			if err := os.Remove(vmDirname); err != nil {
-				manager.Logger.Println(err)
+			vmInfo.logger.Println(err)
+			if os.IsNotExist(err) {
+				if err := os.Remove(vmDirname); err != nil {
+					manager.Logger.Println(err)
+				}
 			}
 			continue
 		}
@@ -141,7 +145,6 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vmInfo.ipAddress = ipAddr
 		vmInfo.ownerUsers = stringutil.ConvertListToMap(vmInfo.OwnerUsers,
 			false)
-		vmInfo.logger = prefixlogger.New(ipAddr+": ", manager.Logger)
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
 		vmInfo.setupLockWatcher()
