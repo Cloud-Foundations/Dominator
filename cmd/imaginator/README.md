@@ -69,10 +69,11 @@ the *imaginator* to build an image.
 The main configuration URL points to a JSON encoded file that describes all the
 *image streams* and how to build them. The top-level JSON object defines the
 following fields:
-- `BindMounts`: a list of directories that will be bind-mounted into the build
-                environments
+- `BindMounts`: a list of directories that will be bind-mounted read-only into
+                the build environments
 - `BootstrapStreams`: a table of *bootstrap image* stream names and their
   		      respective configurations
+- `Cache`: optional cache that may be bind-mounted into the build environments
 - `ImageStreamsCheckInterval`: the interval between checks for updated image
                                streams
 - `ImageStreamsToAutoRebuild`: an array of *image stream* names that should be
@@ -112,6 +113,25 @@ fields:
 - `ImageTriggersUrl`: a URL from which JSON-encoded triggers can be read. The
                       triggers will be attached to the image
 - `PackagerType`: the name of the packager type to use
+
+### Cache configuration
+It's considered an anti-pattern to use the *Imaginator* to compile code; instead
+code should be separately pre- compiled into binary artefacts and added when
+building images. However, in some cases - such as extra kernel drivers - it may
+be difficult to pre-compile for the kernel being added to an image. In this case
+it may be simpler to compile during the image build. A cache can be used to
+avoid re-building if an appropriate artefact has already been built.
+
+The cache configuration is a JSON object with the following fields:
+- `BaseDirectory`: the base directory of the cache
+- `MountPoint`: the directory that the cache will be mounted into the build
+                environments
+- `SizeLimit`: the size limit (in bytes) of the cache for each image stream. The
+               oldest files are deleted when the limit is exceeded
+
+The name of the image stream is appended to the `BaseDirectory` and this
+sub-directory of the cache is mounted in the build environments. This provides
+each image stream with it's own subsection of the cache.
 
 ### ImageStreams URL
 This is a JSON encoded configuration file listing all the user-defined *image

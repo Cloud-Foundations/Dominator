@@ -32,7 +32,7 @@ func newNamespaceTarget() (*goroutine.Goroutine, error) {
 // (i.e. /proc and /sys) will be mounted into the new namespace, and the
 // directories specified by bindMounts will be bind-mmounted into the new
 // namespace.
-func newNamespaceTargetWithMounts(rootDir string, bindMounts []string) (
+func newNamespaceTargetWithMounts(rootDir string, bindMounts []bindMountType) (
 	*goroutine.Goroutine, error) {
 	g, err := newNamespaceTarget()
 	if err != nil {
@@ -75,7 +75,7 @@ func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
 }
 
 // setupMounts will mutate the current namespace.
-func setupMounts(rootDir string, bindMounts []string) error {
+func setupMounts(rootDir string, bindMounts []bindMountType) error {
 	err := wsyscall.Mount("none", filepath.Join(rootDir, "proc"), "proc", 0, "")
 	if err != nil {
 		return fmt.Errorf("error mounting proc: %s", err)
@@ -85,11 +85,14 @@ func setupMounts(rootDir string, bindMounts []string) error {
 		return fmt.Errorf("error mounting sysfs: %s", err)
 	}
 	for _, bindMount := range bindMounts {
-		err := wsyscall.Mount(bindMount,
-			filepath.Join(rootDir, bindMount), "",
-			wsyscall.MS_BIND|wsyscall.MS_RDONLY, "")
-		if err != nil {
-			return fmt.Errorf("error bind mounting: %s: %s", bindMount, err)
+		source := bindMount.source
+		target := filepath.Join(rootDir, bindMount.target)
+		flags := uintptr(wsyscall.MS_BIND)
+		if !bindMount.writable {
+			flags |= wsyscall.MS_RDONLY
+		}
+		if err := wsyscall.Mount(source, target, "", flags, ""); err != nil {
+			return fmt.Errorf("error bind mounting: %s: %s", source, err)
 		}
 	}
 	return nil
