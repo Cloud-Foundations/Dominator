@@ -52,6 +52,10 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	if err != nil {
 		return err
 	}
+	qemuVersion, err := getQemuVersion(vm.manager.Logger)
+	if err != nil {
+		return err
+	}
 	cpuModel := "host" // Allow the VM to take full advantage of host CPU.
 	if _, ok := cpuModelFlags["invtsc"]; ok {
 		cpuModel += ",+invtsc,migratable=no" // Try hard to provide TSC.
@@ -68,11 +72,26 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		"-smp", fmt.Sprintf("cpus=%d", nCpus),
 		"-serial",
 		"unix:"+filepath.Join(vm.dirname, serialSockFilename)+",server,nowait",
-		"-chroot", "/tmp",
-		"-runas", vm.manager.Username,
 		"-qmp", "unix:"+vm.monitorSockname+",server,nowait",
 		"-pidfile", pidfile,
 		"-daemonize")
+	// Deal with backwards-incompatible option changes.
+	if qemuVersion.major < 8 {
+		cmd.Args = append(cmd.Args,
+			"-chroot", "/tmp",
+			"-runas", vm.manager.Username,
+		)
+	} else if qemuVersion.major < 9 {
+		cmd.Args = append(cmd.Args,
+			"-run-with", "chroot=/tmp",
+			"-runas", vm.manager.Username,
+		)
+	} else {
+		cmd.Args = append(cmd.Args,
+			"-run-with", "chroot=/tmp",
+			"-run-with", "user="+vm.manager.Username,
+		)
+	}
 	switch vm.FirmwareType {
 	case proto.FirmwareUEFI:
 		cmd.Args = append(cmd.Args,
