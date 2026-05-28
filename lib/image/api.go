@@ -39,6 +39,8 @@ type Image struct {
 	BuildLog      *Annotation
 	CreatedOn     time.Time
 	ExpiresAt     time.Time
+	OwnerGroups   []string
+	OwnerUsers    []string
 	Packages      []Package
 	SourceImage   string // Name of source image.
 	Tags          tags.Tags
