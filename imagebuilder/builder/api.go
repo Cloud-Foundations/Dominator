@@ -61,6 +61,7 @@ type bootstrapStream struct {
 	imageTags        tags.Tags
 	imageTriggers    *triggers.Triggers
 	ImageTriggersUrl string
+	Owners           OwnersType
 	PackagerType     string
 }
 
@@ -281,6 +282,11 @@ type BuilderParams struct {
 	BuildLogArchiver logarchiver.BuildLogArchiver
 	Logger           log.DebugLogger
 	SlaveDriver      *slavedriver.SlaveDriver
+}
+
+type OwnersType struct {
+	Groups []string
+	Users  []string
 }
 
 func Load(confUrl, variablesFile, stateDir, imageServerAddress string,
