@@ -1,28 +1,28 @@
 all: generate
-	CGO_ENABLED=0 go install ./cmd/*
+	CGO_ENABLED=0 go install -buildvcs=true ./cmd/*
 	@cd c; make
 	go vet -composites=false ./cmd/*
 
 build-darwin: generate
-	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go build -buildvcs=true ./cmd/*)
 
 build-linux: generate
-	(CGO_ENABLED=0 GOOS=linux go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=linux go build -buildvcs=true ./cmd/*)
 
 build-windows: generate
-	(CGO_ENABLED=0 GOOS=windows go build ./cmd/*)
+	(CGO_ENABLED=0 GOOS=windows go build -buildvcs=true ./cmd/*)
 
 install-darwin: generate
-	(CGO_ENABLED=0 GOOS=darwin go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go install -buildvcs=true ./cmd/*)
 
 install-linux: generate
-	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=linux go install -buildvcs=true ./cmd/*)
 
 install-linux-arm: generate
-	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install ./cmd/*)
+	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install -buildvcs=true ./cmd/*)
 
 install-windows: generate
-	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
+	(CGO_ENABLED=0 GOOS=windows go install -buildvcs=true ./cmd/*)
 
 disruption-manager.tarball: generate
 	@./scripts/make-tarball disruption-manager
