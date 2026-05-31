@@ -21,6 +21,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
@@ -130,7 +131,7 @@ func (imdb *ImageDataBase) changeImageExpiration(name string,
 	if img == nil {
 		return false, errors.New("image not found")
 	}
-	if err := imdb.checkPermissions(name, img, authInfo); err != nil {
+	if err := imdb.checkPermissions(name, imgType, authInfo); err != nil {
 		return false, err
 	}
 	if img.ExpiresAt.IsZero() {
@@ -242,7 +243,7 @@ func (imdb *ImageDataBase) checkImage(name string) bool {
 }
 
 // This must be called with the lock held.
-func (imdb *ImageDataBase) checkPermissions(imageName string, img *image.Image,
+func (imdb *ImageDataBase) checkPermissions(imageName string, img *imageType,
 	authInfo *srpc.AuthInformation) error {
 	if authInfo == nil {
 		return errNoAuthInfo
@@ -250,10 +251,18 @@ func (imdb *ImageDataBase) checkPermissions(imageName string, img *image.Image,
 	if authInfo.HaveMethodAccess {
 		return nil
 	}
-	if authInfo.Username != "" && img != nil {
-		if img.CreatedBy == authInfo.Username ||
-			img.CreatedFor == authInfo.Username {
+	if authInfo.Username != "" && img != nil && img.image != nil {
+		if img.image.CreatedBy == authInfo.Username ||
+			img.image.CreatedFor == authInfo.Username {
 			return nil
+		}
+		if _, ok := img.ownerUsers[authInfo.Username]; ok {
+			return nil
+		}
+		for group := range authInfo.GroupList {
+			if _, ok := img.ownerGroups[group]; ok {
+				return nil
+			}
 		}
 	}
 	dirname := filepath.Dir(imageName)
@@ -371,7 +380,8 @@ func (imdb *ImageDataBase) deleteImage(name string,
 	} else if img == nil {
 		return errors.New("image: " + name + " is being written")
 	} else {
-		if err := imdb.checkPermissions(name, img, authInfo); err != nil {
+		imgType, _ := imdb.getImageTypeWithLock(name)
+		if err := imdb.checkPermissions(name, imgType, authInfo); err != nil {
 			return err
 		}
 		filename := filepath.Join(imdb.BaseDirectory, name)
@@ -799,6 +809,8 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	exclusive bool) error {
 	computedFiles := img.FileSystem.GetComputedFiles()
+	ownerGroups := stringutil.ConvertListToMap(img.OwnerGroups, false)
+	ownerUsers := stringutil.ConvertListToMap(img.OwnerUsers, false)
 	usageEstimate := img.FileSystem.EstimateUsage(0)
 	filename := filepath.Join(imdb.BaseDirectory, name)
 	fileChecksum, err := writeImage(filename, img, exclusive)
@@ -811,6 +823,8 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 		computedFiles: computedFiles,
 		fileChecksum:  fileChecksum,
 		image:         img,
+		ownerGroups:   ownerGroups,
+		ownerUsers:    ownerUsers,
 		usageEstimate: usageEstimate,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)

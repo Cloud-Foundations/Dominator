@@ -187,9 +187,9 @@ func makeImageNameOnce(streamName string) string {
 func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
-	imageFilter *filter.Filter, rawTags tags.Tags, trig *triggers.Triggers,
-	copyMtimesFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
-	*image.Image, error) {
+	imageFilter *filter.Filter, owners OwnersType, rawTags tags.Tags,
+	trig *triggers.Triggers, copyMtimesFilter *filter.Filter,
+	buildLog buildLogger, logger log.Logger) (*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
 	}
@@ -256,12 +256,14 @@ func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 		}
 	}
 	img := &image.Image{
-		BuildLog:   &image.Annotation{Object: &hashVal},
-		FileSystem: fs,
-		Filter:     imageFilter,
-		Triggers:   trig,
-		Packages:   packages,
-		Tags:       tgs,
+		BuildLog:    &image.Annotation{Object: &hashVal},
+		FileSystem:  fs,
+		Filter:      imageFilter,
+		OwnerGroups: owners.Groups,
+		OwnerUsers:  owners.Users,
+		Triggers:    trig,
+		Packages:    packages,
+		Tags:        tgs,
 	}
 	if err := img.Verify(); err != nil {
 		return nil, err

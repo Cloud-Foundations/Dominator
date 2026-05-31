@@ -301,6 +301,10 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 			}
 		}
 	}
+	owners, err := loadOwners(manifestDir)
+	if err != nil {
+		return nil, err
+	}
 	tgs, err := loadTags(manifestDir)
 	if err != nil {
 		return nil, err
@@ -379,7 +383,7 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	defer g.Quit()
 	img, err := packImage(ctx, g, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
+		owners, tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +571,18 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 	} else {
 		return addFilter, true, nil
 	}
+}
+
+func loadOwners(manifestDir string) (OwnersType, error) {
+	var owners OwnersType
+	err := json.ReadFromFile(filepath.Join(manifestDir, "owners.json"), &owners)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return owners, nil
+		}
+		return OwnersType{}, err
+	}
+	return owners, nil
 }
 
 func loadTags(manifestDir string) (tags.Tags, error) {

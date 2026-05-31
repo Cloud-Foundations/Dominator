@@ -89,6 +89,12 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 			"Built from Git repository: %s on branch: %s at commit: %s<br>\n",
 			img.BuildGitUrl, img.BuildBranch, img.BuildCommitId)
 	}
+	if len(img.OwnerGroups) > 0 {
+		fmt.Fprintf(writer, "OwnerGroups: %v<br>\n", img.OwnerGroups)
+	}
+	if len(img.OwnerUsers) > 0 {
+		fmt.Fprintf(writer, "OwnerUsers: %v<br>\n", img.OwnerUsers)
+	}
 	if len(img.Packages) > 0 {
 		fmt.Fprintf(writer,
 			"Packages: <a href=\"listPackages?%s\">%d</a><br>\n",

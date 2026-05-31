@@ -144,6 +144,17 @@ This is similar to the `filter` file, except that the filter expressions are
 *added* to the filter of the *SourceImage*, thus inheriting and (if not empty)
 extending the filter. This must not be present if the `filter` file is present.
 
+### `owners.json` file
+An optional JSON encoded file containing a list of group and user owners for the
+image. These owners will be permitted to delete and change the image lifetime of
+built images. For example:
+```
+{
+    "Groups": ["admins", "builders"],
+    "Users": ["alice", "bob"]
+}
+```
+
 ### `tags.json` file
 An optional JSON encoded file containing key:value tags to add to the image.
 Variable expansion is performed on the values.
