@@ -182,6 +182,7 @@ type ImageArchive struct {
 // signifying the end of the list.
 
 type ListSelectedImagesRequest struct {
+	DirectoryName        string
 	IgnoreExpiringImages bool
 	TagsToMatch          tags.MatchTags // Empty: match all tags.
 }

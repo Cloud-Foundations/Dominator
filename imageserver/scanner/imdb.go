@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
@@ -92,7 +93,6 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 		if doCleanup {
 			imdb.Lock()
 			delete(imdb.imageMap, name)
-			imdb.imageNameIndex.Delete(name)
 			imdb.Unlock()
 		}
 	}()
@@ -393,7 +393,6 @@ func (imdb *ImageDataBase) deleteImageAndUpdateUnreferencedObjectsList(
 		return
 	}
 	delete(imdb.imageMap, name)
-	imdb.imageNameIndex.Delete(name)
 	imdb.Params.ObjectServer.AdjustRefcounts(false, img)
 }
 
@@ -599,6 +598,13 @@ func (imdb *ImageDataBase) listImages(
 	imdb.RLock()
 	defer imdb.RUnlock()
 	names := make([]string, 0)
+	directoryName := request.DirectoryName
+	if directoryName == "." {
+		directoryName = ""
+	}
+	if directoryName != "" && !strings.HasSuffix(directoryName, "/") {
+		directoryName += "/"
+	}
 	for name, img := range imdb.imageMap {
 		if img == nil {
 			continue
@@ -609,16 +615,12 @@ func (imdb *ImageDataBase) listImages(
 		if !tagMatcher.MatchEach(img.image.Tags) {
 			continue
 		}
+		if !strings.HasPrefix(name, directoryName) {
+			continue
+		}
 		names = append(names, name)
 	}
 	return names
-}
-
-func (imdb *ImageDataBase) listImagesInDirectory(
-	directoryName string) []string {
-	imdb.RLock()
-	defer imdb.RUnlock()
-	return imdb.imageNameIndex.GetByPrefix(directoryName)
 }
 
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,
@@ -752,7 +754,6 @@ func (imdb *ImageDataBase) restoreImageFromArchive(
 		if doCleanup {
 			imdb.Lock()
 			delete(imdb.imageMap, imageArchive.ImageName)
-			imdb.imageNameIndex.Delete(imageArchive.ImageName)
 			imdb.Unlock()
 		}
 	}()
@@ -824,7 +825,6 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 		usageEstimate: usageEstimate,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
-	imdb.imageNameIndex.Add(name)
 	imdb.Unlock()
 	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
 }

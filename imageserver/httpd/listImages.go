@@ -18,12 +18,11 @@ func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	var imageNames []string
 	if directoryName := query.Get("directoryName"); directoryName != "" &&
 		directoryName != "." {
-		// Output is already sorted.
 		imageNames = s.imageDataBase.ListImagesInDirectory(directoryName)
 	} else {
 		imageNames = s.imageDataBase.ListImages()
-		verstr.Sort(imageNames)
 	}
+	verstr.Sort(imageNames)
 	if query.Get("output") == "text" {
 		for _, name := range imageNames {
 			fmt.Fprintln(writer, name)

@@ -43,7 +43,6 @@ type ImageDataBase struct {
 	// Protected by main lock.
 	directoryMap    map[string]image.DirectoryMetadata
 	imageMap        map[string]*imageType // nil: write in progress.
-	imageNameIndex  imageIndex            // sorted keys of image names.
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
@@ -64,16 +63,6 @@ type imageType struct {
 type Params struct {
 	Logger       log.DebugLogger
 	ObjectServer objectserver.FullObjectServer
-}
-
-// imageIndex provides exact and prefix lookups over image names.
-// Implementations are not safe for concurrent use; callers must hold the
-// main lock.
-type imageIndex interface {
-	Add(name string)
-	Delete(name string)
-	Get(name string) (string, bool)
-	GetByPrefix(prefix string) []string
 }
 
 func Load(config Config, params Params) (*ImageDataBase, error) {
@@ -201,7 +190,9 @@ func (imdb *ImageDataBase) ListSelectedImages(
 
 func (imdb *ImageDataBase) ListImagesInDirectory(
 	directoryName string) []string {
-	return imdb.listImagesInDirectory(directoryName)
+	return imdb.listImages(proto.ListSelectedImagesRequest{
+		DirectoryName: directoryName,
+	})
 }
 
 // ListUnreferencedObjects will return a map listing all the objects and their
