@@ -544,6 +544,10 @@ func loadComputedFiles(manifestDir string) ([]util.ComputedFile, bool, error) {
 		return nil, false, errors.New(
 			"computed-files and computed-files.add files both present")
 	} else if haveComputedFiles {
+		// Return empty slice if empty file.
+		if computedFiles == nil {
+			computedFiles = []util.ComputedFile{}
+		}
 		return computedFiles, false, nil
 	} else {
 		return addComputedFiles, true, nil
