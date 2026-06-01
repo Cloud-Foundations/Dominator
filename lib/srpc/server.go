@@ -55,10 +55,12 @@ type methodWrapper struct {
 	fn                            reflect.Value
 	requestType                   reflect.Type
 	responseType                  reflect.Type
+	metricsMutex                  sync.Mutex
 	failedCallsDistribution       *tricorder.CumulativeDistribution
 	failedRRCallsDistribution     *tricorder.CumulativeDistribution
 	numDeniedCalls                uint64
 	numPermittedCalls             uint64
+	numRunningCalls               uint64
 	successfulCallsDistribution   *tricorder.CumulativeDistribution
 	successfulRRCallsDistribution *tricorder.CumulativeDistribution
 }
@@ -304,6 +306,11 @@ func (m *methodWrapper) registerMetrics(dir *tricorder.DirectorySpec) error {
 	}
 	err = dir.RegisterMetric("num-permitted-calls", &m.numPermittedCalls,
 		units.None, "number of permitted calls to method")
+	if err != nil {
+		return err
+	}
+	err = dir.RegisterMetric("num-running-calls", &m.numRunningCalls,
+		units.None, "number of running calls to method")
 	if err != nil {
 		return err
 	}
@@ -650,7 +657,9 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 		conn.haveMethodAccess = false
 	} else {
 		conn.haveMethodAccess = false
+		method.metricsMutex.Lock()
 		method.numDeniedCalls++
+		method.metricsMutex.Unlock()
 		return nil, ErrorAccessToMethodDenied
 	}
 	authInfo := conn.GetAuthInformation()
@@ -749,7 +758,10 @@ func tlsHandshake(conn *tls.Conn) error {
 }
 
 func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
+	m.metricsMutex.Lock()
 	m.numPermittedCalls++
+	m.numRunningCalls++
+	m.metricsMutex.Unlock()
 	startTime := time.Now()
 	err := m._call(conn, makeCoder)
 	timeTaken := time.Since(startTime)
@@ -758,6 +770,9 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 	} else {
 		m.failedCallsDistribution.Add(timeTaken)
 	}
+	m.metricsMutex.Lock()
+	m.numRunningCalls--
+	m.metricsMutex.Unlock()
 	return err
 }
 
