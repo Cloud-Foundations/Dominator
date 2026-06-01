@@ -124,6 +124,8 @@ fields:
                   tags will be attached to the image
 - `ImageTriggersUrl`: a URL from which JSON-encoded triggers can be read. The
                       triggers will be attached to the image
+- `Owners`: optional object with a list of `Groups` and `Users` who will have
+            ownership of the built images
 - `PackagerType`: the name of the packager type to use
 
 ### Cache configuration

@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -185,9 +184,8 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 				vm.numVolumesTableEntry(),
 				vm.storageTotalTableEntry(),
 				vm.OwnerUsers[0],
-				fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+				fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 					vm.hypervisor.Machine.Hostname,
-					constants.HypervisorPortNumber,
 					vm.hypervisor.Machine.Hostname),
 				fmt.Sprintf("<a href=\"listHypervisors?location=%s\">%s</a>",
 					vm.hypervisor.location, vm.hypervisor.location),

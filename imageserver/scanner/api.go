@@ -55,6 +55,8 @@ type imageType struct {
 	fileChecksum  []byte
 	image         *image.Image
 	modifying     bool
+	ownerGroups   map[string]struct{}
+	ownerUsers    map[string]struct{}
 	numLinksTable filesystem.NumLinksTable
 	usageEstimate uint64
 }

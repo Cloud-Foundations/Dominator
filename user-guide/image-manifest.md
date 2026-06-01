@@ -152,7 +152,18 @@ extending the filter. This must not be present if the `filter` file is present.
 If neither `filter` nor `filter.add` is present, the filter from the
 *SourceImage* is inherited only when the
 *[imaginator](../cmd/imaginator/README.md)* is started with
-`-enableDefaultInheritance`; otherwise the image has no filter.
+`-enableDefaultInheritance`; otherwise the image has nil filter.
+
+### `owners.json` file
+An optional JSON encoded file containing a list of group and user owners for the
+image. These owners will be permitted to delete and change the image lifetime of
+built images. For example:
+```
+{
+    "Groups": ["admins", "builders"],
+    "Users": ["alice", "bob"]
+}
+```
 
 ### `tags.json` file
 An optional JSON encoded file containing key:value tags to add to the image.
