@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 )
 
 var (
@@ -81,6 +83,10 @@ func makeVmInfo(t *testing.T, nonZeroFill bool, invertIndex int,
 				fieldValue.Set(reflect.ValueOf(addresses))
 			case "Volumes":
 				volumes := []Volume{{
+					DfmParams{
+						types.Bytes(base) + 1,
+						DfmProfile("dfm-prof"),
+					},
 					VolumeFormat(base) + 1,
 					VolumeInterface(base) + 2,
 					uint64(base) + 3,

@@ -39,6 +39,7 @@ const (
 	VolumeInterfaceVirtIO = 0
 	VolumeInterfaceIDE    = 1
 	VolumeInterfaceNVMe   = 2
+	VolumeInterfaceDFM    = 3
 
 	VolumeTypePersistent = 0
 	VolumeTypeMemory     = 1
@@ -326,6 +327,13 @@ type CreateVmResponse struct { // Multiple responses are sent.
 	IpAddress       net.IP
 	ProgressMessage string
 	Error           string
+}
+
+type DfmProfile string
+
+type DfmParams struct {
+	NvramSize types.Bytes `json:",omitempty"`
+	Profile   DfmProfile  `json:",omitempty"`
 }
 
 type DebugVmImageRequest struct {
@@ -952,6 +960,7 @@ type VmInfo struct {
 }
 
 type Volume struct {
+	DFM         DfmParams         `json:",omitempty"`
 	Format      VolumeFormat      `json:",omitempty"`
 	Interface   VolumeInterface   `json:",omitempty"`
 	Size        uint64            `json:",omitempty"`
