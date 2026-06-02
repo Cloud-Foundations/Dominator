@@ -595,16 +595,10 @@ func (imdb *ImageDataBase) listDirectories() []image.Directory {
 func (imdb *ImageDataBase) listImages(
 	request proto.ListSelectedImagesRequest) []string {
 	tagMatcher := tagmatcher.New(request.TagsToMatch, false)
+	directoryMatcher := newDirectoryMatcher(request.DirectoryName)
 	imdb.RLock()
 	defer imdb.RUnlock()
 	names := make([]string, 0)
-	directoryName := request.DirectoryName
-	if directoryName == "." {
-		directoryName = ""
-	}
-	if directoryName != "" && !strings.HasSuffix(directoryName, "/") {
-		directoryName += "/"
-	}
 	for name, img := range imdb.imageMap {
 		if img == nil {
 			continue
@@ -615,12 +609,26 @@ func (imdb *ImageDataBase) listImages(
 		if !tagMatcher.MatchEach(img.image.Tags) {
 			continue
 		}
-		if !strings.HasPrefix(name, directoryName) {
+		if !directoryMatcher(name) {
 			continue
 		}
 		names = append(names, name)
 	}
 	return names
+}
+
+// newDirectoryMatcher returns a predicate matching image names by directory.
+func newDirectoryMatcher(directoryName string) func(name string) bool {
+	switch {
+	case directoryName == "" || directoryName == ".":
+		return func(string) bool { return true }
+	case strings.HasSuffix(directoryName, "/"):
+		dir := strings.TrimSuffix(directoryName, "/")
+		return func(name string) bool { return filepath.Dir(name) == dir }
+	default:
+		prefix := directoryName + "/"
+		return func(name string) bool { return strings.HasPrefix(name, prefix) }
+	}
 }
 
 func (imdb *ImageDataBase) makeDirectory(directory image.Directory,

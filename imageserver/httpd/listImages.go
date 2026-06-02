@@ -9,19 +9,18 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
+	proto "github.com/Cloud-Foundations/Dominator/proto/imageserver"
 )
 
 func (s state) listImagesHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
 	query := req.URL.Query()
-	var imageNames []string
-	if directoryName := query.Get("directoryName"); directoryName != "" &&
-		directoryName != "." {
-		imageNames = s.imageDataBase.ListImagesInDirectory(directoryName)
-	} else {
-		imageNames = s.imageDataBase.ListImages()
-	}
+	directoryName := query.Get("directoryName")
+	imageNames := s.imageDataBase.ListSelectedImages(
+		proto.ListSelectedImagesRequest{
+			DirectoryName: directoryName,
+		})
 	verstr.Sort(imageNames)
 	if query.Get("output") == "text" {
 		for _, name := range imageNames {

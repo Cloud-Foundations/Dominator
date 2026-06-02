@@ -188,13 +188,6 @@ func (imdb *ImageDataBase) ListSelectedImages(
 	return imdb.listImages(request)
 }
 
-func (imdb *ImageDataBase) ListImagesInDirectory(
-	directoryName string) []string {
-	return imdb.listImages(proto.ListSelectedImagesRequest{
-		DirectoryName: directoryName,
-	})
-}
-
 // ListUnreferencedObjects will return a map listing all the objects and their
 // corresponding sizes which are not referenced by an image.
 // Note that some objects may have been recently added and the referencing image
