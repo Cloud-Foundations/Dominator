@@ -120,6 +120,22 @@ func copyData(filename string, reader io.Reader, length uint64,
 	return err
 }
 
+func copyVolume(filename string, reader io.Reader, volume *proto.Volume,
+	index int, wantInit bool, logger log.DebugLogger) error {
+	switch volume.Interface {
+	case proto.VolumeInterfaceDFM:
+		if reader != nil {
+			return fmt.Errorf("cannot copy data into DFM volume")
+		}
+		if wantInit {
+			return fmt.Errorf("cannot initialise DFM volume")
+		}
+		return makeDfmVolume(filename, index, volume)
+	default:
+		return copyData(filename, reader, volume.Size, logger)
+	}
+}
+
 func createTapDeviceOnBridge(bridge string, numQueues uint) (
 	*libnet.TapDevice, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
@@ -1559,11 +1575,14 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			err := copyData(fname, dataReader, volume.Size, vm.logger)
+			wantInit := index < len(request.SecondaryVolumesInit)
+			err := copyVolume(fname, dataReader, &volume, index+1, wantInit,
+				vm.logger)
 			if err != nil {
 				return sendError(conn, err)
 			}
-			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
+			vm.Volumes[index+1].Size = volume.Size
+			if dataReader == nil && wantInit {
 				vinit := request.SecondaryVolumesInit[index]
 				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
 					NoDiscard:                true,

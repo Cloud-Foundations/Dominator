@@ -114,6 +114,11 @@ func (vm *vmInfoType) scanStorage() error {
 func (vm *vmInfoType) setupVolumes(rootVolume proto.Volume,
 	secondaryVolumes []proto.Volume, spreadVolumes bool,
 	storageIndices []uint) error {
+	switch rootVolume.Interface {
+	case proto.VolumeInterfaceDFM:
+		return fmt.Errorf("root volume not supported on interface: %s",
+			rootVolume.Interface)
+	}
 	volumeDirectories, err := vm.manager.getVolumeDirectories(rootVolume,
 		secondaryVolumes, spreadVolumes, storageIndices)
 	if err != nil {

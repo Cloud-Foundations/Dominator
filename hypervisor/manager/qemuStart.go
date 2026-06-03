@@ -165,6 +165,10 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 					"file=%s,format=%s,discard=off,if=%s",
 					volume.Filename, volumeFormat, volumeInterface))
 			continue
+		case proto.VolumeInterfaceDFM:
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf("dfm,filename=%s", volume.Filename))
+			continue
 		}
 		cmd.Args = append(cmd.Args,
 			"-blockdev", fmt.Sprintf(
