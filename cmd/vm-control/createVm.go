@@ -617,6 +617,10 @@ func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
 		if index+1 < len(volumeTypes) {
 			volume.Type = volumeTypes[index+1]
 		}
+		if volume.Interface == hyper_proto.VolumeInterfaceDFM {
+			volume.DFM.NvramSize = types.Bytes(size) >> 6
+			volume.DFM.Profile = "hopper_qlc_difdix"
+		}
 		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
 		if *initialiseSecondaryVolumes &&
 			index < len(vinitParams) {
