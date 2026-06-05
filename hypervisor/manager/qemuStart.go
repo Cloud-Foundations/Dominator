@@ -78,17 +78,17 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	// Deal with backwards-incompatible option changes.
 	if qemuVersion.major < 8 {
 		cmd.Args = append(cmd.Args,
-			"-chroot", "/tmp",
+			"-chroot", vm.getLogsDirectory(),
 			"-runas", vm.manager.Username,
 		)
 	} else if qemuVersion.major < 9 {
 		cmd.Args = append(cmd.Args,
-			"-run-with", "chroot=/tmp",
+			"-run-with", "chroot="+vm.getLogsDirectory(),
 			"-runas", vm.manager.Username,
 		)
 	} else {
 		cmd.Args = append(cmd.Args,
-			"-run-with", "chroot=/tmp",
+			"-run-with", "chroot="+vm.getLogsDirectory(),
 			"-run-with", "user="+vm.manager.Username,
 		)
 	}
@@ -205,7 +205,8 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			"-watchdog-action", vm.WatchdogAction.String(),
 			"-device", vm.WatchdogModel.String())
 	}
-	os.Remove(filepath.Join(vm.dirname, "bootlog"))
+	os.Remove(vm.getBootLogFilename())
+	cmd.Dir = vm.getLogsDirectory()
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "VM_HOSTNAME="+vm.Hostname)
 	if len(vm.OwnerGroups) > 0 {

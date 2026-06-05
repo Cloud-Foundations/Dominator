@@ -58,7 +58,6 @@ import (
 )
 
 const (
-	bootlogFilename      = "bootlog"
 	lastPatchLogFilename = "lastPatchLog"
 	serialSockFilename   = "serial0.sock"
 
@@ -2145,7 +2144,7 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	filename := filepath.Join(vm.dirname, "bootlog")
+	filename := vm.getBootLogFilename()
 	vm.mutex.RUnlock()
 	return os.Open(filename)
 }
@@ -4212,6 +4211,16 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	return nil
 }
 
+// createLogsDirectory will delete an old logs directory and create a new one.
+func (vm *vmInfoType) createLogsDirectory() error {
+	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return os.Mkdir(vm.getLogsDirectory(), fsutil.PrivateDirPerms)
+}
+
 // delete deletes external VM state (files, leases, IPs). The VM lock will be
 // released and later grabbed. The Manager lock will be grabbed and released
 // while the VM lock is not held.
@@ -4317,6 +4326,10 @@ func (vm *vmInfoType) getActiveKernelPath() string {
 	return ""
 }
 
+func (vm *vmInfoType) getBootLogFilename() string {
+	return filepath.Join(vm.dirname, "bootlog")
+}
+
 func (vm *vmInfoType) getDebugRoot() string {
 	filename := vm.VolumeLocations[0].Filename + ".debug"
 	if _, err := os.Stat(filename); err == nil {
@@ -4331,6 +4344,10 @@ func (vm *vmInfoType) getInitrdPath() string {
 
 func (vm *vmInfoType) getKernelPath() string {
 	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "kernel")
+}
+
+func (vm *vmInfoType) getLogsDirectory() string {
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "logs")
 }
 
 func (vm *vmInfoType) kill() {
@@ -4423,7 +4440,7 @@ func (vm *vmInfoType) rootLabelSaved(debug bool) string {
 }
 
 func (vm *vmInfoType) serialManager() {
-	bootlogFile, err := os.OpenFile(filepath.Join(vm.dirname, bootlogFilename),
+	bootlogFile, err := os.OpenFile(vm.getBootLogFilename(),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, fsutil.PublicFilePerms)
 	if err != nil {
 		vm.logger.Printf("error opening bootlog file: %s\n", err)
@@ -4525,6 +4542,10 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		return false, nil
 	}
 	if err := vm.checkVolumes(true); err != nil {
+		vm.setState(proto.StateFailedToStart)
+		return false, err
+	}
+	if err := vm.createLogsDirectory(); err != nil {
 		vm.setState(proto.StateFailedToStart)
 		return false, err
 	}
