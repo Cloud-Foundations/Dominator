@@ -544,6 +544,16 @@ type GetVmUserDataResponse struct {
 	Length uint64
 } // Data (length=Length) are streamed afterwards.
 
+type GetVmVirtualiserLogFileRequest struct {
+	Filename  string
+	IpAddress net.IP
+}
+
+type GetVmVirtualiserLogFileResponse struct {
+	Error  string
+	Length uint64
+} // Data (length=Length) are streamed afterwards.
+
 // The GetVmVolume() RPC is followed by the proto/rsync.GetBlocks message.
 
 type GetVmVolumeRequest struct {
@@ -620,6 +630,16 @@ type ListVMsRequest struct {
 
 type ListVMsResponse struct {
 	IpAddresses []net.IP
+}
+
+type ListVmVirtualiserLogFilesRequest struct {
+	IpAddress net.IP
+}
+
+type ListVmVirtualiserLogFilesResponse struct {
+	Error     string
+	Filenames []string
+	Lengths   []uint64
 }
 
 type ListVolumeDirectoriesRequest struct{}
