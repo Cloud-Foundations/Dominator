@@ -2233,6 +2233,33 @@ func (m *Manager) getVmLockWatcher(ipAddr net.IP) (
 	return vm.lockWatcher, nil
 }
 
+func (m *Manager) getVmVirtualiserLogFile(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, filename string) (
+	io.ReadCloser, uint64, error) {
+	if filename == "" ||
+		filename == "." ||
+		filename == "/" ||
+		filename != filepath.Base(filename) {
+		return nil, 0, fmt.Errorf("invalid filename")
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	pathname := filepath.Join(vm.getLogsDirectory(), filename)
+	vm.mutex.RUnlock()
+	file, err := os.Open(pathname)
+	if err != nil {
+		return nil, 0, err
+	}
+	if fi, err := file.Stat(); err != nil {
+		file.Close()
+		return nil, 0, err
+	} else {
+		return file, uint64(fi.Size()), nil
+	}
+}
+
 func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	var request proto.GetVmVolumeRequest
 	if err := conn.Decode(&request); err != nil {
@@ -2556,6 +2583,30 @@ func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 		verstr.Sort(ipAddrs)
 	}
 	return ipAddrs
+}
+
+func (m *Manager) listVmVirtualiserLogFiles(ipAddr net.IP) (
+	[]string, []uint64, error) {
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	dirname := vm.getLogsDirectory()
+	vm.mutex.RUnlock()
+	filenames, err := fsutil.ReadDirnames(dirname, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	lengths := make([]uint64, 0, len(filenames))
+	for _, filename := range filenames {
+		pathname := filepath.Join(dirname, filename)
+		if fi, err := os.Stat(pathname); err != nil {
+			return nil, nil, fmt.Errorf("error stating: %s: %s", pathname, err)
+		} else {
+			lengths = append(lengths, uint64(fi.Size()))
+		}
+	}
+	return filenames, lengths, nil
 }
 
 func (m *Manager) migrateVm(conn *srpc.Conn) error {
