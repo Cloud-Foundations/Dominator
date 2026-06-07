@@ -753,6 +753,39 @@ func getVmUserData(client srpc.ClientI, ipAddress net.IP,
 	return conn, response.Length, nil
 }
 
+func getVmVirtualiserLogFile(client srpc.ClientI, ipAddress net.IP,
+	filename string) (io.ReadCloser, uint64, error) {
+	conn, err := client.Call("Hypervisor.GetVmVirtualiserLogFile")
+	if err != nil {
+		return nil, 0, err
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
+	request := proto.GetVmVirtualiserLogFileRequest{
+		Filename:  filename,
+		IpAddress: ipAddress,
+	}
+	if err := conn.Encode(request); err != nil {
+		return nil, 0, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, 0, err
+	}
+	var response proto.GetVmVirtualiserLogFileResponse
+	if err := conn.Decode(&response); err != nil {
+		return nil, 0, err
+	}
+	if err := errors.New(response.Error); err != nil {
+		return nil, 0, err
+	}
+	doClose = false
+	return conn, response.Length, nil
+}
+
 func getVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
 	writer io.WriteSeeker, reader io.Reader, initialFileSize, size uint64,
 	logger log.DebugLogger) (proto.GetVmVolumeResponse, error) {
@@ -861,6 +894,21 @@ func listVMs(client srpc.ClientI,
 		return nil, err
 	}
 	return reply.IpAddresses, nil
+}
+
+func listVmVirtualiserLogFiles(client srpc.ClientI, ipAddress net.IP) (
+	[]string, []uint64, error) {
+	request := proto.ListVmVirtualiserLogFilesRequest{IpAddress: ipAddress}
+	var reply proto.ListVmVirtualiserLogFilesResponse
+	err := client.RequestReply("Hypervisor.ListVmVirtualiserLogFiles", request,
+		&reply)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return nil, nil, err
+	}
+	return reply.Filenames, reply.Lengths, nil
 }
 
 func listVolumeDirectories(client srpc.ClientI, doSort bool) ([]string, error) {

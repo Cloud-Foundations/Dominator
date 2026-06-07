@@ -228,6 +228,11 @@ func GetVmUserData(client srpc.ClientI, ipAddress net.IP,
 	return getVmUserData(client, ipAddress, accessToken)
 }
 
+func GetVmVirtualiserLogFile(client srpc.ClientI, ipAddress net.IP,
+	filename string) (io.ReadCloser, uint64, error) {
+	return getVmVirtualiserLogFile(client, ipAddress, filename)
+}
+
 func GetVmVolume(client srpc.ClientI, request proto.GetVmVolumeRequest,
 	writer io.WriteSeeker, reader io.Reader, initialFileSize, size uint64,
 	logger log.DebugLogger) (proto.GetVmVolumeResponse, error) {
@@ -262,6 +267,11 @@ func ListSubnets(client srpc.ClientI, doSort bool) ([]proto.Subnet, error) {
 func ListVMs(client srpc.ClientI,
 	request proto.ListVMsRequest) ([]net.IP, error) {
 	return listVMs(client, request)
+}
+
+func ListVmVirtualiserLogFiles(client srpc.ClientI, ipAddress net.IP) (
+	[]string, []uint64, error) {
+	return listVmVirtualiserLogFiles(client, ipAddress)
 }
 
 func ListVolumeDirectories(client srpc.ClientI, doSort bool) ([]string, error) {
