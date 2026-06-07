@@ -2,24 +2,22 @@ package rpcd
 
 import (
 	"io"
-	"os"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func (t *srpcType) GetVmUserData(conn *srpc.Conn) error {
-	var request proto.GetVmUserDataRequest
+func (t *srpcType) GetVmVirtualiserLogFile(conn *srpc.Conn) error {
+	var request proto.GetVmVirtualiserLogFileRequest
 	if err := conn.Decode(&request); err != nil {
 		return err
 	}
-	rc, length, err := t.manager.GetVmUserDataRPC(request.IpAddress,
-		conn.GetAuthInformation(), request.AccessToken)
+	rc, length, err := t.manager.GetVmVirtualiserLogFile(request.IpAddress,
+		conn.GetAuthInformation(), request.Filename)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return conn.Encode(proto.GetVmUserDataResponse{})
-		}
-		return conn.Encode(proto.GetVmUserDataResponse{Error: err.Error()})
+		return conn.Encode(proto.GetVmVirtualiserLogFileResponse{
+			Error: err.Error(),
+		})
 	}
 	defer rc.Close()
 	response := proto.GetVmUserDataResponse{Length: length}
