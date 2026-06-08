@@ -4596,9 +4596,11 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 		vm.setState(proto.StateFailedToStart)
 		return false, err
 	}
-	if err := vm.createLogsDirectory(); err != nil {
-		vm.setState(proto.StateFailedToStart)
-		return false, err
+	if vm.State != proto.StateRunning {
+		if err := vm.createLogsDirectory(); err != nil {
+			vm.setState(proto.StateFailedToStart)
+			return false, err
+		}
 	}
 	if dhcpTimeout >= 0 {
 		err := vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)
