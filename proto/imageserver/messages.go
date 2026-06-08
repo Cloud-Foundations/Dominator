@@ -182,6 +182,10 @@ type ImageArchive struct {
 // signifying the end of the list.
 
 type ListSelectedImagesRequest struct {
+	// Empty or ".": all images.
+	// Trailing "/": images in the directory only.
+	// otherwise the directory subtree.
+	DirectoryName        string
 	IgnoreExpiringImages bool
 	TagsToMatch          tags.MatchTags // Empty: match all tags.
 }

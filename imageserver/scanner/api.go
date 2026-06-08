@@ -30,6 +30,7 @@ type Config struct {
 }
 
 type notifiers map[<-chan string]chan<- string
+
 type makeDirectoryNotifiers map[<-chan image.Directory]chan<- image.Directory
 
 type ImageDataBase struct {
