@@ -39,6 +39,7 @@ const (
 	VolumeInterfaceVirtIO = 0
 	VolumeInterfaceIDE    = 1
 	VolumeInterfaceNVMe   = 2
+	VolumeInterfaceDFM    = 3
 
 	VolumeTypePersistent = 0
 	VolumeTypeMemory     = 1
@@ -328,6 +329,13 @@ type CreateVmResponse struct { // Multiple responses are sent.
 	Error           string
 }
 
+type DfmProfile string
+
+type DfmParams struct {
+	NvramSize types.Bytes `json:",omitempty"`
+	Profile   DfmProfile  `json:",omitempty"`
+}
+
 type DebugVmImageRequest struct {
 	DhcpTimeout      time.Duration // <0: no DHCP; 0: no wait; >0 DHPC wait.
 	ImageDataSize    uint64
@@ -536,6 +544,16 @@ type GetVmUserDataResponse struct {
 	Length uint64
 } // Data (length=Length) are streamed afterwards.
 
+type GetVmVirtualiserLogFileRequest struct {
+	Filename  string
+	IpAddress net.IP
+}
+
+type GetVmVirtualiserLogFileResponse struct {
+	Error  string
+	Length uint64
+} // Data (length=Length) are streamed afterwards.
+
 // The GetVmVolume() RPC is followed by the proto/rsync.GetBlocks message.
 
 type GetVmVolumeRequest struct {
@@ -612,6 +630,16 @@ type ListVMsRequest struct {
 
 type ListVMsResponse struct {
 	IpAddresses []net.IP
+}
+
+type ListVmVirtualiserLogFilesRequest struct {
+	IpAddress net.IP
+}
+
+type ListVmVirtualiserLogFilesResponse struct {
+	Error     string
+	Filenames []string
+	Lengths   []uint64
 }
 
 type ListVolumeDirectoriesRequest struct{}
@@ -952,6 +980,7 @@ type VmInfo struct {
 }
 
 type Volume struct {
+	DFM         DfmParams         `json:",omitempty"`
 	Format      VolumeFormat      `json:",omitempty"`
 	Interface   VolumeInterface   `json:",omitempty"`
 	Size        uint64            `json:",omitempty"`

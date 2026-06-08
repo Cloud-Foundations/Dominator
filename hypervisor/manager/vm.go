@@ -58,7 +58,6 @@ import (
 )
 
 const (
-	bootlogFilename      = "bootlog"
 	lastPatchLogFilename = "lastPatchLog"
 	serialSockFilename   = "serial0.sock"
 
@@ -118,6 +117,22 @@ func copyData(filename string, reader io.Reader, length uint64,
 	}
 	_, err = io.CopyN(file, reader, int64(length))
 	return err
+}
+
+func copyVolume(filename string, reader io.Reader, volume *proto.Volume,
+	index int, wantInit bool, logger log.DebugLogger) error {
+	switch volume.Interface {
+	case proto.VolumeInterfaceDFM:
+		if reader != nil {
+			return fmt.Errorf("cannot copy data into DFM volume")
+		}
+		if wantInit {
+			return fmt.Errorf("cannot initialise DFM volume")
+		}
+		return makeDfmVolume(filename, index, volume)
+	default:
+		return copyData(filename, reader, volume.Size, logger)
+	}
 }
 
 func createTapDeviceOnBridge(bridge string, numQueues uint) (
@@ -1559,11 +1574,14 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			if request.SecondaryVolumesData {
 				dataReader = conn
 			}
-			err := copyData(fname, dataReader, volume.Size, vm.logger)
+			wantInit := index < len(request.SecondaryVolumesInit)
+			err := copyVolume(fname, dataReader, &volume, index+1, wantInit,
+				vm.logger)
 			if err != nil {
 				return sendError(conn, err)
 			}
-			if dataReader == nil && index < len(request.SecondaryVolumesInit) {
+			vm.Volumes[index+1].Size = volume.Size
+			if dataReader == nil && wantInit {
 				vinit := request.SecondaryVolumesInit[index]
 				err := util.MakeExt4fsWithParams(fname, util.MakeExt4fsParams{
 					NoDiscard:                true,
@@ -2126,7 +2144,7 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	filename := filepath.Join(vm.dirname, "bootlog")
+	filename := vm.getBootLogFilename()
 	vm.mutex.RUnlock()
 	return os.Open(filename)
 }
@@ -2213,6 +2231,33 @@ func (m *Manager) getVmLockWatcher(ipAddr net.IP) (
 	}
 	defer vm.mutex.RUnlock()
 	return vm.lockWatcher, nil
+}
+
+func (m *Manager) getVmVirtualiserLogFile(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, filename string) (
+	io.ReadCloser, uint64, error) {
+	if filename == "" ||
+		filename == "." ||
+		filename == "/" ||
+		filename != filepath.Base(filename) {
+		return nil, 0, fmt.Errorf("invalid filename")
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	pathname := filepath.Join(vm.getLogsDirectory(), filename)
+	vm.mutex.RUnlock()
+	file, err := os.Open(pathname)
+	if err != nil {
+		return nil, 0, err
+	}
+	if fi, err := file.Stat(); err != nil {
+		file.Close()
+		return nil, 0, err
+	} else {
+		return file, uint64(fi.Size()), nil
+	}
 }
 
 func (m *Manager) getVmVolume(conn *srpc.Conn) error {
@@ -2538,6 +2583,30 @@ func (m *Manager) listVMs(request proto.ListVMsRequest) []string {
 		verstr.Sort(ipAddrs)
 	}
 	return ipAddrs
+}
+
+func (m *Manager) listVmVirtualiserLogFiles(ipAddr net.IP) (
+	[]string, []uint64, error) {
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	dirname := vm.getLogsDirectory()
+	vm.mutex.RUnlock()
+	filenames, err := fsutil.ReadDirnames(dirname, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	lengths := make([]uint64, 0, len(filenames))
+	for _, filename := range filenames {
+		pathname := filepath.Join(dirname, filename)
+		if fi, err := os.Stat(pathname); err != nil {
+			return nil, nil, fmt.Errorf("error stating: %s: %s", pathname, err)
+		} else {
+			lengths = append(lengths, uint64(fi.Size()))
+		}
+	}
+	return filenames, lengths, nil
 }
 
 func (m *Manager) migrateVm(conn *srpc.Conn) error {
@@ -4193,6 +4262,16 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 	return nil
 }
 
+// createLogsDirectory will delete an old logs directory and create a new one.
+func (vm *vmInfoType) createLogsDirectory() error {
+	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return os.Mkdir(vm.getLogsDirectory(), fsutil.PrivateDirPerms)
+}
+
 // delete deletes external VM state (files, leases, IPs). The VM lock will be
 // released and later grabbed. The Manager lock will be grabbed and released
 // while the VM lock is not held.
@@ -4298,6 +4377,10 @@ func (vm *vmInfoType) getActiveKernelPath() string {
 	return ""
 }
 
+func (vm *vmInfoType) getBootLogFilename() string {
+	return filepath.Join(vm.dirname, "bootlog")
+}
+
 func (vm *vmInfoType) getDebugRoot() string {
 	filename := vm.VolumeLocations[0].Filename + ".debug"
 	if _, err := os.Stat(filename); err == nil {
@@ -4312,6 +4395,10 @@ func (vm *vmInfoType) getInitrdPath() string {
 
 func (vm *vmInfoType) getKernelPath() string {
 	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "kernel")
+}
+
+func (vm *vmInfoType) getLogsDirectory() string {
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "logs")
 }
 
 func (vm *vmInfoType) kill() {
@@ -4404,7 +4491,7 @@ func (vm *vmInfoType) rootLabelSaved(debug bool) string {
 }
 
 func (vm *vmInfoType) serialManager() {
-	bootlogFile, err := os.OpenFile(filepath.Join(vm.dirname, bootlogFilename),
+	bootlogFile, err := os.OpenFile(vm.getBootLogFilename(),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, fsutil.PublicFilePerms)
 	if err != nil {
 		vm.logger.Printf("error opening bootlog file: %s\n", err)
@@ -4508,6 +4595,12 @@ func (vm *vmInfoType) startManaging(dhcpTimeout time.Duration,
 	if err := vm.checkVolumes(true); err != nil {
 		vm.setState(proto.StateFailedToStart)
 		return false, err
+	}
+	if vm.State != proto.StateRunning {
+		if err := vm.createLogsDirectory(); err != nil {
+			vm.setState(proto.StateFailedToStart)
+			return false, err
+		}
 	}
 	if dhcpTimeout >= 0 {
 		err := vm.manager.DhcpServer.AddLease(vm.Address, vm.Hostname)

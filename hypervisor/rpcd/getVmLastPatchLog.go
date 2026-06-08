@@ -20,6 +20,7 @@ func (t *srpcType) GetVmLastPatchLog(conn *srpc.Conn) error {
 		}
 		return conn.Encode(proto.GetVmLastPatchLogResponse{Error: err.Error()})
 	}
+	defer rc.Close()
 	response := proto.GetVmLastPatchLogResponse{
 		Length:    length,
 		PatchTime: patchTime,

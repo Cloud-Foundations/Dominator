@@ -64,6 +64,7 @@ var (
 		VolumeInterfaceVirtIO: "virtio",
 		VolumeInterfaceIDE:    "ide",
 		VolumeInterfaceNVMe:   "nvme",
+		VolumeInterfaceDFM:    "dfm",
 	}
 	textToVolumeInterface map[string]VolumeInterface
 
