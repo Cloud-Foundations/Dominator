@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
 var (
@@ -67,7 +68,8 @@ type ObjectServer struct {
 }
 
 type Params struct {
-	Logger log.DebugLogger
+	Logger           log.DebugLogger
+	MetricsDirectory *tricorder.DirectorySpec
 }
 
 func NewObjectServer(baseDir string, logger log.Logger) (
