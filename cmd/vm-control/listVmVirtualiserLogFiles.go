@@ -12,8 +12,7 @@ import (
 func listVmVirtualiserLogFilesSubcommand(args []string,
 	logger log.DebugLogger) error {
 	if err := listVmVirtualiserLogFiles(args[0], logger); err != nil {
-		return fmt.Errorf("error listing VM virtualiser log files: %s",
-			args[1], err)
+		return fmt.Errorf("error listing VM virtualiser log files: %s", err)
 	}
 	return nil
 }

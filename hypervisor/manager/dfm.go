@@ -35,17 +35,23 @@ func makeDfmVolume(filename string, id int, volume *proto.Volume) error {
 	if volume.DFM.NvramSize > types.Bytes(volume.Size)>>1 {
 		return fmt.Errorf("DFM NVRAM must be less than half volume size")
 	}
+	tmpdir, err := os.MkdirTemp("/tmp", "qemu-img-")
+	if err != nil {
+		return err
+	}
 	cmd := exec.Command("qemu-img", "create", "-f", "dfm",
 		"-o",
 		fmt.Sprintf("dfm_id=%d,profile=%s,wssd_file_bytes=%d,nvram_bytes=%d",
 			id, volume.DFM.Profile, volume.Size-uint64(volume.DFM.NvramSize),
 			volume.DFM.NvramSize),
 		filename)
+	cmd.Dir = tmpdir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error running %v: %s: %s",
-			cmd.Args, err, string(output))
+		return fmt.Errorf("error running %v (tmpdir=%s): %s: %s",
+			cmd.Args, tmpdir, err, string(output))
 	}
+	os.RemoveAll(tmpdir)
 	if fi, err := os.Stat(filename); err != nil {
 		os.Remove(filename)
 		return err
