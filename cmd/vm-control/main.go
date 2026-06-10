@@ -268,7 +268,7 @@ var subcommands = []commands.Command{
 	{"get-vm-info", "IPaddr", 1, 1, getVmInfoSubcommand},
 	{"get-vm-infos", "", 0, 0, getVmInfosSubcommand},
 	{"get-vm-user-data", "IPaddr", 1, 1, getVmUserDataSubcommand},
-	{"get-vm-virtualiser-log-file", "IPaddr", 2, 2,
+	{"get-vm-virtualiser-log-file", "IPaddr filename", 2, 2,
 		getVmVirtualiserLogFileSubcommand},
 	{"get-vm-volume", "IPaddr", 1, 1, getVmVolumeSubcommand},
 	{"get-vm-volume-storage-configuration", "IPaddr", 1, 1,
