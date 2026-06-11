@@ -145,15 +145,18 @@ func (sub *Sub) tryMakeBusy() bool {
 	return true
 }
 
-// makeBusy waits until it makes the sub busy.
-func (sub *Sub) makeBusy() {
+// makeBusy waits until it makes the sub busy, waiting until the specified time.
+// It returns true if the sub was made busy, else false indicating waiting
+// timed out.
+func (sub *Sub) makeBusy(timeoutTime time.Time) bool {
 	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
-	for {
+	for time.Until(timeoutTime) > 0 {
 		if sub.tryMakeBusy() {
-			return
+			return true
 		}
 		sleeper.Sleep()
 	}
+	return false
 }
 
 func (sub *Sub) makeUnbusy() {
@@ -1074,6 +1077,17 @@ func waitOnSemaphore(semaphore chan<- struct{},
 func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	request domproto.FastUpdateRequest) {
 	defer close(progressChannel)
+	fastUpdateMutex.Lock()
+	fastUpdateNumRunning++
+	fastUpdateMutex.Unlock()
+	decrementNumRunning := true
+	defer func() {
+		if decrementNumRunning {
+			fastUpdateMutex.Lock()
+			fastUpdateNumRunning--
+			fastUpdateMutex.Unlock()
+		}
+	}()
 	var queueTime time.Duration
 	var startTime time.Time
 	select {
@@ -1088,6 +1102,8 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 				queueTime, startTime, statusWaitingToPoll)
 			fastUpdateMutex.Lock()
 			fastUpdateNumQueueTimeouts++
+			fastUpdateNumRunning--
+			decrementNumRunning = false
 			fastUpdateMutex.Unlock()
 			return
 		}
@@ -1100,11 +1116,22 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	}()
 	fastUpdateQueueTimeDistribution.Add(queueTime)
 	startTime = time.Now()
+	timeoutTime := time.Now().Add(request.Timeout)
 	if !sub.tryMakeBusy() {
 		sendFastUpdateFullMessage(progressChannel,
 			"waiting for sub to not be busy", queueTime, startTime,
 			statusWaitingToPoll)
-		sub.makeBusy()
+		if !sub.makeBusy(timeoutTime) {
+			sendFastUpdateFullMessage(progressChannel,
+				"timed out waiting to make sub busy",
+				queueTime, startTime, statusWaitingToPoll)
+			fastUpdateMutex.Lock()
+			fastUpdateNumBusySubTimeouts++
+			fastUpdateNumRunning--
+			decrementNumRunning = false
+			fastUpdateMutex.Unlock()
+			return
+		}
 	}
 	defer sub.makeUnbusy()
 	sendFastUpdateFullMessage(progressChannel, "made sub busy", queueTime,
@@ -1128,7 +1155,6 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	sleeper := backoffdelay.NewExponential(10*time.Millisecond, time.Second, 2)
 	sleeper.SetSleepFunc(sub.herd.cpuSharer.Sleep)
 	var prevStatus subStatus
-	timeoutTime := time.Now().Add(request.Timeout)
 	defer sub.restoreScanSpeed(progressChannel)
 	sub.status = statusWaitingToPoll // Force a poll before status check.
 	sub.generationCount = 0          // Force a full poll.
@@ -1165,6 +1191,8 @@ func (sub *Sub) processFastUpdate(progressChannel chan<- FastUpdateMessage,
 	}
 	fastUpdateMutex.Lock()
 	fastUpdateNumProcessingTimeouts++
+	fastUpdateNumRunning--
+	decrementNumRunning = false
 	fastUpdateMutex.Unlock()
 }
 
