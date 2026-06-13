@@ -72,7 +72,9 @@ following fields:
 - `BindMounts`: a list of directories that will be bind-mounted read-only into
                 the build environments
 - `BootstrapStreams`: a table of *bootstrap image* stream names and their
-  		      respective configurations
+  		      respective configurations. If `$ARCH` is present in the
+                      stream name it is expanded to the value of
+                      `runtime.GOARCH`     
 - `Cache`: optional cache that may be bind-mounted into the build environments
 - `ImageStreamsCheckInterval`: the interval between checks for updated image
                                streams
@@ -102,8 +104,9 @@ Each *bootstrap stream* is configured by a JSON object with the following
 fields:
 - `BootstrapCommand`: an array of strings containing the bootstrap script to run
   		      to generate the image contents (typically `debootstrap`
-		      and `yumbootstrap`). The `$dir` variable expands to the
-		      root directory of the image to build
+		      and `yumbootstrap`). The `$ARCH` variable expands to the
+                      value of `runtime.GOARCH` and the `$dir` variable expands
+                      to the root directory of the image to build
 - `FilterLines`: an array of regular expressions matching files which should not
   		 be included in the image
 - `ImageFilterUrl`: a URL from which a filter lines can be read. The filter will
@@ -142,6 +145,9 @@ streams*. It contains the following top-level fields:
                     *image stream* names and their respective configurations
 - `Streams`:  this contains a table of *image stream* names and their
               respective configurations
+
+The `$ARCH` variable in the pattern strings or stream names expands to the value
+of `runtime.GOARCH`.
 
 The configuration for an *image stream* is a JSON object with the following
 fields:

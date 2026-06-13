@@ -1,10 +1,10 @@
 {
   "StreamPatterns": {
-    "users/bar/.*/amd64": {
+    "users/bar/.*/$ARCH": {
       "ManifestUrl": "https://github.com/bar/image-manifests.git",
       "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
     },
-    "users/foo/.*/amd64": {
+    "users/foo/.*/$ARCH": {
       "ManifestUrl": "https://github.com/foo/image-manifests.git",
       "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
     }
@@ -26,6 +26,10 @@
       "ManifestUrl": "https://github.com/Cloud-Foundations/image-manifests.git",
       "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
     },
+    "bootable/Debian-11/$ARCH": {
+      "ManifestUrl": "https://github.com/Cloud-Foundations/image-manifests.git",
+      "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
+    },
     "hypervisor": {
       "ManifestUrl": "https://github.com/Cloud-Foundations/image-manifests.git",
       "ManifestDirectory": "$IMAGE_STREAM"
@@ -35,6 +39,10 @@
       "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
     },
     "local-bootstrap/Debian-10/i386": {
+      "ManifestUrl": "dir:///n/Dominator/image-manifests",
+      "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
+    },
+    "local-bootstrap/Debian-11/$ARCH": {
       "ManifestUrl": "dir:///n/Dominator/image-manifests",
       "ManifestDirectory": "$IMAGE_STREAM_DIRECTORY_NAME"
     },
