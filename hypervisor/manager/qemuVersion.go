@@ -28,6 +28,7 @@ var (
 
 func getQemuVersion(logger log.Logger) (qemuVersionType, error) {
 	cmd := exec.Command(*qemuCommand, "-version")
+	cmd.Dir = "/tmp"
 	stdout, err := cmd.Output()
 	if err != nil {
 		return qemuVersionType{}, err

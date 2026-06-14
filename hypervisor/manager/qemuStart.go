@@ -15,6 +15,7 @@ import (
 
 func getQemuCpuModelFlags() (map[string]struct{}, error) {
 	cmd := exec.Command(*qemuCommand, "-cpu", "help")
+	cmd.Dir = "/tmp"
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, err
