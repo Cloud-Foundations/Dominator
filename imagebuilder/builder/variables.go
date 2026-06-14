@@ -2,9 +2,17 @@ package builder
 
 import (
 	"io"
+	"runtime"
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 )
+
+func archMapper(name string) string {
+	if name == "ARCH" {
+		return runtime.GOARCH
+	}
+	return ""
+}
 
 func (b *Builder) getVariableFunc(
 	extraVariables0, extraVariables1 map[string]string) func(string) string {
