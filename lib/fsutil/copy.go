@@ -33,7 +33,7 @@ func copyToFileExclusive(destFilename string, perm os.FileMode,
 	reader io.Reader, length uint64) error {
 	// First do a read-only test for existence, to limit file-system mutations.
 	if _, err := os.Stat(destFilename); err == nil {
-		return os.ErrExist
+		return fmt.Errorf("open %s: file exists", destFilename)
 	}
 	tmpFilename := destFilename + "~"
 	destFile, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_EXCL|os.O_WRONLY,
@@ -46,7 +46,7 @@ func copyToFileExclusive(destFilename string, perm os.FileMode,
 	// At this point we own the tmpfile and implicitly the destfile. Do a quick
 	// check so that we don't waste time writing if it's going to fail later.
 	if _, err := os.Stat(destFilename); err == nil {
-		return os.ErrExist
+		return fmt.Errorf("open %s: file exists", destFilename)
 	}
 	if err := copyToWriter(destFile, tmpFilename, reader, length); err != nil {
 		return err
