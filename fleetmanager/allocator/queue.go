@@ -79,7 +79,10 @@ func (m *manager) enqueue(request proto.AllocateRequest,
 			return nil, err
 		}
 	}
-	return &proto.AllocateResponse{RequestId: requestId}, nil
+	return &proto.AllocateResponse{
+		RequestId:      requestId,
+		UpdatePosition: m.updateQueue.Position(),
+	}, nil
 }
 
 func (m *manager) listQueue() []proto.AllocateRequestEntry {
