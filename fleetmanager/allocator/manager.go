@@ -465,6 +465,9 @@ func (m *manager) manage(nextExpiration time.Time,
 				request.response <- *response
 				checkExpirations = true
 				recalculate = true
+				m.params.Logger.Debugf(1,
+					"received allocation request, issued ID: %s, UpdatePosition: %d\n",
+					response.RequestId, response.UpdatePosition)
 			}
 		case request := <-m.cancelAllocationChannel:
 			request.response <- m.cancelAllocation(request.authInfo,
@@ -570,6 +573,7 @@ func (m *manager) makeId() fm_proto.RequestId {
 }
 
 func (m *manager) processUpdate(update fm_proto.Update, resetResources *bool) {
+	m.params.Logger.Debugln(1, "processUpdate()")
 	if *resetResources {
 		m.initialiseResources()
 		*resetResources = false
@@ -665,28 +669,39 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 func (m *manager) sendAllocation(requestId fm_proto.RequestId,
 	request *fm_proto.AllocateRequest, available *fm_proto.Allocation,
 	username types.Username) error {
+	position := m.updateQueue.Position()
+	m.params.Logger.Debugf(1,
+		"sendAllocation(%s), request: %+v, available: %+v\n",
+		requestId, request, available)
 	return m.sendUpdate(fm_proto.AllocationUpdateEntry{
 		Available: available,
 		Request:   request,
 		RequestId: requestId,
 		Username:  username,
-	})
+	},
+		position)
 }
 
 func (m *manager) sendDeleted(requestId fm_proto.RequestId,
 	request *fm_proto.AllocateRequest, deletedEntry fm_proto.DeletedAllocation,
 	username types.Username) error {
+	position := m.updateQueue.Position()
+	m.params.Logger.Debugf(1,
+		"sendDeleted(%s), request: %+v, deleted: %+v\n",
+		requestId, request, deletedEntry)
 	return m.sendUpdate(fm_proto.AllocationUpdateEntry{
 		Deleted:   &deletedEntry,
 		Request:   request,
 		RequestId: requestId,
 		Username:  username,
-	})
+	},
+		position)
 }
 
-func (m *manager) sendUpdate(update fm_proto.AllocationUpdateEntry) error {
+func (m *manager) sendUpdate(update fm_proto.AllocationUpdateEntry,
+	position uint64) error {
 	update.Timestamp = time.Now()
-	err := m.params.Storer.WriteUpdate(update, m.updateQueue.Position())
+	err := m.params.Storer.WriteUpdate(update, position)
 	if err != nil {
 		return err
 	}
