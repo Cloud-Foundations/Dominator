@@ -454,6 +454,19 @@ func (m *manager) manage(nextExpiration time.Time,
 	expireTimer := time.NewTimer(time.Until(nextExpiration))
 	timer := time.NewTimer(time.Second)
 	for {
+		// The removeChannel has a buffer length of 1 and if it fills the
+		// broadcast queue will be stuck waiting to drain the channel and thus
+		// this goroutine will lock up if it tries to send to the queue. Ensure
+		// that remove messages are all processed before doing anything else.
+		select {
+		case entry := <-removeChannel:
+			if err := m.params.Storer.DeleteUpdate(entry.Position); err != nil {
+				m.params.Logger.Println(err)
+			}
+			delete(m.deleted, entry.Value.RequestId)
+			continue
+		default:
+		}
 		var checkExpirations, recalculate bool
 		select {
 		case request := <-m.allocateRequestChannel:
