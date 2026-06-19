@@ -105,10 +105,10 @@ func clearTimer(timer *time.Timer) {
 	}
 }
 
-func watchHeartbeat(heartbeatChannel <-chan struct{},
+func watchHeartbeat(timeout time.Duration, heartbeatChannel <-chan struct{},
 	heartbeatTimestamp *time.Time, heartbeatStopped *bool,
 	lastHeartbeatLostTime *time.Time, logger log.Logger) {
-	timer := time.NewTimer(time.Minute)
+	timer := time.NewTimer(timeout)
 	for {
 		select {
 		case <-timer.C:
@@ -121,7 +121,7 @@ func watchHeartbeat(heartbeatChannel <-chan struct{},
 				*heartbeatStopped = false
 			}
 			clearTimer(timer)
-			timer.Reset(time.Minute)
+			timer.Reset(timeout)
 			*heartbeatTimestamp = time.Now()
 		}
 	}
@@ -129,6 +129,12 @@ func watchHeartbeat(heartbeatChannel <-chan struct{},
 
 func newManager(options Options, params Params) (*Manager, error) {
 	params.Logger = prefixlogger.New("allocator: ", params.Logger)
+	if params.heartbeatTimeout <= 0 {
+		params.heartbeatTimeout = time.Minute
+	}
+	if params.managerInterval <= 0 {
+		params.managerInterval = time.Second
+	}
 	allocateRequestChannel := make(chan allocateRequestType, 1)
 	cancelAllocationChannel := make(chan cancelAllocationType, 1)
 	closeNotifierChannel := make(chan (<-chan fm_proto.AllocationUpdate), 1)
@@ -198,8 +204,8 @@ func newManager(options Options, params Params) (*Manager, error) {
 		return nil, err
 	}
 	go managerInternal.manage(nextExpiration, removeChannel)
-	go watchHeartbeat(heartbeatChannel, &lastHeartbeatTime,
-		&managerPublic.lostHeartbeat,
+	go watchHeartbeat(params.heartbeatTimeout, heartbeatChannel,
+		&lastHeartbeatTime, &managerPublic.lostHeartbeat,
 		&managerPublic.lastLostHeartbeatTime, params.Logger)
 	tricorder.RegisterMetric("allocator/last-heartbeat-time",
 		&lastHeartbeatTime, units.None,
@@ -452,7 +458,7 @@ func (m *manager) manage(nextExpiration time.Time,
 		fm_proto.GetUpdatesRequest{IgnoreMissingLocalTags: true})
 	var resetResources bool
 	expireTimer := time.NewTimer(time.Until(nextExpiration))
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(m.params.managerInterval)
 	for {
 		// The removeChannel has a buffer length of 1 and if it fills the
 		// broadcast queue will be stuck waiting to drain the channel and thus
@@ -518,9 +524,12 @@ func (m *manager) manage(nextExpiration time.Time,
 			channel <- m.listAllocations()
 		case channel := <-m.listQueueChannel:
 			channel <- m.listQueue()
-		case m.topology = <-m.topologyChannel:
-			m.params.Logger.Debugln(0, "received topology")
-			recalculate = true
+		case topo := <-m.topologyChannel:
+			if topo != nil {
+				m.topology = topo
+				m.params.Logger.Debugln(0, "received topology")
+				recalculate = true
+			} // nil case is for unittests.
 		case entry := <-removeChannel:
 			if err := m.params.Storer.DeleteUpdate(entry.Position); err != nil {
 				m.params.Logger.Println(err)
@@ -542,7 +551,7 @@ func (m *manager) manage(nextExpiration time.Time,
 		case <-timer.C:
 		}
 		clearTimer(timer)
-		timerInterval := time.Second
+		timerInterval := m.params.managerInterval
 		if recalculate && m.topology != nil {
 			startTime := time.Now()
 			requestId := m.recalculate()

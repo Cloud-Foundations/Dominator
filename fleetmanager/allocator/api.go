@@ -66,15 +66,16 @@ type Params struct {
 	Logger             log.DebugLogger
 	Storer             Storer
 	UpdateChannelMaker UpdateChannelMaker
+	heartbeatTimeout   time.Duration
+	managerInterval    time.Duration
 }
 
 type Storer interface {
 	DeleteUpdate(position uint64) error
 	DeleteUserRequest(username types.Username, reqId proto.RequestId) error
 	ReadUpdates() (uint64, []proto.AllocationUpdateEntry, error)
-	ReadUsersQueue() (usernames []types.Username, err error)
-	ReadUserQueue(username types.Username) (
-		requestIDs []proto.RequestId, err error)
+	ReadUsersQueue() ([]types.Username, error)
+	ReadUserQueue(username types.Username) ([]proto.RequestId, error)
 	ReadUserRequest(username types.Username, requestId proto.RequestId) (
 		proto.AllocateRequest, error)
 	WriteUpdate(update proto.AllocationUpdateEntry, position uint64) error
