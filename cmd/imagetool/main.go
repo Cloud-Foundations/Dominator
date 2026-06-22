@@ -210,6 +210,8 @@ var subcommands = []commands.Command{
 	{"mkdir", "name", 1, 1, makeDirectorySubcommand},
 	{"patch-directory", "name directory", 2, 2, patchDirectorySubcommand},
 	{"restore-from-file", "filename", 1, 1, restoreImageSubcommand},
+	{"run-command-in-image-chroot", "name cmd...", 2, -1,
+		runCommandInImageChrootSubcommand},
 	{"save-to-file", "name [outfile]", 1, 2, saveImageSubcommand},
 	{"scan-filtered-files", "name directory", 2, 2,
 		scanFilteredFilesSubcommand},
