@@ -66,7 +66,8 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 		})
 	}
 	img, err := buildImageFromManifest(ctx, client, manifestDirectory, request,
-		bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
+		bindMounts, stream, gitInfo, b.mtimesCopyFilter,
+		b.enableDefaultInheritance, buildLog, b.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +285,8 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	manifestDir string, request proto.BuildImageRequest,
 	bindMounts []bindMountType, envGetter environmentGetter,
 	gitInfo *gitInfoType, mtimesCopyFilter *filter.Filter,
-	buildLog buildLogger, logger log.Logger) (*image.Image, error) {
+	enableDefaultInheritance bool, buildLog buildLogger,
+	logger log.Logger) (*image.Image, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
 	if err != nil {
@@ -354,21 +356,30 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 			}
 		}
 	}
+	// With enableDefaultInheritance, the sourceImage value is inherited only
+	// when no local file is present. An explicit file still overrides, and
+	// .add files merge as before.
 	if addComputedFiles {
 		computedFilesList = util.MergeComputedFiles(
 			manifest.sourceImageInfo.computedFiles, computedFilesList)
+	} else if enableDefaultInheritance && computedFilesList == nil {
+		computedFilesList = manifest.sourceImageInfo.computedFiles
 	}
 	if addFilter {
 		mergeableFilter := &filter.MergeableFilter{}
 		mergeableFilter.Merge(manifest.sourceImageInfo.filter)
 		mergeableFilter.Merge(imageFilter)
 		imageFilter = mergeableFilter.ExportFilter()
+	} else if enableDefaultInheritance && imageFilter == nil {
+		imageFilter = manifest.sourceImageInfo.filter
 	}
 	if addTriggers {
 		mergeableTriggers := &triggers.MergeableTriggers{}
 		mergeableTriggers.Merge(manifest.sourceImageInfo.triggers)
 		mergeableTriggers.Merge(imageTriggers)
 		imageTriggers = mergeableTriggers.ExportTriggers()
+	} else if enableDefaultInheritance && imageTriggers == nil {
+		imageTriggers = manifest.sourceImageInfo.triggers
 	}
 	if manifest.mtimesCopyFilter != nil {
 		mtimesCopyFilter = manifest.mtimesCopyFilter
@@ -419,6 +430,7 @@ func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
 		},
 		nil,
 		options.MtimesCopyFilter,
+		options.EnableDefaultInheritance,
 		buildLog,
 		logger)
 	if err != nil {
@@ -538,6 +550,10 @@ func loadComputedFiles(manifestDir string) ([]util.ComputedFile, bool, error) {
 		return nil, false, errors.New(
 			"computed-files and computed-files.add files both present")
 	} else if haveComputedFiles {
+		// Return empty slice if empty file.
+		if computedFiles == nil {
+			computedFiles = []util.ComputedFile{}
+		}
 		return computedFiles, false, nil
 	} else {
 		return addComputedFiles, true, nil
