@@ -18,7 +18,8 @@ import (
 
 func makeRawImageSubcommand(args []string, logger log.DebugLogger) error {
 	objectsGetter := getObjectsGetter(logger)
-	if err := makeRawImage(objectsGetter, args[0], args[1]); err != nil {
+	err := makeRawImage(objectsGetter, args[0], args[1], logger)
+	if err != nil {
 		return fmt.Errorf("error making raw image: %s", err)
 	}
 	return nil
@@ -48,10 +49,11 @@ func loadOverlayFiles() (map[string][]byte, error) {
 }
 
 func makeRawImage(objectsGetter objectserver.ObjectsGetter, name string,
-	rawFilename string) error {
+	rawFilename string, logger log.DebugLogger) error {
 	if os.Geteuid() != 0 {
 		return reExecAsRoot()
 	}
+	gid, uid := getSudoIDs()
 	fs, objectsGetter, imageName, err := getImageForUnpack(objectsGetter, name)
 	if err != nil {
 		return err
@@ -95,6 +97,15 @@ func makeRawImage(objectsGetter objectserver.ObjectsGetter, name string,
 		secondaryFstab.Write(options.OverlayFiles["/etc/fstab"])
 		options.OverlayFiles["/etc/fstab"] = secondaryFstab.Bytes()
 	}
-	return util.WriteRawWithOptions(fs, objectsGetter, rawFilename,
+	err = util.WriteRawWithOptions(fs, objectsGetter, rawFilename,
 		fsutil.PublicFilePerms, tableType, options, logger)
+	if err != nil {
+		return err
+	}
+	if gid != 0 && uid != 0 {
+		if err := os.Chown(rawFilename, int(uid), int(gid)); err != nil {
+			logger.Println(err)
+		}
+	}
+	return nil
 }

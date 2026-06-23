@@ -70,6 +70,8 @@ Some of the sub-commands available are:
 - **mkdir**: make a directory
 - **patch-directory**: patch (update) a local directory with an image
 - **restore-from-file**: restore an image from an imagearchive file
+- **run-command-in-image-chroot**: unpack an image into a temporary directory
+                                   and run the specified command inside a chroot
 - **save-to-file**: save an image to an imagearchive file or stdout
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image

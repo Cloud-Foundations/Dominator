@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	filegen_proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -88,6 +90,24 @@ func diffFiles(tool, leftFile, rightFile string) error {
 		return err
 	}
 	return nil
+}
+
+func getEnvInt(key string) uint64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return 0
+	}
+	if valueInt, err := strconv.ParseUint(value, 10, 32); err != nil {
+		return 0
+	} else {
+		return valueInt
+	}
+}
+
+func getSudoIDs() (types.GroupId, types.UserId) {
+	gid := getEnvInt("SUDO_GID")
+	uid := getEnvInt("SUDO_UID")
+	return types.GroupId(gid), types.UserId(uid)
 }
 
 // getTypedFileReader returns a file reader. The reader must be closed before
