@@ -10,9 +10,10 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -50,6 +51,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
+	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -1530,20 +1532,13 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
-		httpResponse, err := http.Get(request.ImageURL)
+		rc, err := m.openImageUrl(request.ImageURL)
 		if err != nil {
 			return sendError(conn, err)
 		}
-		defer httpResponse.Body.Close()
-		if httpResponse.StatusCode != http.StatusOK {
-			return sendError(conn, errors.New(httpResponse.Status))
-		}
-		if httpResponse.ContentLength < 0 {
-			return sendError(conn,
-				errors.New("ContentLength from: "+request.ImageURL))
-		}
-		err = vm.copyRootVolume(request, bufio.NewReader(httpResponse.Body),
-			uint64(httpResponse.ContentLength), rootVolume.Type)
+		defer rc.Close()
+		err = vm.copyRootVolume(request, bufio.NewReader(rc), rc.Size(),
+			rootVolume.Type)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1754,20 +1749,12 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
-		httpResponse, err := http.Get(request.ImageURL)
+		rc, err := m.openImageUrl(request.ImageURL)
 		if err != nil {
 			return sendError(conn, err)
 		}
-		defer httpResponse.Body.Close()
-		if httpResponse.StatusCode != http.StatusOK {
-			return sendError(conn, errors.New(httpResponse.Status))
-		}
-		if httpResponse.ContentLength < 0 {
-			return sendError(conn,
-				errors.New("ContentLength from: "+request.ImageURL))
-		}
-		err = copyData(rootFilename, httpResponse.Body,
-			uint64(httpResponse.ContentLength), vm.logger)
+		defer rc.Close()
+		err = copyData(rootFilename, rc, rc.Size(), vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -2981,6 +2968,29 @@ func (m *Manager) notifyVmMetadataRequest(ipAddr net.IP, path string) {
 	}
 }
 
+func (m *Manager) openImageUrl(rawurl string) (urlutil.SizedReadCloser, error) {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "file" {
+		// Extra scrutiny required for local files.
+		if m.LocalImagesDirectory == "" {
+			return nil, fmt.Errorf("local image support not configured")
+		}
+		if filename := path.Clean(u.Path); filename != u.Path {
+			return nil, fmt.Errorf("%s is not a clean path", u.Path)
+		}
+		if len(u.Path) <= len(m.LocalImagesDirectory)+1 ||
+			u.Path[len(m.LocalImagesDirectory)] != '/' ||
+			u.Path[:len(m.LocalImagesDirectory)] != m.LocalImagesDirectory {
+			return nil, fmt.Errorf("%s is not beneath: %s",
+				u.Path, m.LocalImagesDirectory)
+		}
+	}
+	return urlutil.Open(rawurl)
+}
+
 func (m *Manager) patchVmImage(conn *srpc.Conn,
 	request proto.PatchVmImageRequest) error {
 	client, img, imageName, err := m.getImage(request.ImageName,
@@ -3543,20 +3553,13 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if err := drainingReader.Drain(); err != nil {
 			return err
 		}
-		httpResponse, err := http.Get(request.ImageURL)
+		rc, err := m.openImageUrl(request.ImageURL)
 		if err != nil {
 			return sendError(conn, err)
 		}
-		defer httpResponse.Body.Close()
-		if httpResponse.StatusCode != http.StatusOK {
-			return sendError(conn, errors.New(httpResponse.Status))
-		}
-		if httpResponse.ContentLength < 0 {
-			return sendError(conn,
-				errors.New("ContentLength from: "+request.ImageURL))
-		}
-		reader := bufio.NewReader(httpResponse.Body)
-		newVolume.Size = uint64(httpResponse.ContentLength)
+		defer rc.Close()
+		reader := bufio.NewReader(rc)
+		newVolume.Size = rc.Size()
 		if newVolume.Format == proto.VolumeFormatQCOW2 {
 			qcow2Header, err := qcow2.PeekHeader(reader)
 			if err != nil {
