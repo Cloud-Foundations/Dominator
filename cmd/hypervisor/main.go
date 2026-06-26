@@ -58,6 +58,8 @@ var (
 		"Interval between checks for lock timeouts")
 	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
 		"Timeout before logging that a lock has been held too long")
+	localImagesDirectory = flag.String("localImagesDirectory", "",
+		"Optional directory where local images can be fetched from")
 	networkBootImage = flag.String("networkBootImage", "pxelinux.%d",
 		"Name of boot image passed via DHCP option")
 	objectCacheDirectory = flag.String("objectCacheDirectory", "",
@@ -214,6 +216,7 @@ func run() {
 		ImageServerAddress:   imageServerAddress,
 		LockCheckInterval:    *lockCheckInterval,
 		LockLogTimeout:       *lockLogTimeout,
+		LocalImagesDirectory: *localImagesDirectory,
 		Logger:               logger,
 		ObjectCacheDirectory: *objectCacheDirectory,
 		ObjectCacheBytes:     uint64(objectCacheSize),
