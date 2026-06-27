@@ -9,9 +9,14 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log/debuglogger"
 )
 
-// Open will open the URL given by url. A io.ReadCloser is returned, which must
+type SizedReadCloser interface {
+	io.ReadCloser
+	Size() uint64
+}
+
+// Open will open the URL given by url. A ReadCloser is returned, which must
 // be closed.
-func Open(url string) (io.ReadCloser, error) {
+func Open(url string) (SizedReadCloser, error) {
 	return open(url)
 }
 

@@ -85,6 +85,7 @@ type StartOptions struct {
 	ImageServerAddress   string
 	LockCheckInterval    time.Duration
 	LockLogTimeout       time.Duration
+	LocalImagesDirectory string
 	Logger               log.DebugLogger
 	ObjectCacheDirectory string
 	ObjectCacheBytes     uint64

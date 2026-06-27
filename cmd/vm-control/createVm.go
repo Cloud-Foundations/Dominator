@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -216,20 +216,14 @@ func approximateVolumesForCreateRequest(
 		return &vmInfo, nil
 	}
 	if *imageURL != "" {
-		httpResponse, err := http.Get(*imageURL)
+		rc, err := urlutil.Open(*imageURL)
 		if err != nil {
 			return nil, err
 		}
-		defer httpResponse.Body.Close()
-		if httpResponse.StatusCode != http.StatusOK {
-			return nil, errors.New(httpResponse.Status)
-		}
-		if httpResponse.ContentLength < 0 {
-			return nil, errors.New("ContentLength from: " + *imageURL)
-		}
-		vmInfo.Volumes[0].Size = uint64(httpResponse.ContentLength)
+		defer rc.Close()
+		vmInfo.Volumes[0].Size = rc.Size()
 		if volumeFormat == hyper_proto.VolumeFormatQCOW2 {
-			qcow2Header, err := qcow2.ReadHeader(httpResponse.Body)
+			qcow2Header, err := qcow2.ReadHeader(rc)
 			if err != nil {
 				return nil, err
 			}
