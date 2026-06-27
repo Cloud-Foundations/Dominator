@@ -52,5 +52,10 @@ func newObjectServer(config Config, params Params) (*ObjectServer, error) {
 			Logger:        prefixlogger.New("ObjectServer: ", params.Logger),
 			LogTimeout:    config.LockLogTimeout,
 		})
+	if params.MetricsDirectory != nil {
+		if err := objSrv.registerMetrics(params.MetricsDirectory); err != nil {
+			return nil, err
+		}
+	}
 	return objSrv, nil
 }
