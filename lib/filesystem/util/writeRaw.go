@@ -253,7 +253,11 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			kernelOptions = append(kernelOptions, options.ExtraKernelOptions)
 		}
 		kernelOptionsString := strings.Join(kernelOptions, " ")
-		bootInfo, err = getBootInfo(fs, options.RootLabel, kernelOptionsString)
+		bootInfo, err = getBootInfo(fs, MakeKernelOptionsParams{
+			Architecture: options.Architecture,
+			ExtraOptions: kernelOptionsString,
+			RootDevice:   "LABEL=" + options.RootLabel,
+		})
 		if err != nil {
 			return err
 		}
@@ -351,7 +355,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			}
 		}
 		err := bootInfo.installBootloader(bootDevice, rootMount,
-			options.RootLabel, options.DoChroot, logger)
+			options.DoChroot, logger)
 		if err != nil {
 			if efiMount != "" {
 				wsyscall.Unmount(efiMount, 0)
@@ -376,17 +380,21 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	return nil
 }
 
-func makeBootable(fs *filesystem.FileSystem,
-	deviceName, rootLabel, rootDir, kernelOptions string,
-	doChroot bool, logger log.DebugLogger) error {
-	if err := writeRootFstabEntry(rootDir, rootLabel); err != nil {
+func makeBootable(params MakeBootableParams) error {
+	err := writeRootFstabEntry(params.RootDirectory, params.RootLabel)
+	if err != nil {
 		return err
 	}
-	if bootInfo, err := getBootInfo(fs, rootLabel, kernelOptions); err != nil {
+	bootInfo, err := getBootInfo(params.FileSystem, MakeKernelOptionsParams{
+		Architecture: params.Architecture,
+		ExtraOptions: params.KernelOptions,
+		RootDevice:   "LABEL=" + params.RootLabel,
+	})
+	if err != nil {
 		return err
 	} else {
-		return bootInfo.installBootloader(deviceName, rootDir, rootLabel,
-			doChroot, logger)
+		return bootInfo.installBootloader(params.DeviceName,
+			params.RootDirectory, params.DoChroot, params.Logger)
 	}
 }
 
@@ -490,6 +498,18 @@ func makeExtraFileSystems(bootDevice, partitionPrefix string,
 	return nil
 }
 
+func makeKernelOptions(params MakeKernelOptionsParams) string {
+	var serialPort string
+	switch params.Architecture {
+	case "amd64", "":
+		serialPort = "ttyS0"
+	case "arm64":
+		serialPort = "ttyAMA0"
+	}
+	return fmt.Sprintf("root=%s ro console=tty0 console=%s,115200n8 %s",
+		params.RootDevice, serialPort, params.ExtraOptions)
+}
+
 func sanitiseInput(ch rune) rune {
 	if 'a' <= ch && ch <= 'z' {
 		return ch
@@ -514,16 +534,16 @@ func writeOverlayFiles(mountPoint string,
 	return nil
 }
 
-func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
-	extraKernelOptions string) (*BootInfoType, error) {
+func getBootInfo(fs *filesystem.FileSystem, params MakeKernelOptionsParams) (
+	*BootInfoType, error) {
 	bootDirectory, err := getBootDirectory(fs)
 	if err != nil {
 		return nil, err
 	}
 	bootInfo := &BootInfoType{
+		Architecture:  params.Architecture,
 		BootDirectory: bootDirectory,
-		KernelOptions: MakeKernelOptions("LABEL="+rootLabel,
-			extraKernelOptions),
+		KernelOptions: MakeKernelOptionsWithParams(params),
 	}
 	for _, dirent := range bootDirectory.EntryList {
 		if strings.HasPrefix(dirent.Name, "initrd.img-") ||
@@ -546,7 +566,7 @@ func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
 }
 
 func (bootInfo *BootInfoType) installBootloader(deviceName string,
-	rootDir, rootLabel string, doChroot bool, logger log.DebugLogger) error {
+	rootDir string, doChroot bool, logger log.DebugLogger) error {
 	startTime := time.Now()
 	mountTable, err := mounts.GetMountTable()
 	if err != nil {
@@ -590,8 +610,16 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 		cmd.Args = append(cmd.Args,
 			"--efi-directory="+efiDir,
 			"--removable", // Needed for loop devices.
-			"--target=x86_64-efi",
 		)
+		switch bootInfo.Architecture {
+		case "amd64":
+			cmd.Args = append(cmd.Args, "--target=x86_64-efi")
+		case "arm64":
+			cmd.Args = append(cmd.Args, "--target=arm64-efi")
+		default:
+			return fmt.Errorf("unsupported GRUB EFI target for arch: %s",
+				bootInfo.Architecture)
+		}
 		if isGrub2 {
 			// Likely RedHat or derivative: work around their controlling
 			// behaviour.
@@ -600,9 +628,13 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			)
 		}
 	} else {
-		cmd.Args = append(cmd.Args,
-			"--target=i386-pc",
-		)
+		switch bootInfo.Architecture {
+		case "amd64":
+			cmd.Args = append(cmd.Args, "--target=i386-pc")
+		default:
+			return fmt.Errorf("unsupported GRUB target for arch: %s",
+				bootInfo.Architecture)
+		}
 	}
 	if doChroot {
 		cmd.Dir = "/"

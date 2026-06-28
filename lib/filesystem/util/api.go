@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -16,6 +15,7 @@ import (
 )
 
 type BootInfoType struct {
+	Architecture      string
 	BootDirectory     *filesystem.DirectoryInode
 	InitrdImageDirent *filesystem.DirectoryEntry
 	InitrdImageFile   string
@@ -37,6 +37,17 @@ type ComputedFilesData struct {
 type GroupId = types.GroupId
 type UserId = types.UserId
 
+type MakeBootableParams struct {
+	Architecture  string
+	DeviceName    string
+	DoChroot      bool
+	FileSystem    *filesystem.FileSystem
+	KernelOptions string
+	Logger        log.DebugLogger
+	RootDirectory string
+	RootLabel     string
+}
+
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
 	Label                    string
@@ -46,6 +57,12 @@ type MakeExt4fsParams struct {
 	RootUserId               UserId
 	Size                     uint64
 	UnsupportedOptions       []string
+}
+
+type MakeKernelOptionsParams struct {
+	Architecture string
+	ExtraOptions string
+	RootDevice   string
 }
 
 // CopyMtimes will copy modification times for files from the source to the
@@ -76,7 +93,15 @@ func DeletedFilteredFiles(rootDir string, filt *filter.Filter) error {
 
 func GetBootInfo(fs *filesystem.FileSystem, rootLabel string,
 	extraKernelOptions string) (*BootInfoType, error) {
-	return getBootInfo(fs, rootLabel, extraKernelOptions)
+	return GetBootInfoWithParams(fs, MakeKernelOptionsParams{
+		ExtraOptions: extraKernelOptions,
+		RootDevice:   "LABEL=" + rootLabel,
+	})
+}
+
+func GetBootInfoWithParams(fs *filesystem.FileSystem,
+	params MakeKernelOptionsParams) (*BootInfoType, error) {
+	return getBootInfo(fs, params)
 }
 
 func GetUnsupportedExt4fsOptions(fs *filesystem.FileSystem,
@@ -91,8 +116,19 @@ func LoadComputedFiles(filename string) ([]ComputedFile, error) {
 func MakeBootable(fs *filesystem.FileSystem,
 	deviceName, rootLabel, rootDir, kernelOptions string,
 	doChroot bool, logger log.DebugLogger) error {
-	return makeBootable(fs, deviceName, rootLabel, rootDir, kernelOptions,
-		doChroot, logger)
+	return MakeBootableWithParams(MakeBootableParams{
+		DeviceName:    deviceName,
+		DoChroot:      doChroot,
+		FileSystem:    fs,
+		KernelOptions: kernelOptions,
+		Logger:        logger,
+		RootDirectory: rootDir,
+		RootLabel:     rootLabel,
+	})
+}
+
+func MakeBootableWithParams(params MakeBootableParams) error {
+	return makeBootable(params)
 }
 
 func MakeExt4fs(deviceName, label string, unsupportedOptions []string,
@@ -111,8 +147,15 @@ func MakeExt4fsWithParams(deviceName string, params MakeExt4fsParams,
 }
 
 func MakeKernelOptions(rootDevice, extraOptions string) string {
-	return fmt.Sprintf("root=%s ro console=tty0 console=ttyS0,115200n8 %s",
-		rootDevice, extraOptions)
+	return MakeKernelOptionsWithParams(MakeKernelOptionsParams{
+		Architecture: "amd64",
+		ExtraOptions: extraOptions,
+		RootDevice:   rootDevice,
+	})
+}
+
+func MakeKernelOptionsWithParams(params MakeKernelOptionsParams) string {
+	return makeKernelOptions(params)
 }
 
 func MergeComputedFiles(base, overlay []ComputedFile) []ComputedFile {
@@ -159,6 +202,7 @@ func WriteOverlayFiles(mountPoint string,
 
 type WriteRawOptions struct {
 	AllocateBlocks       bool
+	Architecture         string
 	DoChroot             bool
 	ExtraKernelOptions   string
 	ExtraPartitions      []installer.Partition
