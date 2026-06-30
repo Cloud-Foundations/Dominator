@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -75,9 +74,6 @@ var (
 	errorNoAccessToResource = errors.New("no access to resource")
 	newlineLiteral          = []byte{'\n'}
 	newlineReplacement      = []byte{'\\', 'n'}
-
-	qemuCommand = flag.String("qemuCommand", "qemu-system-x86_64",
-		"QEMU command")
 )
 
 func checkCpuPriority(authInfo *srpc.AuthInformation, cpuPriority int) error {
@@ -417,6 +413,12 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	if err := os.MkdirAll(dirname, fsutil.DirPerms); err != nil {
 		return nil, err
 	}
+	if err := req.ArchitectureType.CheckValid(); err != nil {
+		return nil, err
+	}
+	if req.ArchitectureType == proto.ArchitectureTypeAuto {
+		req.ArchitectureType = m.architectureType
+	}
 	if err := req.ConsoleType.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -502,6 +504,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		LocalVmInfo: proto.LocalVmInfo{
 			VmInfo: proto.VmInfo{
 				Address:            address,
+				ArchitectureType:   req.ArchitectureType,
 				CreatedOn:          time.Now(),
 				ConsoleType:        req.ConsoleType,
 				CpuPriority:        req.CpuPriority,
@@ -1496,6 +1499,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
+			Architecture:       request.ArchitectureType.String(),
 			ExtraKernelOptions: request.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
@@ -1725,6 +1729,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
+			Architecture:     vm.ArchitectureType.String(),
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
 			OverlayFiles:     request.OverlayFiles,
@@ -3050,8 +3055,12 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	} else {
 		objectsGetter = m.objectCache
 	}
-	bootInfo, err := util.GetBootInfo(img.FileSystem, vm.rootLabel(false),
-		"net.ifnames=0")
+	bootInfo, err := util.GetBootInfoWithParams(img.FileSystem,
+		util.MakeKernelOptionsParams{
+			Architecture: vm.ArchitectureType.String(),
+			ExtraOptions: "net.ifnames=0",
+			RootDevice:   "LABEL=" + vm.rootLabel(false),
+		})
 	if err != nil {
 		return err
 	}
@@ -3505,6 +3514,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
+			Architecture:       vm.ArchitectureType.String(),
 			ExtraKernelOptions: vm.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
@@ -4117,7 +4127,11 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	writeRawOptions.AllocateBlocks = true
 	if skipBootloader {
-		bootInfo, err := util.GetBootInfo(fs, writeRawOptions.RootLabel, "")
+		bootInfo, err := util.GetBootInfoWithParams(fs,
+			util.MakeKernelOptionsParams{
+				Architecture: writeRawOptions.Architecture,
+				RootDevice:   "LABEL=" + writeRawOptions.RootLabel,
+			})
 		if err != nil {
 			return err
 		}

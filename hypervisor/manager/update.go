@@ -42,6 +42,7 @@ func (m *Manager) makeUpdateChannel() <-chan proto.Update {
 	update := proto.Update{
 		HaveAddressPool:  true,
 		AddressPool:      m.addressPool.Registered,
+		ArchitectureType: m.architectureType,
 		HaveDisabled:     true,
 		Disabled:         m.disabled,
 		MemoryInMiB:      &m.memTotalInMiB,

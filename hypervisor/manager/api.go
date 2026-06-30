@@ -46,6 +46,7 @@ type DhcpServer interface {
 
 type Manager struct {
 	StartOptions
+	architectureType  proto.ArchitectureType
 	healthStatusMutex sync.RWMutex
 	healthStatus      string
 	lockWatcher       *lockwatcher.LockWatcher

@@ -58,6 +58,10 @@ func getUUID(stateDir string) (string, error) {
 }
 
 func newManager(startOptions StartOptions) (*Manager, error) {
+	var architectureType proto.ArchitectureType
+	if err := architectureType.Set(runtime.GOARCH); err != nil {
+		return nil, err
+	}
 	memInfo, err := meminfo.GetMemInfo()
 	if err != nil {
 		return nil, err
@@ -71,14 +75,15 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		return nil, err
 	}
 	manager := &Manager{
-		StartOptions:  startOptions,
-		rootCookie:    rootCookie,
-		memTotalInMiB: memInfo.Total >> 20,
-		notifiers:     make(map[<-chan proto.Update]chan<- proto.Update),
-		numCPUs:       uint(runtime.NumCPU()),
-		serialNumber:  firmware.ReadSystemSerial(),
-		vms:           make(map[string]*vmInfoType),
-		uuid:          uuid,
+		StartOptions:     startOptions,
+		architectureType: architectureType,
+		rootCookie:       rootCookie,
+		memTotalInMiB:    memInfo.Total >> 20,
+		notifiers:        make(map[<-chan proto.Update]chan<- proto.Update),
+		numCPUs:          uint(runtime.NumCPU()),
+		serialNumber:     firmware.ReadSystemSerial(),
+		vms:              make(map[string]*vmInfoType),
+		uuid:             uuid,
 	}
 	err = fsutil.CopyToFile(manager.GetRootCookiePath(),
 		fsutil.PrivateFilePerms, bytes.NewReader(rootCookie), 0)
@@ -140,6 +145,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			continue
 		}
 		vmInfo.Address.Shrink()
+		if vmInfo.ArchitectureType == proto.ArchitectureTypeAuto {
+			vmInfo.ArchitectureType = manager.architectureType
+		}
 		vmInfo.manager = manager
 		vmInfo.dirname = vmDirname
 		vmInfo.ipAddress = ipAddr
