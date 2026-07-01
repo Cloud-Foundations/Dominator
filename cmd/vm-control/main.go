@@ -30,8 +30,9 @@ var (
 		"Port number of Allocation Manager")
 	allocateTimeout = flag.Duration("allocateTimeout", 0,
 		"Time to wait before timing out on allocation request for VM (default infinite")
-	consoleType hyper_proto.ConsoleType
-	cpuPriority = flag.Int("cpuPriority", 0,
+	architectureType hyper_proto.ArchitectureType
+	consoleType      hyper_proto.ConsoleType
+	cpuPriority      = flag.Int("cpuPriority", 0,
 		"CPU priority (-20:+19) for VM process on Hypervisor")
 	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
 		"If true, destroy VM if it powers down internally")
@@ -173,6 +174,8 @@ var (
 )
 
 func init() {
+	flag.Var(&architectureType, "architectureType",
+		"Type of CPU architecture to emulate (default auto/Hypervisor native)")
 	flag.Var(&consoleType, "consoleType",
 		"type of graphical console (default none)")
 	flag.Var(&firmwareType, "firmwareType",
@@ -218,7 +221,7 @@ func printUsage() {
 	fmt.Fprintln(w, "Common flags:")
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
-	commands.PrintCommands(w, subcommands)
+	commands.PrintCommandsAligned(w, subcommands)
 }
 
 var subcommands = []commands.Command{

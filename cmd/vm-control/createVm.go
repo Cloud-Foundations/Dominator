@@ -361,6 +361,7 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 		})
 	}
 	vmInfo := hyper_proto.VmInfo{
+		ArchitectureType:   architectureType,
 		ConsoleType:        consoleType,
 		CpuPriority:        *cpuPriority,
 		DestroyOnPowerdown: *destroyOnPowerdown,
