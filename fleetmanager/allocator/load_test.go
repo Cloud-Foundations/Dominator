@@ -155,13 +155,15 @@ func (updater *fakeUpdater) initialise() {
 				NumFreeAddresses: map[string]uint{"subnet": 100},
 			}},
 		ChangedMachines: []*proto.Machine{{
-			MemoryInMiB: 1 << 20,
+			MachineData: proto.MachineData{
+				MemoryInMiB:      1 << 20,
+				NumCPUs:          64,
+				TotalVolumeBytes: 10 << 40,
+			},
 			NetworkEntry: proto.NetworkEntry{
 				Hostname: "hyper0",
 				SubnetId: "subnet",
 			},
-			NumCPUs:          64,
-			TotalVolumeBytes: 10 << 40,
 		}},
 	}
 	updater.updateChannel <- proto.Update{} // Ensure manager processed it.

@@ -36,6 +36,7 @@ type GetHypervisorForVMResponse struct {
 }
 
 type GetHypervisorsInLocationRequest struct {
+	ArchitectureType      proto.ArchitectureType
 	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
 	IncludeUnhealthy      bool
 	IncludeVMs            bool
@@ -116,6 +117,7 @@ type ListHypervisorLocationsResponse struct {
 }
 
 type ListHypervisorsInLocationRequest struct {
+	ArchitectureType      proto.ArchitectureType
 	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
 	IncludeUnhealthy      bool
 	Location              string
@@ -145,17 +147,22 @@ type ListVMsInLocationResponse struct {
 }
 
 type Machine struct {
+	MachineData
 	GatewaySubnetId         string       `json:",omitempty"`
 	IPMI                    NetworkEntry `json:",omitempty"`
 	Location                string       `json:",omitempty"`
-	MemoryInMiB             uint64       `json:",omitempty"`
 	NetworkEntry            `json:",omitempty"`
-	NumCPUs                 uint           `json:",omitempty"`
 	OwnerGroups             []string       `json:",omitempty"`
 	OwnerUsers              []string       `json:",omitempty"`
 	SecondaryNetworkEntries []NetworkEntry `json:",omitempty"`
 	Tags                    tags.Tags      `json:",omitempty"`
-	TotalVolumeBytes        uint64         `json:",omitempty"`
+}
+
+type MachineData struct {
+	ArchitectureType proto.ArchitectureType `json:",omitempty"`
+	MemoryInMiB      uint64                 `json:",omitempty"`
+	NumCPUs          uint                   `json:",omitempty"`
+	TotalVolumeBytes uint64                 `json:",omitempty"`
 }
 
 type MoveIpAddressesRequest struct {

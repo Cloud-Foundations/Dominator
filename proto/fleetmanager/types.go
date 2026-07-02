@@ -55,13 +55,13 @@ type VmAllocation struct {
 
 // This type is experimental and subject to change without notice.
 type VmAllocationSpecification struct {
-	// CpuType? MachineType?
-	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
-	Location              string         `json:",omitempty"`
-	MemoryInMiB           uint64
-	MilliCPUs             uint
-	NetworkInterfaces     []NetworkInterfaceSpecification
-	Volumes               []VolumeSpecification
+	HypervisorArchitecture hyper_proto.ArchitectureType
+	HypervisorTagsToMatch  tags.MatchTags // Empty: match all tags.
+	Location               string         `json:",omitempty"`
+	MemoryInMiB            uint64
+	MilliCPUs              uint
+	NetworkInterfaces      []NetworkInterfaceSpecification
+	Volumes                []VolumeSpecification
 }
 
 // This type is experimental and subject to change without notice.
