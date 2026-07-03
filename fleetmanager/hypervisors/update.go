@@ -283,6 +283,7 @@ func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 	h.mutex.Lock()
 	locationChanged := h.location != machine.Location
 	h.location = machine.Location
+	machine.ArchitectureType = h.Machine.ArchitectureType
 	machine.MemoryInMiB = h.Machine.MemoryInMiB
 	machine.NumCPUs = h.Machine.NumCPUs
 	machine.TotalVolumeBytes = h.Machine.TotalVolumeBytes
@@ -732,6 +733,9 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	h.mutex.Lock()
 	oldData := h.HypervisorData
 	oldMachine := h.Machine
+	if update.ArchitectureType != hyper_proto.ArchitectureTypeAuto {
+		h.ArchitectureType = update.ArchitectureType
+	}
 	if update.AvailableMemoryInMiB != nil {
 		h.AvailableMemory = *update.AvailableMemoryInMiB
 	}

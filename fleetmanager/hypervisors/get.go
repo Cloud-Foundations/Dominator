@@ -103,7 +103,8 @@ func (m *Manager) getHypervisorsInLocation(
 		showFilter = showConnected
 	}
 	hypervisors, err := m.listHypervisors(request.Location, showFilter,
-		request.SubnetId, tagmatcher.New(request.HypervisorTagsToMatch, false))
+		request.SubnetId, request.ArchitectureType,
+		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return fm_proto.GetHypervisorsInLocationResponse{}, err
 	}
