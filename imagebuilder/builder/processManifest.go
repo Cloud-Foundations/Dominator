@@ -108,6 +108,20 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 	if envGetter == nil {
 		return manifestConfig, nil
 	}
+	// Manifest Variables are low-priority defaults; envGetter overrides.
+	if len(manifestConfig.Variables) > 0 {
+		merged := make(map[string]string,
+			len(envGetter.getenv())+len(manifestConfig.Variables))
+		for key, expr := range manifestConfig.Variables {
+			merged[key] = expand.Expression(expr, func(name string) string {
+				return envGetter.getenv()[name]
+			})
+		}
+		for key, value := range envGetter.getenv() {
+			merged[key] = value
+		}
+		envGetter = variablesGetter(merged)
+	}
 	manifestConfig.SourceImage = expand.Expression(manifestConfig.SourceImage,
 		func(name string) string {
 			return envGetter.getenv()[name]
@@ -141,6 +155,18 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 			delete(manifestConfig.SourceImageTagsToMatch, key)
 		}
 	}
+	manifestConfig.Variant = expand.Expression(manifestConfig.Variant,
+		func(name string) string {
+			return envGetter.getenv()[name]
+		})
+	// Propagate the expanded Variant to source rebuilds as $VARIANT.
+	if manifestConfig.Variant != "" {
+		if manifestConfig.SourceImageBuildVariables == nil {
+			manifestConfig.SourceImageBuildVariables = map[string]string{}
+		}
+		manifestConfig.SourceImageBuildVariables["VARIANT"] =
+			manifestConfig.Variant
+	}
 	return manifestConfig, nil
 }
 
@@ -167,6 +193,7 @@ func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 		}
 	}
 	sourceImageInfo, err := unpackImage(client, manifestConfig.SourceImage,
+		manifestConfig.Variant,
 		manifestConfig.SourceImageGitCommitId,
 		manifestConfig.SourceImageTagsToMatch,
 		maxSourceAge, rootDir, buildLog, logger)
@@ -198,6 +225,7 @@ func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 		mtimesCopyAddFilter: mtimesCopyAddFilter,
 		mtimesCopyFilter:    mtimesCopyFilter,
 		sourceImageInfo:     sourceImageInfo,
+		variant:             manifestConfig.Variant,
 	}, nil
 }
 

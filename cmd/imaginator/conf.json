@@ -54,7 +54,8 @@
 	    ],
 	    "ImageFilterUrl": "file:///etc/imaginator/filters/Debian-10",
 	    "ImageTriggersUrl": "file:///etc/imaginator/triggers/Debian-10",
-	    "PackagerType": "deb"
+	    "PackagerType": "deb",
+	    "Variant": "$EPOCH"
 	},
 	"bootstrap/Debian-10/i386": {
 	    "BootstrapCommand": [

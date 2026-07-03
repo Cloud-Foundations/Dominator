@@ -51,6 +51,10 @@ fields:
                             image
 - `SourceImageTagsToMatch`: key:[value] tag matches to use when searching for a
                             source image
+- `Variant`: an optional expression expanded against the merged build
+             variables. When non-empty, the expanded value is appended to
+             `SourceImage` when looking up the source image and to the
+             current stream name when publishing the built image
 
 Other fields may be present and they will be ignored by the
 *[imaginator](../cmd/imaginator/README.md)*. This is typically used to store
