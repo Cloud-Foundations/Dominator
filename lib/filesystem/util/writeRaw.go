@@ -931,6 +931,9 @@ func writeRaw(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, rawFilename string,
 	perm os.FileMode, tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
+	if options.ArchitectureType == hypervisor.ArchitectureTypeAuto {
+		options.ArchitectureType = hypervisor.ArchitectureTypeRuntime
+	}
 	if options.PartitionWaitTimeout < time.Millisecond {
 		options.PartitionWaitTimeout = 2 * time.Second
 	}

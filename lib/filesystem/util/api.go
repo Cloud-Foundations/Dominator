@@ -95,8 +95,9 @@ func DeletedFilteredFiles(rootDir string, filt *filter.Filter) error {
 func GetBootInfo(fs *filesystem.FileSystem, rootLabel string,
 	extraKernelOptions string) (*BootInfoType, error) {
 	return GetBootInfoWithParams(fs, MakeKernelOptionsParams{
-		ExtraOptions: extraKernelOptions,
-		RootDevice:   "LABEL=" + rootLabel,
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
+		ExtraOptions:     extraKernelOptions,
+		RootDevice:       "LABEL=" + rootLabel,
 	})
 }
 
@@ -118,13 +119,14 @@ func MakeBootable(fs *filesystem.FileSystem,
 	deviceName, rootLabel, rootDir, kernelOptions string,
 	doChroot bool, logger log.DebugLogger) error {
 	return MakeBootableWithParams(MakeBootableParams{
-		DeviceName:    deviceName,
-		DoChroot:      doChroot,
-		FileSystem:    fs,
-		KernelOptions: kernelOptions,
-		Logger:        logger,
-		RootDirectory: rootDir,
-		RootLabel:     rootLabel,
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
+		DeviceName:       deviceName,
+		DoChroot:         doChroot,
+		FileSystem:       fs,
+		KernelOptions:    kernelOptions,
+		Logger:           logger,
+		RootDirectory:    rootDir,
+		RootLabel:        rootLabel,
 	})
 }
 
@@ -149,7 +151,7 @@ func MakeExt4fsWithParams(deviceName string, params MakeExt4fsParams,
 
 func MakeKernelOptions(rootDevice, extraOptions string) string {
 	return MakeKernelOptionsWithParams(MakeKernelOptionsParams{
-		ArchitectureType: hypervisor.ArchitectureTypeAmd64,
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
 		ExtraOptions:     extraOptions,
 		RootDevice:       rootDevice,
 	})
