@@ -63,10 +63,11 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	allocateRequest := fm_proto.AllocateRequest{
 		VMs: []fm_proto.VmAllocationSpecification{
 			{
-				HypervisorTagsToMatch: hypervisorTagsToMatch,
-				Location:              *location,
-				MemoryInMiB:           createRequest.MemoryInMiB,
-				MilliCPUs:             createRequest.MilliCPUs,
+				HypervisorArchitecture: hypervisorArchitectureToMatch,
+				HypervisorTagsToMatch:  hypervisorTagsToMatch,
+				Location:               *location,
+				MemoryInMiB:            createRequest.MemoryInMiB,
+				MilliCPUs:              createRequest.MilliCPUs,
 				NetworkInterfaces: []fm_proto.NetworkInterfaceSpecification{
 					{
 						SubnetId: createRequest.SubnetId,

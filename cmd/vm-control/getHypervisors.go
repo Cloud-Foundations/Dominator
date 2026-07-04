@@ -26,6 +26,7 @@ func getHypervisors(logger log.DebugLogger) error {
 	}
 	defer client.Close()
 	request := proto.GetHypervisorsInLocationRequest{
+		ArchitectureType:      hypervisorArchitectureToMatch,
 		HypervisorTagsToMatch: hypervisorTagsToMatch,
 		IncludeUnhealthy:      *includeUnhealthy,
 		IncludeVMs:            *includeVMs,

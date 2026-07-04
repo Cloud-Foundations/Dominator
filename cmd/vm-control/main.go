@@ -56,7 +56,8 @@ var (
 		"Port number of Fleet Resource Manager")
 	forceIfNotStopped = flag.Bool("forceIfNotStopped", false,
 		"If true, snapshot or restore VM even if not stopped")
-	hypervisorHostname = flag.String("hypervisorHostname", "",
+	hypervisorArchitectureToMatch hyper_proto.ArchitectureType
+	hypervisorHostname            = flag.String("hypervisorHostname", "",
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
 		constants.HypervisorPortNumber, "Port number of hypervisor")
@@ -180,6 +181,8 @@ func init() {
 		"type of graphical console (default none)")
 	flag.Var(&firmwareType, "firmwareType",
 		"type of firmware (default bios on i386/amd64)")
+	flag.Var(&hypervisorArchitectureToMatch, "hypervisorArchitectureToMatch",
+		"Type of CPU architecture to emulate (default auto/Hypervisor native)")
 	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
 		"Tags to match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&machineType, "machineType",
