@@ -182,7 +182,7 @@ func init() {
 	flag.Var(&firmwareType, "firmwareType",
 		"type of firmware (default bios on i386/amd64)")
 	flag.Var(&hypervisorArchitectureToMatch, "hypervisorArchitectureToMatch",
-		"Type of CPU architecture to emulate (default auto/Hypervisor native)")
+		"CPU architecture match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&hypervisorTagsToMatch, "hypervisorTagsToMatch",
 		"Tags to match when getting/listing or creating/copying/moving VMs")
 	flag.Var(&machineType, "machineType",
