@@ -340,6 +340,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
 	[]net.IP, error) {
 	hypervisors, err := m.listHypervisors(request.Location, showAll, "",
+		hyper_proto.ArchitectureTypeAuto,
 		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return nil, err

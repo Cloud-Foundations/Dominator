@@ -11,6 +11,11 @@ import (
 )
 
 const (
+	ArchitectureTypeAuto  = 0
+	ArchitectureTypeAmd64 = 1
+	ArchitectureTypeArm64 = 2
+	// ArchitectureTypeRuntime is defined in architecture-specific files.
+
 	ConsoleNone  = 0
 	ConsoleDummy = 1
 	ConsoleVNC   = 2
@@ -19,8 +24,10 @@ const (
 	FirmwareBIOS    = 1
 	FirmwareUEFI    = 2
 
-	MachineTypeGenericPC = 0
+	MachineTypeAuto      = 0
 	MachineTypeQ35       = 1
+	MachineTypeGenericPC = 2
+	MachineTypeVirt      = 3
 
 	StateStarting      = 0
 	StateRunning       = 1
@@ -77,6 +84,8 @@ type AddVmVolumesRequest struct {
 type AddVmVolumesResponse struct {
 	Error string
 }
+
+type ArchitectureType uint
 
 type BecomePrimaryVmOwnerRequest struct {
 	IpAddress net.IP
@@ -468,6 +477,7 @@ type GetUpdatesRequest struct {
 type Update struct {
 	HaveAddressPool      bool               `json:",omitempty"`
 	AddressPool          []Address          `json:",omitempty"` // Used & free.
+	ArchitectureType     ArchitectureType   `json:",omitempty"`
 	AvailableMemoryInMiB *uint64            `json:",omitempty"`
 	HaveDisabled         bool               `json:",omitempty"`
 	Disabled             bool               `json:",omitempty"`
@@ -945,21 +955,22 @@ type UserId = types.UserId
 
 type VmInfo struct {
 	Address             Address
-	ChangedStateOn      time.Time    `json:",omitempty"`
-	ConsoleType         ConsoleType  `json:",omitempty"`
-	CreatedOn           time.Time    `json:",omitempty"`
-	CpuPriority         int          `json:",omitempty"`
-	DestroyOnPowerdown  bool         `json:",omitempty"`
-	DestroyProtection   bool         `json:",omitempty"`
-	DisableVirtIO       bool         `json:",omitempty"`
-	ExtraKernelOptions  string       `json:",omitempty"`
-	FirmwareType        FirmwareType `json:",omitempty"`
-	Hostname            string       `json:",omitempty"`
-	IdentityExpires     time.Time    `json:",omitempty"`
-	IdentityName        string       `json:",omitempty"`
-	ImageName           string       `json:",omitempty"`
-	ImageURL            string       `json:",omitempty"`
-	MachineType         MachineType  `json:",omitempty"`
+	ArchitectureType    ArchitectureType `json:",omitempty"`
+	ChangedStateOn      time.Time        `json:",omitempty"`
+	ConsoleType         ConsoleType      `json:",omitempty"`
+	CreatedOn           time.Time        `json:",omitempty"`
+	CpuPriority         int              `json:",omitempty"`
+	DestroyOnPowerdown  bool             `json:",omitempty"`
+	DestroyProtection   bool             `json:",omitempty"`
+	DisableVirtIO       bool             `json:",omitempty"`
+	ExtraKernelOptions  string           `json:",omitempty"`
+	FirmwareType        FirmwareType     `json:",omitempty"`
+	Hostname            string           `json:",omitempty"`
+	IdentityExpires     time.Time        `json:",omitempty"`
+	IdentityName        string           `json:",omitempty"`
+	ImageName           string           `json:",omitempty"`
+	ImageURL            string           `json:",omitempty"`
+	MachineType         MachineType      `json:",omitempty"`
 	MemoryInMiB         uint64
 	MilliCPUs           uint
 	NetworkEntries      []NetworkEntry `json:",omitempty"`

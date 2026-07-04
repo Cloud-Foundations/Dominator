@@ -124,6 +124,9 @@ func (left *HypervisorData) Equal(right *HypervisorData) bool {
 }
 
 func (left *Machine) Equal(right *Machine) bool {
+	if left.ArchitectureType != right.ArchitectureType {
+		return false
+	}
 	if left.GatewaySubnetId != right.GatewaySubnetId {
 		return false
 	}

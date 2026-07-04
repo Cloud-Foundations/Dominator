@@ -8,7 +8,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/tags/tagmatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/types"
-	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
+	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 type hypervisorAllocation struct {
@@ -23,7 +24,7 @@ var (
 	errorListError = errors.New("list error")
 )
 
-func addVmAllocationToTotals(vmSpec proto.VmAllocationSpecification,
+func addVmAllocationToTotals(vmSpec fm_proto.VmAllocationSpecification,
 	hypervisorHostname string, totals map[string]*hypervisorAllocation) {
 	hAlloc := totals[hypervisorHostname]
 	if hAlloc == nil {
@@ -44,9 +45,13 @@ func addVmAllocationToTotals(vmSpec proto.VmAllocationSpecification,
 
 // checkVmFitsOnMachine returns true if the VM will fit on the machine at this
 // time. The errorCannotFit error is returned if the VM will never fit.
-func (m *manager) checkVmFitsOnMachine(vm proto.VmAllocationSpecification,
-	machine *proto.Machine,
+func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
+	machine *fm_proto.Machine,
 	hypervisorAllocations map[string]*hypervisorAllocation) (bool, error) {
+	if vm.HypervisorArchitecture != hyper_proto.ArchitectureTypeAuto &&
+		vm.HypervisorArchitecture != machine.ArchitectureType {
+		return false, errorCannotFit
+	}
 	var totalVolumeSize types.Bytes
 	for _, volume := range vm.Volumes {
 		totalVolumeSize += volume.Size
@@ -113,12 +118,12 @@ func (m *manager) computeAllocationTotals() map[string]*hypervisorAllocation {
 
 // listMachinesInLocation will list the machines in a location.
 func (m *manager) listMachinesInLocation(location string) (
-	[]*proto.Machine, error) {
+	[]*fm_proto.Machine, error) {
 	topoMachines, err := m.topology.ListMachines(location)
 	if err != nil {
 		return nil, err
 	}
-	machines := make([]*proto.Machine, 0, len(topoMachines))
+	machines := make([]*fm_proto.Machine, 0, len(topoMachines))
 	for _, tm := range topoMachines {
 		if machine, ok := m.machines[tm.Hostname]; !ok {
 			return nil, fmt.Errorf("unknown machine: %s", tm.Hostname)
@@ -132,10 +137,10 @@ func (m *manager) listMachinesInLocation(location string) (
 // recalculate will process the request queue and make an allocation if there is
 // capacity available to satisfy a request. It returns the RequestId for the
 // allocation made, else "".
-func (m *manager) recalculate() proto.RequestId {
+func (m *manager) recalculate() fm_proto.RequestId {
 	hypervisorAllocations := m.computeAllocationTotals()
-	var allocationRequestId proto.RequestId
-	m.walkQueue(func(request proto.AllocateRequestEntry) bool {
+	var allocationRequestId fm_proto.RequestId
+	m.walkQueue(func(request fm_proto.AllocateRequestEntry) bool {
 		allocation, vmHypervisors, err := m.tryToAllocate(
 			request.Request, hypervisorAllocations)
 		if err != nil {
@@ -143,13 +148,13 @@ func (m *manager) recalculate() proto.RequestId {
 				m.params.Logger.Println(err)
 				return false
 			}
-			var deletedEntry proto.DeletedAllocation
+			var deletedEntry fm_proto.DeletedAllocation
 			if err == errorCannotFit {
-				deletedEntry = proto.DeletedAllocation{
-					Reason: proto.AllocationRequestCannotFit,
+				deletedEntry = fm_proto.DeletedAllocation{
+					Reason: fm_proto.AllocationRequestCannotFit,
 				}
 			} else {
-				deletedEntry = proto.DeletedAllocation{Error: err.Error()}
+				deletedEntry = fm_proto.DeletedAllocation{Error: err.Error()}
 			}
 			m.deleted[request.RequestId] = &deletedType{
 				deleted:  &deletedEntry,
@@ -191,11 +196,11 @@ func (m *manager) recalculate() proto.RequestId {
 // tryToAllocate will try to allocate capacity for the request. It returns the
 // allocation made and the hypervisor hostnames, else nil.
 // The errorCannotFit error is returned if any of the VMs will never fit.
-func (m *manager) tryToAllocate(req proto.AllocateRequest,
+func (m *manager) tryToAllocate(req fm_proto.AllocateRequest,
 	hypervisorAllocations map[string]*hypervisorAllocation) (
-	*proto.Allocation, []string, error) {
+	*fm_proto.Allocation, []string, error) {
 	var hypervisorHostnames []string
-	vmAllocations := make([]proto.VmAllocation, 0, len(req.VMs))
+	vmAllocations := make([]fm_proto.VmAllocation, 0, len(req.VMs))
 	for _, vm := range req.VMs {
 		vmAllocation, hypervisorHostname, err := m.tryToAllocateVm(vm,
 			hypervisorAllocations)
@@ -211,7 +216,7 @@ func (m *manager) tryToAllocate(req proto.AllocateRequest,
 	if len(vmAllocations) < 1 {
 		return nil, nil, nil
 	}
-	return &proto.Allocation{
+	return &fm_proto.Allocation{
 		CreateDeadline: time.Now().Add(m.options.CreateDeadline),
 		VMs:            vmAllocations,
 	}, hypervisorHostnames, nil
@@ -220,9 +225,9 @@ func (m *manager) tryToAllocate(req proto.AllocateRequest,
 // tryToAllocateVm will try to allocate capacity for a VM. It returns the
 // allocation made and the hypervisor hostname, else nil.
 // The errorCannotFit error is returned if the VM will never fit.
-func (m *manager) tryToAllocateVm(vm proto.VmAllocationSpecification,
+func (m *manager) tryToAllocateVm(vm fm_proto.VmAllocationSpecification,
 	hypervisorAllocations map[string]*hypervisorAllocation) (
-	*proto.VmAllocation, string, error) {
+	*fm_proto.VmAllocation, string, error) {
 	machines, err := m.listMachinesInLocation(vm.Location)
 	if err != nil {
 		return nil, "", err
@@ -247,7 +252,7 @@ func (m *manager) tryToAllocateVm(vm proto.VmAllocationSpecification,
 		addVmAllocationToTotals(vm, machine.Hostname, hypervisorAllocations)
 		address := fmt.Sprintf("%s:%d",
 			machine.Hostname, constants.HypervisorPortNumber)
-		return &proto.VmAllocation{HypervisorAddress: address},
+		return &fm_proto.VmAllocation{HypervisorAddress: address},
 			machine.Hostname,
 			nil
 	}

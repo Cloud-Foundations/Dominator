@@ -140,6 +140,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 			continue
 		}
 		vmInfo.Address.Shrink()
+		if vmInfo.ArchitectureType == proto.ArchitectureTypeAuto {
+			vmInfo.ArchitectureType = proto.ArchitectureTypeRuntime
+		}
 		vmInfo.manager = manager
 		vmInfo.dirname = vmDirname
 		vmInfo.ipAddress = ipAddr

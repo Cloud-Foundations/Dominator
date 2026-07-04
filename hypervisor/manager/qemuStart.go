@@ -1,8 +1,6 @@
 package manager
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,59 +11,21 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-func getQemuCpuModelFlags() (map[string]struct{}, error) {
-	cmd := exec.Command(*qemuCommand, "-cpu", "help")
-	cmd.Dir = "/tmp"
-	stdout, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	scanner := bufio.NewScanner(bytes.NewReader(stdout))
-	var modelFlags map[string]struct{} // nil means header not yet found.
-	for scanner.Scan() {
-		line := scanner.Text()
-		if len(line) < 2 {
-			continue
-		}
-		if modelFlags == nil {
-			if line == "Recognized CPUID flags:" {
-				modelFlags = make(map[string]struct{})
-			}
-			continue
-		}
-		if !strings.HasPrefix(line, "  ") {
-			break
-		}
-		for _, field := range strings.Fields(line[2:]) {
-			modelFlags[field] = struct{}{}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return modelFlags, nil
-}
-
 func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	pidfile string, nCpus uint, netOptions []string,
 	tapFiles []*os.File) error {
-	cpuModelFlags, err := getQemuCpuModelFlags()
+	qemuInfo, err := getQemuInfo(vm.ArchitectureType, vm.manager.Logger)
 	if err != nil {
 		return err
 	}
-	qemuVersion, err := getQemuVersion(vm.manager.Logger)
-	if err != nil {
-		return err
+	machine := []string{qemuInfo.getMachine(vm.MachineType)}
+	if vm.ArchitectureType == proto.ArchitectureTypeRuntime {
+		machine = append(machine, "accel=kvm")
 	}
-	cpuModel := "host" // Allow the VM to take full advantage of host CPU.
-	if _, ok := cpuModelFlags["invtsc"]; ok {
-		cpuModel += ",+invtsc,migratable=no" // Try hard to provide TSC.
-	} else if _, ok := cpuModelFlags["kvmclock"]; ok {
-		cpuModel += ",+kvmclock" // Fall back to something faster than HPET.
-	}
-	cmd := exec.Command(*qemuCommand,
-		"-machine", fmt.Sprintf("%s,accel=kvm", vm.MachineType),
-		"-cpu", cpuModel,
+	cmd := exec.Command(qemuInfo.command,
+		"-machine", strings.Join(machine, ","),
+		"-cpu", qemuInfo.cpuModel,
+		"-rtc", "base=utc,clock=host", // TODO(rgooch): consider if needed.
 		"-nodefaults",
 		"-name", vm.ipAddress,
 		"-m", fmt.Sprintf("%dM", vm.MemoryInMiB),
@@ -77,12 +37,12 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		"-pidfile", pidfile,
 		"-daemonize")
 	// Deal with backwards-incompatible option changes.
-	if qemuVersion.major < 8 {
+	if qemuInfo.version.major < 8 {
 		cmd.Args = append(cmd.Args,
 			"-chroot", vm.getLogsDirectory(),
 			"-runas", vm.manager.Username,
 		)
-	} else if qemuVersion.major < 9 {
+	} else if qemuInfo.version.major < 9 {
 		cmd.Args = append(cmd.Args,
 			"-run-with", "chroot="+vm.getLogsDirectory(),
 			"-runas", vm.manager.Username,
@@ -97,7 +57,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	case proto.FirmwareUEFI:
 		cmd.Args = append(cmd.Args,
 			"-drive",
-			"if=pflash,format=raw,file=/usr/share/ovmf/OVMF.fd,readonly=on")
+			"if=pflash,format=raw,file="+qemuInfo.efiFlash+",readonly=on")
 	}
 	var interfaceDriver string
 	if !vm.DisableVirtIO {
@@ -118,13 +78,20 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			cmd.Args = append(cmd.Args,
 				"-initrd", initrdPath,
 				"-append",
-				util.MakeKernelOptions("LABEL="+vm.rootLabelSaved(false),
-					kernelOptionsString),
+				util.MakeKernelOptionsWithParams(util.MakeKernelOptionsParams{
+					ArchitectureType: vm.ArchitectureType,
+					ExtraOptions:     kernelOptionsString,
+					RootDevice:       "LABEL=" + vm.rootLabelSaved(false),
+				}),
 			)
 		} else {
 			cmd.Args = append(cmd.Args,
-				"-append", util.MakeKernelOptions("/dev/vda1",
-					kernelOptionsString),
+				"-append",
+				util.MakeKernelOptionsWithParams(util.MakeKernelOptionsParams{
+					ArchitectureType: vm.ArchitectureType,
+					ExtraOptions:     kernelOptionsString,
+					RootDevice:       "/dev/vda1",
+				}),
 			)
 		}
 	} else if enableNetboot {
@@ -138,13 +105,13 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		case proto.ConsoleNone:
 			cmd.Args = append(cmd.Args, "-nographic")
 		case proto.ConsoleDummy:
-			cmd.Args = append(cmd.Args, "-display", "none", "-vga", "std")
+			cmd.Args = append(cmd.Args, "-display", "none")
+			cmd.Args = append(cmd.Args, qemuInfo.displayArgs...)
 		case proto.ConsoleVNC:
 			cmd.Args = append(cmd.Args,
-				"-display", "vnc=unix:"+filepath.Join(vm.dirname, "vnc"),
-				"-vga", "std",
-				"-usb", "-device", "usb-tablet",
-			)
+				"-display", "vnc=unix:"+filepath.Join(vm.dirname, "vnc"))
+			cmd.Args = append(cmd.Args, qemuInfo.displayArgs...)
+			cmd.Args = append(cmd.Args, qemuInfo.vncArgs...)
 		}
 	}
 	for index, volume := range vm.VolumeLocations {
@@ -209,6 +176,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	os.Remove(vm.getBootLogFilename())
 	cmd.Dir = vm.getLogsDirectory()
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "VM_ARCH="+vm.ArchitectureType.String())
 	cmd.Env = append(cmd.Env, "VM_HOSTNAME="+vm.Hostname)
 	if len(vm.OwnerGroups) > 0 {
 		cmd.Env = append(cmd.Env,
@@ -219,6 +187,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	cmd.Env = append(cmd.Env, "VM_PRIMARY_IP_ADDRESS="+vm.ipAddress)
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
 	if output, err := cmd.CombinedOutput(); err != nil {
+		vm.logger.Printf("Failed QEMU command: %v\n", cmd.Args)
 		return fmt.Errorf("error starting QEMU: %s: %s", err, output)
 	} else if len(output) > 0 {
 		vm.logger.Printf("QEMU started. Output: \"%s\"\n", string(output))
