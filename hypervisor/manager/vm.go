@@ -417,7 +417,7 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		return nil, err
 	}
 	if req.ArchitectureType == proto.ArchitectureTypeAuto {
-		req.ArchitectureType = m.architectureType
+		req.ArchitectureType = proto.ArchitectureTypeRuntime
 	}
 	if err := req.ConsoleType.CheckValid(); err != nil {
 		return nil, err

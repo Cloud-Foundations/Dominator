@@ -19,7 +19,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		return err
 	}
 	machine := []string{qemuInfo.getMachine(vm.MachineType)}
-	if vm.ArchitectureType == vm.manager.architectureType {
+	if vm.ArchitectureType == proto.ArchitectureTypeRuntime {
 		machine = append(machine, "accel=kvm")
 	}
 	cmd := exec.Command(qemuInfo.command,
