@@ -14,6 +14,7 @@ const (
 	ArchitectureTypeAuto  = 0
 	ArchitectureTypeAmd64 = 1
 	ArchitectureTypeArm64 = 2
+	// ArchitectureTypeRuntime is defined in architecture-specific files.
 
 	ConsoleNone  = 0
 	ConsoleDummy = 1
