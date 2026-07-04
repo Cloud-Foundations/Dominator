@@ -11,11 +11,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 type BootInfoType struct {
-	Architecture      string
+	ArchitectureType  hypervisor.ArchitectureType
 	BootDirectory     *filesystem.DirectoryInode
 	InitrdImageDirent *filesystem.DirectoryEntry
 	InitrdImageFile   string
@@ -38,14 +39,14 @@ type GroupId = types.GroupId
 type UserId = types.UserId
 
 type MakeBootableParams struct {
-	Architecture  string
-	DeviceName    string
-	DoChroot      bool
-	FileSystem    *filesystem.FileSystem
-	KernelOptions string
-	Logger        log.DebugLogger
-	RootDirectory string
-	RootLabel     string
+	ArchitectureType hypervisor.ArchitectureType
+	DeviceName       string
+	DoChroot         bool
+	FileSystem       *filesystem.FileSystem
+	KernelOptions    string
+	Logger           log.DebugLogger
+	RootDirectory    string
+	RootLabel        string
 }
 
 type MakeExt4fsParams struct {
@@ -60,9 +61,9 @@ type MakeExt4fsParams struct {
 }
 
 type MakeKernelOptionsParams struct {
-	Architecture string
-	ExtraOptions string
-	RootDevice   string
+	ArchitectureType hypervisor.ArchitectureType
+	ExtraOptions     string
+	RootDevice       string
 }
 
 // CopyMtimes will copy modification times for files from the source to the
@@ -148,9 +149,9 @@ func MakeExt4fsWithParams(deviceName string, params MakeExt4fsParams,
 
 func MakeKernelOptions(rootDevice, extraOptions string) string {
 	return MakeKernelOptionsWithParams(MakeKernelOptionsParams{
-		Architecture: "amd64",
-		ExtraOptions: extraOptions,
-		RootDevice:   rootDevice,
+		ArchitectureType: hypervisor.ArchitectureTypeAmd64,
+		ExtraOptions:     extraOptions,
+		RootDevice:       rootDevice,
 	})
 }
 
@@ -202,7 +203,7 @@ func WriteOverlayFiles(mountPoint string,
 
 type WriteRawOptions struct {
 	AllocateBlocks       bool
-	Architecture         string
+	ArchitectureType     hypervisor.ArchitectureType
 	DoChroot             bool
 	ExtraKernelOptions   string
 	ExtraPartitions      []installer.Partition

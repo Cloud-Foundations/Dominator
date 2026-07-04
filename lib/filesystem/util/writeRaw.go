@@ -31,6 +31,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
+	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
@@ -254,9 +255,9 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 		}
 		kernelOptionsString := strings.Join(kernelOptions, " ")
 		bootInfo, err = getBootInfo(fs, MakeKernelOptionsParams{
-			Architecture: options.Architecture,
-			ExtraOptions: kernelOptionsString,
-			RootDevice:   "LABEL=" + options.RootLabel,
+			ArchitectureType: options.ArchitectureType,
+			ExtraOptions:     kernelOptionsString,
+			RootDevice:       "LABEL=" + options.RootLabel,
 		})
 		if err != nil {
 			return err
@@ -386,9 +387,9 @@ func makeBootable(params MakeBootableParams) error {
 		return err
 	}
 	bootInfo, err := getBootInfo(params.FileSystem, MakeKernelOptionsParams{
-		Architecture: params.Architecture,
-		ExtraOptions: params.KernelOptions,
-		RootDevice:   "LABEL=" + params.RootLabel,
+		ArchitectureType: params.ArchitectureType,
+		ExtraOptions:     params.KernelOptions,
+		RootDevice:       "LABEL=" + params.RootLabel,
 	})
 	if err != nil {
 		return err
@@ -500,10 +501,10 @@ func makeExtraFileSystems(bootDevice, partitionPrefix string,
 
 func makeKernelOptions(params MakeKernelOptionsParams) string {
 	var serialPort string
-	switch params.Architecture {
-	case "amd64", "":
+	switch params.ArchitectureType {
+	case hypervisor.ArchitectureTypeAmd64, hypervisor.ArchitectureTypeAuto:
 		serialPort = "ttyS0"
-	case "arm64":
+	case hypervisor.ArchitectureTypeArm64:
 		serialPort = "ttyAMA0"
 	}
 	return fmt.Sprintf("root=%s ro console=tty0 console=%s,115200n8 %s",
@@ -541,9 +542,9 @@ func getBootInfo(fs *filesystem.FileSystem, params MakeKernelOptionsParams) (
 		return nil, err
 	}
 	bootInfo := &BootInfoType{
-		Architecture:  params.Architecture,
-		BootDirectory: bootDirectory,
-		KernelOptions: MakeKernelOptionsWithParams(params),
+		ArchitectureType: params.ArchitectureType,
+		BootDirectory:    bootDirectory,
+		KernelOptions:    MakeKernelOptionsWithParams(params),
 	}
 	for _, dirent := range bootDirectory.EntryList {
 		if strings.HasPrefix(dirent.Name, "initrd.img-") ||
@@ -611,14 +612,14 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			"--efi-directory="+efiDir,
 			"--removable", // Needed for loop devices.
 		)
-		switch bootInfo.Architecture {
-		case "amd64":
+		switch bootInfo.ArchitectureType {
+		case hypervisor.ArchitectureTypeAmd64:
 			cmd.Args = append(cmd.Args, "--target=x86_64-efi")
-		case "arm64":
+		case hypervisor.ArchitectureTypeArm64:
 			cmd.Args = append(cmd.Args, "--target=arm64-efi")
 		default:
 			return fmt.Errorf("unsupported GRUB EFI target for arch: %s",
-				bootInfo.Architecture)
+				bootInfo.ArchitectureType)
 		}
 		if isGrub2 {
 			// Likely RedHat or derivative: work around their controlling
@@ -628,12 +629,12 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			)
 		}
 	} else {
-		switch bootInfo.Architecture {
-		case "amd64":
+		switch bootInfo.ArchitectureType {
+		case hypervisor.ArchitectureTypeAmd64:
 			cmd.Args = append(cmd.Args, "--target=i386-pc")
 		default:
 			return fmt.Errorf("unsupported GRUB target for arch: %s",
-				bootInfo.Architecture)
+				bootInfo.ArchitectureType)
 		}
 	}
 	if doChroot {

@@ -1499,7 +1499,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
-			Architecture:       request.ArchitectureType.String(),
+			ArchitectureType:   request.ArchitectureType,
 			ExtraKernelOptions: request.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
@@ -1729,7 +1729,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
-			Architecture:     vm.ArchitectureType.String(),
+			ArchitectureType: vm.ArchitectureType,
 			InitialImageName: imageName,
 			MinimumFreeBytes: request.MinimumFreeBytes,
 			OverlayFiles:     request.OverlayFiles,
@@ -3057,9 +3057,9 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	}
 	bootInfo, err := util.GetBootInfoWithParams(img.FileSystem,
 		util.MakeKernelOptionsParams{
-			Architecture: vm.ArchitectureType.String(),
-			ExtraOptions: "net.ifnames=0",
-			RootDevice:   "LABEL=" + vm.rootLabel(false),
+			ArchitectureType: vm.ArchitectureType,
+			ExtraOptions:     "net.ifnames=0",
+			RootDevice:       "LABEL=" + vm.rootLabel(false),
 		})
 	if err != nil {
 		return err
@@ -3514,7 +3514,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return err
 		}
 		writeRawOptions := util.WriteRawOptions{
-			Architecture:       vm.ArchitectureType.String(),
+			ArchitectureType:   vm.ArchitectureType,
 			ExtraKernelOptions: vm.ExtraKernelOptions,
 			InitialImageName:   imageName,
 			MinimumFreeBytes:   request.MinimumFreeBytes,
@@ -4129,8 +4129,8 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	if skipBootloader {
 		bootInfo, err := util.GetBootInfoWithParams(fs,
 			util.MakeKernelOptionsParams{
-				Architecture: writeRawOptions.Architecture,
-				RootDevice:   "LABEL=" + writeRawOptions.RootLabel,
+				ArchitectureType: writeRawOptions.ArchitectureType,
+				RootDevice:       "LABEL=" + writeRawOptions.RootLabel,
 			})
 		if err != nil {
 			return err

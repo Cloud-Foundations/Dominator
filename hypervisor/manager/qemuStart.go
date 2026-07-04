@@ -79,18 +79,18 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 				"-initrd", initrdPath,
 				"-append",
 				util.MakeKernelOptionsWithParams(util.MakeKernelOptionsParams{
-					Architecture: vm.ArchitectureType.String(),
-					ExtraOptions: kernelOptionsString,
-					RootDevice:   "LABEL=" + vm.rootLabelSaved(false),
+					ArchitectureType: vm.ArchitectureType,
+					ExtraOptions:     kernelOptionsString,
+					RootDevice:       "LABEL=" + vm.rootLabelSaved(false),
 				}),
 			)
 		} else {
 			cmd.Args = append(cmd.Args,
 				"-append",
 				util.MakeKernelOptionsWithParams(util.MakeKernelOptionsParams{
-					Architecture: vm.ArchitectureType.String(),
-					ExtraOptions: kernelOptionsString,
-					RootDevice:   "/dev/vda1",
+					ArchitectureType: vm.ArchitectureType,
+					ExtraOptions:     kernelOptionsString,
+					RootDevice:       "/dev/vda1",
 				}),
 			)
 		}
