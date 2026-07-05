@@ -643,10 +643,10 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	grantMethod := func(_ string, auth *AuthInformation) bool {
 		return receiver.grantMethod(serviceName, auth)
 	}
-	var authorized bool
-	authorized, conn.haveMethodAccess = CheckAuthorization(serviceMethod, conn,
+	var authorised bool
+	authorised, conn.haveMethodAccess = CheckAuthorisation(serviceMethod, conn,
 		grantMethod, method.public, method.unauthenticatedPermitted)
-	if !authorized {
+	if !authorised {
 		method.numDeniedCalls++
 		return nil, ErrorAccessToMethodDenied
 	}
@@ -698,10 +698,10 @@ func checkMethodAccess(methodName string, conn AuthConn) bool {
 	return false
 }
 
-// CheckAuthorization checks if access should be granted.
-func CheckAuthorization(methodName string, conn AuthConn,
+// CheckAuthorisation checks if access should be granted.
+func CheckAuthorisation(methodName string, conn AuthConn,
 	grantMethod func(string, *AuthInformation) bool,
-	isPublic, isUnauthenticated bool) (authorized, haveMethodAccess bool) {
+	isPublic, isUnauthenticated bool) (authorised, haveMethodAccess bool) {
 
 	authInfo := conn.GetAuthInformation()
 	if conn.AllowMethodPowers() && checkMethodAccess(methodName, conn) {

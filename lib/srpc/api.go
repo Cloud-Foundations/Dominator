@@ -176,7 +176,7 @@ type Encoder interface {
 	Encode(e interface{}) error
 }
 
-// AuthConn defines the interface for authorization checks.
+// AuthConn defines the interface for authorisation checks.
 type AuthConn interface {
 	GetAuthInformation() *AuthInformation
 	GetPermittedMethods() map[string]struct{}

@@ -55,7 +55,7 @@ func (c *Conn) AllowMethodPowers() bool {
 	return true
 }
 
-func authorizeRequest(ctx context.Context, fullMethod string) (context.Context, error) {
+func authoriseRequest(ctx context.Context, fullMethod string) (context.Context, error) {
 	_, isPublic := publicMethods[fullMethod]
 	_, isUnauthenticated := unauthenticatedMethods[fullMethod]
 
@@ -72,9 +72,9 @@ func authorizeRequest(ctx context.Context, fullMethod string) (context.Context, 
 	}
 
 	srpcMethod := grpcToSrpcMethod(fullMethod)
-	authorized, haveMethodAccess := srpc.CheckAuthorization(srpcMethod, conn,
+	authorised, haveMethodAccess := srpc.CheckAuthorisation(srpcMethod, conn,
 		srpc.GetDefaultGrantMethod(), isPublic, false)
-	if !authorized {
+	if !authorised {
 		recordDeniedCall(fullMethod)
 		return nil, status.Error(codes.PermissionDenied, "call on "+fullMethod)
 	}
@@ -82,11 +82,11 @@ func authorizeRequest(ctx context.Context, fullMethod string) (context.Context, 
 	return ContextWithConn(ctx, conn), nil
 }
 
-// UnaryAuthInterceptor handles authentication and authorization for unary RPCs.
+// UnaryAuthInterceptor handles authentication and authorisation for unary RPCs.
 func UnaryAuthInterceptor(ctx context.Context, req interface{},
 	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
-	ctx, err := authorizeRequest(ctx, info.FullMethod)
+	ctx, err := authoriseRequest(ctx, info.FullMethod)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +104,11 @@ func UnaryAuthInterceptor(ctx context.Context, req interface{},
 	return resp, err
 }
 
-// StreamAuthInterceptor handles authentication and authorization for streaming RPCs.
+// StreamAuthInterceptor handles authentication and authorisation for streaming RPCs.
 func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream,
 	info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 
-	ctx, err := authorizeRequest(ss.Context(), info.FullMethod)
+	ctx, err := authoriseRequest(ss.Context(), info.FullMethod)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func ContextWithConn(ctx context.Context, conn *Conn) context.Context {
 	return context.WithValue(ctx, connKey, conn)
 }
 
-// ServiceOptions configures authorization for a gRPC service.
+// ServiceOptions configures authorisation for a gRPC service.
 type ServiceOptions struct {
 	PublicMethods                  []string          // SRPC method names
 	UnauthenticatedMethods         []string          // SRPC method names
