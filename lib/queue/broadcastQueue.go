@@ -73,9 +73,9 @@ func (q *broadcastQueue[T]) manage(addChannel <-chan T,
 }
 
 func (q *broadcastQueue[T]) CloseSubscriber(ch <-chan BroadcastEntry[T]) {
-	close(q.subscribers[ch])
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+	close(q.subscribers[ch])
 	delete(q.subscribers, ch)
 }
 
