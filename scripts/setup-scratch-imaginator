@@ -1,0 +1,425 @@
+#! /bin/bash --posix
+
+# setup-scratch-imaginator: Set up an isolated imaginator and imageserver on
+#                          the local host for testing image manifests.
+#
+# Usage: setup-scratch-imaginator command [args]
+# Commands:
+#   setup manifests-dir   First-time setup and start.
+#   start                 Start services (after stop or reboot).
+#   stop                  Stop services.
+#   restart               Stop and start.
+#   status                Show which services are running.
+#   env                   Print shell aliases (sb-build, sb-image).
+#   teardown              Stop and remove all state.
+#
+# Environment variables (defaults shown):
+#   SCRATCH_DIR         (default: ~/scratch-imaginator)
+#   IMAGINATOR_PORT     (default: 26975)
+#   IMAGESERVER_PORT    (default: 26971)
+#   CERT_DAYS           (default: 30)
+#   CONF_SRC_DIR        (default: auto-detected — either
+#                        $MANIFESTS_DIR/coreinfra/imaginator/files/etc/imaginator
+#                        if it contains a conf.json, or /etc/imaginator otherwise)
+#
+# Configuration state is persisted in $SCRATCH_DIR/etc/scratch.env so that
+# start, stop, status and env do not need to be given the manifests-dir a
+# second time.
+#
+# Caveats:
+#   * The scratch conf.json strips SshMetadataFetcher from the source
+#     config. Without this, imaginator tries to contact the
+#     169.254.169.254 instance-metadata endpoint and refuses to start on
+#     non-cloud hosts with "error getting master configuration: 404".
+#   * Directories referenced by BindMounts in the source conf.json must
+#     exist on the host or every build fails on `mount --bind`. The scratch
+#     conf.json empties BindMounts by default; re-enable entries only after
+#     creating the directories (or empty stubs) they point at.
+
+set -eu
+
+# Variables below are intentionally not readonly: load_state may restore
+# values persisted from a previous setup invocation.
+SCRATCH_DIR="${SCRATCH_DIR:-$HOME/scratch-imaginator}"
+IMAGINATOR_PORT="${IMAGINATOR_PORT:-26975}"
+IMAGESERVER_PORT="${IMAGESERVER_PORT:-26971}"
+CERT_DAYS="${CERT_DAYS:-30}"
+
+readonly STATE_FILE="$SCRATCH_DIR/etc/scratch.env"
+
+die () {
+    echo "$1" >&2
+    exit 1
+}
+
+need_tool () {
+    command -v "$1" > /dev/null 2>&1 || die "'$1' not found in PATH ($2)"
+}
+
+check_prereqs () {
+    need_tool wget    "install: sudo apt-get install -y wget"
+    need_tool curl    "install: sudo apt-get install -y curl"
+    need_tool jq      "install: sudo apt-get install -y jq"
+    need_tool tar     "install: sudo apt-get install -y tar"
+    need_tool python3 "install: sudo apt-get install -y python3"
+    need_tool openssl "install: sudo apt-get install -y openssl"
+    need_tool umoci   "install: sudo apt-get install -y umoci"
+    need_tool sudo    "sudo is required (imaginator manipulates mount and chroot namespaces)"
+}
+
+load_state () {
+    # shellcheck disable=SC1090
+    [ -f "$STATE_FILE" ] && . "$STATE_FILE"
+}
+
+save_state () {
+    cat > "$STATE_FILE" <<EOF
+MANIFESTS_DIR="$MANIFESTS_DIR"
+CONF_SRC_DIR="$CONF_SRC_DIR"
+IMAGINATOR_PORT="$IMAGINATOR_PORT"
+IMAGESERVER_PORT="$IMAGESERVER_PORT"
+EOF
+}
+
+# Locate the source conf.json/image-streams.json. Prefers CONF_SRC_DIR if
+# already set (via env or state file). Falls back to the layout used by
+# manifests repos that bundle imaginator config (e.g.
+# coreinfra/imaginator/files/etc/imaginator), then to /etc/imaginator.
+resolve_conf_src_dir () {
+    if [ -n "${CONF_SRC_DIR:-}" ]; then
+        return
+    fi
+    if [ -f "$MANIFESTS_DIR/coreinfra/imaginator/files/etc/imaginator/conf.json" ]; then
+        CONF_SRC_DIR="$MANIFESTS_DIR/coreinfra/imaginator/files/etc/imaginator"
+    elif [ -f "/etc/imaginator/conf.json" ]; then
+        CONF_SRC_DIR="/etc/imaginator"
+    else
+        die "cannot find conf.json — set CONF_SRC_DIR or place conf.json at /etc/imaginator/"
+    fi
+}
+
+# Locate image-streams.json inside CONF_SRC_DIR. Prefers 'image-streams.json'
+# (the installed convention) but accepts 'streams.json' as a fallback since
+# the Dominator sample ships under that name.
+resolve_streams_src () {
+    for name in image-streams.json streams.json; do
+        if [ -f "$CONF_SRC_DIR/$name" ]; then
+            STREAMS_SRC="$CONF_SRC_DIR/$name"
+            return
+        fi
+    done
+    die "cannot find image-streams.json or streams.json under $CONF_SRC_DIR"
+}
+
+# ------- setup steps ------------------------------------------------------
+
+make_dirs () {
+    mkdir -p \
+        "$SCRATCH_DIR/bin" \
+        "$SCRATCH_DIR/tls" \
+        "$SCRATCH_DIR/etc" \
+        "$SCRATCH_DIR/var/imaginator/state" \
+        "$SCRATCH_DIR/var/imageserver/images" \
+        "$SCRATCH_DIR/var/imageserver/objects" \
+        "$SCRATCH_DIR/var/log/imaginator" \
+        "$SCRATCH_DIR/var/log/imageserver" \
+        "$SCRATCH_DIR/var/log/buildlogs"
+}
+
+check_binaries () {
+    for bin in imaginator imageserver; do
+        if [ ! -x "$SCRATCH_DIR/bin/$bin" ]; then
+            die "$SCRATCH_DIR/bin/$bin not found — build from source (see user-guide/getting-started.md) or copy the binary into place, then re-run."
+        fi
+    done
+}
+
+gen_certs () {
+    local tls="$SCRATCH_DIR/tls"
+    if [ -f "$tls/ca.pem" ] && [ -f "$tls/client-dir/cert.pem" ]; then
+        echo "[=] TLS certificates already exist; skipping generation."
+        return
+    fi
+    echo "[+] generating self-signed CA, server and client certificates"
+    cd "$tls"
+
+    # One config file, one entry per extension profile. The subject CN of
+    # each cert is supplied inline via `openssl req -subj`.
+    cat > openssl.cnf <<'EOF'
+[req]
+distinguished_name = dn
+[dn]
+[server_exts]
+subjectAltName = DNS:localhost, IP:127.0.0.1
+extendedKeyUsage = serverAuth, clientAuth
+[client_exts]
+extendedKeyUsage = clientAuth
+EOF
+
+    # Self-signed CA that signs the three leaf certs below.
+    openssl req -x509 -nodes -newkey rsa:2048 -days "$CERT_DAYS" \
+        -subj "/CN=scratch-imaginator-CA" \
+        -keyout ca.key -out ca.pem 2> /dev/null
+
+    _issue () {
+        openssl req -new -nodes -newkey rsa:2048 -batch \
+            -subj "/CN=$2" -keyout "$1.key" -out "$1.csr" 2> /dev/null
+        openssl x509 -req -in "$1.csr" \
+            -CA ca.pem -CAkey ca.key -CAcreateserial \
+            -days "$CERT_DAYS" -extfile openssl.cnf -extensions "$3" \
+            -out "$1.cert" 2> /dev/null
+        rm -f "$1.csr"
+    }
+    _issue imageserver imageserver-scratch server_exts
+    _issue imaginator  imaginator-scratch  server_exts
+    _issue client      "$USER"             client_exts
+
+    mkdir -p client-dir
+    cp client.cert client-dir/cert.pem
+    cp client.key  client-dir/key.pem
+    chmod 600 client-dir/key.pem
+    cd - > /dev/null
+}
+
+install_symlinks () {
+    # If CONF_SRC_DIR *is* /etc/imaginator, the config files (and any
+    # filters/tags/triggers) are already in place — nothing to symlink.
+    if [ "$CONF_SRC_DIR" = "/etc/imaginator" ]; then
+        echo "[=] CONF_SRC_DIR is /etc/imaginator; skipping symlink install"
+        return
+    fi
+    echo "[+] installing symlinks under /usr/local/sbin and /etc/imaginator"
+    sudo mkdir -p /etc/imaginator /usr/local/sbin
+    # Bootstrap scripts, when the layout carries them alongside the config
+    # (typical for manifest repos that bundle a usr/local/sbin/ tree).
+    local sbin_src="$CONF_SRC_DIR/../../usr/local/sbin"
+    if [ -d "$sbin_src" ]; then
+        for s in "$sbin_src"/*.sh; do
+            [ -f "$s" ] || continue
+            sudo ln -sf "$s" "/usr/local/sbin/$(basename "$s")"
+        done
+    fi
+    # Per-stream filter, tag and trigger files live alongside conf.json.
+    for d in filters tags triggers; do
+        [ -d "$CONF_SRC_DIR/$d" ] && sudo ln -sfn "$CONF_SRC_DIR/$d" "/etc/imaginator/$d"
+    done
+}
+
+prepare_config () {
+    resolve_streams_src
+    echo "[+] copying and rewriting scratch conf.json / image-streams.json"
+
+    cp "$CONF_SRC_DIR/conf.json" "$SCRATCH_DIR/etc/conf.json"
+    cp "$STREAMS_SRC"            "$SCRATCH_DIR/etc/image-streams.json"
+
+    # Repoint ImageStreamsUrl at the local scratch copy via file://. Handles
+    # both `git@github.com:owner/image-manifests.git/…/image-streams.json`
+    # and `https://…/image-manifests.git/…/image-streams.json`.
+    sed -i -E \
+        -e "s|\"ImageStreamsUrl\": \"(git@\|https?://)[^\"]*image-manifests\\.git[^\"]*(image-)?streams\\.json\"|\"ImageStreamsUrl\": \"file://$SCRATCH_DIR/etc/image-streams.json\"|" \
+        "$SCRATCH_DIR/etc/conf.json"
+
+    # Repoint every ManifestUrl at the local checkout via dir://.
+    sed -i -E \
+        -e "s|(git@\|https?://)[^\"]*image-manifests\\.git|dir://$MANIFESTS_DIR|g" \
+        "$SCRATCH_DIR/etc/image-streams.json"
+
+    # Strip production-only sections from conf.json.
+    python3 - "$SCRATCH_DIR/etc/conf.json" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+d = json.loads(p.read_text())
+
+# Instance-metadata SSH cert fetch — only meaningful on cloud VMs.
+d.pop("SshMetadataFetcher", None)
+
+# Optional build cache — not needed for scratch.
+d.pop("Cache", None)
+
+# Auto-rebuild of production streams — off for scratch.
+d["ImageStreamsToAutoRebuild"] = []
+
+# BindMounts sources may be absent on this host; caller can restore
+# individual entries once the corresponding directories are populated.
+d["BindMounts"] = []
+p.write_text(json.dumps(d, indent=4))
+PY
+}
+
+# ------- service control --------------------------------------------------
+
+pid_imageserver () {
+    pgrep -f "bin/imageserver -portNum=${IMAGESERVER_PORT}" 2> /dev/null || true
+}
+
+pid_imaginator () {
+    pgrep -f "bin/imaginator -portNum=${IMAGINATOR_PORT}" 2> /dev/null || true
+}
+
+start_imageserver () {
+    [ -n "$(pid_imageserver)" ] && { echo "[=] imageserver already running"; return; }
+    echo "[+] starting imageserver on :$IMAGESERVER_PORT"
+    (cd "$SCRATCH_DIR" && \
+        nohup ./bin/imageserver \
+            -portNum="$IMAGESERVER_PORT" \
+            -CAfile=./tls/ca.pem -identityCAfile=./tls/ca.pem \
+            -certFile=./tls/imageserver.cert -keyFile=./tls/imageserver.key \
+            -imageDir=./var/imageserver/images \
+            -objectDir=./var/imageserver/objects \
+            -logDir=./var/log/imageserver \
+            -srpcTrustedUsers="imaginator-scratch,$USER" \
+            -alsoLogToStderr \
+            > "$SCRATCH_DIR/var/log/imageserver.stdout" 2>&1 & )
+    sleep 2
+}
+
+start_imaginator () {
+    [ -n "$(pid_imaginator)" ] && { echo "[=] imaginator already running"; return; }
+    local run="$SCRATCH_DIR/bin/run-imaginator"
+    cat > "$run" <<EOF
+#! /bin/bash --posix
+cd "$SCRATCH_DIR"
+exec ./bin/imaginator \\
+    -portNum=$IMAGINATOR_PORT \\
+    -configurationUrl=file://$SCRATCH_DIR/etc/conf.json \\
+    -imageServerHostname=localhost -imageServerPortNum=$IMAGESERVER_PORT \\
+    -CAfile=./tls/ca.pem -identityCAfile=./tls/ca.pem \\
+    -certFile=./tls/imaginator.cert -keyFile=./tls/imaginator.key \\
+    -stateDir=./var/imaginator/state \\
+    -buildLogDir=./var/log/buildlogs \\
+    -logDir=./var/log/imaginator \\
+    -srpcTrustedUsers=$USER,imaginator-scratch \\
+    -imageRebuildInterval=24h \\
+    -alsoLogToStderr
+EOF
+    chmod +x "$run"
+    echo "[+] starting imaginator (sudo) on :$IMAGINATOR_PORT"
+    # sudo -b + setsid + explicit redirects fully detach from the invoking
+    # shell so the script returns immediately even under `ssh host command`.
+    sudo -b setsid "$run" </dev/null \
+        >> "$SCRATCH_DIR/var/log/imaginator.stdout" 2>&1
+    sleep 4
+}
+
+# ------- commands ---------------------------------------------------------
+
+cmd_setup () {
+    [ $# -eq 1 ] || die "usage: $0 setup manifests-dir"
+    MANIFESTS_DIR="$(cd "$1" && pwd)"
+    resolve_conf_src_dir
+
+    echo "Setting up scratch imaginator with:"
+    echo "  MANIFESTS_DIR    = $MANIFESTS_DIR"
+    echo "  CONF_SRC_DIR     = $CONF_SRC_DIR"
+    echo "  SCRATCH_DIR      = $SCRATCH_DIR"
+    echo "  IMAGINATOR_PORT  = $IMAGINATOR_PORT"
+    echo "  IMAGESERVER_PORT = $IMAGESERVER_PORT"
+    echo
+
+    check_prereqs
+    make_dirs
+    check_binaries
+    gen_certs
+    install_symlinks
+    prepare_config
+    save_state
+    cmd_start
+
+    cat <<EOF
+
+Setup complete. Load the shell aliases into your session with:
+    eval "\$($0 env)"
+
+Then trigger a build:
+    sb-build build-image bootstrap/<distro>/<arch>
+    sb-image list
+EOF
+}
+
+cmd_start () {
+    load_state
+    [ -z "${MANIFESTS_DIR:-}" ] && die "no saved state — run '$0 setup manifests-dir' first"
+    start_imageserver
+    start_imaginator
+    echo
+    cmd_status
+}
+
+cmd_stop () {
+    load_state
+    local pid
+    pid=$(pid_imaginator)
+    [ -n "$pid" ] && { echo "[-] stopping imaginator (sudo)"; sudo kill "$pid" 2> /dev/null || true; }
+    pid=$(pid_imageserver)
+    [ -n "$pid" ] && { echo "[-] stopping imageserver"; kill "$pid" 2> /dev/null || true; }
+    sleep 2
+    cmd_status
+}
+
+cmd_restart () {
+    cmd_stop
+    cmd_start
+}
+
+cmd_status () {
+    load_state
+    for svc in imaginator imageserver; do
+        pid=$(pid_$svc)
+        if [ -n "$pid" ]; then
+            echo "$svc: running (pid=$pid)"
+        else
+            echo "$svc: stopped"
+        fi
+    done
+}
+
+cmd_env () {
+    load_state
+    [ -z "${MANIFESTS_DIR:-}" ] && die "no saved state — run '$0 setup manifests-dir' first"
+    cat <<EOF
+# eval "\$($0 env)" to activate these in your shell
+export SSL_CERT_FILE="$SCRATCH_DIR/tls/ca.pem"
+alias sb-build="builder-tool -certDirectory=$SCRATCH_DIR/tls/client-dir -imaginatorHostname=localhost -imaginatorPortNum=$IMAGINATOR_PORT -imageServerHostname=localhost -imageServerPortNum=$IMAGESERVER_PORT"
+alias sb-image="imagetool -certDirectory=$SCRATCH_DIR/tls/client-dir -imageServerHostname=localhost -imageServerPortNum=$IMAGESERVER_PORT"
+EOF
+}
+
+cmd_teardown () {
+    load_state
+    cmd_stop
+    # Mirror install_symlinks: nothing was installed if CONF_SRC_DIR is the
+    # stock system location.
+    if [ -n "${CONF_SRC_DIR:-}" ] && [ "$CONF_SRC_DIR" != "/etc/imaginator" ]; then
+        local sbin_src="$CONF_SRC_DIR/../../usr/local/sbin"
+        if [ -d "$sbin_src" ]; then
+            for s in "$sbin_src"/*.sh; do
+                [ -f "$s" ] || continue
+                local link="/usr/local/sbin/$(basename "$s")"
+                [ -L "$link" ] && sudo rm -f "$link"
+            done
+        fi
+        for d in filters tags triggers; do
+            [ -L "/etc/imaginator/$d" ] && sudo rm -f "/etc/imaginator/$d"
+        done
+        sudo rmdir /etc/imaginator 2> /dev/null || true
+    fi
+    sudo rm -rf "$SCRATCH_DIR"
+    echo "Removed $SCRATCH_DIR and installed symlinks."
+}
+
+usage () {
+    sed -n '3,37p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+}
+
+case "${1:-help}" in
+    setup)    shift; cmd_setup "$@" ;;
+    start)    cmd_start ;;
+    stop)     cmd_stop ;;
+    restart)  cmd_restart ;;
+    status)   cmd_status ;;
+    env)      cmd_env ;;
+    teardown) cmd_teardown ;;
+    help|-h|--help) usage ;;
+    *)        echo "Unknown command: $1" >&2; usage ;;
+esac
