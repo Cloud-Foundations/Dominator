@@ -293,7 +293,7 @@ exec ./bin/imaginator \\
 EOF
     chmod +x "$run"
     echo "[+] starting imaginator (sudo) on :$IMAGINATOR_PORT"
-    # sudo -b + setsid + explicit redirects standard I/O and fully detaches
+    # sudo -b + setsid + explicitly redirects standard I/O and fully detaches
     # from the invoking shell so the script returns immediately even under
     # `ssh host command`.
     sudo -b setsid "$run" </dev/null \
