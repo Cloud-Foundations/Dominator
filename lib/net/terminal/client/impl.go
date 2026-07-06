@@ -30,6 +30,7 @@ func startTerminal(conn FlushReadWriter) error {
 }
 
 func readFromConnection(conn io.Reader) error {
+	fmt.Fprintln(os.Stderr, "Press control-\\ to disconnect\r")
 	// Read from connection until EOF, write to stdout.
 	buffer := make([]byte, 256)
 	for {
