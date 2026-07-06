@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/cleanup"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -27,7 +29,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
+	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 const (
@@ -223,7 +228,8 @@ func lookPath(rootDir, file string) (string, error) {
 
 func makeAndWriteRoot(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice, rootDevice string,
-	makeEfi bool, options WriteRawOptions, logger log.DebugLogger) error {
+	makeEfi bool, options WriteRawOptions, partitionPrefix string,
+	startPartition int, cancel <-chan os.Signal, logger log.DebugLogger) error {
 	unsupportedOptions, err := getUnsupportedOptions(fs, objectsGetter)
 	if err != nil {
 		return err
@@ -248,7 +254,11 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			kernelOptions = append(kernelOptions, options.ExtraKernelOptions)
 		}
 		kernelOptionsString := strings.Join(kernelOptions, " ")
-		bootInfo, err = getBootInfo(fs, options.RootLabel, kernelOptionsString)
+		bootInfo, err = getBootInfo(fs, MakeKernelOptionsParams{
+			ArchitectureType: options.ArchitectureType,
+			ExtraOptions:     kernelOptionsString,
+			RootDevice:       "LABEL=" + options.RootLabel,
+		})
 		if err != nil {
 			return err
 		}
@@ -263,6 +273,11 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
+	err = makeExtraFileSystems(bootDevice, partitionPrefix, startPartition,
+		options, logger)
+	if err != nil {
+		return err
+	}
 	rootMount, err := ioutil.TempDir("", "write-raw-image")
 	if err != nil {
 		return err
@@ -272,20 +287,47 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
+	cleanupFunctions := cleanup.NewCleanupFunctions(logger)
+	cleanupFunctions.Add(func() error {
+		return wsyscall.Unmount(rootMount, 0)
+	})
 	doUnmount := true
 	defer func() {
 		if doUnmount {
-			wsyscall.Unmount(rootMount, 0)
+			cleanupFunctions.HardCleanup()
 		}
 	}()
 	os.RemoveAll(filepath.Join(rootMount, "lost+found"))
-	if err := Unpack(fs, objectsGetter, rootMount, logger); err != nil {
+	for index, partition := range options.ExtraPartitions {
+		device := fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index)
+		mountPoint := filepath.Join(rootMount,
+			filepath.Clean(partition.MountPoint))
+		if err := os.MkdirAll(mountPoint, fsutil.DirPerms); err != nil {
+			return err
+		}
+		err := wsyscall.Mount(device, mountPoint, "ext4", 0, "")
+		if err != nil {
+			return err
+		}
+		cleanupFunctions.Add(func() error {
+			return wsyscall.Unmount(mountPoint, 0)
+		})
+	}
+	if err := unpack(fs, objectsGetter, rootMount, cancel, logger); err != nil {
 		return err
 	}
 	for _, dirname := range options.OverlayDirectories {
 		dirname := filepath.Clean(dirname) // Stop funny business.
-		err := os.MkdirAll(filepath.Join(rootMount, dirname), fsutil.DirPerms)
-		if err != nil {
+		pathname := filepath.Join(rootMount, dirname)
+		if err := os.MkdirAll(pathname, fsutil.DirPerms); err != nil {
+			return err
+		}
+		// Set permissions for what are likely to be mount points.
+		if err := os.Lchown(pathname, 0, 0); err != nil {
+			return err
+		}
+		if err := os.Chmod(pathname, fsutil.DirPerms); err != nil {
 			return err
 		}
 	}
@@ -314,7 +356,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			}
 		}
 		err := bootInfo.installBootloader(bootDevice, rootMount,
-			options.RootLabel, options.DoChroot, logger)
+			options.DoChroot, logger)
 		if err != nil {
 			if efiMount != "" {
 				wsyscall.Unmount(efiMount, 0)
@@ -329,27 +371,31 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	doUnmount = false
 	startTime := time.Now()
-	if err := wsyscall.Unmount(rootMount, 0); err != nil {
-		return err
+	if err := cleanupFunctions.HardCleanup(); err != nil {
+		return fmt.Errorf("cleanup error: %w", err)
 	}
 	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
-		logger.Debugf(0, "Unmounted: %s in %s\n",
-			rootDevice, format.Duration(time.Since(startTime)))
+		logger.Debugf(0, "Unmounted in %s\n",
+			format.Duration(time.Since(startTime)))
 	}
 	return nil
 }
 
-func makeBootable(fs *filesystem.FileSystem,
-	deviceName, rootLabel, rootDir, kernelOptions string,
-	doChroot bool, logger log.DebugLogger) error {
-	if err := writeRootFstabEntry(rootDir, rootLabel); err != nil {
+func makeBootable(params MakeBootableParams) error {
+	err := writeRootFstabEntry(params.RootDirectory, params.RootLabel)
+	if err != nil {
 		return err
 	}
-	if bootInfo, err := getBootInfo(fs, rootLabel, kernelOptions); err != nil {
+	bootInfo, err := getBootInfo(params.FileSystem, MakeKernelOptionsParams{
+		ArchitectureType: params.ArchitectureType,
+		ExtraOptions:     params.KernelOptions,
+		RootDevice:       "LABEL=" + params.RootLabel,
+	})
+	if err != nil {
 		return err
 	} else {
-		return bootInfo.installBootloader(deviceName, rootDir, rootLabel,
-			doChroot, logger)
+		return bootInfo.installBootloader(params.DeviceName,
+			params.RootDirectory, params.DoChroot, params.Logger)
 	}
 }
 
@@ -376,7 +422,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		}
 	}
 	sizeString := strconv.FormatUint(params.Size>>10, 10)
-	var options []string
+	var featureOptions []string
 	if len(params.UnsupportedOptions) > 0 {
 		defaultFeatures, err := getDefaultMkfsFeatures(deviceName, sizeString,
 			logger)
@@ -385,7 +431,7 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		}
 		for _, option := range params.UnsupportedOptions {
 			if _, ok := defaultFeatures[option]; ok {
-				options = append(options, "^"+option)
+				featureOptions = append(featureOptions, "^"+option)
 			}
 		}
 	}
@@ -401,11 +447,20 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		cmd.Args = append(cmd.Args, "-m",
 			strconv.FormatUint(uint64(params.ReservedBlocksPercentage), 10))
 	}
+	var extendedOptions []string
 	if params.NoDiscard {
-		cmd.Args = append(cmd.Args, "-E", "nodiscard")
+		extendedOptions = append(extendedOptions, "nodiscard")
 	}
-	if len(options) > 0 {
-		cmd.Args = append(cmd.Args, "-O", strings.Join(options, ","))
+	if params.RootGroupId != 0 || params.RootUserId != 0 {
+		extendedOptions = append(extendedOptions,
+			fmt.Sprintf("root_owner=%d:%d",
+				params.RootUserId, params.RootGroupId))
+	}
+	if len(extendedOptions) > 0 {
+		cmd.Args = append(cmd.Args, "-E", strings.Join(extendedOptions, ","))
+	}
+	if len(featureOptions) > 0 {
+		cmd.Args = append(cmd.Args, "-O", strings.Join(featureOptions, ","))
 	}
 	cmd.Args = append(cmd.Args, deviceName, sizeString)
 	startTime := time.Now()
@@ -417,6 +472,43 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 		format.FormatBytes(params.Size), deviceName,
 		format.Duration(time.Since(startTime)))
 	return nil
+}
+
+func makeExtraFileSystems(bootDevice, partitionPrefix string,
+	startPartition int, options WriteRawOptions, logger log.Logger) error {
+	for index, partition := range options.ExtraPartitions {
+		if partition.FileSystemType != installer.FileSystemTypeExt4 {
+			return fmt.Errorf("extra partition: %d is not ext4fs", index)
+		}
+		err := makeExt4fs(fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index),
+			MakeExt4fsParams{
+				BytesPerInode:            uint64(partition.BytesPerInode),
+				Label:                    partition.FileSystemLabel,
+				NoDiscard:                true,
+				ReservedBlocksPercentage: uint16(partition.ReservedBlocksPercentage),
+				RootGroupId:              partition.RootGroupId,
+				RootUserId:               partition.RootUserId,
+				Size:                     partition.MinimumBytes,
+			},
+			logger)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func makeKernelOptions(params MakeKernelOptionsParams) string {
+	var serialPort string
+	switch params.ArchitectureType {
+	case hypervisor.ArchitectureTypeAmd64, hypervisor.ArchitectureTypeAuto:
+		serialPort = "ttyS0"
+	case hypervisor.ArchitectureTypeArm64:
+		serialPort = "ttyAMA0"
+	}
+	return fmt.Sprintf("root=%s ro console=tty0 console=%s,115200n8 %s",
+		params.RootDevice, serialPort, params.ExtraOptions)
 }
 
 func sanitiseInput(ch rune) rune {
@@ -443,16 +535,16 @@ func writeOverlayFiles(mountPoint string,
 	return nil
 }
 
-func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
-	extraKernelOptions string) (*BootInfoType, error) {
+func getBootInfo(fs *filesystem.FileSystem, params MakeKernelOptionsParams) (
+	*BootInfoType, error) {
 	bootDirectory, err := getBootDirectory(fs)
 	if err != nil {
 		return nil, err
 	}
 	bootInfo := &BootInfoType{
-		BootDirectory: bootDirectory,
-		KernelOptions: MakeKernelOptions("LABEL="+rootLabel,
-			extraKernelOptions),
+		ArchitectureType: params.ArchitectureType,
+		BootDirectory:    bootDirectory,
+		KernelOptions:    MakeKernelOptionsWithParams(params),
 	}
 	for _, dirent := range bootDirectory.EntryList {
 		if strings.HasPrefix(dirent.Name, "initrd.img-") ||
@@ -475,7 +567,7 @@ func getBootInfo(fs *filesystem.FileSystem, rootLabel string,
 }
 
 func (bootInfo *BootInfoType) installBootloader(deviceName string,
-	rootDir, rootLabel string, doChroot bool, logger log.DebugLogger) error {
+	rootDir string, doChroot bool, logger log.DebugLogger) error {
 	startTime := time.Now()
 	mountTable, err := mounts.GetMountTable()
 	if err != nil {
@@ -519,8 +611,16 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 		cmd.Args = append(cmd.Args,
 			"--efi-directory="+efiDir,
 			"--removable", // Needed for loop devices.
-			"--target=x86_64-efi",
 		)
+		switch bootInfo.ArchitectureType {
+		case hypervisor.ArchitectureTypeAmd64:
+			cmd.Args = append(cmd.Args, "--target=x86_64-efi")
+		case hypervisor.ArchitectureTypeArm64:
+			cmd.Args = append(cmd.Args, "--target=arm64-efi")
+		default:
+			return fmt.Errorf("unsupported GRUB EFI target for arch: %s",
+				bootInfo.ArchitectureType)
+		}
 		if isGrub2 {
 			// Likely RedHat or derivative: work around their controlling
 			// behaviour.
@@ -529,9 +629,13 @@ func (bootInfo *BootInfoType) installBootloader(deviceName string,
 			)
 		}
 	} else {
-		cmd.Args = append(cmd.Args,
-			"--target=i386-pc",
-		)
+		switch bootInfo.ArchitectureType {
+		case hypervisor.ArchitectureTypeAmd64:
+			cmd.Args = append(cmd.Args, "--target=i386-pc")
+		default:
+			return fmt.Errorf("unsupported GRUB target for arch: %s",
+				bootInfo.ArchitectureType)
+		}
 	}
 	if doChroot {
 		cmd.Dir = "/"
@@ -690,27 +794,57 @@ func writeImageName(mountPoint, imageName string) error {
 	return fsutil.CopyToFile(pathname, fsutil.PublicFilePerms, buffer, 0)
 }
 
+func writeMbr(filename string, tableType mbr.TableType, rootSize uint64,
+	options WriteRawOptions) error {
+	if len(options.ExtraPartitions) < 1 {
+		return mbr.WriteDefault(filename, tableType)
+	}
+	partitions := []mbr.Partition{{Size: types.Bytes(rootSize), Type: "ext2"}}
+	for _, extraPartition := range options.ExtraPartitions {
+		partitions = append(partitions, mbr.Partition{
+			Size: types.Bytes(extraPartition.MinimumBytes),
+			Type: extraPartition.FileSystemType.String(),
+		})
+	}
+	return mbr.Write(filename, tableType, partitions)
+}
+
 func writeToBlock(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice string,
 	tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
-	if err := mbr.WriteDefault(bootDevice, tableType); err != nil {
+	usageEstimate := fs.EstimateUsage(0)
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
+	rootBytes += options.MinimumFreeBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
+	if err := writeMbr(bootDevice, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	index := "1"
+	index := 1
+	indexString := "1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
-		index = "2"
+		index = 2
+		indexString = "2"
 		makeEfi = true
 	}
-	rootDevice, err := waitForRootPartition(bootDevice, index,
+	rootDevice, err := waitForRootPartition(bootDevice, indexString,
 		options.PartitionWaitTimeout)
 	if err != nil {
 		return err
-	} else {
-		return makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice,
-			makeEfi, options, logger)
 	}
+	err = makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice, makeEfi,
+		options, "", index+1, nil, logger)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func writeToFile(fs *filesystem.FileSystem,
@@ -725,10 +859,21 @@ func writeToFile(fs *filesystem.FileSystem,
 		defer os.Remove(tmpFilename)
 	}
 	usageEstimate := fs.EstimateUsage(0)
-	minBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
-	minBytes += options.MinimumFreeBytes
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
+	rootBytes += options.MinimumFreeBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
+	minBytes := rootBytes + 1<<20 // Leave bottom 1 MiB free.
 	if tableType == mbr.TABLE_TYPE_GPT {
 		minBytes += 130 << 20 // Leave space for the EFI partition.
+	}
+	for _, extraPartition := range options.ExtraPartitions {
+		minBytes += extraPartition.MinimumBytes
 	}
 	if options.RoundupPower < 24 {
 		options.RoundupPower = 24 // 16 MiB.
@@ -748,27 +893,36 @@ func writeToFile(fs *filesystem.FileSystem,
 				tmpFilename, err)
 		}
 	}
-	if err := mbr.WriteDefault(tmpFilename, tableType); err != nil {
+	if err := writeMbr(tmpFilename, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	partition := "p1"
+	partition := 1
+	partitionString := "p1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
 		makeEfi = true
-		partition = "p2"
+		partition = 2
+		partitionString = "p2"
 	}
+	cancel := make(chan os.Signal, 1)
+	signal.Notify(cancel, syscall.SIGINT)
+	defer signal.Stop(cancel)
 	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
-		partition, time.Minute, logger)
+		partitionString, time.Minute, logger)
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partitionString,
 		time.Minute, logger)
-	rootDevice := loopDevice + partition
+	rootDevice := loopDevice + partitionString
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
-		options, logger)
+		options, "p", partition+1, cancel, logger)
 	if err != nil {
 		return err
+	}
+	select {
+	case <-cancel:
+	default:
 	}
 	return os.Rename(tmpFilename, rawFilename)
 }
@@ -777,6 +931,9 @@ func writeRaw(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, rawFilename string,
 	perm os.FileMode, tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
+	if options.ArchitectureType == hypervisor.ArchitectureTypeAuto {
+		options.ArchitectureType = hypervisor.ArchitectureTypeRuntime
+	}
 	if options.PartitionWaitTimeout < time.Millisecond {
 		options.PartitionWaitTimeout = 2 * time.Second
 	}

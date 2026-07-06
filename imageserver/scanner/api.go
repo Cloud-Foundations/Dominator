@@ -30,6 +30,7 @@ type Config struct {
 }
 
 type notifiers map[<-chan string]chan<- string
+
 type makeDirectoryNotifiers map[<-chan image.Directory]chan<- image.Directory
 
 type ImageDataBase struct {
@@ -55,6 +56,9 @@ type imageType struct {
 	fileChecksum  []byte
 	image         *image.Image
 	modifying     bool
+	ownerGroups   map[string]struct{}
+	ownerUsers    map[string]struct{}
+	numLinksTable filesystem.NumLinksTable
 	usageEstimate uint64
 }
 
@@ -154,6 +158,13 @@ func (imdb *ImageDataBase) GetImageFileChecksum(name string) []byte {
 func (imdb *ImageDataBase) GetImageComputedFiles(name string) (
 	[]filesystem.ComputedFile, bool) {
 	return imdb.getImageComputedFiles(name)
+}
+
+// GetImageInodes will get inode information for a list of filenames for the
+// specified image.
+func (imdb *ImageDataBase) GetImageInodes(imageName string,
+	filenames []filesystem.Filename) (proto.GetImageInodesResponse, error) {
+	return imdb.getImageInodes(imageName, filenames)
 }
 
 // GetImageUsageEstimate will return the usage estimate for the specified image

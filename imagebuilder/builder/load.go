@@ -27,6 +27,21 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 )
 
+// expandArchStrings will opportunistically expand the $ARCH expression in a
+// slice of strings. We need to use opportunistic expansion here because the
+// "$dir" expression in bootstrap command arguments must be passed through so
+// that it can be expanded later.
+func expandArchStrings(input []string) []string {
+	if input == nil {
+		return nil
+	}
+	output := make([]string, 0, len(input))
+	for _, str := range input {
+		output = append(output, expand.Opportunistic(str, archMapper))
+	}
+	return output
+}
+
 func getNamespace() (string, error) {
 	pathname := fmt.Sprintf("/proc/%d/ns/mnt", syscall.Gettid())
 	namespace, err := os.Readlink(pathname)
@@ -46,6 +61,17 @@ func imageStreamsRealDecoder(reader io.Reader) (
 	if err := json.Read(reader, &config); err != nil {
 		return nil, err
 	}
+	// Expand stream pattern names and then process.
+	newStreamPatterns := make(map[string]*imageStreamPatternType,
+		len(config.StreamPatterns))
+	for name, stream := range config.StreamPatterns {
+		name := expand.Expression(name, archMapper)
+		if _, ok := newStreamPatterns[name]; ok {
+			return nil, fmt.Errorf("duplicate stream pattern: %s", name)
+		}
+		newStreamPatterns[name] = stream
+	}
+	config.StreamPatterns = newStreamPatterns
 	for pattern, streamPattern := range config.StreamPatterns {
 		streamPattern.builderUsers = stringutil.ConvertListToMap(
 			streamPattern.BuilderUsers, false)
@@ -55,6 +81,16 @@ func imageStreamsRealDecoder(reader io.Reader) (
 		}
 		streamPattern.regexp = re
 	}
+	// Expand stream names and then process.
+	newStreams := make(map[string]*imageStreamType, len(config.Streams))
+	for name, stream := range config.Streams {
+		name := expand.Expression(name, archMapper)
+		if _, ok := newStreams[name]; ok {
+			return nil, fmt.Errorf("duplicate stream: %s", name)
+		}
+		newStreams[name] = stream
+	}
+	config.Streams = newStreams
 	for _, stream := range config.Streams {
 		stream.builderUsers = stringutil.ConvertListToMap(stream.BuilderUsers,
 			false)
@@ -127,10 +163,22 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 	autoRebuildTrigger := make(chan chan<- struct{}) // Unbuffered: busy block.
 	generateDependencyTrigger := make(chan chan<- struct{}, 1)
 	streamsLoadedChannel := make(chan struct{})
+	if masterConfiguration.Cache.BaseDirectory != "" {
+		fi, err := os.Stat(masterConfiguration.Cache.BaseDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("error stating: %s: %s",
+				masterConfiguration.Cache.BaseDirectory, err)
+		}
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("%s is not a directory",
+				masterConfiguration.Cache.BaseDirectory)
+		}
+	}
 	b := &Builder{
 		autoRebuildTrigger:          autoRebuildTrigger,
 		buildLogArchiver:            params.BuildLogArchiver,
 		bindMounts:                  masterConfiguration.BindMounts,
+		cache:                       masterConfiguration.Cache,
 		mtimesCopyFilter:            mtimesCopyFilter,
 		createSlaveTimeout:          options.CreateSlaveTimeout,
 		generateDependencyTrigger:   generateDependencyTrigger,
@@ -226,7 +274,29 @@ func loadMasterConfiguration(url string, logger log.DebugLogger) (
 			return nil, err
 		}
 	}
+	streams, err := processBootstrapStreams(configuration.BootstrapStreams)
+	if err != nil {
+		return nil, err
+	}
+	configuration.BootstrapStreams = streams
+	configuration.ImageStreamsToAutoRebuild =
+		expandArchStrings(configuration.ImageStreamsToAutoRebuild)
 	return &configuration, nil
+}
+
+func processBootstrapStreams(input map[string]*bootstrapStream) (
+	map[string]*bootstrapStream, error) {
+	output := make(map[string]*bootstrapStream, len(input))
+	for name, stream := range input {
+		name = expand.Expression(name, archMapper)
+		if _, ok := output[name]; ok {
+			return nil, fmt.Errorf("duplicate bootstrap stream: %s", name)
+		}
+		newStream := stream
+		newStream.BootstrapCommand = expandArchStrings(stream.BootstrapCommand)
+		output[name] = newStream
+	}
+	return output, nil
 }
 
 func (stream *bootstrapStream) loadFiles() error {

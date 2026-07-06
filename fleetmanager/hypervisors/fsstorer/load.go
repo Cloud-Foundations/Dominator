@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
@@ -51,6 +52,19 @@ func (s *Storer) load() error {
 		}
 	}
 	return nil
+}
+
+func newStorer(topDir string, logger log.DebugLogger) (*Storer, error) {
+	storer := &Storer{
+		topDir:          topDir,
+		logger:          logger,
+		hypervisorToIPs: make(map[IP][]IP),
+		ipToHypervisor:  make(map[IP]IP),
+	}
+	if err := storer.load(); err != nil {
+		return nil, err
+	}
+	return storer, nil
 }
 
 func (s *Storer) readDirectory(partialIP []byte, dirname string) error {

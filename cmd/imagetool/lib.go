@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupclient"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 	filegen_proto "github.com/Cloud-Foundations/Dominator/proto/filegenerator"
 	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
@@ -48,14 +50,15 @@ const (
 )
 
 type typedImage struct {
-	buildLog   *image.Annotation
-	fileSystem *filesystem.FileSystem
-	filter     *filter.Filter
-	image      *image.Image
-	imageName  string
-	imageType  uint
-	specifier  string
-	triggers   *triggers.Triggers
+	buildLog               *image.Annotation
+	fileSystem             *filesystem.FileSystem
+	filter                 *filter.Filter
+	image                  *image.Image
+	imageName              string
+	imageType              uint
+	informationDatabaseURL string
+	specifier              string
+	triggers               *triggers.Triggers
 }
 
 type readCloser struct {
@@ -87,6 +90,24 @@ func diffFiles(tool, leftFile, rightFile string) error {
 		return err
 	}
 	return nil
+}
+
+func getEnvInt(key string) uint64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return 0
+	}
+	if valueInt, err := strconv.ParseUint(value, 10, 32); err != nil {
+		return 0
+	} else {
+		return valueInt
+	}
+}
+
+func getSudoIDs() (types.GroupId, types.UserId) {
+	gid := getEnvInt("SUDO_GID")
+	uid := getEnvInt("SUDO_UID")
+	return types.GroupId(gid), types.UserId(uid)
 }
 
 // getTypedFileReader returns a file reader. The reader must be closed before
@@ -231,19 +252,19 @@ func getTypedImageFilter(typedName string) (*filter.Filter, error) {
 	return filt, nil
 }
 
-func getTypedImageMetadata(typedName string) (*image.Image, error) {
+func getTypedImageMetadata(typedName string) (*image.Image, string, error) {
 	ti, err := makeTypedImage(typedName)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := ti.loadMetadata(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	img, err := ti.getImage()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return img, nil
+	return img, ti.informationDatabaseURL, nil
 }
 
 func getTypedImageTriggers(typedName string) (*triggers.Triggers, error) {
@@ -370,11 +391,12 @@ func (ti *typedImage) load() error {
 		ti.fileSystem = fs
 	case imageTypeImage:
 		imageSClient, _ := getClients()
-		img, err := getImage(imageSClient, ti.specifier)
+		img, informationDatabaseURL, err := getImage(imageSClient, ti.specifier)
 		if err != nil {
 			return err
 		}
 		ti.buildLog = img.BuildLog
+		ti.informationDatabaseURL = informationDatabaseURL
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
@@ -382,11 +404,13 @@ func (ti *typedImage) load() error {
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, name, err := getLatestImage(imageSClient, ti.specifier, false)
+		img, name, informationDatabaseURL, err :=
+			getLatestImage(imageSClient, ti.specifier, false)
 		if err != nil {
 			return err
 		}
 		ti.buildLog = img.BuildLog
+		ti.informationDatabaseURL = informationDatabaseURL
 		ti.fileSystem = img.FileSystem
 		ti.filter = img.Filter
 		ti.image = img
@@ -423,21 +447,24 @@ func (ti *typedImage) load() error {
 func (ti *typedImage) loadMetadata() error {
 	switch ti.imageType {
 	case imageTypeImage:
-		img, err := getImageMetadata(ti.specifier)
+		img, informationDatabaseURL, err := getImageMetadata(ti.specifier)
 		if err != nil {
 			return err
 		}
 		ti.buildLog = img.BuildLog
+		ti.informationDatabaseURL = informationDatabaseURL
 		ti.filter = img.Filter
 		ti.image = img
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, name, err := getLatestImage(imageSClient, ti.specifier, true)
+		img, name, informationDatabaseURL, err := getLatestImage(
+			imageSClient, ti.specifier, true)
 		if err != nil {
 			return err
 		}
 		ti.buildLog = img.BuildLog
+		ti.informationDatabaseURL = informationDatabaseURL
 		ti.filter = img.Filter
 		ti.image = img
 		ti.imageName = name
@@ -572,26 +599,32 @@ func findHypervisorClient(client *srpc.Client,
 	return reply.HypervisorAddress, nil
 }
 
-func getImage(client *srpc.Client, name string) (*image.Image, error) {
-	img, err := imgclient.GetImageWithTimeout(client, name, *timeout)
+func getImage(client *srpc.Client, name string) (*image.Image, string, error) {
+	request := img_proto.GetImageRequest{
+		ImageName: name,
+		Timeout:   *timeout,
+	}
+	var reply img_proto.GetImageResponse
+	err := client.RequestReply("ImageServer.GetImage", request, &reply)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if img == nil {
-		return nil, errors.New(name + ": not found")
+	if reply.Image == nil {
+		return nil, "", fmt.Errorf("image: %s not found", name)
 	}
+	img := reply.Image
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if img.Filter != nil {
 		if err := img.Filter.Compile(); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return img, nil
+	return img, reply.InformationDatabaseURL, nil
 }
 
-func getImageMetadata(imageName string) (*image.Image, error) {
+func getImageMetadata(imageName string) (*image.Image, string, error) {
 	imageSClient, _ := getClients()
 	logger.Debugf(0, "getting image: %s\n", imageName)
 	request := img_proto.GetImageRequest{
@@ -602,16 +635,16 @@ func getImageMetadata(imageName string) (*image.Image, error) {
 	var reply img_proto.GetImageResponse
 	err := imageSClient.RequestReply("ImageServer.GetImage", request, &reply)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if reply.Image == nil {
-		return nil, fmt.Errorf("image: %s not found", imageName)
+		return nil, "", fmt.Errorf("image: %s not found", imageName)
 	}
-	return reply.Image, nil
+	return reply.Image, reply.InformationDatabaseURL, nil
 }
 
 func getLatestImage(client *srpc.Client, name string,
-	ignoreFilesystem bool) (*image.Image, string, error) {
+	ignoreFilesystem bool) (*image.Image, string, string, error) {
 	imageName, err := imgclient.FindLatestImageReq(client,
 		img_proto.FindLatestImageRequest{
 			BuildCommitId:        *buildCommitId,
@@ -619,20 +652,20 @@ func getLatestImage(client *srpc.Client, name string,
 			IgnoreExpiringImages: *ignoreExpiring,
 		})
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if ignoreFilesystem {
-		img, err := getImageMetadata(imageName)
+		img, informationDatabaseURL, err := getImageMetadata(imageName)
 		if err != nil {
-			return nil, "", err
+			return nil, "", "", err
 		}
-		return img, imageName, nil
+		return img, imageName, informationDatabaseURL, nil
 	}
-	img, err := getImage(client, imageName)
+	img, informationDatabaseURL, err := getImage(client, imageName)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	} else {
-		return img, imageName, nil
+		return img, imageName, informationDatabaseURL, nil
 	}
 }
 

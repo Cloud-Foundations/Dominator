@@ -3,14 +3,15 @@ package html
 import (
 	"fmt"
 	"io"
-	"runtime"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 )
 
 func writeFooter(writer io.Writer) {
-	fmt.Fprintf(writer, "Page generated at: %s with %s<br>\n",
+	info := version.Get()
+	fmt.Fprintf(writer, "Page generated at: %s with %s (%s)<br>\n",
 		time.Now().Format(format.TimeFormatSeconds),
-		runtime.Version())
+		info.Version, info.GoVersion)
 }

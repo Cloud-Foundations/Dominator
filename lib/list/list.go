@@ -15,8 +15,25 @@ func (l *List[T]) iterateEntries(fn func(*ListEntry[T]) bool) bool {
 	return true
 }
 
+func (l *List[T]) iterateEntriesReverse(fn func(*ListEntry[T]) bool) bool {
+	var previousEntry *ListEntry[T]
+	for entry := l.last; entry != nil; entry = previousEntry {
+		previousEntry = entry.previous
+		if !fn(entry) {
+			return false
+		}
+	}
+	return true
+}
+
 func (l *List[T]) iterateValues(fn func(T) bool) bool {
 	return l.IterateEntries(func(entry *ListEntry[T]) bool {
+		return fn(entry.value)
+	})
+}
+
+func (l *List[T]) iterateValuesReverse(fn func(T) bool) bool {
+	return l.IterateEntriesReverse(func(entry *ListEntry[T]) bool {
 		return fn(entry.value)
 	})
 }

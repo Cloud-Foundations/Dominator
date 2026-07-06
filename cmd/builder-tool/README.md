@@ -42,8 +42,9 @@ Some of the sub-commands available are:
                                 *[imageserver](../imageserver/README.md)*
 - **disable-auto-builds**: disable automatic image building for the period
                            specified by `-disableFor`
-- **disable-build-requests**: disable automatic image building for the period
+- **disable-build-requests**: disable image build requests for the period
                               specified by `-disableFor`
+- **enable-build-requests**: enable image build requests
 - **get-dependencies**: get the dependencies for all the *[imaginator](../imaginator/README.md)*
                         image streams and write a JSON representation to stdout
 - **get-digraph**: get the image stream dependencies represented as a directed

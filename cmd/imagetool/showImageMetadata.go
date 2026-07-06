@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
+
+type imageData struct {
+	InformationDatabaseURL string `json:",omitempty"`
+	*image.Image
+}
 
 func showImageMetadataSubcommand(args []string, logger log.DebugLogger) error {
 	if err := showImageMetadata(args[0]); err != nil {
@@ -16,11 +22,15 @@ func showImageMetadataSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func showImageMetadata(imageName string) error {
-	if img, err := getTypedImageMetadata(imageName); err != nil {
+	if img, infoURL, err := getTypedImageMetadata(imageName); err != nil {
 		return err
 	} else if img == nil {
 		return fmt.Errorf("no image")
 	} else {
-		return json.WriteWithIndent(os.Stdout, "    ", img)
+		data := imageData{
+			InformationDatabaseURL: infoURL,
+			Image:                  img,
+		}
+		return json.WriteWithIndent(os.Stdout, "    ", data)
 	}
 }

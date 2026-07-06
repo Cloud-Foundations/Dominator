@@ -3,8 +3,10 @@ package rpcd
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"sync"
+	"text/template"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
@@ -25,8 +27,9 @@ var (
 )
 
 type Config struct {
-	AllowUnauthenticatedReads bool
-	ReplicationMaster         string
+	AllowUnauthenticatedReads   bool
+	InformationDatabaseTemplate string
+	ReplicationMaster           string
 }
 
 type Params struct {
@@ -36,19 +39,20 @@ type Params struct {
 }
 
 type srpcType struct {
-	imageDataBase             *scanner.ImageDataBase
-	excludeFilter             *filter.Filter
-	finishedReplication       <-chan struct{} // Closed when finished.
-	includeFilter             *filter.Filter
-	replicationMaster         string
-	imageserverResource       *srpc.ClientResource
-	objSrv                    objectserver.FullObjectServer
-	archiveMode               bool
-	logger                    log.DebugLogger
-	numReplicationClientsLock sync.RWMutex // Protect numReplicationClients.
-	numReplicationClients     uint
-	imagesBeingInjectedLock   sync.Mutex // Protect imagesBeingInjected.
-	imagesBeingInjected       map[string]struct{}
+	imageDataBase               *scanner.ImageDataBase
+	excludeFilter               *filter.Filter
+	finishedReplication         <-chan struct{} // Closed when finished.
+	includeFilter               *filter.Filter
+	informationDatabaseTemplate *template.Template
+	replicationMaster           string
+	imageserverResource         *srpc.ClientResource
+	objSrv                      objectserver.FullObjectServer
+	archiveMode                 bool
+	logger                      log.DebugLogger
+	numReplicationClientsLock   sync.RWMutex // Protect numReplicationClients.
+	numReplicationClients       uint
+	imagesBeingInjectedLock     sync.Mutex // Protect imagesBeingInjected.
+	imagesBeingInjected         map[string]struct{}
 }
 
 type htmlWriter srpcType
@@ -76,6 +80,14 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		archiveMode:         *archiveMode,
 		imagesBeingInjected: make(map[string]struct{}),
 	}
+	if config.InformationDatabaseTemplate != "" {
+		tmpl, err := template.New("").Parse(config.InformationDatabaseTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse template: %s: %s",
+				config.InformationDatabaseTemplate, err)
+		}
+		srpcObj.informationDatabaseTemplate = tmpl
+	}
 	var err error
 	if *replicationExcludeFilter != "" {
 		srpcObj.excludeFilter, err = filter.Load(*replicationExcludeFilter)
@@ -101,6 +113,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		"GetImageArchive",
 		"GetImageComputedFiles",
 		"GetImageExpiration",
+		"GetImageInodes",
 		"GetImageUpdates",
 		"GetImageUsageEstimate",
 		"GetReplicationMaster",
@@ -120,6 +133,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 			"GetImageArchive",
 			"GetImageComputedFiles",
 			"GetImageExpiration",
+			"GetImageInodes",
 			"GetImageUpdates",
 			"GetImageUsageEstimate",
 			"GetReplicationMaster",

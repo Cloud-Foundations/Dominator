@@ -23,7 +23,11 @@ var (
 )
 
 func PrintCommands(writer io.Writer, commands []Command) {
-	printCommands(writer, commands)
+	printCommands(writer, commands, false)
+}
+
+func PrintCommandsAligned(writer io.Writer, commands []Command) {
+	printCommands(writer, commands, true)
 }
 
 func RunCommands(commands []Command, printUsage func(),

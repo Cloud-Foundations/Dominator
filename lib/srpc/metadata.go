@@ -97,7 +97,10 @@ func readMetadataFile(filename string, timeout time.Duration) ([]byte, error) {
 	client := http.Client{Timeout: timeout}
 	resp, err := client.Get(constants.MetadataUrl + filename)
 	if err != nil {
-		return nil, err
+		return nil, ErrorMissingCertificate
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrorMissingCertificate
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)

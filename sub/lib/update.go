@@ -410,6 +410,7 @@ func (t *uType) writePatchedImageName(imageName string) error {
 			}
 			return err
 		}
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(pathname), fsutil.DirPerms); err != nil {
 		return err

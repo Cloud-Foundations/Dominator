@@ -21,6 +21,8 @@ import (
 var (
 	configFile = flag.String("configFile", "/var/lib/filegen-server/config",
 		"Name of file containing the configuration")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	permitInsecureMode = flag.Bool("permitInsecureMode", false,
 		"If true, run in insecure mode. This gives remote access to all")
 	portNum = flag.Uint("portNum", constants.BasicFileGenServerPortNumber,
@@ -49,8 +51,9 @@ func main() {
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
 	params := setupserver.Params{
-		Logger:         logger,
-		PermitInsecure: *permitInsecureMode,
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+		PermitInsecure:    *permitInsecureMode,
 	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)

@@ -1,5 +1,45 @@
 package queue
 
+type BroadcastEntry[T any] struct {
+	Position uint64
+	Value    T
+}
+
+type BroadcastQueue[T any] interface {
+	// CloseSubscriber closes a subscriber channel.
+	CloseSubscriber(<-chan BroadcastEntry[T])
+
+	// IterateEntries will call fn for each entry in the queue, starting from
+	// the front (oldest). If fn returns false the iteration terminates and
+	// IterateEntries will return false, else it will return true.
+	IterateEntries(fn func(BroadcastEntry[T]) bool) bool
+
+	// IterateEntriesReverse will call fn for each entry in the queue, starting
+	// from the back (newest). If fn returns false the iteration terminates and
+	// IterateEntriesReverse will return false, else it will return true.
+	IterateEntriesReverse(fn func(BroadcastEntry[T]) bool) bool
+
+	// IterateValues will call fn for each entry in the queue, starting from
+	// the front (oldest). If fn returns false the iteration terminates and
+	// IterateValues will return false, else it will return true.
+	IterateValues(fn func(T) bool) bool
+
+	// IterateValuesReverse will call fn for each entry in the queue, starting
+	// from the back (newest). If fn returns false the iteration terminates and
+	// IterateEntriesReverse will return false, else it will return true.
+	IterateValuesReverse(fn func(T) bool) bool
+
+	// Position returns the position of the next entry that will be sent.
+	Position() uint64
+
+	// Subscribe creates a subscriber channel which will receive messages at the
+	// specified startingPostion.
+	Subscribe(startingPosition uint64) <-chan BroadcastEntry[T]
+
+	// Sync ensures that any pending messages have been added to the queue.
+	Sync()
+}
+
 type CloseSender[T any] interface {
 	Closer
 	Sender[T]
@@ -23,6 +63,20 @@ type Receiver[T any] interface {
 
 type Sender[T any] interface {
 	Send(value T)
+}
+
+// NewBroadcastQueue will create a one-to-many queue which may be used to
+// broadcast messages. The starting position of the queue is given by
+// initialPosition. The maximum number of entries that may be stored in the
+// queue is given by maximumSize; zero will allow the queue to grow without
+// bounds.
+// A BroadcastQueue is returned which may be used to register subscribers
+// (consumers), a channel to write messages and a channel yielding messages
+// which have been removed (due to the queue filling up).
+// A background goroutine is created for the queue and for each subscriber.
+func NewBroadcastQueue[T any](initialPosition, maximumSize uint64) (
+	BroadcastQueue[T], chan<- T, <-chan BroadcastEntry[T]) {
+	return newBroadcastQueue[T](initialPosition, maximumSize)
 }
 
 // NewChannelPair creates a pair of channels (a send-only channel and a

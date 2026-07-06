@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"text/template"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
@@ -13,8 +14,9 @@ import (
 )
 
 type Config struct {
-	AllowUnauthenticatedReads bool
-	PortNumber                uint
+	AllowUnauthenticatedReads   bool
+	InformationDatabaseTemplate string
+	PortNumber                  uint
 }
 
 type HtmlWriter interface {
@@ -31,9 +33,11 @@ type Params struct {
 var htmlWriters []HtmlWriter
 
 type state struct {
-	allowUnauthenticatedReads bool
-	imageDataBase             *scanner.ImageDataBase
-	objectServer              objectserver.ObjectServer
+	allowUnauthenticatedReads   bool
+	imageDataBase               *scanner.ImageDataBase
+	informationDatabaseTemplate *template.Template
+	logger                      log.DebugLogger
+	objectServer                objectserver.ObjectServer
 }
 
 func StartServer(config Config, params Params) error {
@@ -44,7 +48,16 @@ func StartServer(config Config, params Params) error {
 	myState := state{
 		allowUnauthenticatedReads: config.AllowUnauthenticatedReads,
 		imageDataBase:             params.ImageDataBase,
+		logger:                    params.Logger,
 		objectServer:              params.ObjectServer,
+	}
+	if config.InformationDatabaseTemplate != "" {
+		tmpl, err := template.New("").Parse(config.InformationDatabaseTemplate)
+		if err != nil {
+			return fmt.Errorf("cannot parse template: %s: %s",
+				config.InformationDatabaseTemplate, err)
+		}
+		myState.informationDatabaseTemplate = tmpl
 	}
 	html.HandleFunc("/", statusHandler)
 	if config.AllowUnauthenticatedReads {

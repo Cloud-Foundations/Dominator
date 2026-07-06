@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -13,6 +14,11 @@ import (
 )
 
 var timeFormat string = "02 Jan 2006 15:04:05.99 MST"
+
+type imageData struct {
+	Name string
+	*image.Image
+}
 
 func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 	writer := bufio.NewWriter(w)
@@ -83,6 +89,12 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 			"Built from Git repository: %s on branch: %s at commit: %s<br>\n",
 			img.BuildGitUrl, img.BuildBranch, img.BuildCommitId)
 	}
+	if len(img.OwnerGroups) > 0 {
+		fmt.Fprintf(writer, "OwnerGroups: %v<br>\n", img.OwnerGroups)
+	}
+	if len(img.OwnerUsers) > 0 {
+		fmt.Fprintf(writer, "OwnerUsers: %v<br>\n", img.OwnerUsers)
+	}
 	if len(img.Packages) > 0 {
 		fmt.Fprintf(writer,
 			"Packages: <a href=\"listPackages?%s\">%d</a><br>\n",
@@ -105,6 +117,21 @@ func (s state) showImageHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(writer, `</pre><p style="clear: both;">`)
 	}
 	fmt.Fprintf(writer, "File checksum: %x<br>\n", checksum)
+	if s.informationDatabaseTemplate != nil {
+		data := imageData{
+			Name:  imageName,
+			Image: img,
+		}
+		builder := &strings.Builder{}
+		err := s.informationDatabaseTemplate.Execute(builder, data)
+		if err != nil {
+			s.logger.Printf("%s: error executing template%s\n", err)
+		} else {
+			fmt.Fprintf(writer,
+				"External information <a href=\"%s\">link</a><br>\n",
+				builder)
+		}
+	}
 	fmt.Fprintln(writer, "</body>")
 }
 

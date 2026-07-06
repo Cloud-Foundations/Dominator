@@ -27,6 +27,8 @@ var (
 	debug         = flag.Bool("debug", false, "Deprecated")
 	fetchInterval = flag.Uint("fetchInterval", 59,
 		"Interval between fetches from the MDB source, in seconds")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	hostnamesExcludeFile = flag.String("hostnamesExcludeFile", "",
 		"A file containing a list of hostnames to exclude")
 	hostnamesIncludeFile = flag.String("hostnamesIncludeFile", "",
@@ -243,7 +245,10 @@ func main() {
 		printUsage()
 		os.Exit(2)
 	}
-	params := setupserver.Params{Logger: logger}
+	params := setupserver.Params{
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+	}
 	setupserver.SetupTlsWithParams(params)
 	handleSignals(logger)
 	readerChannel := fsutil.WatchFile(*sourcesFile, logger)

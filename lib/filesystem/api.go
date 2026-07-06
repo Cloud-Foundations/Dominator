@@ -41,6 +41,8 @@ type GenericInode interface {
 	WriteMetadata(name string) error
 }
 
+type Filename string
+type InodeNumber uint64
 type InodeTable map[uint64]GenericInode
 type InodeToFilenamesTable map[uint64][]string
 type FilenameToInodeTable map[string]uint64

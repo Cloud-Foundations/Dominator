@@ -70,6 +70,8 @@ Some of the sub-commands available are:
 - **mkdir**: make a directory
 - **patch-directory**: patch (update) a local directory with an image
 - **restore-from-file**: restore an image from an imagearchive file
+- **run-command-in-image-chroot**: unpack an image into a temporary directory
+                                   and run the specified command inside a chroot
 - **save-to-file**: save an image to an imagearchive file or stdout
 - **scan-filtered-files**: scan a directory and list those matched by the image filter
 - **show**: show (list) an image
@@ -96,3 +98,18 @@ authentication. *Imagetool* will load certificate and key files from the
 `~/.ssl` directory. *Imagetool* will present these certificates to
 *imageserver*. If one of the certificates is signed by a certificate authority
 that *imageserver* trusts, *imageserver* will grant access.
+
+## Making raw images
+You can specify extra partitions to be created using the `-extraPartitionsFilename` option to the `make-raw-image` subcommand, which specifies a JSON file. An example file is:
+```
+[
+    {
+        "FileSystemLabel": "/home",
+        "MountPoint": "/home",
+        "MinimumBytes": 536870912,
+        "RootGroupId": 1,
+        "RootUserId": 2
+    }
+]
+```
+This will create an extra 512 MiB `/home` partition and file-system, with the root inode owned by GID=1,UID=2.

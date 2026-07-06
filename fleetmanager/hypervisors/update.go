@@ -126,6 +126,12 @@ func (h *hypervisorType) checkAuth(authInfo *srpc.AuthInformation) error {
 	return errorNoAccessToResource
 }
 
+func (h *hypervisorType) getMachine() *fm_proto.Machine {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.getMachineLocked()
+}
+
 func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	machine := h.Machine
 	if len(h.localTags) < 1 {
@@ -134,6 +140,41 @@ func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	machine.Tags = h.Machine.Tags.Copy()
 	machine.Tags.Merge(h.localTags)
 	return &machine
+}
+
+// deleteStaleHypervisors deletes stored Hypervisors which are not in the
+// specified list of machines. If the initial topology has been loaded,
+// deleteStaleHypervisors does nothing.
+func (m *Manager) deleteStaleHypervisors(machines []*fm_proto.Machine) error {
+	if len(m.topologyLoaded) < 1 {
+		return nil // Already loaded and processed topology.
+	}
+	hypervisorIPs, err := m.storer.ListHypervisors()
+	if err != nil {
+		return err
+	}
+	hypervisorsToDelete := make(map[string]net.IP, len(hypervisorIPs))
+	for _, ip := range hypervisorIPs {
+		hypervisorsToDelete[ip.String()] = ip
+	}
+	for _, machine := range machines {
+		ip := machine.HostIpAddress.String()
+		if _, ok := hypervisorsToDelete[ip]; ok {
+			delete(hypervisorsToDelete, ip)
+		}
+	}
+	if len(hypervisorsToDelete) < 1 {
+		return nil
+	}
+	m.logger.Printf("Deleting stale data for %d old Hypervisors\n",
+		len(hypervisorsToDelete))
+	for ipAddr, netIP := range hypervisorsToDelete {
+		m.logger.Printf("Deleting stale data for old Hypervisor: %s\n", ipAddr)
+		if err := m.storer.UnregisterHypervisor(netIP); err != nil {
+			m.logger.Println(err)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) changeMachineTags(hostname string,
@@ -172,12 +213,6 @@ func (m *Manager) changeMachineTags(hostname string,
 		m.sendUpdate(location, update)
 		return nil
 	}
-}
-
-func (h *hypervisorType) getMachine() *fm_proto.Machine {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return h.getMachineLocked()
 }
 
 func (m *Manager) closeUpdateChannel(channel <-chan fm_proto.Update) {
@@ -248,6 +283,7 @@ func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 	h.mutex.Lock()
 	locationChanged := h.location != machine.Location
 	h.location = machine.Location
+	machine.ArchitectureType = h.Machine.ArchitectureType
 	machine.MemoryInMiB = h.Machine.MemoryInMiB
 	machine.NumCPUs = h.Machine.NumCPUs
 	machine.TotalVolumeBytes = h.Machine.TotalVolumeBytes
@@ -289,10 +325,17 @@ func (m *Manager) updateTopology(t *topology.Topology) {
 		m.logger.Println(err)
 		return
 	}
+	if err := m.deleteStaleHypervisors(machines); err != nil {
+		m.logger.Println(err)
+		return
+	}
 	var waitGroup sync.WaitGroup
 	deleteList := m.updateTopologyLocked(t, machines, &waitGroup)
 	for _, hypervisor := range deleteList {
-		m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
+		err := m.storer.UnregisterHypervisor(hypervisor.Machine.HostIpAddress)
+		if err != nil {
+			m.logger.Println(err)
+		}
 		hypervisor.delete()
 	}
 	waitGroup.Wait()
@@ -433,6 +476,7 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 		h.logger.Printf("error reading tags, not managing hypervisor: %s", err)
 		return
 	}
+	vms := make([]*vmInfoType, 0, len(vmList))
 	for _, vmIpAddr := range vmList {
 		pVmInfo, err := m.storer.ReadVm(h.Machine.HostIpAddress, vmIpAddr)
 		if err != nil {
@@ -445,9 +489,34 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 		m.mutex.Lock()
 		m.vms[vmIpAddr] = vmInfo
 		m.mutex.Unlock()
+		vms = append(vms, vmInfo)
 	}
 	wg.Done() // Loading completed: notify.
 	wg = nil
+	// Check that the VM IPs are registered to this Hypervisor.
+	if ips, err := m.getIPsForHypervisor(h.Machine.HostIpAddress); err != nil {
+		h.logger.Println(err)
+	} else {
+		ipMap := make(map[string]struct{}, len(ips))
+		for _, ip := range ips {
+			ipMap[ip] = struct{}{}
+		}
+		for _, vm := range vms {
+			if _, found := ipMap[vm.ipAddr]; !found {
+				h.logger.Printf(
+					"WARNING: VM primary IP: %s not registered to me\n",
+					vm.ipAddr)
+			}
+			for _, address := range vm.SecondaryAddresses {
+				ipAddr := address.IpAddress.String()
+				if _, found := ipMap[ipAddr]; !found {
+					h.logger.Printf(
+						"WARNING: VM secondary IP: %s not registered to me\n",
+						ipAddr)
+				}
+			}
+		}
+	}
 	for !h.isDeleteScheduled() {
 		sleepTime := m.manageHypervisor(h)
 		time.Sleep(sleepTime)
@@ -664,6 +733,9 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	h.mutex.Lock()
 	oldData := h.HypervisorData
 	oldMachine := h.Machine
+	if update.ArchitectureType != hyper_proto.ArchitectureTypeAuto {
+		h.ArchitectureType = update.ArchitectureType
+	}
 	if update.AvailableMemoryInMiB != nil {
 		h.AvailableMemory = *update.AvailableMemoryInMiB
 	}
@@ -857,6 +929,11 @@ func (m *Manager) processVmUpdatesWithLock(h *hypervisorType,
 				vm.VmInfo = *protoVm
 				updateToSend.ChangedVMs[ipAddr] = protoVm
 				updateToSend.VmToHypervisor[ipAddr] = h.Machine.Hostname
+				if _vm, ok := m.vms[ipAddr]; !ok {
+					h.logger.Printf("VM: %s not in global map\n", ipAddr)
+				} else if _vm == nil {
+					h.logger.Printf("VM: %s is nil in global map\n", ipAddr)
+				}
 			} else {
 				if _, ok := h.migratingVms[ipAddr]; ok {
 					delete(h.migratingVms, ipAddr)

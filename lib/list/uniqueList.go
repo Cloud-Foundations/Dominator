@@ -22,8 +22,26 @@ func (l *UniqueList[T]) iterateEntries(fn func(*UniqueListEntry[T]) bool) bool {
 	return true
 }
 
+func (l *UniqueList[T]) iterateEntriesReverse(
+	fn func(*UniqueListEntry[T]) bool) bool {
+	var previousEntry *UniqueListEntry[T]
+	for entry := l.last; entry != nil; entry = previousEntry {
+		previousEntry = entry.previous
+		if !fn(entry) {
+			return false
+		}
+	}
+	return true
+}
+
 func (l *UniqueList[T]) iterateValues(fn func(T) bool) bool {
 	return l.IterateEntries(func(entry *UniqueListEntry[T]) bool {
+		return fn(entry.value)
+	})
+}
+
+func (l *UniqueList[T]) iterateValuesReverse(fn func(T) bool) bool {
+	return l.IterateEntriesReverse(func(entry *UniqueListEntry[T]) bool {
 		return fn(entry.value)
 	})
 }

@@ -11,12 +11,23 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
 
-func printCommands(writer io.Writer, commands []Command) {
+func printCommands(writer io.Writer, commands []Command, alignColumns bool) {
 	isSorted := sort.SliceIsSorted(commands, func(i, j int) bool {
 		return commands[i].Command < commands[j].Command
 	})
 	if !isSorted {
 		fmt.Fprintln(writer, "NOTE: COMMANDS ARE NOT SORTED!")
+	}
+	var width int
+	if alignColumns {
+		for _, command := range commands {
+			if command.CmdFunc == nil {
+				continue
+			}
+			if len(command.Command) > width {
+				width = len(command.Command)
+			}
+		}
 	}
 	for _, command := range commands {
 		if command.CmdFunc == nil {
@@ -25,7 +36,8 @@ func printCommands(writer io.Writer, commands []Command) {
 		if command.Args == "" {
 			fmt.Fprintln(writer, " ", command.Command)
 		} else {
-			fmt.Fprintln(writer, " ", command.Command, command.Args)
+			fmt.Fprintf(writer, "  %-*s %s\n",
+				width, command.Command, command.Args)
 		}
 	}
 	if !isSorted {

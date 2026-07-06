@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -51,10 +52,31 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	ctx, cancel := makeContext2(b.maximumBuildDuration,
 		request.MaximumBuildDuration)
 	defer cancel()
+	bindMounts := convertBindMounts(b.bindMounts)
+	if b.cache.BaseDirectory != "" && b.cache.MountPoint != "" {
+		sourceDir := filepath.Join(b.cache.BaseDirectory,
+			filepath.Clean(request.StreamName))
+		if err := os.MkdirAll(sourceDir, fsutil.DirPerms); err != nil {
+			return nil, err
+		}
+		bindMounts = append(bindMounts, bindMountType{
+			source:   sourceDir,
+			target:   b.cache.MountPoint,
+			writable: true,
+		})
+	}
 	img, err := buildImageFromManifest(ctx, client, manifestDirectory, request,
-		b.bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
+		bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
 	if err != nil {
 		return nil, err
+	}
+	if b.cache.BaseDirectory != "" && b.cache.MountPoint != "" {
+		sourceDir := filepath.Join(b.cache.BaseDirectory,
+			filepath.Clean(request.StreamName))
+		err := trimDirectory(sourceDir, b.cache.SizeLimit, buildLog)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return img, nil
 }
@@ -69,6 +91,7 @@ func (stream *imageStreamType) getenv() map[string]string {
 			return ""
 		})
 	}
+	envTable["ARCH"] = runtime.GOARCH
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
 	envTable["IMAGE_STREAM_LEAF_NAME"] = filepath.Base(stream.name)
@@ -258,10 +281,10 @@ func runCommand(buildLog io.Writer, cwd string, args ...string) error {
 }
 
 func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
-	manifestDir string, request proto.BuildImageRequest, bindMounts []string,
-	envGetter environmentGetter, gitInfo *gitInfoType,
-	mtimesCopyFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
-	*image.Image, error) {
+	manifestDir string, request proto.BuildImageRequest,
+	bindMounts []bindMountType, envGetter environmentGetter,
+	gitInfo *gitInfoType, mtimesCopyFilter *filter.Filter,
+	buildLog buildLogger, logger log.Logger) (*image.Image, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
 	if err != nil {
@@ -279,6 +302,10 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 				fmt.Fprintln(buildLog, line)
 			}
 		}
+	}
+	owners, err := loadOwners(manifestDir)
+	if err != nil {
+		return nil, err
 	}
 	tgs, err := loadTags(manifestDir)
 	if err != nil {
@@ -351,9 +378,14 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		mf.Merge(manifest.mtimesCopyAddFilter)
 		mtimesCopyFilter = mf.ExportFilter()
 	}
-	img, err := packImage(ctx, nil, client, request, rootDir, manifest.filter,
+	g, err := newNamespaceTargetWithMounts(rootDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer g.Quit()
+	img, err := packImage(ctx, g, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
-		tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
+		owners, tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +410,7 @@ func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
 		client,
 		options.ManifestDirectory,
 		request,
-		options.BindMounts,
+		convertBindMounts(options.BindMounts),
 		&imageStreamType{
 			name: streamName,
 			imageStreamConfigurationType: imageStreamConfigurationType{
@@ -454,7 +486,8 @@ func buildTreeFromManifest(ctx context.Context, client srpc.ClientI,
 		return "", err
 	}
 	_, err = unpackImageAndProcessManifest(ctx, client,
-		options.ManifestDirectory, 0, rootDir, options.BindMounts, true,
+		options.ManifestDirectory, 0, rootDir,
+		convertBindMounts(options.BindMounts), true,
 		variablesGetter(options.Variables), buildLog, logger)
 	if err != nil {
 		os.RemoveAll(rootDir)
@@ -540,6 +573,18 @@ func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
 	} else {
 		return addFilter, true, nil
 	}
+}
+
+func loadOwners(manifestDir string) (OwnersType, error) {
+	var owners OwnersType
+	err := json.ReadFromFile(filepath.Join(manifestDir, "owners.json"), &owners)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return owners, nil
+		}
+		return OwnersType{}, err
+	}
+	return owners, nil
 }
 
 func loadTags(manifestDir string) (tags.Tags, error) {

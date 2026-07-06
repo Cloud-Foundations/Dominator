@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
@@ -121,7 +120,7 @@ func (m *Manager) getVMs(doSort bool) []*vmInfoType {
 }
 
 func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
-	capacity *hyper_proto.GetCapacityResponse,
+	ipMap map[string]struct{}, capacity *hyper_proto.GetCapacityResponse,
 	locationFilter, primaryOwnerFilter string, outputType uint) error {
 	topology, err := m.getTopology()
 	if err != nil {
@@ -166,6 +165,8 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 			} else if topology.CheckIfIpIsHost(vm.ipAddr) ||
 				topology.CheckIfIpIsReserved(vm.ipAddr) {
 				background = "orange"
+			} else if _, found := ipMap[vm.ipAddr]; !found && ipMap != nil {
+				background = "red"
 			}
 			vCPUs := strconv.Itoa(int(numSpecifiedVirtualCPUs(vm.MilliCPUs,
 				vm.VirtualCPUs)))
@@ -183,9 +184,8 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 				vm.numVolumesTableEntry(),
 				vm.storageTotalTableEntry(),
 				vm.OwnerUsers[0],
-				fmt.Sprintf("<a href=\"http://%s:%d/\">%s</a>",
+				fmt.Sprintf("<a href=\"showHypervisor?%s\">%s</a>",
 					vm.hypervisor.Machine.Hostname,
-					constants.HypervisorPortNumber,
 					vm.hypervisor.Machine.Hostname),
 				fmt.Sprintf("<a href=\"listHypervisors?location=%s\">%s</a>",
 					vm.hypervisor.location, vm.hypervisor.location),
@@ -325,7 +325,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 		fmt.Fprintln(writer, "<body>")
 	}
 	vms := m.getVMs(true)
-	err := m.listVMs(writer, vms, nil, parsedQuery.Table["location"],
+	err := m.listVMs(writer, vms, nil, nil, parsedQuery.Table["location"],
 		parsedQuery.Table["primaryOwner"], parsedQuery.OutputType())
 	if err != nil {
 		fmt.Fprintln(writer, err)
@@ -340,6 +340,7 @@ func (m *Manager) listVMsHandler(w http.ResponseWriter,
 func (m *Manager) listVMsInLocation(request fm_proto.ListVMsInLocationRequest) (
 	[]net.IP, error) {
 	hypervisors, err := m.listHypervisors(request.Location, showAll, "",
+		hyper_proto.ArchitectureTypeAuto,
 		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return nil, err

@@ -8,18 +8,26 @@ import (
 )
 
 const (
-	consoleTypeUnknown     = "UNKNOWN ConsoleType"
-	firmwareTypeUnknown    = "UNKNOWN FirmwareType"
-	machineTypeUnknown     = "UNKNOWN MachineType"
-	stateUnknown           = "UNKNOWN State"
-	volumeFormatUnknown    = "UNKNOWN VolumeFormat"
-	volumeInterfaceUnknown = "UNKNOWN VolumeInterface"
-	volumeTypeUnknown      = "UNKNOWN VolumeType"
-	watchdogActionUnknown  = "UNKNOWN WatchdogAction"
-	watchdogModelUnknown   = "UNKNOWN WatchdogModel"
+	architectureTypeUnknown = "UNKNOWN ArchitectureType"
+	consoleTypeUnknown      = "UNKNOWN ConsoleType"
+	firmwareTypeUnknown     = "UNKNOWN FirmwareType"
+	machineTypeUnknown      = "UNKNOWN MachineType"
+	stateUnknown            = "UNKNOWN State"
+	volumeFormatUnknown     = "UNKNOWN VolumeFormat"
+	volumeInterfaceUnknown  = "UNKNOWN VolumeInterface"
+	volumeTypeUnknown       = "UNKNOWN VolumeType"
+	watchdogActionUnknown   = "UNKNOWN WatchdogAction"
+	watchdogModelUnknown    = "UNKNOWN WatchdogModel"
 )
 
 var (
+	architectureTypeToText = map[ArchitectureType]string{
+		ArchitectureTypeAuto:  "auto",
+		ArchitectureTypeAmd64: "amd64",
+		ArchitectureTypeArm64: "arm64",
+	}
+	textToArchitectureType map[string]ArchitectureType
+
 	consoleTypeToText = map[ConsoleType]string{
 		ConsoleNone:  "none",
 		ConsoleDummy: "dummy",
@@ -35,8 +43,10 @@ var (
 	textToFirmwareType map[string]FirmwareType
 
 	machineTypeToText = map[MachineType]string{
-		MachineTypeGenericPC: "pc",
+		MachineTypeAuto:      "auto",
 		MachineTypeQ35:       "q35",
+		MachineTypeGenericPC: "pc",
+		MachineTypeVirt:      "virt",
 	}
 	textToMachineType map[string]MachineType
 
@@ -64,6 +74,7 @@ var (
 		VolumeInterfaceVirtIO: "virtio",
 		VolumeInterfaceIDE:    "ide",
 		VolumeInterfaceNVMe:   "nvme",
+		VolumeInterfaceDFM:    "dfm",
 	}
 	textToVolumeInterface map[string]VolumeInterface
 
@@ -90,6 +101,11 @@ var (
 )
 
 func init() {
+	textToArchitectureType = make(map[string]ArchitectureType,
+		len(architectureTypeToText))
+	for architectureType, text := range architectureTypeToText {
+		textToArchitectureType[text] = architectureType
+	}
 	textToConsoleType = make(map[string]ConsoleType, len(consoleTypeToText))
 	for consoleType, text := range consoleTypeToText {
 		textToConsoleType[text] = consoleType
@@ -229,6 +245,49 @@ func stringSlicesEqual(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+func (architectureType *ArchitectureType) CheckValid() error {
+	if _, ok := architectureTypeToText[*architectureType]; !ok {
+		return errors.New(architectureTypeUnknown)
+	} else {
+		return nil
+	}
+}
+
+func (architectureType ArchitectureType) MarshalText() ([]byte, error) {
+	if text := architectureType.String(); text == architectureTypeUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (architectureType *ArchitectureType) Set(value string) error {
+	if val, ok := textToArchitectureType[value]; !ok {
+		return errors.New(architectureTypeUnknown)
+	} else {
+		*architectureType = val
+		return nil
+	}
+}
+
+func (architectureType ArchitectureType) String() string {
+	if str, ok := architectureTypeToText[architectureType]; !ok {
+		return architectureTypeUnknown
+	} else {
+		return str
+	}
+}
+
+func (architectureType *ArchitectureType) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToArchitectureType[txt]; ok {
+		*architectureType = val
+		return nil
+	} else {
+		return errors.New("unknown ArchitectureType: " + txt)
+	}
 }
 
 func (consoleType *ConsoleType) CheckValid() error {
@@ -455,6 +514,9 @@ func (subnet *Subnet) Shrink() {
 
 func (left *VmInfo) Equal(right *VmInfo) bool {
 	if !left.Address.Equal(&right.Address) {
+		return false
+	}
+	if left.ArchitectureType != right.ArchitectureType {
 		return false
 	}
 	if !left.ChangedStateOn.Equal(right.ChangedStateOn) {

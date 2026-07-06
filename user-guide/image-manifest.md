@@ -62,6 +62,15 @@ If present, any files and symbolic links in this directory tree will be
 copied verbatim into the image (prior to installing packages), preserving the
 directory structure.
 
+### `files.append` directory tree
+If present, any files in this directory tree will be appended to their
+corresponding paths in the image, preserving the directory structure.
+If a file already exists in the image, its contents will be appended
+verbatim. If a file does not exist, it will be created with the same
+permissions as the source file, and its contents will be written.
+Symbolic links are not supported in this directory and will be ignored
+if present.
+
 ### `pre-install-scripts` directory
 An optional directory containing scripts to run prior to installing packages.
 These are processed in lexical order. The scripts are run in a contained
@@ -75,6 +84,16 @@ contents of the `files` directory tree should contain any package repositories.
 ### `post-install-files` directory tree
 If present, any files and symbolic links in this directory tree will be
 copied verbatim into the image, preserving the directory structure.
+
+### `post-install-files.append` directory tree
+If present, any files in this directory tree will be appended to their
+corresponding paths in the image, preserving the directory structure.
+If a file already exists in the image, its contents will be appended
+verbatim. If a file does not exist, it will be created with the same
+permissions as the source file, and its contents will be written.
+Symbolic links are not supported in this directory and will be ignored
+if present.
+Unlike post-install-files, this directory performs append operations instead of overwriting.
 
 ### `scripts` directory
 An optional directory containing scripts to run. These are processed in lexical
@@ -124,6 +143,17 @@ only for images which will be lived patched onto machines with the
 This is similar to the `filter` file, except that the filter expressions are
 *added* to the filter of the *SourceImage*, thus inheriting and (if not empty)
 extending the filter. This must not be present if the `filter` file is present.
+
+### `owners.json` file
+An optional JSON encoded file containing a list of group and user owners for the
+image. These owners will be permitted to delete and change the image lifetime of
+built images. For example:
+```
+{
+    "Groups": ["admins", "builders"],
+    "Users": ["alice", "bob"]
+}
+```
 
 ### `tags.json` file
 An optional JSON encoded file containing key:value tags to add to the image.

@@ -39,6 +39,7 @@ func restartService(srpcClient *srpc.Client, serviceName string) error {
 			},
 		},
 		PathsToDelete: []string{tmpPathname},
+		SparseImage:   true,
 		Triggers: &triggers.Triggers{
 			Triggers: []*triggers.Trigger{&trg},
 		},

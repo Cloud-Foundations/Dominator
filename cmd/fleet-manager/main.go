@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/fleetmanager/allocator"
+	allocator_fs_storer "github.com/Cloud-Foundations/Dominator/fleetmanager/allocator/fsstorer"
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/httpd"
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/hypervisors"
-	"github.com/Cloud-Foundations/Dominator/fleetmanager/hypervisors/fsstorer"
+	hypervisors_fs_storer "github.com/Cloud-Foundations/Dominator/fleetmanager/hypervisors/fsstorer"
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/rpcd"
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -27,6 +29,8 @@ import (
 var (
 	checkTopology = flag.Bool("checkTopology", false,
 		"If true, perform a one-time check, write to stdout and exit")
+	createDeadline = flag.Duration("createDeadline",
+		5*time.Minute, "Deadline for creating VMs for available allocation")
 	ipmiPasswordFile = flag.String("ipmiPasswordFile", "",
 		"Name of password file used to authenticate for IPMI requests")
 	ipmiUsername = flag.String("ipmiUsername", "",
@@ -35,6 +39,8 @@ var (
 		time.Minute, "Configuration check interval")
 	portNum = flag.Uint("portNum", constants.FleetManagerPortNumber,
 		"Port number to allocate and listen on for HTTP/RPC")
+	maximumQueueSize = flag.Uint64("maximumQueueSize", 1000,
+		"Maximum size of the allocation update queue")
 	stateDir = flag.String("stateDir", "/var/lib/fleet-manager",
 		"Name of state directory")
 	topologyDir = flag.String("topologyDir", "",
@@ -98,23 +104,44 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Cannot watch for topology: %s\n", err)
 	}
-	storer, err := fsstorer.New(filepath.Join(*stateDir, "hypervisor-db"),
+	hypervisorsStorer, err := hypervisors_fs_storer.New(
+		filepath.Join(*stateDir, "hypervisor-db"),
 		logger)
 	if err != nil {
-		logger.Fatalf("Cannot create DB: %s\n", err)
+		logger.Fatalf("Cannot create Hypervisors DB: %s\n", err)
 	}
 	hyperManager, err := hypervisors.New(hypervisors.StartOptions{
 		IpmiPasswordFile: *ipmiPasswordFile,
 		IpmiUsername:     *ipmiUsername,
 		Logger:           logger,
-		Storer:           storer,
+		Storer:           hypervisorsStorer,
 	})
 	if err != nil {
 		logger.Fatalf("Cannot create hypervisors manager: %s\n", err)
 	}
+	allocatorStorer, err := allocator_fs_storer.New(
+		filepath.Join(*stateDir, "allocator-db"),
+		logger)
+	if err != nil {
+		logger.Fatalf("Cannot create Allocator DB: %s\n", err)
+	}
+	allocationManager, err := allocator.New(
+		allocator.Options{
+			CreateDeadline:   *createDeadline,
+			MaximumQueueSize: *maximumQueueSize,
+		},
+		allocator.Params{
+			Logger:             logger,
+			Storer:             allocatorStorer,
+			UpdateChannelMaker: hyperManager,
+		})
+	if err != nil {
+		logger.Fatalf("Cannot create allocation manager: %s\n", err)
+	}
 	rpcHtmlWriter, err := rpcd.Setup(
 		rpcd.Config{},
 		rpcd.Params{
+			AllocationManager:  allocationManager,
 			HypervisorsManager: hyperManager,
 			Logger:             logger},
 	)
@@ -126,11 +153,13 @@ func main() {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
 	webServer.AddHtmlWriter(hyperManager)
+	webServer.AddHtmlWriter(allocationManager)
 	webServer.AddHtmlWriter(rpcHtmlWriter)
 	webServer.AddHtmlWriter(logger)
 	for topology := range topologyChannel {
 		logger.Println("Received new topology")
 		webServer.UpdateTopology(topology)
 		hyperManager.UpdateTopology(topology)
+		allocationManager.UpdateTopology(topology)
 	}
 }

@@ -99,6 +99,9 @@ func dial(network, address string, dialer Dialer) (net.Conn, error) {
 
 func dialHTTP(network, address string, tlsConfig *tls.Config,
 	dialer Dialer) (*Client, error) {
+	if err := validateTlsConfig(tlsConfig); err != nil {
+		return nil, err
+	}
 	if *srpcProxy == "" {
 		return dialHTTPDirect(network, address, tlsConfig, dialer)
 	}
@@ -288,7 +291,7 @@ func registerClientTlsConfig(config *tls.Config) {
 	if config == nil {
 		return
 	}
-	setupCertExpirationMetric(setupClientExpirationMetric, config,
+	setupCertExpirationMetric(setupClientExpirationMetric, &clientTlsConfig,
 		clientMetricsDir)
 }
 

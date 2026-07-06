@@ -21,6 +21,7 @@ func (t *srpcType) GetVmUserData(conn *srpc.Conn) error {
 		}
 		return conn.Encode(proto.GetVmUserDataResponse{Error: err.Error()})
 	}
+	defer rc.Close()
 	response := proto.GetVmUserDataResponse{Length: length}
 	if err := conn.Encode(response); err != nil {
 		return err

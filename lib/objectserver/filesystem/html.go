@@ -40,8 +40,9 @@ func (objSrv *ObjectServer) writeHtml(writer io.Writer) {
 			100.0 * float64(unreferencedBytes) / float64(totalBytes)
 	}
 	fmt.Fprintf(writer,
-		"Number of objects: %d, consuming %s (%.1f%% of FS which is %.1f%% full)<br>\n",
-		numObjects, format.FormatBytes(totalBytes), totalUtilisation,
+		"Number of objects: %d, consuming %s (%.1f%% of %s FS which is %.1f%% full)<br>\n",
+		numObjects, format.FormatBytes(totalBytes),
+		totalUtilisation, format.FormatBytes(capacity),
 		utilisation)
 	if numDuplicated > 0 {
 		fmt.Fprintf(writer,

@@ -85,6 +85,7 @@ var subcommands = []commands.Command{
 		buildTreeFromManifestSubcommand},
 	{"disable-auto-builds", "", 0, 0, disableAutoBuildsSubcommand},
 	{"disable-build-requests", "", 0, 0, disableBuildRequestsSubcommand},
+	{"enable-build-requests", "", 0, 0, enableBuildRequestsSubcommand},
 	{"get-dependencies", "", 0, 0, getDependenciesSubcommand},
 	{"get-digraph", "", 0, 0, getDirectedGraphSubcommand},
 	{"process-manifest", "manifestDir rootDir", 2, 2,
@@ -141,7 +142,11 @@ func doMain() int {
 	}
 	logger := cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
-	if err := setupclient.SetupTls(true); err != nil {
+	err := setupclient.SetupTlsWithParams(setupclient.Params{
+		IgnoreMissingCerts: true,
+		Logger:             logger,
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

@@ -19,10 +19,11 @@ import (
 )
 
 type Params struct {
-	ClientOnly     bool // If true, only register client certificate and key.
-	FailIfExpired  bool // If true, fail if certificate not yet valid or expired
-	Logger         log.DebugLogger
-	PermitInsecure bool // If true, ignore missing CA.
+	ClientOnly        bool // true: only register client certificate and key.
+	FailIfExpired     bool // true: fail if certificate not yet valid or expired
+	GenerateIfMissing bool // true: generate a server cert&key if missing.
+	Logger            log.DebugLogger
+	PermitInsecure    bool // If true, ignore missing CA.
 }
 
 func SetupTls() error {

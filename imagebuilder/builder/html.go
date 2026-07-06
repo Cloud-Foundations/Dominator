@@ -109,6 +109,12 @@ func (b *Builder) showImageStreams(writer io.Writer) {
 }
 
 func (b *Builder) writeHtml(writer io.Writer) {
+	if disableFor := time.Until(b.disableBuildRequestsUntil); disableFor > 0 {
+		fmt.Fprintf(writer,
+			"<font color=\"salmon\">Build requests disabled until %s (%s)</font><p>\n",
+			b.disableBuildRequestsUntil.Format(format.TimeFormatSeconds),
+			format.Duration(disableFor))
+	}
 	fmt.Fprintf(writer,
 		"Number of image streams: <a href=\"showImageStreams\">%d</a><br>\n",
 		b.getNumStreams())

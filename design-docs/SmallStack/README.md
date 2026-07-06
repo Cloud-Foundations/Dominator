@@ -59,11 +59,11 @@ Core Components
 
 This system has three main components:
 
--   The Hypervisor
+- The Hypervisor
 
--   The Fleet Manager
+- The Fleet Manager
 
--   The vm-control utility (or API)
+- The vm-control utility (or API)
 
 All components are simple-to-deploy Go binaries, built from Open Source software.
 
@@ -71,17 +71,17 @@ All components are simple-to-deploy Go binaries, built from Open Source software
 
 This is an agent that runs on each physical node. It has the following responsibilities and components:
 
--   Uses QEMU+KVM to run VMs
+- Uses QEMU+KVM to run VMs
 
--   Manages the node capacity (CPU, RAM and local storage)
+- Manages the node capacity (CPU, RAM and local storage)
 
--   Contains a built-in DHCP server to provide network configuration information to the VMs and for installing other Hypervisors via PXE boot
+- Contains a built-in DHCP server to provide network configuration information to the VMs and for installing other Hypervisors via PXE boot
 
--   Contains a built-in TFTP server which may be used for [birthing](../MachineBirthing/README.md) physical machines (i.e. other Hypervisors) via PXE boot
+- Contains a built-in TFTP server which may be used for [birthing](../MachineBirthing/README.md) physical machines (i.e. other Hypervisors) via PXE boot
 
--   Contains a metadata server (on the 169.254.169.254 link-local address) which can provide other configuration information and credentials to the VMs. [Appendix 1: Metadata Server](#_m32qdtj523bz) contains more information
+- Contains a metadata server (on the 169.254.169.254 link-local address) which can provide other configuration information and credentials to the VMs. [Appendix 1: Metadata Server](#_m32qdtj523bz) contains more information
 
--   Object Cache which caches some commonly-used objects in the [**Dominator**](../Dominator/README.md) ecosystem images. This optional cache improves the performance of creating and updating VMs using these images
+- Object Cache which caches some commonly-used objects in the [**Dominator**](../Dominator/README.md) ecosystem images. This optional cache improves the performance of creating and updating VMs using these images
 
 A diagram is shown below:
 ![Hypervisor image](../pictures/Hypervisor.svg)
@@ -98,27 +98,29 @@ The Hypervisor probes the node at startup to determine the total machine capacit
 
 The Fleet Manager performs several functions:
 
--   Address pool replenishment
+- Address pool replenishment
 
--   Poll Hypervisors to find VMs and monitor utilisation metrics
+- Poll Hypervisors to find VMs and monitor utilisation metrics
 
--   Provide a directory service for the vm-control utility or API
+- Provide a directory service for the vm-control utility or API
 
--   Manage VM snapshots (backups) of VM volumes
+- Provide an optional Allocation Manager service (experimental)
+
+- Manage VM snapshots (backups) of VM volumes (to be implemented)
 
 The Fleet Manager reads the configuration of the fleet (typically from a URL pointing to a directory tree in a Git repository). This configuration includes:
 
--   Physical groupings of machines, such as:
+- Physical groupings of machines, such as:
 
-    -   region
+  - region
 
-    -   building
+  - building
 
-    -   isle
+  - isle
 
-    -   rack
+  - rack
 
--   Routing, VLAN and subnet mappings
+- Routing, VLAN and subnet mappings
 
 The topology is discussed in more detail below.
 
@@ -128,11 +130,11 @@ The scope of the Fleet Manager is deliberately limited so that it is reliable an
 
 The Fleet Manager has the essential function of monitoring the spare pool of IP and MAC addresses that each Hypervisor has and replenishing those pools when they fall below a threshold. The thresholds at which to replenish or reclaim the Hypervisor address pools are configurable, with the following defaults:
 
--   Desired number of free addresses: 16
+- Desired number of free addresses: 16
 
--   Threshold below which the pool is replenished with more addresses (low watermark): 8
+- Threshold below which the pool is replenished with more addresses (low watermark): 8
 
--   Threshold above which free addresses are reclaimed (high watermark): 24
+- Threshold above which free addresses are reclaimed (high watermark): 24
 
 Using the fleet topology and this configuration it computes IP and MAC address blocks that may be assigned to different groups of Hypervisors and hands them out in small chunks.
 
@@ -144,7 +146,25 @@ In addition to replenishing the address pools for Hypervisors, the Fleet Manager
 
 #### Directory Service
 
-The Fleet Manager provides a directory service for the vm-control utility or API, so that the utility knows where to find a Hypervisor with available capacity. This service is a (significant) convenience, but is not essential. If the DNS name or address of a Hypervisor with available capacity is known through some other means, the vm-control utility can be provided that information.
+The Fleet Manager provides a directory service for the [vm-control](../../cmd/vm-control/README.md) utility or API, so that the utility knows where to find a Hypervisor with available capacity. This service is a (significant) convenience, but is not essential. If the DNS name or address of a Hypervisor with available capacity is known through some other means, the vm-control utility can be provided that information.
+
+#### Allocation Manager Service
+
+By default the [vm-control](../../cmd/vm-control/README.md) utility makes placement decisions when creating a VM, using the Fleet Manager to find Hypervisors with available capacity (using the Directory Service feature of the Fleet Manager). If capacity is not immediately available, the tool fails. The Allocation Manager is an optional service that may be use to cooperatively request capacity. It maintains a queue of requests and returns allocations as capacity becomes available. The queue tries to maintain fairness between users by placing users at the back of the queue as each allocation request is granted. Each Allocation Manager maintains its own request queue, and clients can decide which (if any) to use. This allows for using local/regional/global Allocation Managers as well as experimentation with improved queueing algorithms without affecting general usage.
+
+The Allocation Manager is particularly useful in environments where VMs are created dynamically to process tasks and then destroyed and there is no spare (unused) capacity, such as with build and test farms.
+
+To use an Allocation Manager to create a VM, the following additional steps are taken:
+
+- Issue an `Allocate` request containing details about the VM(s) to create. This is a non-blocking request which returns a request identifier and the current position in the update stream
+
+- Concurrently or afterwards, issue a `GetAllocationUpdates` request with the position in the update stream to start receiving. This is a streaming request which yields a succession of `AllocationUpdate` messages. At some point in the future an update message will match the previously obtained request identifier. If the request completed, the message will include the Hypervisor(s) that the VM(s) can be created on. VM creation then follows the normal workflow: issuing create request(s) to the Hypervisor(s). If the VMs are not created in time, a further update message will be received indicating that the create timeout has been exceeded
+
+- Once a VM has been created, the Allocation Manager considers the request fulfilled
+
+- The Allocation Manager retains the last N (default 1000) allocate update messages, allowing clients to reconnect and start consuming updates from where they left off.
+
+Please see the Fleet Manager [protocol messages](https://github.com/Cloud-Foundations/Dominator/blob/master/proto/fleetmanager/) for more detail.
 
 #### Manage VM Snapshots
 
@@ -161,53 +181,53 @@ A diagram is shown below:
 
 The [vm-control](../../cmd/vm-control/README.md) utility orchestrates the creation, starting, stopping and destruction of VMs. It typically consults the Fleet Manager to obtain the global view of Hypervisors, their physical location (i.e. failure zones), available capacity and the placement of VMs. This global view is used to find the required Hypervisor. If the address of the Hypervisor is provided, then the Fleet Manager is not consulted. Typical VM creation options that are supported are:
 
--   Create VM of specified size anywhere
+- Create VM of specified size anywhere
 
--   Create one VM per rack or isle
+- Create one VM per rack or isle
 
--   Create VM in the same Hypervisor as a specified VM
+- Create VM in the same Hypervisor as a specified VM
 
--   Create VM in the same rack as a specified VM
+- Create VM in the same rack as a specified VM
 
--   Create VM in a different rack/isle as a specified VM
+- Create VM in a different rack/isle as a specified VM
 
--   Create VM using the same configuration (size, image) as a specified VM
+- Create VM using the same configuration (size, image) as a specified VM
 
--   Create a VM from a snapshot of another VM
+- Create a VM from a snapshot of another VM
 
--   Migrate a VM to another Hypervisor
+- Migrate a VM to another Hypervisor
 
 Since all the intelligence of VM orchestration is the responsibility of the vm-control utility, more advanced features such as VM migration and rolling migrations can be added without risking the health of the fleet; neither the Hypervisor or the Fleet Manager require new code or extra complexity. They only perform some basic services and implement simple primitives. Different users can experiment with new orchestration features, independently, *without compromising the reliability or integrity of the platform*. Integration with other systems (such as updating a Machine DataBase or DNS records) can be added by the user, with the potential for different systems to be integrated by different users.
 
 Other VM management operations include:
 
--   Create an unscheduled snapshot of a VM
+- Create an unscheduled snapshot of a VM
 
--   Replace the root image (volume) of a VM
+- Replace the root image (volume) of a VM
 
--   Patch the root image (volume) of a VM
+- Patch the root image (volume) of a VM
 
--   Restore the root image (volume) of a VM with the previous volume
+- Restore the root image (volume) of a VM with the previous volume
 
--   Stop a VM, preserving the volume(s) on the Hypervisor
+- Stop a VM, preserving the volume(s) on the Hypervisor
 
--   Stop a VM, snapshot the volume(s) and delete from the Hypervisor
+- Stop a VM, snapshot the volume(s) and delete from the Hypervisor
 
--   Destroy a VM
+- Destroy a VM
 
--   Destroy a VM and all its snapshots
+- Destroy a VM and all its snapshots
 
--   Delete snapshot(s) for a VM
+- Delete snapshot(s) for a VM
 
--   Start a VM (from local preserved volume or specified snapshot)
+- Start a VM (from local preserved volume or specified snapshot)
 
--   Connect to a serial port on a VM (remote serial console)
+- Connect to a serial port on a VM (remote serial console)
 
 Finally, some low level Hypervisor management operations are supported, which allow for bringing Hypervisors to a useful state even with no Fleet Manager configured:
 
--   Add an IP and MAC address to the address pool
+- Add an IP and MAC address to the address pool
 
--   Add a subnet
+- Add a subnet
 
 Please see the [online documentation](../../cmd/vm-control/README.md) for usage information.
 
@@ -222,11 +242,11 @@ Rather than pre-defining (hopefully) all potential grouping types or re-writing 
 
 An example topology with two large regions (NYC and SJC) and one smaller region (SYD) is available at [example-topology](../../cmd/fleet-manager/example-topology/README.md). Each region has 3 VLANs:
 
--   Production: for products serving customers
+- Production: for products serving customers
 
--   Infrastructure: for internal infrastructure services
+- Infrastructure: for internal infrastructure services
 
--   Egress: for VMs which have Internet egress access via a NAT gateway
+- Egress: for VMs which have Internet egress access via a NAT gateway
 
 VM Migration
 ------------
@@ -244,9 +264,9 @@ The first-class images supported are the [**Dominator**](../Dominator/README.md)
 
 If you have non-Linux images or do not want to use images from the [**Dominator**](../Dominator/README.md) ecosystem, there are two other supported options for specifying boot image content:
 
--   A local RAW image (a boot disc image). The vm-control utility will stream the image data to the Hypervisor. For good performance, this should be done close to the Hypervisor (another VM on the same Hypervisor is best)
+- A local RAW image (a boot disc image). The vm-control utility will stream the image data to the Hypervisor. For good performance, this should be done close to the Hypervisor (another VM on the same Hypervisor is best)
 
--   A HTTP/HTTPS URL pointing to a RAW image. In effect, you are providing your own image server. Again, for good performance, the image server should have a fast network connection to the Hypervisor.
+- A HTTP/HTTPS URL pointing to a RAW image. In effect, you are providing your own image server. Again, for good performance, the image server should have a fast network connection to the Hypervisor.
 
 With these two options, you can quickly set up the whole system and use familiar tools, keeping the barrier to entry low. You can upgrade to using [**Dominator**](../Dominator/README.md) images at any time.
 
@@ -259,44 +279,44 @@ Upgrading VMs
 
 Modern DevOps Best Practices for updating services and infrastructure urge the use of immutable infrastructure and strongly discourage logging into machines to perform updates. Rather than update running systems, the philosophy is to deploy new systems (with the latest software), verify and test the new systems and (gradually) replace the old systems with the new ones (such as by redirecting requests/workload from old to new systems). While SmallStack fully supports (and encourages) this model, it is recognised that this model may be more challenging to adopt, particularly in on-premise environments, for various reasons:
 
--   Systems may have a large amount of data which are costly or time-consuming to move
+- Systems may have a large amount of data which are costly or time-consuming to move
 
--   The IP addresses of systems may be configured into other dependent systems (i.e. network devices such as routers, firewalls and load balancers)
+- The IP addresses of systems may be configured into other dependent systems (i.e. network devices such as routers, firewalls and load balancers)
 
 SmallStack provides easy to use, leading-edge options for updating systems that retain many of the benefits of the immutable infrastructure model (reproducible deployments, consistency across systems, no partial updates) without the above challenges. There are 3 update modes available:
 
--   **Live patching** VMs with the [**Dominator**](../Dominator/README.md). This requires the [subd](../../cmd/subd/README.md) agent to run in the VMs. It is the fastest way to update VMs with the least service disruption (updating services are stopped for under a second while critical changes are made). This is limited to Linux VMs as the [subd](../../cmd/subd/README.md) agent has not been ported to other operating systems
+- **Live patching** VMs with the [**Dominator**](../Dominator/README.md). This requires the [subd](../../cmd/subd/README.md) agent to run in the VMs. It is the fastest way to update VMs with the least service disruption (updating services are stopped for under a second while critical changes are made). This is limited to Linux VMs as the [subd](../../cmd/subd/README.md) agent has not been ported to other operating systems
 
--   **Zombie patching** of VMs by using the same image-based patching used by the [**Dominator**](../Dominator/README.md) for the root volume. The VM must be stopped, then the Hypervisor will perform the update on the root volume, after which the VM may be started again. As with live patching, configuration changes and data are not modified. This approach is more disruptive than live patching as the VM needs to be shutdown, upgraded and then started, but does not require running an agent in the VMs. This is limited to VMs which use the Linux ext4fs for the root volume
+- **Zombie patching** of VMs by using the same image-based patching used by the [**Dominator**](../Dominator/README.md) for the root volume. The VM must be stopped, then the Hypervisor will perform the update on the root volume, after which the VM may be started again. As with live patching, configuration changes and data are not modified. This approach is more disruptive than live patching as the VM needs to be shutdown, upgraded and then started, but does not require running an agent in the VMs. This is limited to VMs which use the Linux ext4fs for the root volume
 
--   **Carrousel (rebirth)** of VMs by *replacing* the root volume with a new boot image. A fresh root volume is created from an image source and the root volume for the VM is replaced (while the VM is stopped). The old root volume is preserved in case a rollback (restore) is required. Secondary volumes which typically contain large data stores are unaffected. This approach is the most disruptive as any configuration changes made on the previous root volume will be lost. The image replacement method has the advantage of working for all guest OS types and does not require running an instance of [subd](../../cmd/subd/README.md) in the VM or require a specific file-system format for the root volume. To help mitigate the loss of configuration changes, configuration data may be stored in the user data for the VM, which are available from the metadata service. User data are persistent for the lifetime of the VM and are independent of the root volume.
+- **Carrousel (rebirth)** of VMs by *replacing* the root volume with a new boot image. A fresh root volume is created from an image source and the root volume for the VM is replaced (while the VM is stopped). The old root volume is preserved in case a rollback (restore) is required. Secondary volumes which typically contain large data stores are unaffected. This approach is the most disruptive as any configuration changes made on the previous root volume will be lost. The image replacement method has the advantage of working for all guest OS types and does not require running an instance of [subd](../../cmd/subd/README.md) in the VM or require a specific file-system format for the root volume. To help mitigate the loss of configuration changes, configuration data may be stored in the user data for the VM, which are available from the metadata service. User data are persistent for the lifetime of the VM and are independent of the root volume.
 
 Upgrading Hypervisors
 ---------------------
 
 The principal challenge in maintaining a Private Cloud lies with managing the system software life-cycle of the infrastructure, particularly the Hypervisors. There is a need for safe and rapid patching capability (for security, bugs or features). Hypervisors cannot be redeployed, as they contain precious data and workloads (VMs) that are costly to move. Since SmallStack evolved out of the [**Dominator**](../Dominator/README.md) ecosystem, image-based live-patching of Hypervisors is not just supported but is the recommended method for life-cycle maintenance. The [hyper-control](../../cmd/hyper-control/README.md) utility allows rolling out a [**Dominator**](../Dominator/README.md) ecosystem image to a fleet of Hypervisor in minutes. This rollout uses an [arithmetic progression](https://en.wikipedia.org/wiki/Arithmetic_progression) in a sequence of steps:
 
--   First one Hypervisor is upgraded and a health check performed (concurrency=1)
+- First one Hypervisor is upgraded and a health check performed (concurrency=1)
 
--   If healthy, two Hypervisors are upgraded (concurrency=2)
+- If healthy, two Hypervisors are upgraded (concurrency=2)
 
--   For every step that completes (Hypervisors upgraded and health checks pass), the concurrency level is incremented by one before starting the next step
+- For every step that completes (Hypervisors upgraded and health checks pass), the concurrency level is incremented by one before starting the next step
 
--   If a health check fails, the rolling upgrade is halted
+- If a health check fails, the rolling upgrade is halted
 
 The rollout starts slowly, and gains speed as more Hypervisors are successfully upgraded. The number of rollout steps is approximately sqrt(N\*2) where N is the number of Hypervisors. Here are some example rollout times:
 
--   100 Hypervisors, no reboot needed (15 second upgrade+test): 3m32s
+- 100 Hypervisors, no reboot needed (15 second upgrade+test): 3m32s
 
--   100 Hypervisors, fast reboot (1 minute upgrade+test): 14m9s
+- 100 Hypervisors, fast reboot (1 minute upgrade+test): 14m9s
 
--   100 Hypervisors, slow reboot (5 minute upgrade+test): 1h11m
+- 100 Hypervisors, slow reboot (5 minute upgrade+test): 1h11m
 
--   10000 Hypervisors, no reboot needed (15 second upgrade+test): 35m21s
+- 10000 Hypervisors, no reboot needed (15 second upgrade+test): 35m21s
 
--   10000 Hypervisors, fast reboot (1 minute upgrade+test): 2h21m
+- 10000 Hypervisors, fast reboot (1 minute upgrade+test): 2h21m
 
--   10000 Hypervisors, slow reboot (5 minute upgrade+test): 11h47m
+- 10000 Hypervisors, slow reboot (5 minute upgrade+test): 11h47m
 
 The reboots are required if the kernel on the Hypervisor needs to be upgraded. Since this is less common than upgrading other system software, most fleet upgrades run at the higher speed.
 
@@ -353,25 +373,25 @@ Networking Implementation
 
 The metadata server is part of the Hypervisor process on the host machine, which poses some technical challenges:
 
--   The host may not be on the same subnet/VLAN as the VMs
+- The host may not be on the same subnet/VLAN as the VMs
 
--   The host may have an existing service on port 80
+- The host may have an existing service on port 80
 
 To solve this the Hypervisor, for each bridge device:
 
--   Creates a new Linux Network Namespace (Linux Namespaces are the foundational technology for Containers). This is the metadata server namespace
+- Creates a new Linux Network Namespace (Linux Namespaces are the foundational technology for Containers). This is the metadata server namespace
 
--   Creates a veth (virtual EtherNet) device pair
+- Creates a veth (virtual EtherNet) device pair
 
-    -   Moves one side into the metadata namespace and configures it with the link-local address (169.254.169.254)
+  - Moves one side into the metadata namespace and configures it with the link-local address (169.254.169.254)
 
-    -   Attaches the remaining side to the bridge device (in the primary namespace)
+  - Attaches the remaining side to the bridge device (in the primary namespace)
 
--   Adds routing table entries for all the subnets in the metadata namespace. This allows packets from the metadata server to reach the VMs
+- Adds routing table entries for all the subnets in the metadata namespace. This allows packets from the metadata server to reach the VMs
 
--   Creates a listening socket on port 80 in the metadata namespace
+- Creates a listening socket on port 80 in the metadata namespace
 
--   Creates an ebtables PREROUTING chain on the nat table for the bridge device to direct packets for the link-local address to the MAC address of the veth device in the metadata namespace.This allows packets from the VMs (addressed to the metadata service) to reach the metadata server
+- Creates an ebtables PREROUTING chain on the nat table for the bridge device to direct packets for the link-local address to the MAC address of the veth device in the metadata namespace.This allows packets from the VMs (addressed to the metadata service) to reach the metadata server
 
 Appendix 2: Performance
 =======================
@@ -381,13 +401,13 @@ Baseline VM
 
 A typical Debian v9 (Stretch) VM with a 1 GiB root volume takes approximately 10 seconds to create, boot up and be ready to accept SSH connections. The Hypervisor CPU is an Intel Xeon E5-2650 v2 @ 2.60GHz with spinning HDD storage. The time is spent in these main activities:
 
--   5 seconds fetching the image from the [imageserver](../../cmd/imageserver/README.md) and unpacking into the root volume. The larger the image, the more time will be taken. A future version of the Hypervisor will employ a local object cache to improve this by at least a factor of 2
+- 5 seconds fetching the image from the [imageserver](../../cmd/imageserver/README.md) and unpacking into the root volume. The larger the image, the more time will be taken. A future version of the Hypervisor will employ a local object cache to improve this by at least a factor of 2
 
--   1 second installing the bootloader (GRUB). A future version of the Hypervisor will support direct booting for Linux kernels
+- 1 second installing the bootloader (GRUB). A future version of the Hypervisor will support direct booting for Linux kernels
 
--   3 seconds between the start of the VM and when the OS requests an IP address via DHCP
+- 3 seconds between the start of the VM and when the OS requests an IP address via DHCP
 
--   1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
+- 1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
 
 Below is an example log from vm-control creating such a VM with total time taken shown after:
 
@@ -415,17 +435,17 @@ Optimised VM boot
 
 The above Debian v9 (Stretch) VM configuration takes approximately 7-8 seconds to create, boot up and be ready for SSH connections when using the following optimisations:
 
--   Local object cache
+- Local object cache
 
--   Direct kernel booting (skipping bootloader)
+- Direct kernel booting (skipping bootloader)
 
 The boot time breakdown is:
 
--   2.5 seconds fetching the image from the [imageserver](../../cmd/imageserver/README.md) and unpacking into the root volume
+- 2.5 seconds fetching the image from the [imageserver](../../cmd/imageserver/README.md) and unpacking into the root volume
 
--   3 seconds between the start of the VM and when the OS requests an IP address via DHCP
+- 3 seconds between the start of the VM and when the OS requests an IP address via DHCP
 
--   1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
+- 1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
 
 Below is an example log from vm-control creating such a VM with total time taken shown after:
 

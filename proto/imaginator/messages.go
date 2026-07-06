@@ -39,11 +39,11 @@ type DisableAutoBuildsResponse struct {
 }
 
 type DisableBuildRequestsRequest struct {
-	DisableFor time.Duration
+	DisableFor time.Duration // Zero: enable.
 }
 
 type DisableBuildRequestsResponse struct {
-	DisabledUntil time.Time
+	DisabledUntil time.Time // Zero: not disabled.
 	Error         string
 }
 

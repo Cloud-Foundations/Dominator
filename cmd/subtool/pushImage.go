@@ -210,7 +210,7 @@ func pollFetchAndPush(subObj *domlib.Sub, img *image.Image,
 	objectServerAddress string, timeoutTime time.Time, singleFetch bool,
 	generationCount, lastGenerationCount, lastScanCount *uint64,
 	logger log.DebugLogger) (bool, error) {
-	deleteEarly := *deleteBeforeFetch
+	deleteEarly := *deleteBeforeFetch && img.Filter != nil
 	ignoreMissingComputedFiles := true
 	pushComputedFiles := true
 	if *computedFilesRoot == "" {

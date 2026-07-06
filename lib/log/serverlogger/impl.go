@@ -16,6 +16,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/serverutil"
+	"github.com/Cloud-Foundations/Dominator/lib/version"
 	proto "github.com/Cloud-Foundations/Dominator/proto/logger"
 )
 
@@ -78,7 +79,7 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 		logger.Println("New log directory")
 	}
 	if *logAtStartup {
-		logger.Println("Startup")
+		logger.Printf("Startup: %s", version.Get())
 	}
 	return logger
 }

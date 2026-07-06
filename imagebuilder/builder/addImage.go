@@ -149,8 +149,14 @@ func buildFileSystemWithHasher(dirname string, h *hasher,
 func listPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string) (
 	[]image.Package, error) {
 	return packageutil.GetPackageList(func(cmd string, w io.Writer) error {
-		return runInTarget(ctx, g, nil, w, w, rootDir, nil, packagerPathname,
-			cmd)
+		stderr := new(bytes.Buffer)
+		err := runInTarget(ctx, g, nil, w, stderr, rootDir, nil,
+			packagerPathname, cmd)
+		if err == nil || stderr.Len() < 1 {
+			return err
+		}
+		return fmt.Errorf("%s: %s",
+			err, string(bytes.TrimSpace(stderr.Bytes())))
 	})
 }
 
@@ -181,19 +187,11 @@ func makeImageNameOnce(streamName string) string {
 func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 	request proto.BuildImageRequest, dirname string, scanFilter *filter.Filter,
 	cache *treeCache, computedFilesList []util.ComputedFile,
-	imageFilter *filter.Filter, rawTags tags.Tags, trig *triggers.Triggers,
-	copyMtimesFilter *filter.Filter, buildLog buildLogger, logger log.Logger) (
-	*image.Image, error) {
+	imageFilter *filter.Filter, owners OwnersType, rawTags tags.Tags,
+	trig *triggers.Triggers, copyMtimesFilter *filter.Filter,
+	buildLog buildLogger, logger log.Logger) (*image.Image, error) {
 	if cache == nil {
 		cache = &treeCache{}
-	}
-	if g == nil {
-		var err error
-		g, err = newNamespaceTarget()
-		if err != nil {
-			return nil, err
-		}
-		defer g.Quit()
 	}
 	packages, err := listPackages(ctx, g, dirname)
 	if err != nil {
@@ -258,12 +256,14 @@ func packImage(ctx context.Context, g *goroutine.Goroutine, client srpc.ClientI,
 		}
 	}
 	img := &image.Image{
-		BuildLog:   &image.Annotation{Object: &hashVal},
-		FileSystem: fs,
-		Filter:     imageFilter,
-		Triggers:   trig,
-		Packages:   packages,
-		Tags:       tgs,
+		BuildLog:    &image.Annotation{Object: &hashVal},
+		FileSystem:  fs,
+		Filter:      imageFilter,
+		OwnerGroups: owners.Groups,
+		OwnerUsers:  owners.Users,
+		Triggers:    trig,
+		Packages:    packages,
+		Tags:        tgs,
 	}
 	if err := img.Verify(); err != nil {
 		return nil, err
@@ -290,10 +290,6 @@ func runTests(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	}
 	if len(testProgrammes) < 1 {
 		return nil
-	}
-	g.Run(func() { err = setupMounts(rootDir, nil) })
-	if err != nil {
-		return err
 	}
 	fmt.Fprintf(buildLog, "Running %d tests\n", len(testProgrammes))
 	results := make(chan testResultType, 1)

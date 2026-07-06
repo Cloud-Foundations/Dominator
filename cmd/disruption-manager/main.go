@@ -15,6 +15,8 @@ import (
 )
 
 var (
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	maximumPermittedDuration = flag.Duration("maximumPermittedDuration",
 		time.Hour,
 		"Maximum time disruption will be permitted after last request")
@@ -46,7 +48,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Unable to create Disruption Manager: %s\n", err)
 	}
-	err = setupserver.SetupTlsWithParams(setupserver.Params{Logger: logger})
+	err = setupserver.SetupTlsWithParams(setupserver.Params{
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+	})
 	if err != nil {
 		logger.Fatalln(err)
 	}

@@ -82,6 +82,8 @@ Some of the sub-commands available are:
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
 - **get-vm-user-data**: get (copy) the user data for a VM
+- **get-vm-virtualiser-log-file**: get the specified virtualise (i.e. QEMU) log
+                                   file for a VM
 - **get-vm-volume**: get (copy) a specified VM volume
 - **get-vm-volume-storage-configuration**: get and show the volume storage information for a VM
 - **import-local-vm**: import a local raw VM. This is primarily for debugging
@@ -91,6 +93,7 @@ Some of the sub-commands available are:
                        imported VM is started
 - **list-hypervisors**: list healthy Hypervisors in the specified location
 - **list-locations**: list locations within the specified top location
+- **list-vm-virtualiser-log-files**: list the virtualiser log files for a VM
 - **list-vms**: list the IP addresses for all VMs
 - **make-create-vm-request**: make a VM create request message (may be used
                               later with the *-requestFile* option for
@@ -211,15 +214,22 @@ requested.
         "Label":                    "/data/0",
         "MountPoint":               "/data/0"
         "ReservedBlocksPercentage": 5,
+        "RootGroupId":              0,
+        "RootUserId":               0,
     },
     {
         "BytesPerInode":            0,
         "Label":                    "/data/1",
         "MountPoint":               "/data/1"
         "ReservedBlocksPercentage": 5,
+        "RootGroupId":              0,
+        "RootUserId":               0,
     }
 ]
 ```
+Note that the default `BytesPerInode` varies depending on file-system size.
+If `RootGroupId` and `RootUserId` are left at the default values of zero, if
+the image contains mount points, the IDs are taken from those inodes.
 
 ## VM Placement Command
 An optional local command to be used when making VM placement decisions (when

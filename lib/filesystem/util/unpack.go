@@ -21,6 +21,15 @@ const (
 	filePerms = wsyscall.S_IRUSR | wsyscall.S_IWUSR | wsyscall.S_IRGRP
 )
 
+func checkCancel(cancel <-chan os.Signal) error {
+	select {
+	case sig := <-cancel:
+		return fmt.Errorf("caught: %s", sig)
+	default:
+		return nil
+	}
+}
+
 func createEmptyFile(filename string) error {
 	if file, err := os.Create(filename); err != nil {
 		return err
@@ -33,7 +42,7 @@ func createEmptyFile(filename string) error {
 }
 
 func unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
-	dirname string, logger log.Logger) error {
+	dirname string, cancel <-chan os.Signal, logger log.Logger) error {
 	for _, entry := range fs.EntryList {
 		if entry.Name == ".inodes" {
 			return errors.New("cannot unpack a file-system with /.inodes")
@@ -54,12 +63,15 @@ func unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 	}
 	hashes, inums, lengths := getHashes(fs)
 	err := writeObjects(objectsGetter, hashes, inums, lengths, inodesDir,
-		logger)
+		cancel, logger)
 	if err != nil {
 		return err
 	}
 	startWriteTime := time.Now()
 	if err := writeInodes(fs.InodeTable, inodesDir); err != nil {
+		return err
+	}
+	if err := checkCancel(cancel); err != nil {
 		return err
 	}
 	if err = fs.DirectoryInode.Write(dirname); err != nil {
@@ -95,7 +107,7 @@ func getHashes(fs *filesystem.FileSystem) ([]hash.Hash, []uint64, []uint64) {
 
 func writeObjects(objectsGetter objectserver.ObjectsGetter, hashes []hash.Hash,
 	inums []uint64, lengths []uint64, inodesDir string,
-	logger log.Logger) error {
+	cancel <-chan os.Signal, logger log.Logger) error {
 	startTime := time.Now()
 	objectsReader, err := objectsGetter.GetObjects(hashes)
 	if err != nil {
@@ -111,6 +123,9 @@ func writeObjects(objectsGetter objectserver.ObjectsGetter, hashes []hash.Hash,
 			return err
 		}
 		totalLength += lengths[index]
+		if err := checkCancel(cancel); err != nil {
+			return err
+		}
 	}
 	duration := time.Since(startTime)
 	speed := uint64(float64(totalLength) / duration.Seconds())

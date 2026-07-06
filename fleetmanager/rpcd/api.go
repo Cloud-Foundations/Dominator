@@ -3,6 +3,7 @@ package rpcd
 import (
 	"io"
 
+	"github.com/Cloud-Foundations/Dominator/fleetmanager/allocator"
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/hypervisors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -13,11 +14,13 @@ type Config struct {
 }
 
 type Params struct {
+	AllocationManager  *allocator.Manager
 	HypervisorsManager *hypervisors.Manager
 	Logger             log.DebugLogger
 }
 
 type srpcType struct {
+	allocationManager  *allocator.Manager
 	hypervisorsManager *hypervisors.Manager
 	logger             log.DebugLogger
 	*serverutil.PerUserMethodLimiter
@@ -32,6 +35,7 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 func Setup(config Config, params Params) (
 	*htmlWriter, error) {
 	srpcObj := &srpcType{
+		allocationManager:  params.AllocationManager,
 		hypervisorsManager: params.HypervisorsManager,
 		logger:             params.Logger,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
@@ -43,7 +47,10 @@ func Setup(config Config, params Params) (
 	srpc.RegisterNameWithOptions("FleetManager", srpcObj,
 		srpc.ReceiverOptions{
 			PublicMethods: []string{
+				"Allocate",
+				"CancelAllocation",
 				"ChangeMachineTags",
+				"GetAllocationUpdates",
 				"GetHypervisorForVM",
 				"GetHypervisorsInLocation",
 				"GetIpInfo",

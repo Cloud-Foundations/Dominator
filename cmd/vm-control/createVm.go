@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +14,8 @@ import (
 
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
+	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
@@ -25,6 +25,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -47,6 +50,122 @@ type wrappedReadCloser struct {
 
 func init() {
 	rand.Seed(time.Now().Unix() + time.Now().UnixNano())
+}
+
+func allocateAndCreateVM(createRequest *createVmRequest,
+	tmpVmInfo *hyper_proto.VmInfo) error {
+	volumes := make([]fm_proto.VolumeSpecification, 0, len(tmpVmInfo.Volumes))
+	for _, volume := range tmpVmInfo.Volumes {
+		volumes = append(volumes, fm_proto.VolumeSpecification{
+			Size: types.Bytes(volume.Size),
+		})
+	}
+	allocateRequest := fm_proto.AllocateRequest{
+		VMs: []fm_proto.VmAllocationSpecification{
+			{
+				HypervisorArchitecture: hypervisorArchitectureToMatch,
+				HypervisorTagsToMatch:  hypervisorTagsToMatch,
+				Location:               *location,
+				MemoryInMiB:            createRequest.MemoryInMiB,
+				MilliCPUs:              createRequest.MilliCPUs,
+				NetworkInterfaces: []fm_proto.NetworkInterfaceSpecification{
+					{
+						SubnetId: createRequest.SubnetId,
+					},
+				},
+				Volumes: volumes,
+			},
+		},
+	}
+	if *allocateTimeout > 0 {
+		allocateRequest.Deadline = time.Now().Add(*allocateTimeout)
+	}
+	address := fmt.Sprintf("%s:%d",
+		*allocationManagerHostname, *allocationManagerPortNum)
+	allocatorClient, err := dialAllocationManager(address)
+	if err != nil {
+		return err
+	}
+	defer allocatorClient.Close()
+	var allocateResponse fm_proto.AllocateResponse
+	err = allocatorClient.RequestReply("FleetManager.Allocate", allocateRequest,
+		&allocateResponse)
+	if err != nil {
+		return err
+	}
+	if allocateResponse.Error != "" {
+		return errors.New(allocateResponse.Error)
+	}
+	logger.Printf("RequestId: %s\n", allocateResponse.RequestId)
+	createRequest.Tags["AllocationRequestId"] =
+		string(allocateResponse.RequestId)
+	watchConn, err := allocatorClient.Call("FleetManager.GetAllocationUpdates")
+	if err != nil {
+		return fmt.Errorf("error calling FleetManager.GetAllocationUpdates: %s",
+			err)
+	}
+	doClose := true
+	defer func() {
+		if doClose {
+			watchConn.Close()
+		}
+	}()
+	err = watchConn.Encode(fm_proto.GetAllocationUpdatesRequest{
+		Position:       allocateResponse.UpdatePosition,
+		UntilRequestId: allocateResponse.RequestId,
+	})
+	if err != nil {
+		return err
+	}
+	if err := watchConn.Flush(); err != nil {
+		return err
+	}
+	var foundAllocation *fm_proto.Allocation
+	for {
+		var response fm_proto.AllocationUpdate
+		if err := watchConn.Decode(&response); err != nil {
+			return fmt.Errorf("error decoding AllocationUpdate response: %s",
+				err)
+		}
+		if err := errors.New(response.Error); err != nil {
+			return err
+		}
+		if response.RequestId != allocateResponse.RequestId {
+			continue
+		}
+		if available := response.Available; available != nil {
+			foundAllocation = available
+			break
+		}
+		if deleted := response.Deleted; deleted != nil {
+			if err := errors.New(deleted.Error); err != nil {
+				return err
+			}
+			return fmt.Errorf("allocation request %s", deleted.Reason)
+		}
+	}
+	doClose = false
+	if err := watchConn.Close(); err != nil {
+		return err
+	}
+	logger.Debugf(0, "creating VM on %s\n",
+		foundAllocation.VMs[0].HypervisorAddress)
+	err = createVmOnHypervisor(foundAllocation.VMs[0].HypervisorAddress,
+		*createRequest, logger)
+	if err != nil {
+		logger.Debugf(0, "cancelling allocation request: %s\n",
+			allocateResponse.RequestId)
+		var response fm_proto.CancelAllocationResponse
+		err := allocatorClient.RequestReply("FleetManager.CancelAllocation",
+			fm_proto.CancelAllocationRequest{allocateResponse.RequestId},
+			&response)
+		if err != nil {
+			logger.Println(err)
+		} else if response.Error != "" {
+			logger.Println(response.Error)
+		}
+	}
+	return err
 }
 
 func approximateImageUsage() (uint64, error) {
@@ -98,20 +217,14 @@ func approximateVolumesForCreateRequest(
 		return &vmInfo, nil
 	}
 	if *imageURL != "" {
-		httpResponse, err := http.Get(*imageURL)
+		rc, err := urlutil.Open(*imageURL)
 		if err != nil {
 			return nil, err
 		}
-		defer httpResponse.Body.Close()
-		if httpResponse.StatusCode != http.StatusOK {
-			return nil, errors.New(httpResponse.Status)
-		}
-		if httpResponse.ContentLength < 0 {
-			return nil, errors.New("ContentLength from: " + *imageURL)
-		}
-		vmInfo.Volumes[0].Size = uint64(httpResponse.ContentLength)
+		defer rc.Close()
+		vmInfo.Volumes[0].Size = rc.Size()
 		if volumeFormat == hyper_proto.VolumeFormatQCOW2 {
-			qcow2Header, err := qcow2.ReadHeader(httpResponse.Body)
+			qcow2Header, err := qcow2.ReadHeader(rc)
 			if err != nil {
 				return nil, err
 			}
@@ -210,6 +323,9 @@ func createVm(logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
+	if *allocationManagerHostname != "" {
+		return allocateAndCreateVM(request, tmpVmInfo)
+	}
 	if hypervisor, err := getHypervisorAddress(*tmpVmInfo, logger); err != nil {
 		return err
 	} else {
@@ -246,6 +362,7 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 		})
 	}
 	vmInfo := hyper_proto.VmInfo{
+		ArchitectureType:   architectureType,
 		ConsoleType:        consoleType,
 		CpuPriority:        *cpuPriority,
 		DestroyOnPowerdown: *destroyOnPowerdown,
@@ -485,6 +602,9 @@ func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
 			return nil, err
 		}
 	}
+	if err := updateVolumeInitParams(vinitParams); err != nil {
+		return nil, err
+	}
 	for index, size := range secondaryVolumeSizes {
 		volume := hyper_proto.Volume{Size: uint64(size)}
 		if index+1 < len(volumeInterfaces) {
@@ -492,6 +612,10 @@ func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
 		}
 		if index+1 < len(volumeTypes) {
 			volume.Type = volumeTypes[index+1]
+		}
+		if volume.Interface == hyper_proto.VolumeInterfaceDFM {
+			volume.DFM.NvramSize = types.Bytes(size) >> 6
+			volume.DFM.Profile = "hopper_qlc_difdix"
 		}
 		request.SecondaryVolumes = append(request.SecondaryVolumes, volume)
 		if *initialiseSecondaryVolumes &&
@@ -616,6 +740,65 @@ func setupVmWithIdentity(client *srpc.Client, hypervisorAddress string,
 		return nil
 	}
 	return hyperclient.StartVm(client, vmIP, nil)
+}
+
+func updateVolumeInitParams(vinitParams []volumeInitParams) error {
+	filenames := make([]filesystem.Filename, 0, len(vinitParams))
+	allSpecified := true
+	for _, vinit := range vinitParams {
+		if vinit.RootGroupId == 0 && vinit.RootUserId == 0 {
+			allSpecified = false
+		}
+		filenames = append(filenames, filesystem.Filename(vinit.MountPoint))
+	}
+	if allSpecified {
+		return nil
+	}
+	client, err := getImageServerClient()
+	if err != nil {
+		return err
+	}
+	if client == nil {
+		return nil
+	}
+	// TODO(rgooch): pass this in somehow to reduce duplication.
+	var name string
+	if isDir, err := imgclient.CheckDirectory(client, *imageName); err != nil {
+		return err
+	} else if isDir {
+		name, err = imgclient.FindLatestImage(client, *imageName, false)
+		if err != nil {
+			return err
+		}
+		if name == "" {
+			return errors.New("no images in directory: " + *imageName)
+		}
+	} else {
+		name = *imageName
+	}
+	response, err := imgclient.GetImageInodes(client, name, filenames)
+	if err != nil {
+		logger.Println(err)
+		return nil // Might not be supported, so don't fail.
+	}
+	if !response.ImageExists {
+		return nil
+	}
+	for index, vinit := range vinitParams {
+		if vinit.RootGroupId != 0 || vinit.RootUserId != 0 {
+			continue // User-specified: leave it alone.
+		}
+		if inum, ok := response.InodeNumbers[filenames[index]]; !ok {
+			continue
+		} else if inode, ok := response.Inodes[inum]; !ok {
+			continue
+		} else {
+			vinit.RootGroupId = types.GroupId(inode.GetGid())
+			vinit.RootUserId = types.UserId(inode.GetUid())
+			vinitParams[index] = vinit
+		}
+	}
+	return nil
 }
 
 func (r *wrappedReadCloser) Close() error {

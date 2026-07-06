@@ -51,7 +51,7 @@ func traceInodeHistory(imageName, inodePath string) error {
 			fmt.Printf("Inode originated in: %s\n", lastImageName)
 			return listInode(lastInode, inodePath, lastNumLinks)
 		}
-		img, err = getImage(imageSClient, sourceImageName)
+		img, _, err = getImage(imageSClient, sourceImageName)
 		if err != nil {
 			return err
 		}

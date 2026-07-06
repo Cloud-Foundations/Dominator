@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/x509util"
 )
@@ -53,13 +52,8 @@ func loadCertificates(directory string) ([]tls.Certificate, error) {
 			}
 			cert.Leaf = x509Cert
 		}
-		if notYet := cert.Leaf.NotBefore.Sub(now); notYet > 0 {
-			return nil, fmt.Errorf("%s will not be valid for %s",
-				certName, format.Duration(notYet))
-		}
-		if expired := now.Sub(cert.Leaf.NotAfter); expired > 0 {
-			return nil, fmt.Errorf("%s expired %s ago",
-				certName, format.Duration(expired))
+		if err := validateX509Certificate(now, cert.Leaf); err != nil {
+			return nil, fmt.Errorf("%s %s", certName, err)
 		}
 		certs = append(certs, cert)
 	}

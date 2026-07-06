@@ -25,7 +25,7 @@ func copyFilteredFiles(imageName, sourceDirectory, destDirectory string,
 	if err != nil {
 		return err
 	}
-	img, err := getTypedImageMetadata(imageName)
+	img, _, err := getTypedImageMetadata(imageName)
 	if err != nil {
 		return err
 	}

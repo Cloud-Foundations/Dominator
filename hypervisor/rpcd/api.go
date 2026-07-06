@@ -11,6 +11,17 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type Config struct {
+	AllowUnauthenticatedReads bool
+}
+
+type Params struct {
+	DhcpServer     DhcpServer
+	Logger         log.DebugLogger
+	Manager        *manager.Manager
+	TftpbootServer TftpbootServer
+}
+
 type DhcpServer interface {
 	AddLease(address proto.Address, hostname string) error
 	AddNetbootLease(address proto.Address, hostname string,
@@ -44,86 +55,100 @@ func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
 }
 
-func Setup(manager *manager.Manager, dhcpServer DhcpServer,
-	tftpbootServer TftpbootServer, logger log.DebugLogger) (
-	*htmlWriter, error) {
+func Setup(config Config, params Params) (*htmlWriter, error) {
 	srpcObj := &srpcType{
-		dhcpServer:     dhcpServer,
-		logger:         logger,
-		manager:        manager,
-		tftpbootServer: tftpbootServer,
+		dhcpServer:     params.DhcpServer,
+		logger:         params.Logger,
+		manager:        params.Manager,
+		tftpbootServer: params.TftpbootServer,
 		externalLeases: make(map[ipv4Address]string),
 	}
 	srpc.SetDefaultGrantMethod(
 		func(_ string, authInfo *srpc.AuthInformation) bool {
-			return manager.CheckOwnership(authInfo)
+			return params.Manager.CheckOwnership(authInfo)
 		})
-	srpc.RegisterNameWithOptions("Hypervisor", srpcObj, srpc.ReceiverOptions{
-		PublicMethods: []string{
-			"AcknowledgeVm",
-			"AddVmVolumes",
-			"BecomePrimaryVmOwner",
-			"ChangeVmConsoleType",
-			"ChangeVmCpuPriority",
-			"ChangeVmDestroyProtection",
-			"ChangeVmHostname",
-			"ChangeVmMachineType",
-			"ChangeVmNumNetworkQueues",
-			"ChangeVmOwnerGroups",
-			"ChangeVmOwnerUsers",
-			"ChangeVmSize",
-			"ChangeVmSubnet",
-			"ChangeVmTags",
-			"ChangeVmVolumeInterfaces",
-			"ChangeVmVolumeSize",
-			"ChangeVmVolumeStorageIndex",
-			"CommitImportedVm",
-			"ConnectToVmConsole",
-			"ConnectToVmSerialPort",
-			"CopyVm",
-			"CreateVm",
-			"DebugVmImage",
-			"DeleteVmVolume",
-			"DestroyVm",
-			"DiscardVmAccessToken",
-			"DiscardVmOldImage",
-			"DiscardVmOldUserData",
-			"DiscardVmSnapshot",
-			"ExportLocalVm",
+	publicMethods := []string{
+		"AcknowledgeVm",
+		"AddVmVolumes",
+		"BecomePrimaryVmOwner",
+		"ChangeVmConsoleType",
+		"ChangeVmCpuPriority",
+		"ChangeVmDestroyProtection",
+		"ChangeVmHostname",
+		"ChangeVmMachineType",
+		"ChangeVmNumNetworkQueues",
+		"ChangeVmOwnerGroups",
+		"ChangeVmOwnerUsers",
+		"ChangeVmSize",
+		"ChangeVmSubnet",
+		"ChangeVmTags",
+		"ChangeVmVolumeInterfaces",
+		"ChangeVmVolumeSize",
+		"ChangeVmVolumeStorageIndex",
+		"CommitImportedVm",
+		"ConnectToVmConsole",
+		"ConnectToVmSerialPort",
+		"CopyVm",
+		"CreateVm",
+		"DebugVmImage",
+		"DeleteVmVolume",
+		"DestroyVm",
+		"DiscardVmAccessToken",
+		"DiscardVmOldImage",
+		"DiscardVmOldUserData",
+		"DiscardVmSnapshot",
+		"ExportLocalVm",
+		"GetCapacity",
+		"GetIdentityProvider",
+		"GetPublicKey",
+		"GetRootCookiePath",
+		"GetUpdates",
+		"GetVmAccessToken",
+		"GetVmCreateRequest",
+		"GetVmInfo",
+		"GetVmInfos",
+		"GetVmLastPatchLog",
+		"GetVmUserData",
+		"GetVmVirtualiserLogFile",
+		"GetVmVolume",
+		"GetVmVolumeStorageConfiguration",
+		"ImportLocalVm",
+		"ListSubnets",
+		"ListVMs",
+		"ListVmVirtualiserLogFiles",
+		"ListVolumeDirectories",
+		"MigrateVm",
+		"PatchVmImage",
+		"ProbeVmPort",
+		"RebootVm",
+		"ReplaceVmCredentials",
+		"ReplaceVmIdentity",
+		"ReplaceVmImage",
+		"ReplaceVmUserData",
+		"RestoreVmFromSnapshot",
+		"RestoreVmImage",
+		"RestoreVmUserData",
+		"ReorderVmVolumes",
+		"ScanVmRoot",
+		"SnapshotVm",
+		"StartVm",
+		"StopVm",
+		"TraceVmMetadata",
+	}
+	var unauthenticatedMethods []string
+	if config.AllowUnauthenticatedReads {
+		unauthenticatedMethods = []string{
 			"GetCapacity",
-			"GetIdentityProvider",
-			"GetPublicKey",
-			"GetRootCookiePath",
-			"GetUpdates",
-			"GetVmAccessToken",
-			"GetVmCreateRequest",
 			"GetVmInfo",
 			"GetVmInfos",
 			"GetVmLastPatchLog",
-			"GetVmUserData",
-			"GetVmVolume",
-			"GetVmVolumeStorageConfiguration",
-			"ImportLocalVm",
 			"ListSubnets",
 			"ListVMs",
-			"ListVolumeDirectories",
-			"MigrateVm",
-			"PatchVmImage",
-			"ProbeVmPort",
-			"RebootVm",
-			"ReplaceVmCredentials",
-			"ReplaceVmIdentity",
-			"ReplaceVmImage",
-			"ReplaceVmUserData",
-			"RestoreVmFromSnapshot",
-			"RestoreVmImage",
-			"RestoreVmUserData",
-			"ReorderVmVolumes",
-			"ScanVmRoot",
-			"SnapshotVm",
-			"StartVm",
-			"StopVm",
-			"TraceVmMetadata",
-		}})
+		}
+	}
+	srpc.RegisterNameWithOptions("Hypervisor", srpcObj, srpc.ReceiverOptions{
+		PublicMethods:          publicMethods,
+		UnauthenticatedMethods: unauthenticatedMethods,
+	})
 	return (*htmlWriter)(srpcObj), nil
 }

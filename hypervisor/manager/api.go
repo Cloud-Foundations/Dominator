@@ -85,6 +85,7 @@ type StartOptions struct {
 	ImageServerAddress   string
 	LockCheckInterval    time.Duration
 	LockLogTimeout       time.Duration
+	LocalImagesDirectory string
 	Logger               log.DebugLogger
 	ObjectCacheDirectory string
 	ObjectCacheBytes     uint64
@@ -421,6 +422,12 @@ func (m *Manager) GetVmUserDataRPC(ipAddr net.IP,
 	return m.getVmFileReader(ipAddr, authInfo, accessToken, UserDataFile)
 }
 
+func (m *Manager) GetVmVirtualiserLogFile(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, filename string) (
+	io.ReadCloser, uint64, error) {
+	return m.getVmVirtualiserLogFile(ipAddr, authInfo, filename)
+}
+
 func (m *Manager) GetVmVolume(conn *srpc.Conn) error {
 	return m.getVmVolume(conn)
 }
@@ -463,6 +470,11 @@ func (m *Manager) ListSubnets(doSort bool) []proto.Subnet {
 
 func (m *Manager) ListVMs(request proto.ListVMsRequest) []string {
 	return m.listVMs(request)
+}
+
+func (m *Manager) ListVmVirtualiserLogFiles(ipAddr net.IP) (
+	[]string, []uint64, error) {
+	return m.listVmVirtualiserLogFiles(ipAddr)
 }
 
 func (m *Manager) ListVolumeDirectories() []string {

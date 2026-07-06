@@ -399,9 +399,13 @@ func (b *Builder) disableBuildRequests(disableFor time.Duration) (
 		return time.Time{},
 			fmt.Errorf("cannot disable build requests for more than: 24h")
 	}
+	var disableUntil time.Time
+	if disableFor > 0 {
+		disableUntil = time.Now().Add(disableFor)
+	}
 	b.disableLock.Lock()
 	defer b.disableLock.Unlock()
-	b.disableBuildRequestsUntil = time.Now().Add(disableFor)
+	b.disableBuildRequestsUntil = disableUntil
 	return b.disableBuildRequestsUntil, nil
 }
 

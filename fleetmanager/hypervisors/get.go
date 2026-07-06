@@ -103,7 +103,8 @@ func (m *Manager) getHypervisorsInLocation(
 		showFilter = showConnected
 	}
 	hypervisors, err := m.listHypervisors(request.Location, showFilter,
-		request.SubnetId, tagmatcher.New(request.HypervisorTagsToMatch, false))
+		request.SubnetId, request.ArchitectureType,
+		tagmatcher.New(request.HypervisorTagsToMatch, false))
 	if err != nil {
 		return fm_proto.GetHypervisorsInLocationResponse{}, err
 	}
@@ -119,17 +120,34 @@ func (m *Manager) getHypervisorsInLocation(
 
 func (m *Manager) getIpInfo(ipAddr net.IP) (fm_proto.GetIpInfoResponse, error) {
 	addr := ipAddr.String()
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	if vm, ok := m.vms[addr]; ok {
-		return fm_proto.GetIpInfoResponse{
-			HypervisorAddress: vm.hypervisor.Machine.Hostname,
-			VM:                &vm.VmInfo,
-		}, nil
-	}
 	hyperIP, err := m.storer.GetHypervisorForIp(ipAddr)
 	if err != nil {
 		return fm_proto.GetIpInfoResponse{}, err
+	}
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	if vm, ok := m.vms[addr]; ok {
+		if len(hyperIP) < 1 {
+			return fm_proto.GetIpInfoResponse{},
+				fmt.Errorf("VM on %s but IP not registered",
+					vm.hypervisor.Machine.Hostname)
+		}
+		hypervisor, ok := m.hypervisorsByIP[hyperIP.String()]
+		if !ok {
+			return fm_proto.GetIpInfoResponse{},
+				fmt.Errorf("VM on %s but registation hypervisor IP=%s unknown",
+					vm.hypervisor.Machine.Hostname, hyperIP)
+		}
+		if vm.hypervisor != hypervisor {
+			return fm_proto.GetIpInfoResponse{},
+				fmt.Errorf("VM on %s but IP registered to: %s",
+					vm.hypervisor.Machine.Hostname, hypervisor.Machine.Hostname)
+		}
+		return fm_proto.GetIpInfoResponse{
+			HypervisorAddress: fmt.Sprintf("%s:%d",
+				vm.hypervisor.Machine.Hostname, constants.HypervisorPortNumber),
+			VM: &vm.VmInfo,
+		}, nil
 	}
 	if len(hyperIP) < 1 {
 		return fm_proto.GetIpInfoResponse{}, nil

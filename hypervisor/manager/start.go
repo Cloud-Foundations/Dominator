@@ -127,21 +127,27 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	for _, ipAddr := range names {
 		vmDirname := filepath.Join(dirname, ipAddr)
 		filename := filepath.Join(vmDirname, "info.json")
-		var vmInfo vmInfoType
+		vmInfo := vmInfoType{
+			logger: prefixlogger.New(ipAddr+": ", manager.Logger),
+		}
 		if err := json.ReadFromFile(filename, &vmInfo); err != nil {
-			manager.Logger.Println(err)
-			if err := os.Remove(vmDirname); err != nil {
-				manager.Logger.Println(err)
+			vmInfo.logger.Println(err)
+			if os.IsNotExist(err) {
+				if err := os.Remove(vmDirname); err != nil {
+					manager.Logger.Println(err)
+				}
 			}
 			continue
 		}
 		vmInfo.Address.Shrink()
+		if vmInfo.ArchitectureType == proto.ArchitectureTypeAuto {
+			vmInfo.ArchitectureType = proto.ArchitectureTypeRuntime
+		}
 		vmInfo.manager = manager
 		vmInfo.dirname = vmDirname
 		vmInfo.ipAddress = ipAddr
 		vmInfo.ownerUsers = stringutil.ConvertListToMap(vmInfo.OwnerUsers,
 			false)
-		vmInfo.logger = prefixlogger.New(ipAddr+": ", manager.Logger)
 		vmInfo.metadataChannels = make(map[chan<- string]struct{})
 		manager.vms[ipAddr] = &vmInfo
 		vmInfo.setupLockWatcher()
@@ -163,14 +169,28 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		}
 	}
 	// Check address pool for used addresses with no VM, and remove.
+	// Check that VM IPs are registered and warn if not.
 	freeIPs := make(map[string]struct{}, len(manager.addressPool.Free))
 	for _, addr := range manager.addressPool.Free {
 		freeIPs[addr.IpAddress.String()] = struct{}{}
 	}
+	registeredIPs := make(map[string]struct{},
+		len(manager.addressPool.Registered))
+	for _, addr := range manager.addressPool.Registered {
+		registeredIPs[addr.IpAddress.String()] = struct{}{}
+	}
 	secondaryIPs := make(map[string]struct{})
 	for _, vm := range manager.vms {
+		if _, ok := registeredIPs[vm.ipAddress]; !ok {
+			vm.logger.Println("WARNING: primary IP not registered")
+		}
 		for _, addr := range vm.SecondaryAddresses {
-			secondaryIPs[addr.IpAddress.String()] = struct{}{}
+			addrString := addr.IpAddress.String()
+			if _, ok := registeredIPs[addrString]; !ok {
+				vm.logger.Println("WARNING: secondary IP: %s not registered\n",
+					addrString)
+			}
+			secondaryIPs[addrString] = struct{}{}
 		}
 	}
 	var addressesToKeep []proto.Address
@@ -198,11 +218,6 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	}
 	// Check address pool for free addresses which are not registered and remove
 	addressesToKeep = nil
-	registeredIPs := make(map[string]struct{},
-		len(manager.addressPool.Registered))
-	for _, addr := range manager.addressPool.Registered {
-		registeredIPs[addr.IpAddress.String()] = struct{}{}
-	}
 	for _, addr := range manager.addressPool.Free {
 		ipAddr := addr.IpAddress.String()
 		if _, ok := registeredIPs[ipAddr]; ok {

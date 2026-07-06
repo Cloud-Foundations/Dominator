@@ -2,6 +2,8 @@ package mbr
 
 import (
 	"os"
+
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 )
 
 const (
@@ -20,6 +22,11 @@ const (
 
 type Mbr struct {
 	raw [512]byte
+}
+
+type Partition struct {
+	Size types.Bytes // Zero: use all remaining space.
+	Type string
 }
 
 type TableType uint
@@ -66,5 +73,11 @@ func (tt TableType) String() string {
 // GPT: a UEFI partition followed by an ext2 partition are created.
 // Other partition types have unspecified behaviour.
 func WriteDefault(filename string, tableType TableType) error {
-	return writeDefault(filename, tableType)
+	return Write(filename, tableType, nil)
+}
+
+// Write will write a partition table of the specified table type with the
+// specified partitions.
+func Write(filename string, tableType TableType, partitions []Partition) error {
+	return write(filename, tableType, partitions)
 }

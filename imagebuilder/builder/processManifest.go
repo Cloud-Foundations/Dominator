@@ -70,17 +70,18 @@ func makeDirectory(directory string, directoriesToDelete []string,
 	}
 }
 
-func makeMountPoints(rootDir string, bindMounts []string,
+func makeMountPoints(rootDir string, bindMounts []bindMountType,
 	buildLog io.Writer) ([]string, error) {
 	var directoriesToDelete []string
 	directoriesWhichExist := make(map[string]struct{})
 	defer deleteDirectories(directoriesToDelete)
 	bindMountDirectories := make(map[string]struct{}, len(bindMounts))
 	for _, bindMount := range bindMounts {
-		bindMountDirectories[filepath.Join(rootDir, bindMount)] = struct{}{}
+		directory := filepath.Join(rootDir, bindMount.target)
+		bindMountDirectories[directory] = struct{}{}
 	}
 	for _, bindMount := range bindMounts {
-		directory := filepath.Join(rootDir, bindMount)
+		directory := filepath.Join(rootDir, bindMount.target)
 		var err error
 		directoriesToDelete, err = makeDirectory(directory, directoriesToDelete,
 			directoriesWhichExist, bindMountDirectories, buildLog)
@@ -145,7 +146,7 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 
 func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 	manifestDir string, maxSourceAge time.Duration, rootDir string,
-	bindMounts []string, applyFilter bool, envGetter environmentGetter,
+	bindMounts []bindMountType, applyFilter bool, envGetter environmentGetter,
 	buildLog io.Writer, logger log.Logger) (manifestType, error) {
 	manifestConfig, err := readManifestFile(manifestDir, envGetter)
 	if err != nil {
@@ -201,7 +202,7 @@ func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 }
 
 func processManifest(ctx context.Context, manifestDir, rootDir string,
-	bindMounts []string, envGetter environmentGetter,
+	bindMounts []bindMountType, envGetter environmentGetter,
 	buildLog io.Writer) error {
 	// Copy in system /etc/resolv.conf
 	file, err := os.Open("/etc/resolv.conf")
@@ -210,7 +211,8 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	}
 	defer file.Close()
 	for index, bindMount := range bindMounts {
-		bindMounts[index] = filepath.Clean(bindMount)
+		bindMounts[index].source = filepath.Clean(bindMount.source)
+		bindMounts[index].target = filepath.Clean(bindMount.target)
 	}
 	directoriesToDelete, err := makeMountPoints(rootDir, bindMounts, buildLog)
 	if err != nil {
@@ -230,6 +232,10 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
+		return err
+	}
+	err = appendFiles(manifestDir, "files.append", rootDir, buildLog)
+	if err != nil {
 		return err
 	}
 	err = runScripts(ctx, g, manifestDir, "pre-install-scripts", rootDir,
@@ -258,6 +264,11 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return err
 	}
+	err = appendFiles(manifestDir, "post-install-files.append",
+		rootDir, buildLog)
+	if err != nil {
+		return err
+	}
 	err = runScripts(ctx, g, manifestDir, "scripts", rootDir, envGetter,
 		buildLog)
 	if err != nil {
@@ -282,6 +293,26 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func appendFiles(manifestDir, dirname, rootDir string,
+	buildLog io.Writer) error {
+	startTime := time.Now()
+	sourceDir := filepath.Join(manifestDir, dirname)
+	_, err := os.Open(sourceDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(buildLog, "No %s directory\n", dirname)
+			return nil
+		}
+		return err
+	}
+	if err := fsutil.AppendTree(rootDir, sourceDir); err != nil {
+		return fmt.Errorf("error appending %s: %s", dirname, err)
+	}
+	fmt.Fprintf(buildLog, "\nAppended %s tree in %s\n",
+		dirname, format.Duration(time.Since(startTime)))
 	return nil
 }
 
@@ -375,6 +406,7 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
+	scriptsToRun := make([]string, 0, len(names))
 	for _, name := range names {
 		if len(name) > 0 && name[0] == '.' {
 			continue // Skip hidden paths.
@@ -385,15 +417,9 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		if err != nil {
 			return err
 		}
+		scriptsToRun = append(scriptsToRun, name)
 	}
-	if g == nil {
-		g, err = newNamespaceTargetWithMounts(rootDir, nil)
-		if err != nil {
-			return err
-		}
-		defer g.Quit()
-	}
-	for _, name := range names {
+	for _, name := range scriptsToRun {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
 		err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,

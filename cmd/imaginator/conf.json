@@ -172,7 +172,7 @@
 		    "rpm",
 		    "-qa",
 		    "--queryformat",
-		    "%{NAME} %{VERSION}_%{RELEASE} %{SIZE}\n"
+		    "%{NAME} %{VERSION}_%{RELEASE} %{LONGSIZE}\n"
 		]
 	    },
 	    "RemoveCommand": [

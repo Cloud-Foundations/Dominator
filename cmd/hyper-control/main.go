@@ -12,6 +12,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/cmdlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net/rrdialer"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -157,8 +158,8 @@ var subcommands = []commands.Command{
 		writeNetbootFilesSubcommand},
 }
 
-func loadCerts() error {
-	err := setupclient.SetupTls(false)
+func loadCerts(logger log.DebugLogger) error {
+	err := setupclient.SetupTlsWithParams(setupclient.Params{Logger: logger})
 	if err == nil {
 		return nil
 	}
@@ -194,7 +195,7 @@ func doMain() int {
 	}
 	logger := cmdlogger.New()
 	srpc.SetDefaultLogger(logger)
-	if err := loadCerts(); err != nil {
+	if err := loadCerts(logger); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

@@ -6,6 +6,55 @@ import (
 	"net"
 )
 
+const (
+	allocationRequestUnknown = "UNKNOWN AllocationRequest"
+)
+
+var (
+	allocationDeletionReasonToText = map[AllocationDeletionReason]string{
+		AllocationRequestError:         "",
+		AllocationRequestCompleted:     "completed",
+		AllocationRequestCancelled:     "cancelled",
+		AllocationRequestCannotFit:     "cannot fit",
+		AllocationRequestExpired:       "expired",
+		AllocationRequestCreateTimeout: "create timeout",
+	}
+	textToAllocationDeletionReason map[string]AllocationDeletionReason
+)
+
+func init() {
+	textToAllocationDeletionReason = make(map[string]AllocationDeletionReason)
+	for reason, text := range allocationDeletionReasonToText {
+		textToAllocationDeletionReason[text] = reason
+	}
+}
+
+func (reason AllocationDeletionReason) MarshalText() ([]byte, error) {
+	if text := reason.String(); text == allocationRequestUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (reason AllocationDeletionReason) String() string {
+	if str, ok := allocationDeletionReasonToText[reason]; !ok {
+		return allocationRequestUnknown
+	} else {
+		return str
+	}
+}
+
+func (reason *AllocationDeletionReason) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToAllocationDeletionReason[txt]; ok {
+		*reason = val
+		return nil
+	} else {
+		return errors.New("unknown AllocationDeletionReason: " + txt)
+	}
+}
+
 func listsEqual(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
@@ -75,6 +124,9 @@ func (left *HypervisorData) Equal(right *HypervisorData) bool {
 }
 
 func (left *Machine) Equal(right *Machine) bool {
+	if left.ArchitectureType != right.ArchitectureType {
+		return false
+	}
 	if left.GatewaySubnetId != right.GatewaySubnetId {
 		return false
 	}

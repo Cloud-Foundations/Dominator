@@ -1,67 +1,102 @@
-all:
-	CGO_ENABLED=0 go install ./cmd/*
+all: generate
+	CGO_ENABLED=0 go install -buildvcs=true ./cmd/*
 	@cd c; make
 	go vet -composites=false ./cmd/*
 
-build-darwin:
-	(CGO_ENABLED=0 GOOS=darwin go build ./cmd/*)
+build-darwin: generate
+	(CGO_ENABLED=0 GOOS=darwin go build -buildvcs=true ./cmd/*)
 
-build-linux:
-	(CGO_ENABLED=0 GOOS=linux go build ./cmd/*)
+build-linux: generate
+	(CGO_ENABLED=0 GOOS=linux go build -buildvcs=true ./cmd/*)
 
-build-windows:
-	(CGO_ENABLED=0 GOOS=windows go build ./cmd/*)
+build-windows: generate
+	(CGO_ENABLED=0 GOOS=windows go build -buildvcs=true ./cmd/*)
 
-install-darwin:
-	(CGO_ENABLED=0 GOOS=darwin go install ./cmd/*)
+install-darwin: generate
+	(CGO_ENABLED=0 GOOS=darwin go install -buildvcs=true ./cmd/*)
 
-install-linux:
-	(CGO_ENABLED=0 GOOS=linux go install ./cmd/*)
+install-linux: generate
+	(CGO_ENABLED=0 GOOS=linux go install -buildvcs=true ./cmd/*)
 
-install-linux-arm:
-	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install ./cmd/*)
+install-linux-arm: generate
+	(CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go install -buildvcs=true ./cmd/*)
 
-install-windows:
-	(CGO_ENABLED=0 GOOS=windows go install ./cmd/*)
+install-windows: generate
+	(CGO_ENABLED=0 GOOS=windows go install -buildvcs=true ./cmd/*)
 
-disruption-manager.tarball:
-	@./scripts/make-tarball disruption-manager -C $(ETCDIR) ssl
+disruption-manager.tarball: generate
+	@./scripts/make-tarball disruption-manager
 
-dominator.tarball:
-	@./scripts/make-tarball dominator -C $(ETCDIR) ssl
+dominator.tarball: generate
+	@./scripts/make-tarball dominator
 
-filegen-server.tarball:
-	@./scripts/make-tarball filegen-server -C $(ETCDIR) ssl
+filegen-server.tarball: generate
+	@./scripts/make-tarball filegen-server
 
-fleet-manager.tarball:
-	@./scripts/make-tarball fleet-manager -C $(ETCDIR) ssl
+fleet-manager.tarball: generate
+	@./scripts/make-tarball fleet-manager
 
-hypervisor.tarball:
+hypervisor.tarball: generate
 	@./scripts/make-tarball hypervisor init.d/virtual-machines.* \
 		-C $(ETCDIR) ssl
 
-image-unpacker.tarball:
+image-unpacker.tarball: generate
 	@./scripts/make-tarball image-unpacker \
-		scripts/image-pusher/export-image -C $(ETCDIR) ssl
+		scripts/image-pusher/export-image
 
-installer.tarball:
-	@cmd/installer/make-tarball installer -C $(ETCDIR) ssl
+installer.tarball: generate
+	@cmd/installer/make-tarball installer
 
-imageserver.tarball:
-	@./scripts/make-tarball imageserver -C $(ETCDIR) ssl
+imageserver.tarball: generate
+	@./scripts/make-tarball imageserver
 
-imaginator.tarball:
-	@./scripts/make-tarball imaginator -C $(ETCDIR) ssl
+imaginator.tarball: generate
+	@./scripts/make-tarball imaginator
 
-mdbd.tarball:
-	@./scripts/make-tarball mdbd -C $(ETCDIR) ssl
+mdbd.tarball: generate
+	@./scripts/make-tarball mdbd
 
-subd.tarball:
+subd.tarball: generate
 	@cd c; make
 	@./scripts/make-tarball subd           \
 		-C cmd/subd  set-owner         \
-		-C $(GOPATH) bin/run-in-mntns  \
-		-C $(ETCDIR) ssl
+		-C $(GOPATH) bin/run-in-mntns
+
+
+UPSTREAM_REPO    := https://github.com/Cloud-Foundations/Dominator.git
+BUILD_INFO_FILE  := lib/version/BUILD_INFO
+BUILD_INFO_DEPS  := .git/HEAD .git/logs/HEAD .git/refs/tags \
+                    $(wildcard .git/packed-refs) Makefile
+
+$(BUILD_INFO_FILE): $(BUILD_INFO_DEPS)
+	@version=$$(git describe --tags --always --match 'v[0-9]*.[0-9]*.[0-9]*'); \
+	raw_origin=$$(git remote get-url origin 2>/dev/null || echo unknown); \
+	origin=$$(echo "$$raw_origin" | sed -e 's|^git@[^:]*:||' -e 's|^https://github.com/||' -e 's|\.git$$||'); \
+	branch=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
+	case "$$raw_origin" in *Cloud-Foundations*) is_fork=false;; *) is_fork=true;; esac; \
+	if [ "$$is_fork" = false ] && [ "$$branch" = "master" ]; then \
+		behind=0; \
+	elif [ -n "$(WITH_UPSTREAM)" ] && \
+		git fetch --quiet $(UPSTREAM_REPO) master 2>/dev/null; then \
+		behind=$$(git rev-list --count HEAD..FETCH_HEAD 2>/dev/null || echo -1); \
+	else \
+		behind=-1; \
+	fi; \
+	{ \
+		echo "version=$$version"; \
+		echo "origin=$$origin"; \
+		echo "branch=$$branch"; \
+		echo "behind=$$behind"; \
+		echo "fork=$$is_fork"; \
+	} > $@.tmp; \
+	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
+
+build-info: $(BUILD_INFO_FILE)
+
+build-info-upstream:
+	@$(MAKE) -B --no-print-directory $(BUILD_INFO_FILE) WITH_UPSTREAM=1
+
+generate: build-info
 
 
 format:

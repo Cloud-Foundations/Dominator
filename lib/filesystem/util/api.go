@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -11,9 +10,13 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/proto/hypervisor"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 type BootInfoType struct {
+	ArchitectureType  hypervisor.ArchitectureType
 	BootDirectory     *filesystem.DirectoryInode
 	InitrdImageDirent *filesystem.DirectoryEntry
 	InitrdImageFile   string
@@ -32,13 +35,35 @@ type ComputedFilesData struct {
 	RootDirectory string
 }
 
+type GroupId = types.GroupId
+type UserId = types.UserId
+
+type MakeBootableParams struct {
+	ArchitectureType hypervisor.ArchitectureType
+	DeviceName       string
+	DoChroot         bool
+	FileSystem       *filesystem.FileSystem
+	KernelOptions    string
+	Logger           log.DebugLogger
+	RootDirectory    string
+	RootLabel        string
+}
+
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
 	Label                    string
 	NoDiscard                bool
 	ReservedBlocksPercentage uint16
+	RootGroupId              GroupId
+	RootUserId               UserId
 	Size                     uint64
 	UnsupportedOptions       []string
+}
+
+type MakeKernelOptionsParams struct {
+	ArchitectureType hypervisor.ArchitectureType
+	ExtraOptions     string
+	RootDevice       string
 }
 
 // CopyMtimes will copy modification times for files from the source to the
@@ -69,7 +94,16 @@ func DeletedFilteredFiles(rootDir string, filt *filter.Filter) error {
 
 func GetBootInfo(fs *filesystem.FileSystem, rootLabel string,
 	extraKernelOptions string) (*BootInfoType, error) {
-	return getBootInfo(fs, rootLabel, extraKernelOptions)
+	return GetBootInfoWithParams(fs, MakeKernelOptionsParams{
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
+		ExtraOptions:     extraKernelOptions,
+		RootDevice:       "LABEL=" + rootLabel,
+	})
+}
+
+func GetBootInfoWithParams(fs *filesystem.FileSystem,
+	params MakeKernelOptionsParams) (*BootInfoType, error) {
+	return getBootInfo(fs, params)
 }
 
 func GetUnsupportedExt4fsOptions(fs *filesystem.FileSystem,
@@ -84,8 +118,20 @@ func LoadComputedFiles(filename string) ([]ComputedFile, error) {
 func MakeBootable(fs *filesystem.FileSystem,
 	deviceName, rootLabel, rootDir, kernelOptions string,
 	doChroot bool, logger log.DebugLogger) error {
-	return makeBootable(fs, deviceName, rootLabel, rootDir, kernelOptions,
-		doChroot, logger)
+	return MakeBootableWithParams(MakeBootableParams{
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
+		DeviceName:       deviceName,
+		DoChroot:         doChroot,
+		FileSystem:       fs,
+		KernelOptions:    kernelOptions,
+		Logger:           logger,
+		RootDirectory:    rootDir,
+		RootLabel:        rootLabel,
+	})
+}
+
+func MakeBootableWithParams(params MakeBootableParams) error {
+	return makeBootable(params)
 }
 
 func MakeExt4fs(deviceName, label string, unsupportedOptions []string,
@@ -104,8 +150,15 @@ func MakeExt4fsWithParams(deviceName string, params MakeExt4fsParams,
 }
 
 func MakeKernelOptions(rootDevice, extraOptions string) string {
-	return fmt.Sprintf("root=%s ro console=tty0 console=ttyS0,115200n8 %s",
-		rootDevice, extraOptions)
+	return MakeKernelOptionsWithParams(MakeKernelOptionsParams{
+		ArchitectureType: hypervisor.ArchitectureTypeRuntime,
+		ExtraOptions:     extraOptions,
+		RootDevice:       rootDevice,
+	})
+}
+
+func MakeKernelOptionsWithParams(params MakeKernelOptionsParams) string {
+	return makeKernelOptions(params)
 }
 
 func MergeComputedFiles(base, overlay []ComputedFile) []ComputedFile {
@@ -126,7 +179,7 @@ func SpliceComputedFiles(fs *filesystem.FileSystem,
 
 func Unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 	rootDir string, logger log.Logger) error {
-	return unpack(fs, objectsGetter, rootDir, logger)
+	return unpack(fs, objectsGetter, rootDir, nil, logger)
 }
 
 func (bootInfo *BootInfoType) WriteBootloaderConfig(rootDir string,
@@ -152,10 +205,13 @@ func WriteOverlayFiles(mountPoint string,
 
 type WriteRawOptions struct {
 	AllocateBlocks       bool
+	ArchitectureType     hypervisor.ArchitectureType
 	DoChroot             bool
 	ExtraKernelOptions   string
+	ExtraPartitions      []installer.Partition
 	InitialImageName     string
 	InstallBootloader    bool
+	MinimumBytes         types.Bytes
 	MinimumFreeBytes     uint64
 	OverlayDirectories   []string
 	OverlayFiles         map[string][]byte

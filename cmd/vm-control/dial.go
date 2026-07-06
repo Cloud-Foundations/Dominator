@@ -10,6 +10,10 @@ var (
 	_imageServerClient srpc.ClientI
 )
 
+func dialAllocationManager(address string) (*srpc.Client, error) {
+	return srpc.DialHTTPWithDialer("tcp", address, rrDialer)
+}
+
 func dialFleetManager(address string) (*srpc.Client, error) {
 	return srpc.DialHTTPWithDialer("tcp", address, rrDialer)
 }

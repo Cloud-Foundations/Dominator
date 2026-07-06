@@ -59,6 +59,8 @@ var (
 		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
 		"If true, do not make changes")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	imageServerHostname = flag.String("imageServerHostname", "",
 		"Hostname of image server (overrides TFTP data)")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -272,7 +274,10 @@ func runDaemon() error {
 	}
 	go runShellOnConsole(logger)
 	AddHtmlWriter(logBuffer)
-	params := setupserver.Params{Logger: logger}
+	params := setupserver.Params{
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Println(err)
 	}

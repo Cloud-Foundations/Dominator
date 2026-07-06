@@ -33,11 +33,16 @@ func (t *srpcType) DisableBuildRequests(conn *srpc.Conn,
 		reply.Error = err.Error()
 	} else if authInfo := conn.GetAuthInformation(); authInfo != nil {
 		reply.DisabledUntil = disabledUntil
-		t.logger.Printf(
-			"Disable(%s): build requests until %s (%s)\n",
-			authInfo.Username,
-			disabledUntil.Format(format.TimeFormatSeconds),
-			format.Duration(time.Until(disabledUntil)))
+		if request.DisableFor > 0 {
+			t.logger.Printf(
+				"Disable(%s): build requests until %s (%s)\n",
+				authInfo.Username,
+				disabledUntil.Format(format.TimeFormatSeconds),
+				format.Duration(time.Until(disabledUntil)))
+		} else {
+			t.logger.Printf(
+				"Enable(%s): build requests\n", authInfo.Username)
+		}
 	}
 	return nil
 }

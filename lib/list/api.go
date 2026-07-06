@@ -29,11 +29,19 @@ func (l *List[T]) Front() *ListEntry[T] {
 }
 
 // IterateEntries will call fn for each entry in the list, starting from the
-// front. If fn returns false the iteration terminates and Iterate will return
-// false, else it will return true.
+// front. If fn returns false the iteration terminates and IterateEntries will
+// return false, else it will return true.
 // It is safe to remove the entry passed to fn.
 func (l *List[T]) IterateEntries(fn func(*ListEntry[T]) bool) bool {
 	return l.iterateEntries(fn)
+}
+
+// IterateEntriesReverse will call fn for each entry in the list, starting from
+// the back. If fn returns false the iteration terminates and
+// IterateEntriesReverse will return false, else it will return true.
+// It is safe to remove the entry passed to fn.
+func (l *List[T]) IterateEntriesReverse(fn func(*ListEntry[T]) bool) bool {
+	return l.iterateEntriesReverse(fn)
 }
 
 // IterateValues will call fn for each entry in the list, starting from the
@@ -42,6 +50,14 @@ func (l *List[T]) IterateEntries(fn func(*ListEntry[T]) bool) bool {
 // It is safe to remove the entry corresponding to the value passed to fn.
 func (l *List[T]) IterateValues(fn func(T) bool) bool {
 	return l.iterateValues(fn)
+}
+
+// IterateValuesReverse will call fn for each entry in the list, starting from
+// the back. If fn returns false the iteration terminates and
+// IterateValuesReverse will return false, else it will return true.
+// It is safe to remove the entry corresponding to the value passed to fn.
+func (l *List[T]) IterateValuesReverse(fn func(T) bool) bool {
+	return l.iterateValuesReverse(fn)
 }
 
 // Length returns the number of entries in the list.
@@ -124,12 +140,29 @@ func (l *UniqueList[T]) IterateEntries(fn func(*UniqueListEntry[T]) bool) bool {
 	return l.iterateEntries(fn)
 }
 
+// IterateEntriesReverse will call fn for each entry in the list, starting from
+// the back. If fn returns false the iteration terminates and
+// IterateEntriesReverse will return false, else it will return true.
+// It is safe to remove the entry passed to fn.
+func (l *UniqueList[T]) IterateEntriesReverse(
+	fn func(*UniqueListEntry[T]) bool) bool {
+	return l.iterateEntriesReverse(fn)
+}
+
 // IterateValues will call fn for each entry in the list, starting from the
 // front. If fn returns false the iteration terminates and IterateValues will
 // return false, else it will return true.
 // It is safe to remove the entry corresponding to the value passed to fn.
 func (l *UniqueList[T]) IterateValues(fn func(T) bool) bool {
 	return l.iterateValues(fn)
+}
+
+// IterateValuesReverse will call fn for each entry in the list, starting from
+// the back. If fn returns false the iteration terminates and
+// IterateValuesReverse will return false, else it will return true.
+// It is safe to remove the entry corresponding to the value passed to fn.
+func (l *UniqueList[T]) IterateValuesReverse(fn func(T) bool) bool {
+	return l.iterateValuesReverse(fn)
 }
 
 // Length returns the number of entries in the list.

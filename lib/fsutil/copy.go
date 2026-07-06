@@ -33,7 +33,11 @@ func copyToFileExclusive(destFilename string, perm os.FileMode,
 	reader io.Reader, length uint64) error {
 	// First do a read-only test for existence, to limit file-system mutations.
 	if _, err := os.Stat(destFilename); err == nil {
-		return os.ErrExist
+		return &os.PathError{
+			Op:   "open",
+			Path: destFilename,
+			Err:  os.ErrExist,
+		}
 	}
 	tmpFilename := destFilename + "~"
 	destFile, err := os.OpenFile(tmpFilename, os.O_CREATE|os.O_EXCL|os.O_WRONLY,
@@ -46,7 +50,11 @@ func copyToFileExclusive(destFilename string, perm os.FileMode,
 	// At this point we own the tmpfile and implicitly the destfile. Do a quick
 	// check so that we don't waste time writing if it's going to fail later.
 	if _, err := os.Stat(destFilename); err == nil {
-		return os.ErrExist
+		return &os.PathError{
+			Op:   "open",
+			Path: destFilename,
+			Err:  os.ErrExist,
+		}
 	}
 	if err := copyToWriter(destFile, tmpFilename, reader, length); err != nil {
 		return err
@@ -141,11 +149,11 @@ func copyTree(destDir, sourceDir string, allTypes bool,
 func copyFile(destFilename, sourceFilename string, mode os.FileMode,
 	exclusive bool) error {
 	if mode == 0 {
-		var stat wsyscall.Stat_t
-		if err := wsyscall.Stat(sourceFilename, &stat); err != nil {
-			return errors.New(sourceFilename + ": " + err.Error())
+		var err error
+		mode, err = getFilePerms(sourceFilename)
+		if err != nil {
+			return err
 		}
-		mode = os.FileMode(stat.Mode & wsyscall.S_IFMT)
 	}
 	sourceFile, err := os.Open(sourceFilename)
 	if err != nil {
