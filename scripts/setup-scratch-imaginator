@@ -63,7 +63,6 @@ check_prereqs () {
     need_tool tar     "install: sudo apt-get install -y tar"
     need_tool python3 "install: sudo apt-get install -y python3"
     need_tool openssl "install: sudo apt-get install -y openssl"
-    need_tool umoci   "install: sudo apt-get install -y umoci"
     need_tool sudo    "sudo is required (imaginator manipulates mount and chroot namespaces)"
 }
 
@@ -118,9 +117,9 @@ make_dirs () {
         "$SCRATCH_DIR/bin" \
         "$SCRATCH_DIR/tls" \
         "$SCRATCH_DIR/etc" \
-        "$SCRATCH_DIR/var/imaginator/state" \
-        "$SCRATCH_DIR/var/imageserver/images" \
-        "$SCRATCH_DIR/var/imageserver/objects" \
+        "$SCRATCH_DIR/var/lib/imaginator/state" \
+        "$SCRATCH_DIR/var/lib/imageserver/images" \
+        "$SCRATCH_DIR/var/lib/imageserver/objects" \
         "$SCRATCH_DIR/var/log/imaginator" \
         "$SCRATCH_DIR/var/log/imageserver" \
         "$SCRATCH_DIR/var/log/buildlogs"
@@ -264,8 +263,8 @@ start_imageserver () {
             -portNum="$IMAGESERVER_PORT" \
             -CAfile=./tls/ca.pem -identityCAfile=./tls/ca.pem \
             -certFile=./tls/imageserver.cert -keyFile=./tls/imageserver.key \
-            -imageDir=./var/imageserver/images \
-            -objectDir=./var/imageserver/objects \
+            -imageDir=./var/lib/imageserver/images \
+            -objectDir=./var/lib/imageserver/objects \
             -logDir=./var/log/imageserver \
             -srpcTrustedUsers="imaginator-scratch,$USER" \
             -alsoLogToStderr \
@@ -285,7 +284,7 @@ exec ./bin/imaginator \\
     -imageServerHostname=localhost -imageServerPortNum=$IMAGESERVER_PORT \\
     -CAfile=./tls/ca.pem -identityCAfile=./tls/ca.pem \\
     -certFile=./tls/imaginator.cert -keyFile=./tls/imaginator.key \\
-    -stateDir=./var/imaginator/state \\
+    -stateDir=./var/lib/imaginator/state \\
     -buildLogDir=./var/log/buildlogs \\
     -logDir=./var/log/imaginator \\
     -srpcTrustedUsers=$USER,imaginator-scratch \\
@@ -294,8 +293,9 @@ exec ./bin/imaginator \\
 EOF
     chmod +x "$run"
     echo "[+] starting imaginator (sudo) on :$IMAGINATOR_PORT"
-    # sudo -b + setsid + explicit redirects fully detach from the invoking
-    # shell so the script returns immediately even under `ssh host command`.
+    # sudo -b + setsid + explicit redirects standard I/O and fully detaches
+    # from the invoking shell so the script returns immediately even under
+    # `ssh host command`.
     sudo -b setsid "$run" </dev/null \
         >> "$SCRATCH_DIR/var/log/imaginator.stdout" 2>&1
     sleep 4
