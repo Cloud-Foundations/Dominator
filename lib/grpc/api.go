@@ -1,36 +1,41 @@
+/*
+Package grpc provides gRPC server-side authentication and authorisation
+interceptors that reuse SRPC's authorisation logic. It is intended to be
+used alongside SRPC in the same process, so a server can expose the same
+methods over both wire protocols with identical authorisation semantics.
+
+A gRPC server registers UnaryAuthInterceptor and StreamAuthInterceptor when
+constructing the server, and registers per-service public/unauthenticated
+method options via RegisterServiceOptions. gRPC method names of the form
+"/package.Service/Method" are stripped to the SRPC form "Service.Method"
+before being passed to the shared authorisation check, so a single set of
+permitted-method entries in the caller's X509 client certificate governs
+access over both protocols. Method names in the gRPC service definition
+must therefore match the SRPC method names exactly.
+*/
 package grpc
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
-type connKeyType struct{}
-
-var connKey = connKeyType{}
-
-var publicMethods = make(map[string]struct{})
-var unauthenticatedMethods = make(map[string]struct{})
-
-// grpcToSrpcMethodMapping maps gRPC method names to SRPC method names per service.
-var grpcToSrpcMethodMapping = make(map[string]map[string]string)
-
-// Interface check.
-var _ srpc.AuthConn = (*Conn)(nil)
+// DoNotUseMethodPowersMetadataKey is the gRPC request metadata key used to
+// opt out of method powers on a per-RPC basis. Clients that want to opt out
+// attach this key with the value "true"; this is the gRPC equivalent of
+// SRPC's doNotUseMethodPowers query parameter. gRPC lower-cases metadata
+// keys on the wire, so the header must be sent in lower case.
+const DoNotUseMethodPowersMetadataKey = "donotusemethodpowers"
 
 // Conn holds authentication information for gRPC handlers.
 type Conn struct {
-	authInfo         *srpc.AuthInformation
-	permittedMethods map[string]struct{}
+	authInfo          *srpc.AuthInformation
+	permittedMethods  map[string]struct{}
+	allowMethodPowers bool
 }
 
 // GetAuthInformation returns the authentication information or nil.
@@ -41,6 +46,7 @@ func (c *Conn) GetAuthInformation() *srpc.AuthInformation {
 	return c.authInfo
 }
 
+// GetPermittedMethods returns the caller's permitted method set, or nil.
 func (c *Conn) GetPermittedMethods() map[string]struct{} {
 	if c == nil {
 		return nil
@@ -48,49 +54,62 @@ func (c *Conn) GetPermittedMethods() map[string]struct{} {
 	return c.permittedMethods
 }
 
-// AllowMethodPowers always returns true for gRPC. SRPC supports a
-// "doNotUseMethodPowers" query parameter allowing clients to opt-out of
-// method powers; gRPC has no equivalent mechanism.
+// AllowMethodPowers reports whether the caller has opted in to method
+// powers. See DoNotUseMethodPowersMetadataKey for how clients opt out.
 func (c *Conn) AllowMethodPowers() bool {
-	return true
+	if c == nil {
+		return false
+	}
+	return c.allowMethodPowers
 }
 
-func authoriseRequest(ctx context.Context, fullMethod string) (context.Context, error) {
-	_, isPublic := publicMethods[fullMethod]
-	_, isUnauthenticated := unauthenticatedMethods[fullMethod]
+// ConnFromContext returns the *Conn that the auth interceptors attached to
+// ctx, or nil if ctx has not been passed through an auth interceptor.
+// Handlers call this to obtain the caller's authentication and
+// authorisation information.
+func ConnFromContext(ctx context.Context) *Conn {
+	if v := ctx.Value(connKey); v != nil {
+		return v.(*Conn)
+	}
+	return nil
+}
 
-	if isUnauthenticated {
-		return ContextWithConn(ctx, &Conn{}), nil
-	}
+// ContextWithConn returns a derived context carrying conn. Handlers retrieve
+// conn via ConnFromContext.
+func ContextWithConn(ctx context.Context, conn *Conn) context.Context {
+	return context.WithValue(ctx, connKey, conn)
+}
 
-	conn, err := buildAuthConn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if conn.GetAuthInformation() == nil {
-		return nil, status.Error(codes.Unauthenticated, "no auth information")
-	}
+// ServiceOptions configures authorisation for a gRPC service.
+type ServiceOptions struct {
+	PublicMethods          []string // Method names.
+	UnauthenticatedMethods []string // Method names.
+}
 
-	srpcMethod := grpcToSrpcMethod(fullMethod)
-	authorised, haveMethodAccess := srpc.CheckAuthorisation(srpcMethod, conn,
-		srpc.GetDefaultGrantMethod(), isPublic, false)
-	if !authorised {
-		recordDeniedCall(fullMethod)
-		return nil, status.Error(codes.PermissionDenied, "call on "+fullMethod)
+// RegisterServiceOptions registers public and unauthenticated methods for a
+// service. Method names must match the SRPC method names exactly.
+func RegisterServiceOptions(serviceName string, options ServiceOptions) {
+	allMethods := make(map[string]struct{})
+	for _, method := range options.PublicMethods {
+		fullMethod := "/" + serviceName + "/" + method
+		publicMethods[fullMethod] = struct{}{}
+		allMethods[fullMethod] = struct{}{}
 	}
-	conn.GetAuthInformation().HaveMethodAccess = haveMethodAccess
-	return ContextWithConn(ctx, conn), nil
+	for _, method := range options.UnauthenticatedMethods {
+		fullMethod := "/" + serviceName + "/" + method
+		unauthenticatedMethods[fullMethod] = struct{}{}
+		allMethods[fullMethod] = struct{}{}
+	}
+	registerMethodMetrics(serviceName, allMethods)
 }
 
 // UnaryAuthInterceptor handles authentication and authorisation for unary RPCs.
 func UnaryAuthInterceptor(ctx context.Context, req interface{},
 	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-
 	ctx, err := authoriseRequest(ctx, info.FullMethod)
 	if err != nil {
 		return nil, err
 	}
-
 	recordCallStart()
 	startTime := time.Now()
 	defer func() {
@@ -107,12 +126,10 @@ func UnaryAuthInterceptor(ctx context.Context, req interface{},
 // StreamAuthInterceptor handles authentication and authorisation for streaming RPCs.
 func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream,
 	info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-
 	ctx, err := authoriseRequest(ss.Context(), info.FullMethod)
 	if err != nil {
 		return err
 	}
-
 	wrapped := &wrappedStream{ServerStream: ss, ctx: ctx}
 	recordCallStart()
 	startTime := time.Now()
@@ -126,134 +143,3 @@ func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream,
 	recordCallEnd(info.FullMethod, startTime, err)
 	return err
 }
-
-// ConnFromContext returns the Conn from the context.
-func ConnFromContext(ctx context.Context) *Conn {
-	if v := ctx.Value(connKey); v != nil {
-		return v.(*Conn)
-	}
-	return nil
-}
-
-// ContextWithConn returns a context with the Conn attached.
-func ContextWithConn(ctx context.Context, conn *Conn) context.Context {
-	return context.WithValue(ctx, connKey, conn)
-}
-
-// ServiceOptions configures authorisation for a gRPC service.
-type ServiceOptions struct {
-	PublicMethods                  []string          // SRPC method names
-	UnauthenticatedMethods         []string          // SRPC method names
-	GrpcToSrpcMethods              map[string]string // e.g., {"ListVms": "ListVMs"}
-	GrpcOnlyPublicMethods          []string          // gRPC-only public methods
-	GrpcOnlyUnauthenticatedMethods []string          // gRPC-only unauthenticated methods
-}
-
-// RegisterServiceOptions registers public and unauthenticated methods for a service.
-// It translates SRPC method names to gRPC equivalents and stores the mapping for RBAC.
-func RegisterServiceOptions(serviceName string, options ServiceOptions) {
-	srpcToGrpc := reverseMapping(options.GrpcToSrpcMethods)
-
-	allMethods := make(map[string]struct{})
-	for _, method := range translateMethods(options.PublicMethods, srpcToGrpc, options.GrpcOnlyPublicMethods) {
-		fullMethod := "/" + serviceName + "/" + method
-		publicMethods[fullMethod] = struct{}{}
-		allMethods[fullMethod] = struct{}{}
-	}
-	for _, method := range translateMethods(options.UnauthenticatedMethods, srpcToGrpc, options.GrpcOnlyUnauthenticatedMethods) {
-		fullMethod := "/" + serviceName + "/" + method
-		unauthenticatedMethods[fullMethod] = struct{}{}
-		allMethods[fullMethod] = struct{}{}
-	}
-	if options.GrpcToSrpcMethods != nil {
-		grpcToSrpcMethodMapping[serviceName] = options.GrpcToSrpcMethods
-	}
-	registerMethodMetrics(serviceName, allMethods)
-}
-
-func reverseMapping(m map[string]string) map[string]string {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]string, len(m))
-	for k, v := range m {
-		result[v] = k
-	}
-	return result
-}
-
-func translateMethods(srpcMethods []string, srpcToGrpc map[string]string, grpcOnly []string) []string {
-	result := make([]string, 0, len(srpcMethods)+len(grpcOnly))
-	for _, method := range srpcMethods {
-		if mapped, ok := srpcToGrpc[method]; ok {
-			result = append(result, mapped)
-		} else {
-			result = append(result, method)
-		}
-	}
-	return append(result, grpcOnly...)
-}
-
-// grpcToSrpcMethod converts "/hypervisor.Hypervisor/ListVms" to "Hypervisor.ListVMs".
-func grpcToSrpcMethod(fullMethod string) string {
-	parts := strings.Split(strings.TrimPrefix(fullMethod, "/"), "/")
-	if len(parts) != 2 {
-		return fullMethod
-	}
-	servicePart := parts[0]
-	methodName := parts[1]
-
-	serviceParts := strings.Split(servicePart, ".")
-	serviceName := serviceParts[len(serviceParts)-1]
-
-	if methodMap, ok := grpcToSrpcMethodMapping[servicePart]; ok {
-		if srpcMethod, ok := methodMap[methodName]; ok {
-			methodName = srpcMethod
-		}
-	}
-
-	return serviceName + "." + methodName
-}
-
-func buildAuthConn(ctx context.Context) (*Conn, error) {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "no peer info in context")
-	}
-
-	if p.AuthInfo == nil {
-		return nil, status.Error(codes.Unauthenticated, "no TLS auth info")
-	}
-	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "unexpected auth info type")
-	}
-	username, permittedMethods, groupList, err := srpc.GetAuth(tlsInfo.State)
-	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, err.Error())
-	}
-	return &Conn{
-		authInfo: &srpc.AuthInformation{
-			Username:  username,
-			GroupList: groupList,
-		},
-		permittedMethods: permittedMethods,
-	}, nil
-}
-
-// wrappedStream overrides Context to include auth info.
-type wrappedStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (w *wrappedStream) Context() context.Context {
-	return w.ctx
-}
-
-// Metrics stubs - replaced by metrics.go in a later PR.
-func recordDeniedCall(fullMethod string)                                    {}
-func recordCallStart()                                                      {}
-func recordCallEnd(fullMethod string, startTime time.Time, err error)       {}
-func recordPanic()                                                          {}
-func registerMethodMetrics(serviceName string, methods map[string]struct{}) {}
