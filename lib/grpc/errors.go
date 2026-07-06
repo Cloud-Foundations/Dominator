@@ -8,11 +8,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// CodedError is implemented by errors that provide a gRPC status code.
-type CodedError interface {
-	GrpcCode() codes.Code
-}
-
 var prefixMappings = []struct {
 	prefix string
 	code   codes.Code
@@ -33,35 +28,34 @@ var patternMappings = []struct {
 	pattern string
 	code    codes.Code
 }{
-	// Unauthenticated
+	// Unauthenticated.
 	{"no authentication", codes.Unauthenticated},
 	{"unauthenticated", codes.Unauthenticated},
 	{"not authenticated", codes.Unauthenticated},
 	{"authentication required", codes.Unauthenticated},
-	// PermissionDenied
+	// PermissionDenied.
 	{"permission denied", codes.PermissionDenied},
 	{"access denied", codes.PermissionDenied},
 	{"forbidden", codes.PermissionDenied},
 	{"no access", codes.PermissionDenied},
-	// NotFound
+	// NotFound.
 	{"not found", codes.NotFound},
 	{"does not exist", codes.NotFound},
-	// AlreadyExists
+	// AlreadyExists.
 	{"already exists", codes.AlreadyExists},
 	{"duplicate", codes.AlreadyExists},
-	// InvalidArgument
+	// InvalidArgument.
 	{"invalid", codes.InvalidArgument},
 	{"malformed", codes.InvalidArgument},
-	// Unavailable
+	// Unavailable.
 	{"unavailable", codes.Unavailable},
 	{"connection refused", codes.Unavailable},
-	// DeadlineExceeded
+	// DeadlineExceeded.
 	{"timeout", codes.DeadlineExceeded},
 	{"timed out", codes.DeadlineExceeded},
 }
 
-// ErrorToStatus converts errors to gRPC status codes.
-func ErrorToStatus(err error) error {
+func errorToStatus(err error) error {
 	if err == nil {
 		return nil
 	}
