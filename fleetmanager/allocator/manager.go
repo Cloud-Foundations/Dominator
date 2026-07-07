@@ -728,5 +728,6 @@ func (m *manager) sendUpdate(update fm_proto.AllocationUpdateEntry,
 		return err
 	}
 	m.updateChannel <- update
+	m.updateQueue.Sync() // Ensure queue position is updated now.
 	return nil
 }
