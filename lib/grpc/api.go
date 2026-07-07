@@ -1,8 +1,8 @@
 /*
-Package grpc provides gRPC server-side authentication and authorisation
-interceptors that reuse SRPC's authorisation logic. It is intended to be
-used alongside SRPC in the same process, so a server can expose the same
-methods over both wire protocols with identical authorisation semantics.
+Package grpc provides gRPC server-side helpers for Dominator services:
+authentication and authorisation interceptors that reuse SRPC's
+authorisation logic, and a helper to convert Go errors into gRPC status
+errors.
 
 A gRPC server registers UnaryAuthInterceptor and StreamAuthInterceptor when
 constructing the server, and registers per-service public/unauthenticated
@@ -20,9 +20,22 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
+
+// CodedError is implemented by errors that provide a gRPC status code.
+type CodedError interface {
+	GrpcCode() codes.Code
+}
+
+// ErrorToStatus converts err into a gRPC status error. Errors implementing
+// CodedError use their declared code; otherwise the message is matched against
+// a table of prefixes and substrings, falling back to codes.Internal.
+func ErrorToStatus(err error) error {
+	return errorToStatus(err)
+}
 
 // DoNotUseMethodPowersMetadataKey is the gRPC request metadata key used to
 // opt out of method powers on a per-RPC basis. Clients that want to opt out
