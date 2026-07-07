@@ -1,6 +1,7 @@
 package allocator
 
 import (
+	"fmt"
 	"net"
 	"runtime"
 	"sync"
@@ -26,7 +27,9 @@ func dumpStack(t *testing.T) {
 }
 
 type fakeStorer struct {
-	logger log.DebugLogger
+	logger       log.DebugLogger
+	positionLock sync.Mutex
+	position     uint64
 }
 
 func newFakeStorer(logger log.DebugLogger) *fakeStorer {
@@ -64,15 +67,24 @@ func (*fakeStorer) ReadUserRequest(types.Username, proto.RequestId) (
 
 func (s *fakeStorer) WriteUpdate(update proto.AllocationUpdateEntry,
 	position uint64) error {
+	s.positionLock.Lock()
+	sPos := s.position
+	s.position++
+	s.positionLock.Unlock()
 	if update.Available != nil {
 		s.logger.Printf(
-			"WriteUpdate(%s) available: %+v, position: %d, req: %+v\n",
-			update.RequestId, *update.Available, position, *update.Request)
+			"WriteUpdate(%s) available: %+v, position: %d,%d, req: %+v\n",
+			update.RequestId, *update.Available, position, sPos,
+			*update.Request)
 	} else if update.Deleted != nil {
-		s.logger.Printf("WriteUpdate.Deleted(%s) deleted: %+v, position: %d\n",
-			update.RequestId, *update.Deleted, position)
+		s.logger.Printf(
+			"WriteUpdate.Deleted(%s) deleted: %+v, position: %d,%d\n",
+			update.RequestId, *update.Deleted, position, sPos)
 	} else {
-		s.logger.Printf("WriteUpdate(%+v, %d)\n", update, position)
+		s.logger.Printf("WriteUpdate(%+v, %d,%d)\n", update, position, sPos)
+	}
+	if position != sPos {
+		return fmt.Errorf("position: queue: %d != storer: %d", position, sPos)
 	}
 	return nil
 }
