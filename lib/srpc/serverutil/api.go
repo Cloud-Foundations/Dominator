@@ -1,20 +1,18 @@
 package serverutil
 
 import (
-	"sync"
-
+	"github.com/Cloud-Foundations/Dominator/lib/concurrentlimit"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
+// PerUserMethodLimiter is an srpc.MethodBlocker adapter over
+// *concurrentlimit.Limiter. It caps the number of simultaneously in-flight
+// calls per (user, method) pair for an SRPC server. Callers with elevated
+// method-power access (authInfo.HaveMethodAccess) bypass the limiter; the
+// same *concurrentlimit.Limiter may be reused directly by future gRPC and
+// REST adapters.
 type PerUserMethodLimiter struct {
-	mutex               sync.Mutex
-	perUserMethodCounts map[userMethodType]uint
-	perUserMethodLimits map[string]uint
-}
-
-type userMethodType struct {
-	method   string
-	username string
+	inner *concurrentlimit.Limiter
 }
 
 func NewPerUserMethodLimiter(
