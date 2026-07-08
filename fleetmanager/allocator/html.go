@@ -14,12 +14,15 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
-const commonStyleSheet string = `<style>
+const (
+	commonStyleSheet string = `<style>
 table, th, td {
 border-collapse: collapse;
 }
 </style>
 `
+	maxDeletionsToShow = 100
+)
 
 func (m *Manager) httpSetup() {
 	html.HandleFunc("/listAllocationQueue", m.listAllocationQueueHandler)
@@ -37,7 +40,8 @@ func (m *Manager) listAllocationQueueHandler(w http.ResponseWriter,
 	m.showRequestQueue(writer)
 	fmt.Fprintln(writer, "<p><h2>Unfulfilled Allocations:</h2>")
 	m.showAllocations(writer)
-	fmt.Fprintln(writer, "<p><h2>Old Requests:</h2>")
+	fmt.Fprintf(writer, "<p><h2>Old Requests (max %d):</h2>\n",
+		maxDeletionsToShow)
 	m.showDeletions(writer)
 	fmt.Fprintln(writer, "</body>")
 }
@@ -62,7 +66,7 @@ func (m *Manager) showDeletions(writer io.Writer) {
 			if entry.Deleted != nil {
 				deletions = append(deletions, entry)
 			}
-			if len(deletions) > 100 { // Show at most 100 deletions.
+			if len(deletions) > maxDeletionsToShow {
 				return false
 			}
 			return true
