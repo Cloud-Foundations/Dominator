@@ -319,6 +319,9 @@ func createVm(logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
+	if err := validateVmCreateRequest(request); err != nil {
+		return err
+	}
 	tmpVmInfo, err := approximateVolumesForCreateRequest(request.VmInfo)
 	if err != nil {
 		return err
@@ -797,6 +800,16 @@ func updateVolumeInitParams(vinitParams []volumeInitParams) error {
 			vinit.RootUserId = types.UserId(inode.GetUid())
 			vinitParams[index] = vinit
 		}
+	}
+	return nil
+}
+
+func validateVmCreateRequest(request *createVmRequest) error {
+	if request.Hostname == "" {
+		return errors.New("no hostname specified")
+	}
+	if request.Tags["Name"] == "" {
+		return errors.New("no Name tag specified")
 	}
 	return nil
 }

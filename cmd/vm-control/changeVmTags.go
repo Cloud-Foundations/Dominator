@@ -37,6 +37,9 @@ func changeVmTagsOnHypervisor(hypervisor string, ipAddr net.IP,
 	if _, ok := vmTags["*"]; ok {
 		return hyperclient.ChangeVmTags(client, ipAddr, vmTags)
 	}
+	if name, ok := vmTags["Name"]; ok && name == "" {
+		return fmt.Errorf("Name tag must not be an empty string")
+	}
 	vmInfo, err := hyperclient.GetVmInfo(client, ipAddr)
 	if err != nil {
 		return err
