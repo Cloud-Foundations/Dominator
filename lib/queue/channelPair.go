@@ -7,15 +7,15 @@ func dummyLengthRecorder(length uint) {}
 func newChannelPair[T any](lengthRecorder LengthRecorder) (chan<- T, <-chan T) {
 	send := make(chan T, 1)
 	receive := make(chan T, 1)
-	if lengthRecorder == nil {
-		lengthRecorder = dummyLengthRecorder
-	}
 	go manageQueue(send, receive, lengthRecorder)
 	return send, receive
 }
 
 func manageQueue[T any](send <-chan T, receive chan<- T,
 	lengthRecorder LengthRecorder) {
+	if lengthRecorder == nil {
+		lengthRecorder = dummyLengthRecorder
+	}
 	queue := list.New[T]()
 	for {
 		lengthRecorder(uint(queue.Length()))
@@ -43,4 +43,18 @@ func manageQueue[T any](send <-chan T, receive chan<- T,
 			}
 		}
 	}
+}
+
+func rebufferReceiveChannel[T any](ch <-chan T,
+	lengthRecorder LengthRecorder) <-chan T {
+	receive := make(chan T, 1)
+	go manageQueue(ch, receive, lengthRecorder)
+	return receive
+}
+
+func rebufferSendChannel[T any](ch chan<- T,
+	lengthRecorder LengthRecorder) chan<- T {
+	send := make(chan T, 1)
+	go manageQueue(send, ch, lengthRecorder)
+	return send
 }
