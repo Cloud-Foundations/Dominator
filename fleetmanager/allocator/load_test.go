@@ -30,38 +30,49 @@ type fakeStorer struct {
 	logger       log.DebugLogger
 	positionLock sync.Mutex
 	position     uint64
+	readDelay    time.Duration
+	writeDelay   time.Duration
 }
 
-func newFakeStorer(logger log.DebugLogger) *fakeStorer {
+func newFakeStorer(readDelay, writeDelay time.Duration,
+	logger log.DebugLogger) *fakeStorer {
 	return &fakeStorer{
-		logger: logger,
+		logger:     logger,
+		readDelay:  readDelay,
+		writeDelay: writeDelay,
 	}
 }
 
 func (s *fakeStorer) DeleteUpdate(position uint64) error {
 	s.logger.Printf("DeleteUpdate(%d)\n", position)
+	time.Sleep(s.writeDelay)
 	return nil
 }
 
-func (*fakeStorer) DeleteUserRequest(types.Username, proto.RequestId) error {
+func (s *fakeStorer) DeleteUserRequest(types.Username, proto.RequestId) error {
+	time.Sleep(s.writeDelay)
 	return nil
 }
 
-func (*fakeStorer) ReadUpdates() (uint64, []proto.AllocationUpdateEntry,
+func (s *fakeStorer) ReadUpdates() (uint64, []proto.AllocationUpdateEntry,
 	error) {
+	time.Sleep(s.readDelay)
 	return 0, nil, nil
 }
 
-func (*fakeStorer) ReadUsersQueue() ([]types.Username, error) {
+func (s *fakeStorer) ReadUsersQueue() ([]types.Username, error) {
+	time.Sleep(s.readDelay)
 	return nil, nil
 }
 
-func (*fakeStorer) ReadUserQueue(types.Username) ([]proto.RequestId, error) {
+func (s *fakeStorer) ReadUserQueue(types.Username) ([]proto.RequestId, error) {
+	time.Sleep(s.readDelay)
 	return nil, nil
 }
 
-func (*fakeStorer) ReadUserRequest(types.Username, proto.RequestId) (
+func (s *fakeStorer) ReadUserRequest(types.Username, proto.RequestId) (
 	proto.AllocateRequest, error) {
+	time.Sleep(s.readDelay)
 	return proto.AllocateRequest{}, nil
 }
 
@@ -86,17 +97,23 @@ func (s *fakeStorer) WriteUpdate(update proto.AllocationUpdateEntry,
 	if position != sPos {
 		return fmt.Errorf("position: queue: %d != storer: %d", position, sPos)
 	}
+	time.Sleep(s.writeDelay)
 	return nil
 }
 
-func (*fakeStorer) WriteUsersQueue([]types.Username) error { return nil }
-
-func (*fakeStorer) WriteUserQueue(types.Username, []proto.RequestId) error {
+func (s *fakeStorer) WriteUsersQueue([]types.Username) error {
+	time.Sleep(s.writeDelay)
 	return nil
 }
 
-func (*fakeStorer) WriteUserRequest(types.Username, proto.RequestId,
+func (s *fakeStorer) WriteUserQueue(types.Username, []proto.RequestId) error {
+	time.Sleep(s.writeDelay)
+	return nil
+}
+
+func (s *fakeStorer) WriteUserRequest(types.Username, proto.RequestId,
 	proto.AllocateRequest) error {
+	time.Sleep(s.writeDelay)
 	return nil
 }
 
@@ -252,10 +269,11 @@ func TestFullQueue(t *testing.T) {
 	},
 		Params{
 			Logger:             logger,
-			Storer:             newFakeStorer(logger),
+			Storer:             newFakeStorer(0, 0, logger),
 			UpdateChannelMaker: updater,
 			heartbeatTimeout:   time.Second,
 			managerInterval:    10 * time.Millisecond,
+			skipDashboard:      true,
 		},
 	)
 	if err != nil {
@@ -280,6 +298,44 @@ func TestFullQueue(t *testing.T) {
 	case <-timer.C:
 		t.Log("timed out waiting for completion, stacktrace follows")
 		dumpStack(t)
+	}
+	// Give time for goroutines to finish logging.
+	time.Sleep(10 * time.Millisecond)
+}
+
+func TestUnfulfilled(t *testing.T) {
+	logger := testlogger.New(t)
+	topo, err := topology.Load("testdata/topology")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wg := &sync.WaitGroup{}
+	updater, err := newFakeUpdater(wg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(Options{
+		CreateDeadline:   time.Millisecond,
+		MaximumQueueSize: 20,
+	},
+		Params{
+			Logger:             logger,
+			Storer:             newFakeStorer(0, 0, logger),
+			UpdateChannelMaker: updater,
+			heartbeatTimeout:   100 * time.Millisecond,
+			managerInterval:    10 * time.Millisecond,
+			skipDashboard:      true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.UpdateTopology(topo)
+	m.UpdateTopology(nil) // Ensure manager processed it.
+	updater.initialise()
+	timer := time.NewTimer(200 * time.Millisecond)
+	for range 10 {
+		m.makeTestAllocationRequests(t, wg, timer, 7)
 	}
 	// Give time for goroutines to finish logging.
 	time.Sleep(10 * time.Millisecond)
