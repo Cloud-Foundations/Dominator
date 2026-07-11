@@ -68,6 +68,7 @@ type Params struct {
 	UpdateChannelMaker UpdateChannelMaker
 	heartbeatTimeout   time.Duration
 	managerInterval    time.Duration
+	skipDashboard      bool
 }
 
 type Storer interface {

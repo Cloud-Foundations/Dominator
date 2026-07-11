@@ -157,6 +157,26 @@ func newManager(options Options, params Params) (*Manager, error) {
 	}
 	updateQueue, updateChannel, removeChannel := queue.NewBroadcastQueue[fm_proto.AllocationUpdateEntry](
 		startPosition, options.MaximumQueueSize)
+	// The removeChannel has a buffer length of 1 and if it fills the
+	// broadcast queue will be stuck waiting to drain the channel and thus the
+	// manager goroutine will lock up if it tries to send to the queue. Replace
+	// with an infinite buffer channel.
+	var peakQueueLength, queueLength uint
+	removeChannel = queue.RebufferReceiveChannel[queue.BroadcastEntry[fm_proto.AllocationUpdateEntry]](
+		removeChannel, func(length uint) {
+			queueLength = length
+			if length > peakQueueLength {
+				peakQueueLength = length
+			}
+		})
+	tricorder.RegisterMetric("allocator/remove-queue/current-length",
+		&queueLength,
+		units.None,
+		"current number of entries in remove queue")
+	tricorder.RegisterMetric("allocator/remove-queue/peak-length",
+		&peakQueueLength,
+		units.None,
+		"maximum number of entries in remove queue")
 	managerPublic := &Manager{
 		allocateRequestChannel:  allocateRequestChannel,
 		cancelAllocationChannel: cancelAllocationChannel,
@@ -168,7 +188,9 @@ func newManager(options Options, params Params) (*Manager, error) {
 		topologyChannel:         topologyChannel,
 		updateQueue:             updateQueue,
 	}
-	managerPublic.httpSetup()
+	if !params.skipDashboard {
+		managerPublic.httpSetup()
+	}
 	managerInternal := &manager{
 		allocateRequestChannel:  allocateRequestChannel,
 		allocations:             make(map[fm_proto.RequestId]*allocationType),
@@ -460,19 +482,6 @@ func (m *manager) manage(nextExpiration time.Time,
 	expireTimer := time.NewTimer(time.Until(nextExpiration))
 	timer := time.NewTimer(m.params.managerInterval)
 	for {
-		// The removeChannel has a buffer length of 1 and if it fills the
-		// broadcast queue will be stuck waiting to drain the channel and thus
-		// this goroutine will lock up if it tries to send to the queue. Ensure
-		// that remove messages are all processed before doing anything else.
-		select {
-		case entry := <-removeChannel:
-			if err := m.params.Storer.DeleteUpdate(entry.Position); err != nil {
-				m.params.Logger.Println(err)
-			}
-			delete(m.deleted, entry.Value.RequestId)
-			continue
-		default:
-		}
 		var checkExpirations, recalculate bool
 		select {
 		case request := <-m.allocateRequestChannel:
