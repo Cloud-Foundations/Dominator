@@ -10,7 +10,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
 	github.com/pin/tftp v2.1.0+incompatible
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.45.0
 	google.golang.org/grpc v1.79.3
