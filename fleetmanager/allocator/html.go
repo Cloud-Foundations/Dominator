@@ -77,6 +77,7 @@ func (m *Manager) showDeletions(writer io.Writer) {
 		"Username",
 		"Reason",
 		"Timestamp",
+		"Age",
 	)
 	for _, entry := range deletions {
 		var reason string
@@ -91,6 +92,7 @@ func (m *Manager) showDeletions(writer io.Writer) {
 			string(entry.Username),
 			reason,
 			entry.Timestamp.Format(format.TimeFormatSeconds),
+			format.Duration(time.Since(entry.Timestamp)),
 		)
 	}
 	tw.Close()
