@@ -150,9 +150,10 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	}
 	logger.Debugf(0, "creating VM on %s\n",
 		foundAllocation.VMs[0].HypervisorAddress)
+	var createSucceeded bool
 	err = createVmOnHypervisor(foundAllocation.VMs[0].HypervisorAddress,
-		*createRequest, logger)
-	if err != nil {
+		*createRequest, &createSucceeded, logger)
+	if err != nil && !createSucceeded {
 		logger.Debugf(0, "cancelling allocation request: %s\n",
 			allocateResponse.RequestId)
 		var response fm_proto.CancelAllocationResponse
@@ -333,7 +334,7 @@ func createVm(logger log.DebugLogger) error {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		return createVmOnHypervisor(hypervisor, *request, logger)
+		return createVmOnHypervisor(hypervisor, *request, nil, logger)
 	}
 }
 
@@ -414,8 +415,10 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 	return &vmInfo, nil
 }
 
-func createVmOnHypervisor(hypervisor string,
-	request createVmRequest, logger log.DebugLogger) error {
+// true is written to *createSucceeded if the VM was created, regardless if it
+// is then deleted.
+func createVmOnHypervisor(hypervisor string, request createVmRequest,
+	createSucceeded *bool, logger log.DebugLogger) error {
 	if request.imageReader != nil {
 		defer request.imageReader.Close()
 	}
@@ -442,6 +445,9 @@ func createVmOnHypervisor(hypervisor string,
 	if err != nil {
 		return err
 	}
+	if createSucceeded != nil {
+		*createSucceeded = true
+	}
 	if err := hyperclient.AcknowledgeVm(client, reply.IpAddress); err != nil {
 		return fmt.Errorf("error acknowledging VM: %s", err)
 	}
@@ -455,17 +461,38 @@ func createVmOnHypervisor(hypervisor string,
 			return err
 		}
 	}
-	fmt.Println(reply.IpAddress)
 	if *doNotStart {
+		fmt.Println(reply.IpAddress)
 		return nil
 	}
 	if reply.DhcpTimedOut {
+		if *destroyOnDhcpTimeout {
+			e := hyperclient.DestroyVm(client, reply.IpAddress, nil)
+			if e != nil {
+				logger.Println(e)
+			}
+		} else {
+			fmt.Println(reply.IpAddress)
+		}
 		return errors.New("DHCP ACK timed out")
 	}
 	if *dhcpTimeout > 0 {
 		logger.Debugln(0, "Received DHCP ACK")
 	}
-	return maybeWatchVm(client, hypervisor, reply.IpAddress, logger)
+	err = maybeWatchVm(client, hypervisor, reply.IpAddress, logger)
+	if err != nil {
+		if *destroyOnProbeTimeout {
+			e := hyperclient.DestroyVm(client, reply.IpAddress, nil)
+			if e != nil {
+				logger.Println(e)
+			}
+		} else {
+			fmt.Println(reply.IpAddress)
+		}
+		return err
+	}
+	fmt.Println(reply.IpAddress)
+	return nil
 }
 
 func getReader(filename string) (io.ReadCloser, int64, error) {

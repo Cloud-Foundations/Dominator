@@ -34,8 +34,12 @@ var (
 	consoleType      hyper_proto.ConsoleType
 	cpuPriority      = flag.Int("cpuPriority", 0,
 		"CPU priority (-20:+19) for VM process on Hypervisor")
+	destroyOnDhcpTimeout = flag.Bool("destroyOnDhcpTimeout", false,
+		"If true, destroy newly created VM if DHCP timeout is reached")
 	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
 		"If true, destroy VM if it powers down internally")
+	destroyOnProbeTimeout = flag.Bool("destroyOnProbeTimeout", false,
+		"If true, destroy newly created VM if probe timeout is reached")
 	destroyProtection = flag.Bool("destroyProtection", false,
 		"If true, do not destroy running VM")
 	disableVirtIO = flag.Bool("disableVirtIO", false,
