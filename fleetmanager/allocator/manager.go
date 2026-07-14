@@ -71,26 +71,46 @@ type requestType struct {
 }
 
 // checkVmMatchesSpec returns true if the VM matches the allocation spec.
-func checkVmMatchesSpec(vmInfo *hyper_proto.VmInfo,
-	vmSpec *fm_proto.VmAllocationSpecification) bool {
+func checkVmMatchesSpec(vmInfo *hyper_proto.VmInfo, vmId string,
+	vmSpec *fm_proto.VmAllocationSpecification, logger log.DebugLogger) bool {
 	if vmSpec.MemoryInMiB != vmInfo.MemoryInMiB {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): memory: %d does not match spec: %d\n",
+			vmId, vmInfo.MemoryInMiB, vmSpec.MemoryInMiB)
 		return false
 	}
 	if vmSpec.MilliCPUs != vmInfo.MilliCPUs {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): milliCPUs: %d does not match spec: %d\n",
+			vmId, vmInfo.MilliCPUs, vmSpec.MilliCPUs)
 		return false
 	}
 	if len(vmSpec.NetworkInterfaces) != len(vmInfo.SecondarySubnetIDs)+1 {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): num netif: %d does not match spec: %d\n",
+			vmId, len(vmInfo.SecondarySubnetIDs)+1,
+			len(vmSpec.NetworkInterfaces))
 		return false
 	}
 	if vmSpec.NetworkInterfaces[0].SubnetId != vmInfo.SubnetId {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): subnetId: %s does not match spec: %s\n",
+			vmId, vmInfo.SubnetId, vmSpec.NetworkInterfaces[0].SubnetId)
 		return false
 	}
 	for index, subnetId := range vmInfo.SecondarySubnetIDs {
 		if subnetId != vmSpec.NetworkInterfaces[index+1].SubnetId {
+			logger.Debugf(0,
+				"checkVmMatchesSpec(%s): subnetId[%d]: %s does not match spec: %s\n",
+				vmId, index, subnetId,
+				vmSpec.NetworkInterfaces[index+1].SubnetId)
 			return false
 		}
 	}
 	if len(vmSpec.Volumes) != len(vmInfo.Volumes) {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): num volumes: %d does not match spec: %d\n",
+			vmId, len(vmInfo.Volumes), len(vmSpec.Volumes))
 		return false
 	}
 	return true
@@ -561,7 +581,7 @@ func (m *manager) manage(nextExpiration time.Time,
 		}
 		clearTimer(timer)
 		timerInterval := m.params.managerInterval
-		if recalculate && m.topology != nil {
+		if recalculate && m.topology != nil && len(m.userQueues) > 0 {
 			startTime := time.Now()
 			requestId := m.recalculate()
 			timeTaken := time.Since(startTime)
@@ -653,14 +673,22 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 		return
 	}
 	foundVm := -1
+	vmId := vmIpAddr + "@" + hypervisorHostname
 	for vmIndex, vmSpec := range allocation.request.VMs {
 		if _, ok := allocation.indexToVmIp[vmIndex]; ok {
+			m.params.Logger.Debugf(0, "processVmUpdate(%s): already tracked\n",
+				vmId)
+
 			continue
 		}
 		if hypervisorHostname != allocation.vmHypervisors[vmIndex] {
+			m.params.Logger.Debugf(0,
+				"processVmUpdate(%s): on Hypervisor: %s, expected: %s\n",
+				vmId, hypervisorHostname, allocation.vmHypervisors[vmIndex])
+
 			continue
 		}
-		if !checkVmMatchesSpec(vm, &vmSpec) {
+		if !checkVmMatchesSpec(vm, vmId, &vmSpec, m.params.Logger) {
 			continue
 		}
 		foundVm = vmIndex
@@ -668,9 +696,12 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 	}
 	if foundVm < 0 {
 		m.params.Logger.Printf(
-			"processVmUpdate(): VM: %s does not match request: %s\n",
-			vmIpAddr, requestId)
+			"processVmUpdate(%s): does not match request: %s\n",
+			vmId, requestId)
 		return
+	} else {
+		m.params.Logger.Debugf(0, "processVmUpdate(%s): matches request: %s\n",
+			vmId, requestId)
 	}
 	allocation.indexToVmIp[foundVm] = vmIpAddr
 	allocation.vmIpToIndex[vmIpAddr] = foundVm
