@@ -62,6 +62,20 @@ func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
 		totalVolumeSize >= types.Bytes(machine.TotalVolumeBytes) {
 		return false, errorCannotFit
 	}
+	// TODO(rgooch): avoid recomputing this every time.
+	subnetsList, err := m.topology.GetSubnetsForMachine(machine.Hostname)
+	if err != nil {
+		return false, err
+	}
+	subnetsMap := make(map[string]struct{}, len(subnetsList))
+	for _, subnet := range subnetsList {
+		subnetsMap[subnet.Id] = struct{}{}
+	}
+	for _, netif := range vm.NetworkInterfaces {
+		if _, exists := subnetsMap[netif.SubnetId]; !exists {
+			return false, errorCannotFit
+		}
+	}
 	hyperData, ok := m.hypervisorDatas[machine.Hostname]
 	if !ok {
 		return false, nil
@@ -82,10 +96,7 @@ func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
 		return false, nil
 	}
 	for _, netif := range vm.NetworkInterfaces {
-		numFree, exists := hyperData.NumFreeAddresses[netif.SubnetId]
-		if !exists {
-			return false, errorCannotFit
-		}
+		numFree := hyperData.NumFreeAddresses[netif.SubnetId]
 		if hAlloc.subnets[netif.SubnetId] >= numFree {
 			return false, nil
 		}
