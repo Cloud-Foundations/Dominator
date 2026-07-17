@@ -3,6 +3,7 @@ package fleetmanager
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 )
 
@@ -94,6 +95,36 @@ func parseMAC(text []byte) (HardwareAddr, error) {
 	addr := make([]byte, writePosition+1) // Make a copy just long enough.
 	copy(addr, buf)
 	return addr, nil
+}
+
+func (request *AllocateRequest) CheckValid() error {
+	if len(request.VMs) < 1 {
+		return fmt.Errorf("no VMs requested")
+	}
+	for vmIndex, vm := range request.VMs {
+		if vm.MemoryInMiB < 64 {
+			return fmt.Errorf("vm[%d]: memory: %d MiB too small",
+				vmIndex, vm.MemoryInMiB)
+		}
+		if vm.MilliCPUs < 1 {
+			return fmt.Errorf("vm[%d]: MilliCPUs: %d too small",
+				vmIndex, vm.MilliCPUs)
+		}
+		if len(vm.NetworkInterfaces) < 1 {
+			return fmt.Errorf("vm[%d]: no network interfaces requested",
+				vmIndex)
+		}
+		if len(vm.Volumes) < 1 {
+			return fmt.Errorf("vm[%d]: no volumes requested", vmIndex)
+		}
+		for volIndex, volume := range vm.Volumes {
+			if volume.Size < 16<<20 {
+				return fmt.Errorf("vm[%d] volume[%d] size: %d too small",
+					vmIndex, volIndex, volume.Size)
+			}
+		}
+	}
+	return nil
 }
 
 func (left *HypervisorData) Equal(right *HypervisorData) bool {
