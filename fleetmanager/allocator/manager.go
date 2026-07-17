@@ -267,6 +267,9 @@ func newManager(options Options, params Params) (*Manager, error) {
 
 func (m *Manager) allocate(authInfo *srpc.AuthInformation,
 	request fm_proto.AllocateRequest) (fm_proto.AllocateResponse, error) {
+	if err := request.CheckValid(); err != nil {
+		return fm_proto.AllocateResponse{}, err
+	}
 	m.waitForReady()
 	if !m.active {
 		m.active = true
