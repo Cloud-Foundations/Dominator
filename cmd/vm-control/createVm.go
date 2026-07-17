@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	fmclient "github.com/Cloud-Foundations/Dominator/fleetmanager/client"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -87,14 +88,9 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 		return err
 	}
 	defer allocatorClient.Close()
-	var allocateResponse fm_proto.AllocateResponse
-	err = allocatorClient.RequestReply("FleetManager.Allocate", allocateRequest,
-		&allocateResponse)
+	allocateResponse, err := fmclient.Allocate(allocatorClient, allocateRequest)
 	if err != nil {
 		return err
-	}
-	if allocateResponse.Error != "" {
-		return errors.New(allocateResponse.Error)
 	}
 	logger.Printf("RequestId: %s\n", allocateResponse.RequestId)
 	createRequest.Tags["AllocationRequestId"] =
@@ -156,21 +152,17 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	if err != nil && !createSucceeded {
 		logger.Debugf(0, "cancelling allocation request: %s\n",
 			allocateResponse.RequestId)
-		var response fm_proto.CancelAllocationResponse
-		err := allocatorClient.RequestReply("FleetManager.CancelAllocation",
-			fm_proto.CancelAllocationRequest{allocateResponse.RequestId},
-			&response)
+		err := fmclient.CancelAllocation(allocatorClient,
+			allocateResponse.RequestId)
 		if err != nil {
 			logger.Println(err)
-		} else if response.Error != "" {
-			logger.Println(response.Error)
 		}
 	}
 	return err
 }
 
-func approximateImageUsage() (uint64, error) {
-	size, err := getImageUsage()
+func approximateImageUsage(imageName string) (uint64, error) {
+	size, err := getImageUsage(imageName)
 	if err != nil {
 		return 0, err
 	}
@@ -189,13 +181,13 @@ func approximateImageUsage() (uint64, error) {
 func approximateVolumesForCreateRequest(
 	vmInfo hyper_proto.VmInfo) (*hyper_proto.VmInfo, error) {
 	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
-	for _, size := range secondaryVolumeSizes {
+	for _, volume := range vmInfo.Volumes[1:] {
 		vmInfo.Volumes = append(vmInfo.Volumes, hyper_proto.Volume{
-			Size: uint64(size),
+			Size: volume.Size,
 		})
 	}
-	if *imageName != "" {
-		imageSize, err := approximateImageUsage()
+	if vmInfo.ImageName != "" {
+		imageSize, err := approximateImageUsage(vmInfo.ImageName)
 		if err != nil {
 			return nil, err
 		}
@@ -528,7 +520,7 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 	}
 }
 
-func getImageUsage() (uint64, error) {
+func getImageUsage(imageName string) (uint64, error) {
 	client, err := getImageServerClient()
 	if err != nil {
 		logger.Printf(
@@ -540,18 +532,18 @@ func getImageUsage() (uint64, error) {
 		return 2 << 30, nil
 	}
 	var name string
-	if isDir, err := imgclient.CheckDirectory(client, *imageName); err != nil {
+	if isDir, err := imgclient.CheckDirectory(client, imageName); err != nil {
 		return 0, err
 	} else if isDir {
-		name, err = imgclient.FindLatestImage(client, *imageName, false)
+		name, err = imgclient.FindLatestImage(client, imageName, false)
 		if err != nil {
 			return 0, err
 		}
 		if name == "" {
-			return 0, errors.New("no images in directory: " + *imageName)
+			return 0, errors.New("no images in directory: " + imageName)
 		}
 	} else {
-		name = *imageName
+		name = imageName
 	}
 	usage, exists, err := imgclient.GetImageUsageEstimate(client, name)
 	if err != nil {
@@ -837,6 +829,12 @@ func validateVmCreateRequest(request *createVmRequest) error {
 	}
 	if request.Tags["Name"] == "" {
 		return errors.New("no Name tag specified")
+	}
+	for index, volume := range request.SecondaryVolumes {
+		if volume.Size < 16<<20 {
+			return fmt.Errorf("secondary volume[%d] size: %d too small",
+				index, volume.Size)
+		}
 	}
 	return nil
 }
