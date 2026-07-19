@@ -111,38 +111,30 @@ func (g *fleetManagerGeneratorType) generate() *mdbType {
 		if len(machine.HostIpAddress) > 0 {
 			ipAddr = machine.HostIpAddress.String()
 		}
-		tags := machine.Tags
-		if tags == nil {
-			tags = emptyTags
-		}
-		_, disableUpdates := tags["DisableUpdates"]
+		_, disableUpdates := machine.Tags["DisableUpdates"]
 		newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 			Hostname:       machine.Hostname,
 			IpAddress:      ipAddr,
 			Location:       machine.Location,
 			OwnerGroups:    machine.OwnerGroups,
 			OwnerUsers:     machine.OwnerUsers,
-			RequiredImage:  tags["RequiredImage"],
-			PlannedImage:   tags["PlannedImage"],
+			RequiredImage:  machine.Tags["RequiredImage"],
+			PlannedImage:   machine.Tags["PlannedImage"],
 			DisableUpdates: disableUpdates,
 			Tags:           machine.Tags,
 		})
 	}
 	for ipAddr, vm := range g.vms {
 		if vm.State == hyper_proto.StateRunning {
-			tags := vm.Tags
-			if tags == nil {
-				tags = emptyTags
-			}
-			_, disableUpdates := tags["DisableUpdates"]
+			_, disableUpdates := vm.Tags["DisableUpdates"]
 			var ownerGroup string
 			if len(vm.OwnerGroups) > 0 {
 				ownerGroup = vm.OwnerGroups[0]
 			}
 			machine := mdb.Machine{
 				IpAddress:      ipAddr,
-				RequiredImage:  tags["RequiredImage"],
-				PlannedImage:   tags["PlannedImage"],
+				RequiredImage:  vm.Tags["RequiredImage"],
+				PlannedImage:   vm.Tags["PlannedImage"],
 				DisableUpdates: disableUpdates,
 				OwnerGroup:     ownerGroup,
 				OwnerGroups:    vm.OwnerGroups,
