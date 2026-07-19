@@ -797,7 +797,7 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 		}
 	}
 	if !h.Machine.Equal(&oldMachine) {
-		updateToSend.ChangedMachines = []*fm_proto.Machine{&h.Machine}
+		updateToSend.ChangedMachines = []*fm_proto.Machine{h.getMachine()}
 	}
 	if !h.HypervisorData.Equal(&oldData) {
 		updateToSend.ChangedHypervisors = map[string]fm_proto.HypervisorData{

@@ -105,11 +105,7 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 		if len(machine.HostIpAddress) > 0 {
 			ipAddr = machine.HostIpAddress.String()
 		}
-		tags := machine.Tags
-		if tags == nil {
-			tags = emptyTags
-		}
-		_, disableUpdates := tags["DisableUpdates"]
+		_, disableUpdates := machine.Tags["DisableUpdates"]
 		var location string
 		if g.locationPrefix == "" {
 			location = machine.Location
@@ -122,8 +118,8 @@ func (g *topologyGeneratorType) Generate(unused_datacentre string,
 			IpAddress:      ipAddr,
 			OwnerGroups:    machine.OwnerGroups,
 			OwnerUsers:     machine.OwnerUsers,
-			RequiredImage:  tags["RequiredImage"],
-			PlannedImage:   tags["PlannedImage"],
+			RequiredImage:  machine.Tags["RequiredImage"],
+			PlannedImage:   machine.Tags["PlannedImage"],
 			DisableUpdates: disableUpdates,
 			Tags:           machine.Tags,
 		})
