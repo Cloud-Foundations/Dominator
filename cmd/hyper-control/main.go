@@ -39,6 +39,8 @@ var (
 	fleetManagerPortNum = flag.Uint("fleetManagerPortNum",
 		constants.FleetManagerPortNumber,
 		"Port number of Fleet Resource Manager")
+	forceImageChange = flag.Bool("forceImageChange", false,
+		"If true, force an upgrade even if changing the image stream. USE WITH CAUTION")
 	hypervisorHostname = flag.String("hypervisorHostname", "",
 		"Hostname of hypervisor")
 	hypervisorPortNum = flag.Uint("hypervisorPortNum",
@@ -61,6 +63,8 @@ var (
 		"Time to hold the lock")
 	offerTimeout = flag.Duration("offerTimeout", time.Minute+time.Second,
 		"How long to offer DHCP OFFERs and ACKs")
+	maxConcurrent = flag.Uint("maxConcurrent", 0,
+		"Maximum number of concurrent updates for rollout-image (default infinite)")
 	maxUpdates = flag.Uint64("maxUpdates", 0,
 		"Maximum number of updates to receive (default infinite)")
 	memory              = flagutil.Size(4 << 30)
@@ -111,7 +115,7 @@ func printUsage() {
 	fmt.Fprintln(w, "Common flags:")
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
-	commands.PrintCommands(w, subcommands)
+	commands.PrintCommandsAligned(w, subcommands)
 }
 
 var subcommands = []commands.Command{

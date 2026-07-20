@@ -153,6 +153,12 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 		if hypervisor := <-hypervisorsChannel; hypervisor != nil {
 			if hypervisor.alreadyUpdated {
 				numAlreadyUpdated++
+				err := hypervisor.updateTagForHypervisor(
+					fleetManagerClientResource, "RequiredImage", imageName)
+				if err != nil {
+					return fmt.Errorf("%s: failure updating tags: %s",
+						hypervisor.hostname, err)
+				}
 				continue
 			}
 			err := hypervisor.updateTagForHypervisor(
@@ -197,13 +203,16 @@ func rolloutImage(imageName string, logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
-	maxConcurrent := uint(len(usedHypervisors) / 2)
-	if maxConcurrent < 1 {
-		maxConcurrent = 1
+	concurrentLimit := uint(len(usedHypervisors) / 2)
+	if concurrentLimit < 1 {
+		concurrentLimit = 1
+	}
+	if *maxConcurrent > 0 && concurrentLimit > *maxConcurrent {
+		concurrentLimit = *maxConcurrent
 	}
 	logger.Debugln(0, "upgrading used Hypervisors")
 	err = upgradeHypervisors(fleetManagerClientResource, imageName,
-		usedHypervisors, cpuSharer, maxConcurrent)
+		usedHypervisors, cpuSharer, concurrentLimit)
 	if err != nil {
 		return err
 	}
@@ -429,10 +438,16 @@ func setupHypervisor(hostname string, imageName string, tgs tags.Tags,
 	currentRequiredImage := tgs["RequiredImage"]
 	if currentRequiredImage != "" &&
 		path.Dir(currentRequiredImage) != path.Dir(imageName) {
-		logger.Printf(
-			"image stream: current=%s != new=%s, skipping\n",
-			path.Dir(currentRequiredImage), path.Dir(imageName))
-		return nil
+		if *forceImageChange {
+			logger.Printf(
+				"image stream: current=%s != new=%s, FORGING AHEAD ANYWAY\n",
+				path.Dir(currentRequiredImage), path.Dir(imageName))
+		} else {
+			logger.Printf(
+				"image stream: current=%s != new=%s, skipping\n",
+				path.Dir(currentRequiredImage), path.Dir(imageName))
+			return nil
+		}
 	}
 	h := &hypervisorType{
 		healthAgentClientResource: rpcclientpool.New("tcp",
@@ -461,11 +476,12 @@ func setupHypervisor(hostname string, imageName string, tgs tags.Tags,
 
 func upgradeHypervisors(fleetManagerClientResource *srpc.ClientResource,
 	imageName string, hypervisors map[*hypervisorType]struct{},
-	cpuSharer *cpusharer.FifoCpuSharer, maxConcurrent uint) error {
+	cpuSharer *cpusharer.FifoCpuSharer, concurrentLimit uint) error {
 	if len(hypervisors) < 1 {
 		return nil
 	}
-	state := concurrent.NewStateWithLinearConcurrencyIncrease(1, maxConcurrent)
+	state := concurrent.NewStateWithLinearConcurrencyIncrease(1,
+		concurrentLimit)
 	for hypervisor := range hypervisors {
 		hypervisor := hypervisor
 		err := state.GoRun(func() error {
