@@ -596,6 +596,15 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 			h.initialUnhealthyList[failed] = struct{}{}
 		}
 	}
+	if *preUpdateCommand != "" {
+		cmd := exec.Command(*preUpdateCommand, h.hostname)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s: %s", *preUpdateCommand, err)
+		}
+		h.logger.Debugf(0, "%s completed sucessfully\n", *preUpdateCommand)
+	}
 	h.logger.Debugln(0, "upgrading")
 	err = h.updateTagForHypervisor(clientResource, "RequiredImage", imageName)
 	if err != nil {
@@ -632,6 +641,15 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 		}
 	}
 	h.logger.Debugln(0, "still healthy")
+	if *postUpdateCommand != "" {
+		cmd := exec.Command(*postUpdateCommand, h.hostname)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s: %s", *postUpdateCommand, err)
+		}
+		h.logger.Debugf(0, "%s completed sucessfully\n", *postUpdateCommand)
+	}
 	return nil
 }
 

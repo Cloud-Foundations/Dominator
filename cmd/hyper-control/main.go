@@ -78,6 +78,10 @@ var (
 		"File containing network interfaces for show-network-configuration")
 	numAcknowledgementsToWaitFor = flag.Uint("numAcknowledgementsToWaitFor",
 		2, "Number of DHCP ACKs to wait for")
+	postUpdateCommand = flag.String("postUpdateCommand", "",
+		"Optional command to run after reboot update of Hypervisor. The Hypervisor name is given as the argument")
+	preUpdateCommand = flag.String("preUpdateCommand", "",
+		"Optional command to run before reboot update of Hypervisor. The Hypervisor name is given as the argument")
 	randomSeedBytes = flag.Uint("randomSeedBytes", 0,
 		"Number of bytes of random seed data to inject into installing machine")
 	smtpServer            = flag.String("smtpServer", "", "Address of SMTP server")
