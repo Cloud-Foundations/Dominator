@@ -37,7 +37,7 @@ type environmentGetter interface {
 
 type imageBuilder interface {
 	build(b *Builder, client srpc.ClientI, request proto.BuildImageRequest,
-		buildLog buildLogger) (*image.Image, error)
+		buildLog buildLogger) (*image.Image, string, error)
 }
 
 // Other private types.
@@ -63,6 +63,7 @@ type bootstrapStream struct {
 	ImageTriggersUrl string
 	Owners           OwnersType
 	PackagerType     string
+	Variant          string
 }
 
 type buildResultType struct {
@@ -140,6 +141,8 @@ type manifestConfigType struct {
 	SourceImageBuildVariables map[string]string `json:",omitempty"`
 	SourceImageGitCommitId    string            `json:",omitempty"`
 	SourceImageTagsToMatch    tags.MatchTags    `json:",omitempty"`
+	Variables                 map[string]string `json:",omitempty"`
+	Variant                   string            `json:",omitempty"`
 }
 
 type masterConfigurationType struct {
@@ -167,6 +170,7 @@ type manifestType struct {
 	mtimesCopyAddFilter *filter.Filter
 	mtimesCopyFilter    *filter.Filter
 	sourceImageInfo     *sourceImageInfoType
+	variant             string
 }
 
 type packagerType struct {
@@ -317,7 +321,7 @@ func LoadWithOptionsAndParams(options BuilderOptions,
 
 func (b *Builder) BuildImage(request proto.BuildImageRequest,
 	authInfo *srpc.AuthInformation,
-	logWriter io.Writer) (*image.Image, string, error) {
+	logWriter io.Writer) (*image.Image, string, string, error) {
 	return b.buildImage(request, authInfo, logWriter)
 }
 

@@ -118,6 +118,10 @@ fields:
 - `Owners`: optional object with a list of `Groups` and `Users` who will have
             ownership of the built images
 - `PackagerType`: the name of the packager type to use
+- `Variant`: an optional expression expanded against the build request's
+             `Variables` map. When non-empty, the expanded value is inserted
+             between the stream name and the timestamp when the built image
+             is published
 
 ### Cache configuration
 It's considered an anti-pattern to use the *Imaginator* to compile code; instead

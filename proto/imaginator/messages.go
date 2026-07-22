@@ -27,6 +27,7 @@ type BuildImageResponse struct {
 	SourceImage               string
 	SourceImageBuildVariables map[string]string
 	SourceImageGitCommitId    string
+	Variant                   string
 }
 
 type DisableAutoBuildsRequest struct {

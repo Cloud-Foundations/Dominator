@@ -40,8 +40,8 @@ func (t *srpcType) BuildImage(conn *srpc.Conn) error {
 	} else {
 		logWriter = buildLogBuffer
 	}
-	image, name, err := t.builder.BuildImage(request, conn.GetAuthInformation(),
-		logWriter)
+	image, name, variant, err := t.builder.BuildImage(request,
+		conn.GetAuthInformation(), logWriter)
 	if f, ok := logWriter.(flusher); ok {
 		// Ensure all data are flushed and no background flush will happen.
 		if err := f.flush(); err != nil {
@@ -51,6 +51,7 @@ func (t *srpcType) BuildImage(conn *srpc.Conn) error {
 	reply := proto.BuildImageResponse{
 		Image:       image,
 		ImageName:   name,
+		Variant:     variant,
 		BuildLog:    buildLogBuffer.Bytes(),
 		ErrorString: errors.ErrorToString(err),
 	}
