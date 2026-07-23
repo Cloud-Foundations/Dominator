@@ -61,6 +61,7 @@ import (
 const (
 	lastPatchLogFilename = "lastPatchLog"
 	serialSockFilename   = "serial0.sock"
+	virtualiserDirname   = "virtualiser"
 
 	rebootJson = `{ "execute": "send-key",
      "arguments": { "keys": [ { "type": "qcode", "data": "ctrl" },
@@ -117,7 +118,8 @@ func copyData(filename string, reader io.Reader, length uint64,
 	return err
 }
 
-func copyVolume(filename string, reader io.Reader, volume *proto.Volume,
+func copyVolume(filename, qemuImgPath string, reader io.Reader,
+	volume *proto.Volume,
 	index int, wantInit bool, logger log.DebugLogger) error {
 	switch volume.Interface {
 	case proto.VolumeInterfaceDFM:
@@ -127,7 +129,7 @@ func copyVolume(filename string, reader io.Reader, volume *proto.Volume,
 		if wantInit {
 			return fmt.Errorf("cannot initialise DFM volume")
 		}
-		return makeDfmVolume(filename, index, volume)
+		return makeDfmVolume(filename, qemuImgPath, index, volume)
 	default:
 		return copyData(filename, reader, volume.Size, logger)
 	}
@@ -456,6 +458,9 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		}
 		subnetIDs[subnetId] = struct{}{}
 	}
+	if req.VirtualiserImageName != "" && !authInfo.HaveMethodAccess {
+		return nil, errors.New("custom virtualiser not permitted")
+	}
 	address, subnetId, err := m.getFreeAddress(req.Address.IpAddress,
 		req.SubnetId, authInfo)
 	if err != nil {
@@ -503,32 +508,33 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 	vm := &vmInfoType{
 		LocalVmInfo: proto.LocalVmInfo{
 			VmInfo: proto.VmInfo{
-				Address:            address,
-				ArchitectureType:   req.ArchitectureType,
-				CreatedOn:          time.Now(),
-				ConsoleType:        req.ConsoleType,
-				CpuPriority:        req.CpuPriority,
-				DestroyOnPowerdown: req.DestroyOnPowerdown,
-				DestroyProtection:  req.DestroyProtection,
-				DisableVirtIO:      req.DisableVirtIO,
-				ExtraKernelOptions: req.ExtraKernelOptions,
-				FirmwareType:       req.FirmwareType,
-				Hostname:           req.Hostname,
-				ImageName:          req.ImageName,
-				ImageURL:           req.ImageURL,
-				MachineType:        req.MachineType,
-				MemoryInMiB:        req.MemoryInMiB,
-				MilliCPUs:          req.MilliCPUs,
-				OwnerGroups:        req.OwnerGroups,
-				SpreadVolumes:      req.SpreadVolumes,
-				SecondaryAddresses: secondaryAddresses,
-				SecondarySubnetIDs: req.SecondarySubnetIDs,
-				State:              proto.StateStopped,
-				SubnetId:           subnetId,
-				Tags:               req.Tags,
-				VirtualCPUs:        req.VirtualCPUs,
-				WatchdogAction:     req.WatchdogAction,
-				WatchdogModel:      req.WatchdogModel,
+				Address:              address,
+				ArchitectureType:     req.ArchitectureType,
+				CreatedOn:            time.Now(),
+				ConsoleType:          req.ConsoleType,
+				CpuPriority:          req.CpuPriority,
+				DestroyOnPowerdown:   req.DestroyOnPowerdown,
+				DestroyProtection:    req.DestroyProtection,
+				DisableVirtIO:        req.DisableVirtIO,
+				ExtraKernelOptions:   req.ExtraKernelOptions,
+				FirmwareType:         req.FirmwareType,
+				Hostname:             req.Hostname,
+				ImageName:            req.ImageName,
+				ImageURL:             req.ImageURL,
+				MachineType:          req.MachineType,
+				MemoryInMiB:          req.MemoryInMiB,
+				MilliCPUs:            req.MilliCPUs,
+				OwnerGroups:          req.OwnerGroups,
+				SpreadVolumes:        req.SpreadVolumes,
+				SecondaryAddresses:   secondaryAddresses,
+				SecondarySubnetIDs:   req.SecondarySubnetIDs,
+				State:                proto.StateStopped,
+				SubnetId:             subnetId,
+				Tags:                 req.Tags,
+				VirtualCPUs:          req.VirtualCPUs,
+				VirtualiserImageName: req.VirtualiserImageName,
+				WatchdogAction:       req.WatchdogAction,
+				WatchdogModel:        req.WatchdogModel,
 			},
 		},
 		blockMutations:   true,
@@ -1562,6 +1568,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn, err)
 		}
 	}
+	if err := vm.unpackVirtualiser(request.ImageTimeout); err != nil {
+		return sendError(conn, err)
+	}
 	if len(request.SecondaryVolumes) > 0 {
 		err := sendUpdate(conn, "creating secondary volumes")
 		if err != nil {
@@ -1574,7 +1583,9 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 				dataReader = conn
 			}
 			wantInit := index < len(request.SecondaryVolumesInit)
-			err := copyVolume(fname, dataReader, &volume, index+1, wantInit,
+			err := copyVolume(fname,
+				filepath.Join(vm.getVirtualiserBinaryDirectory(), "qemu-img"),
+				dataReader, &volume, index+1, wantInit,
 				vm.logger)
 			if err != nil {
 				return sendError(conn, err)
@@ -1961,6 +1972,8 @@ func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
 
 func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
 	*srpc.Client, *image.Image, string, error) {
+	// TODO(rgooch): Consider ways to re-use the connection while handling
+	//               multiple concurrent users.
 	client, err := srpc.DialHTTP("tcp", m.ImageServerAddress, 0)
 	if err != nil {
 		return nil, nil, "",
@@ -4101,6 +4114,25 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+func (m *Manager) unpackImage(imageName, rootDir string,
+	timeout time.Duration, logger log.DebugLogger) error {
+	client, img, imageName, err := m.getImage(imageName, timeout)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	fs := img.FileSystem
+	var objectsGetter objectserver.ObjectsGetter
+	if m.objectCache == nil {
+		objectClient := objclient.AttachObjectClient(client)
+		defer objectClient.Close()
+		objectsGetter = objectClient
+	} else {
+		objectsGetter = m.objectCache
+	}
+	return util.Unpack(fs, objectsGetter, rootDir, logger)
+}
+
 func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 	pathChannel chan<- string) error {
 	vm, err := m.getVmAndLock(ipAddr, true)
@@ -4404,6 +4436,21 @@ func (vm *vmInfoType) getDebugRoot() string {
 		return filename
 	}
 	return ""
+}
+
+func (vm *vmInfoType) getVirtualiserBinaryDirectory() string {
+	if vm.VirtualiserImageName == "" {
+		return ""
+	}
+	return filepath.Join(vm.getVirtualiserRootDirectory(), "bin")
+}
+
+func (vm *vmInfoType) getVirtualiserRootDirectory() string {
+	if vm.VirtualiserImageName == "" {
+		return ""
+	}
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		virtualiserDirname)
 }
 
 func (vm *vmInfoType) getInitrdPath() string {
@@ -4875,6 +4922,15 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		}
 	}
 	return nil
+}
+
+func (vm *vmInfoType) unpackVirtualiser(timeout time.Duration) error {
+	if vm.VirtualiserImageName == "" {
+		return nil
+	}
+	rootDir := vm.getVirtualiserRootDirectory()
+	return vm.manager.unpackImage(vm.VirtualiserImageName, rootDir, timeout,
+		vm.logger)
 }
 
 func (vm *vmInfoType) writeAndSendInfo() {

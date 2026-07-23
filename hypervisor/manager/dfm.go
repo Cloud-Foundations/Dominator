@@ -28,7 +28,8 @@ func validateDfmProfile(profile string) bool {
 	})
 }
 
-func makeDfmVolume(filename string, id int, volume *proto.Volume) error {
+func makeDfmVolume(filename, qemuImgPath string, id int,
+	volume *proto.Volume) error {
 	if !validateDfmProfile(string(volume.DFM.Profile)) {
 		return fmt.Errorf("invalid DFM profile: \"%s\"", volume.DFM.Profile)
 	}
@@ -39,7 +40,7 @@ func makeDfmVolume(filename string, id int, volume *proto.Volume) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("qemu-img", "create", "-f", "dfm",
+	cmd := exec.Command(qemuImgPath, "create", "-f", "dfm",
 		"-o",
 		fmt.Sprintf("dfm_id=%d,profile=%s,wssd_file_bytes=%d,nvram_bytes=%d",
 			id, volume.DFM.Profile, volume.Size-uint64(volume.DFM.NvramSize),

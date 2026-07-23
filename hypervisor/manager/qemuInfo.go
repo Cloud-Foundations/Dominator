@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -64,8 +65,8 @@ var (
 )
 
 func getQemuInfo(architectureType proto.ArchitectureType,
-	logger log.Logger) (qemuInfoType, error) {
-	var qemuCommand string
+	binaryDirectory string, logger log.Logger) (qemuInfoType, error) {
+	var qemuCommand, qemuPath string
 	switch architectureType {
 	case proto.ArchitectureTypeAmd64:
 		qemuCommand = "qemu-system-x86_64"
@@ -75,12 +76,17 @@ func getQemuInfo(architectureType proto.ArchitectureType,
 		return qemuInfoType{},
 			fmt.Errorf("unsupported architecture type: %d", architectureType)
 	}
-	qemuInfoMutex.Lock()
-	if qemuInfo, ok := qemuInfos[qemuCommand]; ok {
+	if binaryDirectory == "" {
+		qemuInfoMutex.Lock()
+		if qemuInfo, ok := qemuInfos[qemuCommand]; ok {
+			qemuInfoMutex.Unlock()
+			return qemuInfo, nil
+		}
 		qemuInfoMutex.Unlock()
-		return qemuInfo, nil
+		qemuPath = qemuCommand
+	} else {
+		qemuPath = filepath.Join(binaryDirectory, qemuCommand)
 	}
-	qemuInfoMutex.Unlock()
 	// Get autoMachine.
 	autoMachine, ok := qemuToAutoMachine[qemuCommand]
 	if !ok {
@@ -91,7 +97,7 @@ func getQemuInfo(architectureType proto.ArchitectureType,
 	if !ok {
 		return qemuInfoType{}, fmt.Errorf("no CPU model for: %s", qemuCommand)
 	}
-	cpuModelFlags, err := getQemuCpuModelFlags(qemuCommand)
+	cpuModelFlags, err := getQemuCpuModelFlags(qemuPath)
 	if err != nil {
 		return qemuInfoType{}, err
 	}
@@ -112,7 +118,7 @@ func getQemuInfo(architectureType proto.ArchitectureType,
 		return qemuInfoType{}, fmt.Errorf("no EFI flash for: %s", qemuCommand)
 	}
 	// Get QEMU version.
-	qemuVersion, err := getQemuVersion(qemuCommand, logger)
+	qemuVersion, err := getQemuVersion(qemuPath, logger)
 	if err != nil {
 		return qemuInfoType{}, err
 	}
@@ -134,13 +140,15 @@ func getQemuInfo(architectureType proto.ArchitectureType,
 	if *qemuWrapperCommand != "" {
 		qemuInfo.command = *qemuWrapperCommand
 	}
-	qemuInfoMutex.Lock()
-	if qemuInfo, ok := qemuInfos[qemuCommand]; ok {
+	if binaryDirectory == "" {
+		qemuInfoMutex.Lock()
+		if qemuInfo, ok := qemuInfos[qemuCommand]; ok {
+			qemuInfoMutex.Unlock()
+			return qemuInfo, nil
+		}
+		qemuInfos[qemuCommand] = qemuInfo
 		qemuInfoMutex.Unlock()
-		return qemuInfo, nil
 	}
-	qemuInfos[qemuCommand] = qemuInfo
-	qemuInfoMutex.Unlock()
 	logger.Printf("Detected %s version: %d.%d.%d\n",
 		qemuCommand, qemuVersion.major, qemuVersion.minor, qemuVersion.subminor)
 	return qemuInfo, nil
