@@ -157,6 +157,8 @@ var (
 		"Name file containing user-data accessible from the metadata server")
 	virtualCPUs = flag.Uint("vCPUs", 0,
 		"virtual CPUs (default rounds up milliCPUs)")
+	virtualiserImageName = flag.String("virtualiserImageName", "",
+		"Optional name of image containing virtualiser programme. This is currently a privileged operation")
 	vmHostname    = flag.String("vmHostname", "", "Hostname for VM")
 	vmTags        tags.Tags
 	vmTagsToMatch tags.MatchTags
