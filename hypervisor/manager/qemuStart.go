@@ -14,7 +14,8 @@ import (
 func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	pidfile string, nCpus uint, netOptions []string,
 	tapFiles []*os.File) error {
-	qemuInfo, err := getQemuInfo(vm.ArchitectureType, vm.manager.Logger)
+	bindir := vm.getVirtualiserBinaryDirectory()
+	qemuInfo, err := getQemuInfo(vm.ArchitectureType, bindir, vm.manager.Logger)
 	if err != nil {
 		return err
 	}
@@ -22,7 +23,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	if vm.ArchitectureType == proto.ArchitectureTypeRuntime {
 		machine = append(machine, "accel=kvm")
 	}
-	cmd := exec.Command(qemuInfo.command,
+	cmd := exec.Command(filepath.Join(bindir, qemuInfo.command),
 		"-machine", strings.Join(machine, ","),
 		"-cpu", qemuInfo.cpuModel,
 		"-rtc", "base=utc,clock=host", // TODO(rgooch): consider if needed.
