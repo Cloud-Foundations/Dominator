@@ -36,7 +36,7 @@ var (
 	forceDisruption = flag.Bool("forceDisruption", false,
 		"If true, force an upgrade regardless of DisruptionManager state")
 	forceImageChange = flag.Bool("forceImageChange", false,
-		"If true, force an upgrade even if changing the image")
+		"If true, force an upgrade even if changing the image stream")
 	filterFile = flag.String("filterFile", "",
 		"Replacement filter file to apply when pushing image")
 	imageServerHostname = flag.String("imageServerHostname", "",
@@ -95,7 +95,7 @@ func printUsage() {
 	fmt.Fprintln(w, "Common flags:")
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
-	commands.PrintCommands(w, subcommands)
+	commands.PrintCommandsAligned(w, subcommands)
 }
 
 func getSubClient(logger log.DebugLogger) *srpc.Client {
