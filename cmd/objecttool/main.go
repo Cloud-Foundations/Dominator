@@ -39,14 +39,15 @@ func printUsage() {
 	fmt.Fprintln(w, "Common flags:")
 	flag.PrintDefaults()
 	fmt.Fprintln(w, "Commands:")
-	commands.PrintCommands(w, subcommands)
+	commands.PrintCommandsAligned(w, subcommands)
 }
 
 var subcommands = []commands.Command{
-	{"add", "   files...", 1, -1, addObjectsSubcommand},
-	{"check", " hash", 1, 1, checkObjectSubcommand},
-	{"get", "   hash baseOutputFilename", 2, 2, getObjectSubcommand},
-	{"mget", "  hashesFile directory", 2, 2, getObjectsSubcommand},
+	{"add", "files...", 1, -1, addObjectsSubcommand},
+	{"check", "hash", 1, 1, checkObjectSubcommand},
+	{"get", "hash baseOutputFilename", 2, 2, getObjectSubcommand},
+	{"import", "baseUrl hashesFile", 2, 2, importObjectsSubcommand},
+	{"mget", "hashesFile directory", 2, 2, getObjectsSubcommand},
 	{"test-bandwidth-from-server", "", 0, 0, testBandwidthFromServerSubcommand},
 	{"test-bandwidth-to-server", "", 0, 0, testBandwidthToServerSubcommand},
 }

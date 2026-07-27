@@ -34,6 +34,11 @@ type htmlWriter struct {
 	getSemaphore chan bool
 }
 
+var (
+	replicationMessage = "cannot make changes while under replication control" +
+		", go to master: "
+)
+
 func (hw *htmlWriter) WriteHtml(writer io.Writer) {
 	hw.writeHtml(writer)
 }
@@ -48,7 +53,7 @@ func Setup(config Config, params Params) *htmlWriter {
 	}
 	var publicMethods, unauthenticatedMethods []string
 	if config.AllowPublicAddObjects {
-		publicMethods = append(publicMethods, "AddObjects")
+		publicMethods = append(publicMethods, "AddObjects", "ImportObjects")
 	}
 	if config.AllowPublicCheckObjects {
 		publicMethods = append(publicMethods, "CheckObjects")
