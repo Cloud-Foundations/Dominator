@@ -153,12 +153,6 @@ type GetFilteredImageUpdatesRequest struct {
 	IgnoreExpiring bool
 }
 
-type ImageUpdate struct {
-	Name      string // "" signifies initial list is sent, changes to follow.
-	Directory *image.Directory
-	Operation uint
-}
-
 type GetReplicationMasterRequest struct{}
 
 type GetReplicationMasterResponse struct {
@@ -170,6 +164,29 @@ type ImageArchive struct {
 	ImageName string
 	image.Image
 } // HMAC-SHA512 checksum is written after GOB encoded data.
+
+type ImageUpdate struct {
+	Name      string // "" signifies initial list is sent, changes to follow.
+	Directory *image.Directory
+	Operation uint
+}
+
+type ImportTreeRequest struct {
+	DirectoryName string
+	ExpiresAt     time.Time
+	TreeUrl       string
+}
+
+type ImportTreeResponse struct {
+	FileBytesAdded    uint64
+	FileObjectsAdded  uint64
+	FilesDownloadTime time.Duration
+	Error             string
+	ImageName         string
+	TreeBytesAdded    uint64
+	TreeObjectsAdded  uint64
+	TreesDownloadTime time.Duration
+}
 
 // The ListDirectories() RPC is fully streamed.
 // The client sends no information to the server.
