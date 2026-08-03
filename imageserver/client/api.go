@@ -95,6 +95,11 @@ func GetReplicationMaster(client srpc.ClientI) (string, error) {
 	return getReplicationMaster(client)
 }
 
+func ImportTree(client srpc.ClientI, request proto.ImportTreeRequest) (
+	proto.ImportTreeResponse, error) {
+	return importTree(client, request)
+}
+
 func ListDirectories(client srpc.ClientI) ([]image.Directory, error) {
 	return listDirectories(client)
 }

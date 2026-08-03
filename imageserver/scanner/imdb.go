@@ -823,8 +823,8 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 	delete(imdb.mkdirNotifiers, channel)
 }
 
-// Write the specified image, assuming other writers are blocked and validation
-// checks have been performed.
+// Write the specified image and update refcounts, assuming other writers are
+// blocked and validation checks have been performed.
 func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	exclusive bool) error {
 	computedFiles := img.FileSystem.GetComputedFiles()
@@ -834,6 +834,10 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	filename := filepath.Join(imdb.BaseDirectory, name)
 	fileChecksum, err := writeImage(filename, img, exclusive)
 	if err != nil {
+		return err
+	}
+	if err := imdb.Params.ObjectServer.AdjustRefcounts(true, img); err != nil {
+		os.Remove(filename)
 		return err
 	}
 	imdb.scheduleExpiration(img, name)
@@ -848,7 +852,7 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 	imdb.Unlock()
-	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
+	return nil
 }
 
 // This must be called with the modifying flag set to true.

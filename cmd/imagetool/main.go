@@ -198,6 +198,7 @@ var subcommands = []commands.Command{
 	{"get-image-updates", "", 0, 0, getImageUpdatesSubcommand},
 	{"get-package-list", "name [outfile]", 1, 2, getImagePackageListSubcommand},
 	{"get-replication-master", "", 0, 0, getReplicationMasterSubcommand},
+	{"import-fs-tree", "dirname treeUrl", 2, 2, importFsTreeSubcommand},
 	{"list", "", 0, 0, listImagesSubcommand},
 	{"list-mdb", "", 0, 0, listMdbImagesSubcommand},
 	{"list-not-in-mdb", "", 0, 0, listImagesNotInMdbSubcommand},
@@ -229,6 +230,7 @@ var subcommands = []commands.Command{
 	{"test-download-speed", "name", 1, 1, testDownloadSpeedSubcommand},
 	{"trace-inode-history", "name inodePath", 2, 2,
 		traceInodeHistorySubcommand},
+	{"unpack-fs-tree", "dirname treeUrl", 2, 2, unpackFsTreeSubcommand},
 	{"wait", "name", 1, 1, waitImageSubcommand},
 }
 
