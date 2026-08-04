@@ -48,6 +48,14 @@ type CheckImageResponse struct {
 	ImageExists bool
 }
 
+type DeleteDirectoryRequest struct {
+	DirectoryName string
+}
+
+type DeleteDirectoryResponse struct {
+	Error string
+}
+
 type DeleteImageRequest struct {
 	ImageName string
 }
@@ -127,9 +135,10 @@ type GetImageResponse struct {
 }
 
 const (
-	OperationAddImage      = 0
-	OperationDeleteImage   = 1
-	OperationMakeDirectory = 2
+	OperationAddImage        = 0
+	OperationDeleteImage     = 1
+	OperationMakeDirectory   = 2
+	OperationDeleteDirectory = 3
 )
 
 // The GetImageUpdates() RPC is fully streamed.
