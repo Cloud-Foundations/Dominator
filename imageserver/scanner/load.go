@@ -49,6 +49,7 @@ func loadImageDataBase(config Config, params Params) (*ImageDataBase, error) {
 		addNotifiers:    make(notifiers),
 		deleteNotifiers: make(notifiers),
 		mkdirNotifiers:  make(makeDirectoryNotifiers),
+		rmdirNotifiers:  make(notifiers),
 	}
 	imdb.lockWatcher = lockwatcher.New(&imdb.RWMutex,
 		lockwatcher.LockWatcherOptions{

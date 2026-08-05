@@ -372,6 +372,26 @@ func (imdb *ImageDataBase) countImages() uint {
 	return uint(len(imdb.imageMap))
 }
 
+func (imdb *ImageDataBase) deleteDirectory(name string,
+	authInfo *srpc.AuthInformation) error {
+	if authInfo == nil {
+		return errNoAuthInfo
+	}
+	imdb.Lock()
+	defer imdb.Unlock()
+	if _, ok := imdb.directoryMap[name]; !ok {
+		return errors.New("directory: " + name + " does not exist")
+	} else {
+		dirname := filepath.Join(imdb.BaseDirectory, name)
+		if err := os.Remove(dirname); err != nil {
+			return err
+		}
+		delete(imdb.directoryMap, name)
+		imdb.rmdirNotifiers.sendPlain(name, "rmdir", imdb.Logger)
+		return nil
+	}
+}
+
 func (imdb *ImageDataBase) deleteImage(name string,
 	authInfo *srpc.AuthInformation) error {
 	imdb.Lock()
@@ -717,6 +737,14 @@ func (imdb *ImageDataBase) registerAddNotifier() <-chan string {
 	return channel
 }
 
+func (imdb *ImageDataBase) registerDeleteDirectoryNotifier() <-chan string {
+	channel := make(chan string, 1)
+	imdb.Lock()
+	defer imdb.Unlock()
+	imdb.rmdirNotifiers[channel] = channel
+	return channel
+}
+
 func (imdb *ImageDataBase) registerDeleteNotifier() <-chan string {
 	channel := make(chan string, 1)
 	imdb.Lock()
@@ -808,6 +836,13 @@ func (imdb *ImageDataBase) unregisterAddNotifier(channel <-chan string) {
 	imdb.Lock()
 	defer imdb.Unlock()
 	delete(imdb.addNotifiers, channel)
+}
+
+func (imdb *ImageDataBase) unregisterDeleteDirectoryNotifier(
+	channel <-chan string) {
+	imdb.Lock()
+	defer imdb.Unlock()
+	delete(imdb.rmdirNotifiers, channel)
 }
 
 func (imdb *ImageDataBase) unregisterDeleteNotifier(channel <-chan string) {
