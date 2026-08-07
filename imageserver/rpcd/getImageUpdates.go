@@ -42,8 +42,10 @@ func (t *srpcType) getImageUpdates(conn *srpc.Conn,
 	addChannel := t.imageDataBase.RegisterAddNotifier()
 	deleteChannel := t.imageDataBase.RegisterDeleteNotifier()
 	mkdirChannel := t.imageDataBase.RegisterMakeDirectoryNotifier()
+	rmdirChannel := t.imageDataBase.RegisterDeleteDirectoryNotifier()
 	defer t.imageDataBase.UnregisterAddNotifier(addChannel)
 	defer t.imageDataBase.UnregisterDeleteNotifier(deleteChannel)
+	defer t.imageDataBase.UnregisterDeleteDirectoryNotifier(rmdirChannel)
 	defer t.imageDataBase.UnregisterMakeDirectoryNotifier(mkdirChannel)
 	directories := t.imageDataBase.ListDirectories()
 	image.SortDirectories(directories)
@@ -99,6 +101,12 @@ func (t *srpcType) getImageUpdates(conn *srpc.Conn,
 			}
 		case directory := <-mkdirChannel:
 			if err := sendMakeDirectory(conn, directory); err != nil {
+				t.logger.Println(err)
+				return err
+			}
+		case dirname := <-rmdirChannel:
+			if err := sendUpdate(conn, dirname,
+				imageserver.OperationDeleteDirectory); err != nil {
 				t.logger.Println(err)
 				return err
 			}
