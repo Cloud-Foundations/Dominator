@@ -35,6 +35,10 @@ func ChownDirectory(client srpc.ClientI, dirname, ownerGroup string) error {
 	return chownDirectory(client, dirname, ownerGroup)
 }
 
+func DeleteDirectory(client srpc.ClientI, name string) error {
+	return deleteDirectory(client, name)
+}
+
 func DeleteImage(client srpc.ClientI, name string) error {
 	return deleteImage(client, name)
 }
