@@ -46,6 +46,7 @@ type ImageDataBase struct {
 	addNotifiers    notifiers
 	deleteNotifiers notifiers
 	mkdirNotifiers  makeDirectoryNotifiers
+	rmdirNotifiers  notifiers
 	// Unprotected by main lock.
 	pendingImageLock sync.Mutex
 	objectFetchLock  sync.Mutex
@@ -113,6 +114,11 @@ func (imdb *ImageDataBase) CountDirectories() uint {
 
 func (imdb *ImageDataBase) CountImages() uint {
 	return imdb.countImages()
+}
+
+func (imdb *ImageDataBase) DeleteDirectory(name string,
+	authInfo *srpc.AuthInformation) error {
+	return imdb.deleteDirectory(name, authInfo)
 }
 
 func (imdb *ImageDataBase) DeleteImage(name string,
@@ -217,6 +223,10 @@ func (imdb *ImageDataBase) RegisterAddNotifier() <-chan string {
 	return imdb.registerAddNotifier()
 }
 
+func (imdb *ImageDataBase) RegisterDeleteDirectoryNotifier() <-chan string {
+	return imdb.registerDeleteDirectoryNotifier()
+}
+
 func (imdb *ImageDataBase) RegisterDeleteNotifier() <-chan string {
 	return imdb.registerDeleteNotifier()
 }
@@ -233,6 +243,11 @@ func (imdb *ImageDataBase) RestoreImageFromArchive(
 
 func (imdb *ImageDataBase) UnregisterAddNotifier(channel <-chan string) {
 	imdb.unregisterAddNotifier(channel)
+}
+
+func (imdb *ImageDataBase) UnregisterDeleteDirectoryNotifier(
+	channel <-chan string) {
+	imdb.unregisterDeleteDirectoryNotifier(channel)
 }
 
 func (imdb *ImageDataBase) UnregisterDeleteNotifier(channel <-chan string) {
