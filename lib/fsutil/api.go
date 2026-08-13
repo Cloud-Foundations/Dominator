@@ -168,7 +168,8 @@ func GetTreeSize(dirname string) (uint64, error) {
 }
 
 // LoadLines will open a file and read lines from it. Comment lines (i.e. lines
-// beginning with '#') are skipped.
+// beginning with '#') are skipped. If filename is '-' then lines are read from
+// the standard input.
 func LoadLines(filename string) ([]string, error) {
 	return loadLines(filename)
 }
