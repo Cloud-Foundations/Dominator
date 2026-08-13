@@ -132,6 +132,11 @@ not be present if the `computed-files` file is present.
 An alternative format file `computed-files.add.json` is supported, which must
 contain JSON data.
 
+If neither `computed-files` nor `computed-files.add` is present, the list of
+computed files from the *SourceImage* is inherited only when
+*[imaginator](../cmd/imaginator/README.md)* is started with
+`-enableDefaultInheritance`; otherwise the image has no computed files.
+
 ### `filter` file
 An optional file containing a newline-separated list of regular expressions
 matching files which should not be updated on target machines. This is relevant
@@ -143,6 +148,11 @@ only for images which will be lived patched onto machines with the
 This is similar to the `filter` file, except that the filter expressions are
 *added* to the filter of the *SourceImage*, thus inheriting and (if not empty)
 extending the filter. This must not be present if the `filter` file is present.
+
+If neither `filter` nor `filter.add` is present, the filter from the
+*SourceImage* is inherited only when the
+*[imaginator](../cmd/imaginator/README.md)* is started with
+`-enableDefaultInheritance`; otherwise the image has nil filter.
 
 ### `owners.json` file
 An optional JSON encoded file containing a list of group and user owners for the
@@ -180,6 +190,11 @@ This is similar to the `triggers` file, except that the triggers are *added*
 (merged) to the triggers of the *SourceImage*, thus inheriting and (if not
 `[]`) extending the triggers. This must not be present if the `triggers` file is
 present.
+
+If neither `triggers` nor `triggers.add` is present, the triggers from the
+*SourceImage* are inherited only when the
+*[imaginator](../cmd/imaginator/README.md)* is started with
+`-enableDefaultInheritance`; otherwise the image has no triggers.
 
 ### `tests` directory
 An optional directory containing test scripts to run. These are copied into the
