@@ -162,6 +162,21 @@ type GetFilteredImageUpdatesRequest struct {
 	IgnoreExpiring bool
 }
 
+type GetObjectStatisticsForImagesRequest struct {
+	IgnoreMissing bool
+	ImageNames    []string
+}
+
+type GetObjectStatisticsForImagesResponse struct {
+	ComputationTime     time.Duration
+	Error               string
+	NumFileInodes       uint64
+	NumImages           uint
+	NumObjects          uint64
+	TotalFileInodeBytes uint64
+	TotalObjectBytes    uint64
+}
+
 type GetReplicationMasterRequest struct{}
 
 type GetReplicationMasterResponse struct {
