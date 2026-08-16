@@ -294,6 +294,24 @@ func (imdb *ImageDataBase) chownDirectory(dirname, ownerGroup string,
 		image.Directory{Name: dirname, Metadata: directoryMetadata})
 }
 
+func (imdb *ImageDataBase) getImages(imageNames []string,
+	ignoreMissing bool) ([]*image.Image, error) {
+	imdb.RLock()
+	defer imdb.RUnlock()
+	images := make([]*image.Image, 0, len(imageNames))
+	for _, imageName := range imageNames {
+		if img, _ := imdb.getImageWithLock(imageName); img == nil {
+			if !ignoreMissing {
+				return nil, fmt.Errorf("unknown image: %s", imageName)
+			}
+			images = append(images, nil)
+		} else {
+			images = append(images, img)
+		}
+	}
+	return images, nil
+}
+
 // prepareToWrite returns an error if the image already exists or is being
 // written, otherwise it marks the image as being written and returns nil.
 // The write lock is grabbed and released.
