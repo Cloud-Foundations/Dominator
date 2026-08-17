@@ -43,13 +43,35 @@ func findHypervisorClient(client *srpc.Client,
 }
 
 func lookupIP(vmHostname string) (net.IP, error) {
-	if ips, err := net.LookupIP(vmHostname); err != nil {
+	ips, err := net.LookupIP(vmHostname)
+	if err != nil {
 		return nil, err
-	} else if len(ips) != 1 {
-		return nil, fmt.Errorf("num IPs: %d != 1", len(ips))
-	} else {
-		return ips[0], nil
 	}
+	ipv4, ipv6 := splitIPs(ips)
+	switch {
+	case len(ipv4) == 1 && len(ipv6) <= 1:
+		// Prefer IPv4 when exactly one IPv4 address is available.
+		return ipv4[0], nil
+	case len(ipv6) == 1 && len(ipv4) == 0:
+		return ipv6[0], nil
+	default:
+		return nil, fmt.Errorf(
+			"unable to determine a unique IP address for: %s "+
+				"num IPv4: %d, num IPv6: %d",
+			vmHostname, len(ipv4), len(ipv6),
+		)
+	}
+}
+
+func splitIPs(ips []net.IP) (ipv4, ipv6 []net.IP) {
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			ipv4 = append(ipv4, ip)
+		} else if ip.To16() != nil {
+			ipv6 = append(ipv6, ip)
+		}
+	}
+	return
 }
 
 func lookupVmAndHypervisor(vmHostname string) (net.IP, string, error) {
