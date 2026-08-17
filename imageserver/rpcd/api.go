@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/scanner"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
@@ -39,6 +40,7 @@ type Params struct {
 }
 
 type srpcType struct {
+	analysisGoroutine           *goroutine.Goroutine
 	imageDataBase               *scanner.ImageDataBase
 	excludeFilter               *filter.Filter
 	finishedReplication         <-chan struct{} // Closed when finished.
@@ -68,8 +70,13 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 	if *archiveMode && config.ReplicationMaster == "" {
 		return nil, errors.New("replication master required in archive mode")
 	}
+	analysisGoroutine, err := makeAnalysisGoroutine()
+	if err != nil {
+		return nil, err
+	}
 	finishedReplication := make(chan struct{})
 	srpcObj := &srpcType{
+		analysisGoroutine:   analysisGoroutine,
 		imageDataBase:       params.ImageDataBase,
 		finishedReplication: finishedReplication,
 		replicationMaster:   config.ReplicationMaster,
@@ -88,7 +95,6 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		}
 		srpcObj.informationDatabaseTemplate = tmpl
 	}
-	var err error
 	if *replicationExcludeFilter != "" {
 		srpcObj.excludeFilter, err = filter.Load(*replicationExcludeFilter)
 		if err != nil {
@@ -116,6 +122,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		"GetImageInodes",
 		"GetImageUpdates",
 		"GetImageUsageEstimate",
+		"GetObjectStatisticsForImages",
 		"GetReplicationMaster",
 		"ListDirectories",
 		"ListImages",
@@ -136,6 +143,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 			"GetImageInodes",
 			"GetImageUpdates",
 			"GetImageUsageEstimate",
+			"GetObjectStatisticsForImages",
 			"GetReplicationMaster",
 			"ListDirectories",
 			"ListImages",
@@ -153,4 +161,10 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		close(finishedReplication)
 	}
 	return (*htmlWriter)(srpcObj), nil
+}
+
+func makeAnalysisGoroutine() (*goroutine.Goroutine, error) {
+	g := goroutine.New()
+	g.Run(func() { lowerPriority() }) // Best effort.
+	return g, nil
 }
