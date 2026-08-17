@@ -95,6 +95,12 @@ func GetImageWithTimeout(client srpc.ClientI, name string,
 	return getImage(client, name, timeout)
 }
 
+func GetObjectStatisticsForImages(client srpc.ClientI,
+	request proto.GetObjectStatisticsForImagesRequest) (
+	proto.GetObjectStatisticsForImagesResponse, error) {
+	return getObjectStatisticsForImages(client, request)
+}
+
 func GetReplicationMaster(client srpc.ClientI) (string, error) {
 	return getReplicationMaster(client)
 }
