@@ -56,6 +56,8 @@ Some of the sub-commands available are:
 - **get-file-in-image**: get file in an image
 - **get-image-expiration**: get the expiration time for an image
 - **get-image-updates**: get a stream of image updates
+- **get-object-statistics-for-images**: get objects statistics for a list of
+                                        images
 - **get-package-list**: get package list for an image
 - **get-replication-master**: show the replication master for the imageserver
 - **import-fs-tree**: import a recursive file-system tree from a specified URL
