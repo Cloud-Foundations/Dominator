@@ -64,8 +64,18 @@ func TestStart(t *testing.T) {
 
 func TestStartQuit(t *testing.T) {
 	g := New()
-	g.Start(func() { time.Sleep(time.Second) })
+	var finished bool
+	ch := make(chan struct{}, 1)
+	g.Start(func() {
+		ch <- struct{}{} // Signal I'm running.
+		time.Sleep(time.Millisecond * 10)
+		finished = true
+	})
+	<-ch // Wait for goroutine to start.
 	g.Quit()
+	if !finished {
+		t.Fatal("Function not finished")
+	}
 }
 
 func TestWait(t *testing.T) {

@@ -196,6 +196,8 @@ var subcommands = []commands.Command{
 		getFileInImageSubcommand},
 	{"get-image-expiration", "name", 1, 1, getImageExpirationSubcommand},
 	{"get-image-updates", "", 0, 0, getImageUpdatesSubcommand},
+	{"get-object-statistics-for-images", "listfile", 1, 1,
+		getObjectStatisticsForImagesSubcommand},
 	{"get-package-list", "name [outfile]", 1, 2, getImagePackageListSubcommand},
 	{"get-replication-master", "", 0, 0, getReplicationMasterSubcommand},
 	{"import-fs-tree", "dirname treeUrl", 2, 2, importFsTreeSubcommand},

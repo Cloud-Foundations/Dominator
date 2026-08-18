@@ -151,6 +151,14 @@ func (imdb *ImageDataBase) GetImage(name string) *image.Image {
 	return imdb.getImage(name)
 }
 
+// GetImages will return the specified images.
+// If ignoreMissing is false, missing images will return an error, else if true
+// a nil entry is written.
+func (imdb *ImageDataBase) GetImages(imageNames []string,
+	ignoreMissing bool) ([]*image.Image, error) {
+	return imdb.getImages(imageNames, ignoreMissing)
+}
+
 func (imdb *ImageDataBase) GetImageArchive(name string) ([]byte, error) {
 	return imdb.getImageArchive(name)
 }
