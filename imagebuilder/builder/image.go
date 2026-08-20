@@ -42,11 +42,11 @@ type gitInfoType struct {
 
 func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 	request proto.BuildImageRequest, buildLog buildLogger) (
-	*image.Image, error) {
+	*image.Image, string, error) {
 	manifestDirectory, gitInfo, err := stream.getManifest(b, request.StreamName,
 		request.GitBranch, request.Variables, buildLog)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.RemoveAll(manifestDirectory)
 	ctx, cancel := makeContext2(b.maximumBuildDuration,
@@ -57,7 +57,7 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 		sourceDir := filepath.Join(b.cache.BaseDirectory,
 			filepath.Clean(request.StreamName))
 		if err := os.MkdirAll(sourceDir, fsutil.DirPerms); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		bindMounts = append(bindMounts, bindMountType{
 			source:   sourceDir,
@@ -65,20 +65,21 @@ func (stream *imageStreamType) build(b *Builder, client srpc.ClientI,
 			writable: true,
 		})
 	}
-	img, err := buildImageFromManifest(ctx, client, manifestDirectory, request,
-		bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog, b.logger)
+	img, variant, err := buildImageFromManifest(ctx, client, manifestDirectory,
+		request, bindMounts, stream, gitInfo, b.mtimesCopyFilter, buildLog,
+		b.logger)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if b.cache.BaseDirectory != "" && b.cache.MountPoint != "" {
 		sourceDir := filepath.Join(b.cache.BaseDirectory,
 			filepath.Clean(request.StreamName))
 		err := trimDirectory(sourceDir, b.cache.SizeLimit, buildLog)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return img, nil
+	return img, variant, nil
 }
 
 func (stream *imageStreamType) getenv() map[string]string {
@@ -284,15 +285,15 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	manifestDir string, request proto.BuildImageRequest,
 	bindMounts []bindMountType, envGetter environmentGetter,
 	gitInfo *gitInfoType, mtimesCopyFilter *filter.Filter,
-	buildLog buildLogger, logger log.Logger) (*image.Image, error) {
+	buildLog buildLogger, logger log.Logger) (*image.Image, string, error) {
 	// First load all the various manifest files (fail early on error).
 	computedFilesList, addComputedFiles, err := loadComputedFiles(manifestDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	imageFilter, addFilter, err := loadFilter(manifestDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if imageFilter != nil {
 		if lines := imageFilter.ListUnoptimised(); len(lines) > 0 {
@@ -305,20 +306,20 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	}
 	owners, err := loadOwners(manifestDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tgs, err := loadTags(manifestDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	imageTriggers, addTriggers, err := loadTriggers(manifestDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	rootDir, err := makeTempDirectory("",
 		strings.Replace(request.StreamName, "/", "_", -1)+".root")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
@@ -333,11 +334,14 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		request.MaxSourceAge, rootDir, bindMounts, false, vGetter, buildLog,
 		logger)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	if manifest.variant != "" {
+		request.StreamName = request.StreamName + "/" + manifest.variant
 	}
 	ctimeResolution, err := getCtimeResolution()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	time.Sleep(ctimeResolution)
 	fmt.Fprintf(buildLog, "Waited %s (Ctime resolution)\n",
@@ -346,11 +350,11 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		if fi.IsDir() {
 			testsDir := filepath.Join(rootDir, "tests", request.StreamName)
 			if err := os.MkdirAll(testsDir, fsutil.DirPerms); err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			err := copyFiles(manifestDir, "tests", testsDir, buildLog)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 		}
 	}
@@ -380,14 +384,14 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	}
 	g, err := newNamespaceTargetWithMounts(rootDir, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer g.Quit()
 	img, err := packImage(ctx, g, client, request, rootDir, manifest.filter,
 		manifest.sourceImageInfo.treeCache, computedFilesList, imageFilter,
 		owners, tgs, imageTriggers, mtimesCopyFilter, buildLog, logger)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if gitInfo != nil {
 		img.BuildBranch = gitInfo.branch
@@ -395,7 +399,7 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		img.BuildGitUrl = gitInfo.gitUrl
 	}
 	img.SourceImage = manifest.sourceImageInfo.imageName
-	return img, nil
+	return img, manifest.variant, nil
 }
 
 func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
@@ -405,7 +409,7 @@ func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
 		StreamName: streamName,
 		ExpiresIn:  expiresIn,
 	}
-	img, err := buildImageFromManifest(
+	img, variant, err := buildImageFromManifest(
 		ctx,
 		client,
 		options.ManifestDirectory,
@@ -423,6 +427,9 @@ func buildImageFromManifestAndUpload(ctx context.Context, client srpc.ClientI,
 		logger)
 	if err != nil {
 		return nil, "", err
+	}
+	if variant != "" {
+		request.StreamName = request.StreamName + "/" + variant
 	}
 	name, err := addImage(client, request, img)
 	if err != nil {
@@ -624,7 +631,7 @@ func loadTriggers(manifestDir string) (*triggers.Triggers, bool, error) {
 	}
 }
 
-func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
+func unpackImage(client srpc.ClientI, streamName, variant, buildCommitId string,
 	sourceImageTagsToMatch tags.MatchTags, maxSourceAge time.Duration,
 	rootDir string, buildLog io.Writer, logger log.Logger) (
 	*sourceImageInfoType, error) {
@@ -632,16 +639,20 @@ func unpackImage(client srpc.ClientI, streamName, buildCommitId string,
 	if err != nil {
 		return nil, err
 	}
-	imageName, sourceImage, err := getLatestImage(client, streamName,
+	searchDir := streamName
+	if variant != "" {
+		searchDir += "/" + variant
+	}
+	imageName, sourceImage, err := getLatestImage(client, searchDir,
 		buildCommitId, sourceImageTagsToMatch, buildLog, logger)
 	if err != nil {
 		return nil, err
 	}
 	var specifiedStream string
 	if buildCommitId == "" {
-		specifiedStream = streamName
+		specifiedStream = searchDir
 	} else {
-		specifiedStream = streamName + "@gitCommitId:" + buildCommitId
+		specifiedStream = searchDir + "@gitCommitId:" + buildCommitId
 	}
 	if len(sourceImageTagsToMatch) > 0 {
 		specifiedStream += fmt.Sprintf("@tags:%v", sourceImageTagsToMatch)
