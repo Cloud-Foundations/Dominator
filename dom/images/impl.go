@@ -195,7 +195,7 @@ func (m *Manager) loadImage(imageClient *srpc.Client, name string) (
 		return imageClient, nil, nil
 	}
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
-		m.logger.Printf("Error building inode pointers for image: %s %s",
+		m.logger.Printf("Error building inode pointers for image: %s: %s\n",
 			name, err)
 		return imageClient, nil, err
 	}
@@ -207,6 +207,18 @@ func (m *Manager) loadImage(imageClient *srpc.Client, name string) (
 	img.FileSystem.HashToInodesTable()
 	img.FileSystem.ComputeTotalDataBytes()
 	img.FileSystem.BuildEntryMap()
+	if filt := img.Filter; filt != nil {
+		if err := filt.Compile; err != nil {
+			m.logger.Printf("Error compiling filter for image: %s: %s\n",
+				name, err)
+		}
+	}
+	if trig := img.Triggers; trig != nil {
+		if err := trig.Compile; err != nil {
+			m.logger.Printf("Error compiling triggers for image: %s: %s\n",
+				name, err)
+		}
+	}
 	m.logger.Printf("Got image: %s\n", name)
 	return imageClient, img, nil
 }
