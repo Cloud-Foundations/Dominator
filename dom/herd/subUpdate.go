@@ -13,7 +13,7 @@ import (
 func (sub *Sub) buildUpdateRequest(request *subproto.UpdateRequest) (
 	bool, bool) {
 	request.ImageName = sub.requiredImageName
-	request.Triggers = sub.requiredImage.Triggers
+	request.Triggers = sub.requiredImage.Triggers.Clone()
 	var rusageStart, rusageStop syscall.Rusage
 	computeStartTime := time.Now()
 	syscall.Getrusage(syscall.RUSAGE_SELF, &rusageStart)
