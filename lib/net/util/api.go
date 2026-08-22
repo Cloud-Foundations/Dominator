@@ -75,3 +75,7 @@ func InvertIP(input net.IP) {
 func ShrinkIP(netIP net.IP) net.IP {
 	return shrinkIP(netIP)
 }
+
+func SplitIPs(ips []net.IP) (ipv4s []net.IP, ipv6s []net.IP) {
+	return splitIPs(ips)
+}
