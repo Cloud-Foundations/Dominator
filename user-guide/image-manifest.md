@@ -68,8 +68,18 @@ corresponding paths in the image, preserving the directory structure.
 If a file already exists in the image, its contents will be appended
 verbatim. If a file does not exist, it will be created with the same
 permissions as the source file, and its contents will be written.
+
 Symbolic links are not supported in this directory and will be ignored
 if present.
+
+### `files.templated` directory tree
+If present, any files in this directory tree will be processed using the
+[Golang](https://go.dev/) [text template](https://pkg.go.dev/text/template)
+processor and written into the image (prior to installing packages), preserving
+the directory structure.
+
+The build environment variables are provided as the data for the template
+executions.
 
 ### `pre-install-scripts` directory
 An optional directory containing scripts to run prior to installing packages.
@@ -83,17 +93,29 @@ contents of the `files` directory tree should contain any package repositories.
 
 ### `post-install-files` directory tree
 If present, any files and symbolic links in this directory tree will be
-copied verbatim into the image, preserving the directory structure.
+copied verbatim into the image (after installing packages), preserving the
+directory structure.
 
 ### `post-install-files.append` directory tree
 If present, any files in this directory tree will be appended to their
-corresponding paths in the image, preserving the directory structure.
+corresponding paths in the image (after installing packages), preserving the
+directory structure.
+
 If a file already exists in the image, its contents will be appended
 verbatim. If a file does not exist, it will be created with the same
 permissions as the source file, and its contents will be written.
+
 Symbolic links are not supported in this directory and will be ignored
 if present.
-Unlike post-install-files, this directory performs append operations instead of overwriting.
+
+### `post-install-files.templated` directory tree
+If present, any files in this directory tree will be processed using the
+[Golang](https://go.dev/) [text template](https://pkg.go.dev/text/template)
+processor and written into the image (after installing packages), preserving
+the directory structure.
+
+The build environment variables are provided as the data for the template
+executions.
 
 ### `scripts` directory
 An optional directory containing scripts to run. These are processed in lexical
@@ -104,6 +126,27 @@ is the root directory of the image being built.
 If present, any files and symbolic links in this directory tree will be
 copied verbatim into the image (after the `scripts` are run), preserving the
 directory structure.
+
+### `post-scripts-files.append` directory tree
+If present, any files in this directory tree will be appended to their
+corresponding paths in the image (after the `scripts` are run), preserving the
+directory structure.
+
+If a file already exists in the image, its contents will be appended
+verbatim. If a file does not exist, it will be created with the same
+permissions as the source file, and its contents will be written.
+
+Symbolic links are not supported in this directory and will be ignored
+if present.
+
+### `post-scripts-files.templated` directory tree
+If present, any files in this directory tree will be processed using the
+[Golang](https://go.dev/) [text template](https://pkg.go.dev/text/template)
+processor and written into the image (after the `scripts` are run), preserving
+the directory structure.
+
+The build environment variables are provided as the data for the template
+executions.
 
 ### `post-cleanup-scripts` directory
 An optional directory containing scripts to run after cleanup operations (such
@@ -188,3 +231,12 @@ The tests are run concurrently after the image content is built. If any test
 fails or exceeds the 10 second timeout, the image is not uploaded and the build
 fails. The scripts are run in a contained environment where the root directory
 is the root directory of the image that was built.
+
+## Build Environment
+The build environment consists of the unpacked `SourceImage` specified in the
+`manifest` file and the following environment variables:
+- `ARCH`: the architecture (i.e. `amd64`, `arm64`)
+- `IMAGE_STREAM`: the name of the image stream
+- `IMAGE_STREAM_DIRECTORY_NAME`: all but the rightmost component of `IMAGE_STREAM`
+- `IMAGE_STREAM_LEAF_NAME`: the rightmost component of `IMAGE_STREAM`
+- `IMAGE_STREAM_#`: the numbered component of `IMAGE_STREAM`
