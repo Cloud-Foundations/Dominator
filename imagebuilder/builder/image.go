@@ -10,7 +10,6 @@ import (
 	stdlog "log"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -95,6 +94,9 @@ func (stream *imageStreamType) getenv() map[string]string {
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
 	envTable["IMAGE_STREAM_LEAF_NAME"] = filepath.Base(stream.name)
+	for index, component := range strings.Split(stream.name, "/") {
+		envTable[fmt.Sprintf("IMAGE_STREAM_%d", index)] = component
+	}
 	return envTable
 }
 
@@ -270,14 +272,6 @@ func listDirectory(directoryName string) ([]string, error) {
 		return nil, err
 	}
 	return filenames, nil
-}
-
-func runCommand(buildLog io.Writer, cwd string, args ...string) error {
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = cwd
-	cmd.Stdout = buildLog
-	cmd.Stderr = buildLog
-	return cmd.Run()
 }
 
 func buildImageFromManifest(ctx context.Context, client srpc.ClientI,

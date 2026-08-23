@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/expand"
@@ -92,6 +94,78 @@ func makeMountPoints(rootDir string, bindMounts []bindMountType,
 	retval := directoriesToDelete
 	directoriesToDelete = nil // Do not clean up in the defer.
 	return retval, nil
+}
+
+func processFilesGroups(manifestDir, groupPrefix, rootDir string,
+	envGetter environmentGetter, buildLog io.Writer) error {
+	err := copyFiles(manifestDir, groupPrefix, rootDir, buildLog)
+	if err != nil {
+		return err
+	}
+	err = appendFiles(manifestDir, groupPrefix+".append", rootDir, buildLog)
+	if err != nil {
+		return err
+	}
+	err = processTemplatedFiles(manifestDir, groupPrefix+".templated", rootDir,
+		envGetter.getenv(), buildLog)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func processPackages(ctx context.Context, g *goroutine.Goroutine,
+	manifestDir, rootDir string, envGetter environmentGetter,
+	buildLog io.Writer) error {
+	packageList, err := fsutil.LoadLines(filepath.Join(manifestDir,
+		"package-list"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if len(packageList) < 1 {
+		return nil
+	}
+	err = updatePackageDatabase(ctx, g, rootDir, envGetter, buildLog)
+	if err != nil {
+		return err
+	}
+	err = installPackages(ctx, g, packageList, rootDir, envGetter, buildLog)
+	if err != nil {
+		return errors.New("error installing packages: " + err.Error())
+	}
+	return nil
+}
+
+func processTemplatedFile(destFilename, sourceFilename string, mode os.FileMode,
+	templateData map[string]string, buildLog io.Writer) error {
+	tmpl, err := template.ParseFiles(sourceFilename)
+	if err != nil {
+		return err
+	}
+	buffer := &bytes.Buffer{}
+	if err := tmpl.Execute(buffer, templateData); err != nil {
+		return err
+	}
+	return fsutil.CopyToFile(destFilename, mode, buffer, 0)
+}
+
+func processTemplatedFiles(manifestDir, dirname, rootDir string,
+	templateData map[string]string, buildLog io.Writer) error {
+	startTime := time.Now()
+	sourceDir := filepath.Join(manifestDir, dirname)
+	cf := func(destFilename, sourceFilename string, mode os.FileMode) error {
+		return processTemplatedFile(destFilename, sourceFilename, mode,
+			templateData, buildLog)
+	}
+	if err := fsutil.CopyTreeWithCopyFunc(rootDir, sourceDir, cf); err != nil {
+		return fmt.Errorf("error copying %s: %s", dirname, err)
+	}
+	fmt.Fprintf(buildLog, "\nProcessed %s tree in %s\n",
+		dirname, format.Duration(time.Since(startTime)))
+	return nil
 }
 
 // readManifestFile will read the manifest file in the manifest directory and
@@ -204,7 +278,7 @@ func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
 func processManifest(ctx context.Context, manifestDir, rootDir string,
 	bindMounts []bindMountType, envGetter environmentGetter,
 	buildLog io.Writer) error {
-	// Copy in system /etc/resolv.conf
+	// Read contents of system /etc/resolv.conf
 	file, err := os.Open("/etc/resolv.conf")
 	if err != nil {
 		return err
@@ -231,10 +305,7 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
-	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
-		return err
-	}
-	err = appendFiles(manifestDir, "files.append", rootDir, buildLog)
+	err = processFilesGroups(manifestDir, "files", rootDir, envGetter, buildLog)
 	if err != nil {
 		return err
 	}
@@ -243,29 +314,12 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return err
 	}
-	packageList, err := fsutil.LoadLines(filepath.Join(manifestDir,
-		"package-list"))
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-	}
-	if len(packageList) > 0 {
-		err := updatePackageDatabase(ctx, g, rootDir, envGetter, buildLog)
-		if err != nil {
-			return err
-		}
-	}
-	err = installPackages(ctx, g, packageList, rootDir, envGetter, buildLog)
-	if err != nil {
-		return errors.New("error installing packages: " + err.Error())
-	}
-	err = copyFiles(manifestDir, "post-install-files", rootDir, buildLog)
+	err = processPackages(ctx, g, manifestDir, rootDir, envGetter, buildLog)
 	if err != nil {
 		return err
 	}
-	err = appendFiles(manifestDir, "post-install-files.append",
-		rootDir, buildLog)
+	err = processFilesGroups(manifestDir, "post-install-files", rootDir,
+		envGetter, buildLog)
 	if err != nil {
 		return err
 	}
@@ -280,7 +334,8 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err := clearResolvConf(ctx, g, buildLog, rootDir); err != nil {
 		return err
 	}
-	err = copyFiles(manifestDir, "post-scripts-files", rootDir, buildLog)
+	err = processFilesGroups(manifestDir, "post-scripts-files", rootDir,
+		envGetter, buildLog)
 	if err != nil {
 		return err
 	}
