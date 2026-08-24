@@ -24,6 +24,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 )
 
+var templateFuncMap = template.FuncMap{
+	"Contains": strings.Contains,
+	"ToLower":  strings.ToLower,
+	"ToUpper":  strings.ToUpper,
+}
+
 func deleteDirectories(directoriesToDelete []string) error {
 	for index := len(directoriesToDelete) - 1; index >= 0; index-- {
 		if err := os.Remove(directoriesToDelete[index]); err != nil {
@@ -117,12 +123,20 @@ func processFilesGroups(manifestDir, groupPrefix, rootDir string,
 func processPackages(ctx context.Context, g *goroutine.Goroutine,
 	manifestDir, rootDir string, envGetter environmentGetter,
 	buildLog io.Writer) error {
-	packageList, err := fsutil.LoadLines(filepath.Join(manifestDir,
-		"package-list"))
+	filename := filepath.Join(manifestDir, "package-list")
+	tmpl, err := readTemplateFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
+		return err
+	}
+	buffer := &bytes.Buffer{}
+	if err := tmpl.Execute(buffer, envGetter.getenv()); err != nil {
+		return fmt.Errorf("error executing template: %s", err)
+	}
+	packageList, err := fsutil.ReadLines(buffer)
+	if err != nil {
 		return err
 	}
 	if len(packageList) < 1 {
@@ -141,13 +155,13 @@ func processPackages(ctx context.Context, g *goroutine.Goroutine,
 
 func processTemplatedFile(destFilename, sourceFilename string, mode os.FileMode,
 	templateData map[string]string, buildLog io.Writer) error {
-	tmpl, err := template.ParseFiles(sourceFilename)
+	tmpl, err := readTemplateFile(sourceFilename)
 	if err != nil {
 		return err
 	}
 	buffer := &bytes.Buffer{}
 	if err := tmpl.Execute(buffer, templateData); err != nil {
-		return err
+		return fmt.Errorf("error executing template: %s", err)
 	}
 	return fsutil.CopyToFile(destFilename, mode, buffer, 0)
 }
@@ -216,6 +230,19 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		}
 	}
 	return manifestConfig, nil
+}
+
+func readTemplateFile(filename string) (*template.Template, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	tmpl := template.New("aTemplateFile").Funcs(templateFuncMap)
+	tmpl, err = tmpl.Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing template: %s", err)
+	}
+	return tmpl, nil
 }
 
 func unpackImageAndProcessManifest(ctx context.Context, client srpc.ClientI,
