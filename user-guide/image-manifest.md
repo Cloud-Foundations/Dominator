@@ -90,6 +90,9 @@ built.
 ### `package-list` file
 An optional file containing a newline-separated list of packages to install. The
 contents of the `files` directory tree should contain any package repositories.
+This file is processed using the
+[Golang](https://go.dev/) [text template](https://pkg.go.dev/text/template)
+processor
 
 ### `post-install-files` directory tree
 If present, any files and symbolic links in this directory tree will be
@@ -240,3 +243,13 @@ The build environment consists of the unpacked `SourceImage` specified in the
 - `IMAGE_STREAM_DIRECTORY_NAME`: all but the rightmost component of `IMAGE_STREAM`
 - `IMAGE_STREAM_LEAF_NAME`: the rightmost component of `IMAGE_STREAM`
 - `IMAGE_STREAM_#`: the numbered component of `IMAGE_STREAM`
+
+## Template file format
+Template files use the go [text/template](https://pkg.go.dev/text/template)
+standard package. The following template functions are available:
+
+* `Contains`: returns `true` if the second string is contained in the first
+* `ToLower`: returns the lowercase version of a string
+* `ToUpper`: returns the uppercase version of a string
+
+More info on template functions: https://pkg.go.dev/text/template#Template.Funcs
