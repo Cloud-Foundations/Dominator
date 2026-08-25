@@ -9,6 +9,7 @@ import (
 
 const (
 	allocationRequestUnknown = "UNKNOWN AllocationRequest"
+	probeStatusUnknown       = "UNKNOWN ProbeStatus"
 )
 
 var (
@@ -21,12 +22,28 @@ var (
 		AllocationRequestCreateTimeout: "create timeout",
 	}
 	textToAllocationDeletionReason map[string]AllocationDeletionReason
+
+	probeStatusToText = map[ProbeStatus]string{
+		ProbeStatusNotYetProbed:      "not yet probed",
+		ProbeStatusConnected:         "connected",
+		ProbeStatusAccessDenied:      "access denied",
+		ProbeStatusNoSrpc:            "no SRPC",
+		ProbeStatusNoService:         "no service",
+		ProbeStatusConnectionRefused: "connection refused",
+		ProbeStatusUnreachable:       "unreachable",
+		ProbeStatusOff:               "off",
+	}
+	textToProbeStatus map[string]ProbeStatus
 )
 
 func init() {
 	textToAllocationDeletionReason = make(map[string]AllocationDeletionReason)
 	for reason, text := range allocationDeletionReasonToText {
 		textToAllocationDeletionReason[text] = reason
+	}
+	textToProbeStatus = make(map[string]ProbeStatus)
+	for status, text := range probeStatusToText {
+		textToProbeStatus[text] = status
 	}
 }
 
@@ -143,6 +160,9 @@ func (left *HypervisorData) Equal(right *HypervisorData) bool {
 	if left.AvailableMemory != right.AvailableMemory {
 		return false
 	}
+	if left.Disabled != right.Disabled {
+		return false
+	}
 	if len(left.NumFreeAddresses) != len(right.NumFreeAddresses) {
 		return false
 	}
@@ -150,6 +170,9 @@ func (left *HypervisorData) Equal(right *HypervisorData) bool {
 		if leftValue != right.NumFreeAddresses[subnetId] {
 			return false
 		}
+	}
+	if left.ProbeStatus != right.ProbeStatus {
+		return false
 	}
 	return true
 }
@@ -237,5 +260,31 @@ func (addr *HardwareAddr) UnmarshalText(text []byte) error {
 	} else {
 		*addr = HardwareAddr(hw)
 		return nil
+	}
+}
+
+func (status ProbeStatus) MarshalText() (text []byte, err error) {
+	if text := status.String(); text == probeStatusUnknown {
+		return nil, errors.New(text)
+	} else {
+		return []byte(text), nil
+	}
+}
+
+func (status ProbeStatus) String() string {
+	if str, ok := probeStatusToText[status]; !ok {
+		return probeStatusUnknown
+	} else {
+		return str
+	}
+}
+
+func (status *ProbeStatus) UnmarshalText(text []byte) error {
+	txt := string(text)
+	if val, ok := textToProbeStatus[txt]; ok {
+		*status = val
+		return nil
+	} else {
+		return errors.New("unknown ProbeStatus: " + txt)
 	}
 }

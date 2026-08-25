@@ -15,6 +15,15 @@ const (
 	AllocationRequestCannotFit     = AllocationDeletionReason(3)
 	AllocationRequestExpired       = AllocationDeletionReason(4)
 	AllocationRequestCreateTimeout = AllocationDeletionReason(5)
+
+	ProbeStatusNotYetProbed      = ProbeStatus(0)
+	ProbeStatusConnected         = ProbeStatus(1)
+	ProbeStatusAccessDenied      = ProbeStatus(2)
+	ProbeStatusNoSrpc            = ProbeStatus(3)
+	ProbeStatusNoService         = ProbeStatus(4)
+	ProbeStatusConnectionRefused = ProbeStatus(6)
+	ProbeStatusUnreachable       = ProbeStatus(7)
+	ProbeStatusOff               = ProbeStatus(8)
 )
 
 type ChangeMachineTagsRequest struct {
@@ -60,7 +69,9 @@ type HypervisorData struct {
 	AllocatedMemory      uint64          `json:",omitempty"` // MiB.
 	AllocatedVolumeBytes uint64          `json:",omitempty"`
 	AvailableMemory      uint64          `json:",omitempty"` // MiB.
+	Disabled             bool            `json:",omitempty"`
 	NumFreeAddresses     map[string]uint `json:",omitempty"` // Key: subnet ID.
+	ProbeStatus          ProbeStatus     `json:",omitempty"`
 }
 
 type GetIpInfoRequest struct {
