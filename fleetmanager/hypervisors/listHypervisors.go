@@ -119,11 +119,11 @@ func writeHypervisorTotalsStats(hypervisors []*hypervisorType, location string,
 }
 
 func (h *hypervisorType) getHealthStatus(url bool) string {
-	healthStatus := h.probeStatus.String()
-	if h.probeStatus == probeStatusConnected {
+	healthStatus := h.ProbeStatus.String()
+	if h.ProbeStatus == fm_proto.ProbeStatusConnected {
 		if h.healthStatus != "" {
 			healthStatus = h.healthStatus
-		} else if h.disabled {
+		} else if h.Disabled {
 			healthStatus = "disabled"
 		}
 	}
@@ -226,24 +226,24 @@ func (m *Manager) listHypervisors(topologyDir string, showFilter int,
 		}
 		switch showFilter {
 		case showOK:
-			if hypervisor.probeStatus == probeStatusConnected &&
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected &&
 				(hypervisor.healthStatus == "" ||
 					hypervisor.healthStatus == "healthy") {
 				hypervisors = append(hypervisors, hypervisor)
 			}
 		case showConnected:
-			if hypervisor.probeStatus == probeStatusConnected {
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected {
 				hypervisors = append(hypervisors, hypervisor)
 			}
 		case showDisabled:
-			if hypervisor.probeStatus == probeStatusConnected &&
-				hypervisor.disabled {
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected &&
+				hypervisor.Disabled {
 				hypervisors = append(hypervisors, hypervisor)
 			}
 		case showAll:
 			hypervisors = append(hypervisors, hypervisor)
 		case showOff:
-			if hypervisor.probeStatus == probeStatusOff {
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusOff {
 				hypervisors = append(hypervisors, hypervisor)
 			}
 		}

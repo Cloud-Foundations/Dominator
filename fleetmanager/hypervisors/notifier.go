@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/net/smtp"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -58,13 +59,13 @@ func (m *Manager) getBadHypervisors() []*hypervisorType {
 	defer m.mutex.RUnlock()
 	badHypervisors := make([]*hypervisorType, 0)
 	for _, hypervisor := range m.hypervisors {
-		if hypervisor.disabled {
+		if hypervisor.Disabled {
 			continue
 		}
-		switch hypervisor.probeStatus {
-		case probeStatusNotYetProbed:
+		switch hypervisor.ProbeStatus {
+		case fm_proto.ProbeStatusNotYetProbed:
 			continue
-		case probeStatusConnected:
+		case fm_proto.ProbeStatusConnected:
 			if hypervisor.healthStatus == "" {
 				continue
 			}
