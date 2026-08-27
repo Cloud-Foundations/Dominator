@@ -182,6 +182,7 @@ func (updater *fakeUpdater) initialise() {
 			"hyper0": proto.HypervisorData{
 				AvailableMemory:  1 << 40,
 				NumFreeAddresses: map[string]uint{"subnet": 100},
+				ProbeStatus:      proto.ProbeStatusConnected,
 			}},
 		ChangedMachines: []*proto.Machine{{
 			MachineData: proto.MachineData{
