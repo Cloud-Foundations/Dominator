@@ -142,6 +142,27 @@ func (h *hypervisorType) getMachineLocked() *fm_proto.Machine {
 	return &machine
 }
 
+// setProbeStatus will update the probe status and if changed will send an
+// update message. The Hypervisor lock is grabbed and released.
+func (h *hypervisorType) setProbeStatus(manager *Manager,
+	probeStatus fm_proto.ProbeStatus, goodTimestamp time.Time) {
+	h.mutex.Lock()
+	if h.ProbeStatus == probeStatus {
+		h.mutex.Unlock()
+		return
+	}
+	if probeStatus == fm_proto.ProbeStatusConnected {
+		h.lastConnectedTime = goodTimestamp
+	}
+	h.ProbeStatus = probeStatus
+	updateToSend := fm_proto.Update{
+		ChangedHypervisors: map[string]fm_proto.HypervisorData{
+			h.Hostname: h.HypervisorData},
+	}
+	h.mutex.Unlock()
+	manager.sendUpdate(h.location, &updateToSend)
+}
+
 // deleteStaleHypervisors deletes stored Hypervisors which are not in the
 // specified list of machines. If the initial topology has been loaded,
 // deleteStaleHypervisors does nothing.
@@ -311,7 +332,7 @@ func (m *Manager) updateHypervisor(h *hypervisorType, machine fm_proto.Machine,
 		}
 	}
 	h.mutex.Unlock()
-	if *manageHypervisors && h.probeStatus == probeStatusConnected {
+	if *manageHypervisors && h.ProbeStatus == fm_proto.ProbeStatusConnected {
 		if machineChanged {
 			go h.changeOwners(nil)
 		}
@@ -524,23 +545,23 @@ func (m *Manager) manageHypervisorLoop(h *hypervisorType, wg *sync.WaitGroup) {
 }
 
 func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
-	failureProbeStatus := probeStatusUnreachable
+	failureProbeStatus := fm_proto.ProbeStatusUnreachable
 	defer func() {
 		h.mutex.Lock()
-		defer h.mutex.Unlock()
 		h.closeClientChannel = nil
-		h.probeStatus = failureProbeStatus
+		h.mutex.Unlock()
+		h.setProbeStatus(m, failureProbeStatus, time.Time{})
 	}()
 	client, err := srpc.DialHTTP("tcp", h.address(), time.Second*15)
 	if err != nil {
 		h.logger.Debugln(1, err)
 		switch err {
 		case srpc.ErrorAccessToMethodDenied:
-			failureProbeStatus = probeStatusAccessDenied
+			failureProbeStatus = fm_proto.ProbeStatusAccessDenied
 		case srpc.ErrorNoSrpcEndpoint:
-			failureProbeStatus = probeStatusNoSrpc
+			failureProbeStatus = fm_proto.ProbeStatusNoSrpc
 		case srpc.ErrorConnectionRefused:
-			failureProbeStatus = probeStatusConnectionRefused
+			failureProbeStatus = fm_proto.ProbeStatusConnectionRefused
 		default:
 			failureProbeStatus = m.probeUnreachable(h)
 		}
@@ -558,7 +579,7 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "unknown service") {
 			h.logger.Debugln(1, err)
-			failureProbeStatus = probeStatusNoService
+			failureProbeStatus = fm_proto.ProbeStatusNoService
 			return time.Minute
 		} else {
 			h.logger.Println(err)
@@ -566,7 +587,6 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 		return time.Second
 	}
 	h.mutex.Lock()
-	h.probeStatus = probeStatusConnected
 	if h.deleteScheduled {
 		h.mutex.Unlock()
 		conn.Close()
@@ -576,7 +596,7 @@ func (m *Manager) manageHypervisor(h *hypervisorType) time.Duration {
 	h.closeClientChannel = closeClientChannel
 	h.receiveChannel = make(chan struct{}, 1)
 	h.mutex.Unlock()
-	go h.monitorLoop(client, conn, closeClientChannel)
+	go h.monitorLoop(m, client, conn, closeClientChannel)
 	defer close(h.receiveChannel)
 	h.logger.Debugln(0, "waiting for Update messages")
 	firstUpdate := true
@@ -640,7 +660,7 @@ func (m *Manager) processAddressPoolUpdates(h *hypervisorType,
 		return
 	}
 	addressPoolOptions := defaultAddressPoolOptions
-	if h.disabled {
+	if h.Disabled {
 		addressPoolOptions.desiredSize = 0
 		addressPoolOptions.maximumSize = 0
 		addressPoolOptions.minimumSize = 0
@@ -740,7 +760,7 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 		h.AvailableMemory = *update.AvailableMemoryInMiB
 	}
 	if update.HaveDisabled {
-		h.disabled = update.Disabled
+		h.Disabled = update.Disabled
 	}
 	if update.MemoryInMiB != nil {
 		h.MemoryInMiB = *update.MemoryInMiB
@@ -751,6 +771,8 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 	if update.NumFreeAddresses != nil {
 		h.NumFreeAddresses = update.NumFreeAddresses
 	}
+	h.ProbeStatus = fm_proto.ProbeStatusConnected
+	h.lastConnectedTime = time.Now()
 	if update.TotalVolumeBytes != nil {
 		h.TotalVolumeBytes = *update.TotalVolumeBytes
 	}
@@ -796,6 +818,7 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 			m.processVmUpdates(h, update.VMs, &updateToSend)
 		}
 	}
+	h.mutex.RLock()
 	if !h.Machine.Equal(&oldMachine) {
 		updateToSend.ChangedMachines = []*fm_proto.Machine{h.getMachine()}
 	}
@@ -803,6 +826,7 @@ func (m *Manager) processHypervisorUpdate(h *hypervisorType,
 		updateToSend.ChangedHypervisors = map[string]fm_proto.HypervisorData{
 			h.Hostname: h.HypervisorData}
 	}
+	h.mutex.RUnlock()
 	m.sendUpdate(h.location, &updateToSend)
 }
 

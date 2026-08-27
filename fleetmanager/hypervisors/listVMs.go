@@ -148,12 +148,14 @@ func (m *Manager) listVMs(writer io.Writer, vms []*vmInfoType,
 			fmt.Fprintln(writer, vm.ipAddr)
 		case url.OutputTypeHtml:
 			var background, foreground string
-			if vm.hypervisor.probeStatus == probeStatusOff {
+			if vm.hypervisor.ProbeStatus == fm_proto.ProbeStatusOff {
 				foreground = "#ff8080"
-			} else if vm.hypervisor.probeStatus == probeStatusConnected &&
-				vm.hypervisor.disabled {
+			} else if vm.hypervisor.ProbeStatus ==
+				fm_proto.ProbeStatusConnected &&
+				vm.hypervisor.Disabled {
 				foreground = "grey"
-			} else if vm.hypervisor.probeStatus != probeStatusConnected {
+			} else if vm.hypervisor.ProbeStatus !=
+				fm_proto.ProbeStatusConnected {
 				foreground = "red"
 			} else if vm.hypervisor.healthStatus == "at risk" {
 				foreground = "#c00000"

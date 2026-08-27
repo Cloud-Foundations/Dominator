@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/fleetmanager/topology"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
 func (m *Manager) listLocations(dirname string,
@@ -39,7 +40,7 @@ func (m *Manager) listLocations(dirname string,
 			if err != nil {
 				continue
 			}
-			if hypervisor.probeStatus == probeStatusConnected &&
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected &&
 				(hypervisor.healthStatus == "" ||
 					hypervisor.healthStatus == "healthy") {
 				locations = append(locations, directory.GetPath())

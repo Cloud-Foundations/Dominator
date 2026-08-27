@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
 func (m *Manager) writeHtml(writer io.Writer) {
@@ -23,17 +25,17 @@ func (m *Manager) writeHtml(writer io.Writer) {
 	var numConnected, numDisabled, numOff, numOK uint
 	m.mutex.RLock()
 	for _, hypervisor := range m.hypervisors {
-		switch hypervisor.probeStatus {
-		case probeStatusConnected:
+		switch hypervisor.ProbeStatus {
+		case fm_proto.ProbeStatusConnected:
 			numConnected++
-			if hypervisor.disabled {
+			if hypervisor.Disabled {
 				numDisabled++
 			}
 			switch hypervisor.healthStatus {
 			case "", "healthy":
 				numOK++
 			}
-		case probeStatusOff:
+		case fm_proto.ProbeStatusOff:
 			numOff++
 		}
 	}

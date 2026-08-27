@@ -80,6 +80,12 @@ func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
 	if !ok {
 		return false, nil
 	}
+	if hyperData.Disabled {
+		return false, nil
+	}
+	if hyperData.ProbeStatus != fm_proto.ProbeStatusConnected {
+		return false, nil
+	}
 	hAlloc := hypervisorAllocations[machine.Hostname]
 	if hAlloc == nil {
 		hAlloc = &hypervisorAllocation{

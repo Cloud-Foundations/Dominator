@@ -11,6 +11,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
 
 const powerOff = "Power is off"
@@ -115,9 +116,9 @@ func (m *Manager) probeSerialNumber(h *hypervisorType) {
 	}()
 }
 
-func (m *Manager) probeUnreachable(h *hypervisorType) probeStatus {
+func (m *Manager) probeUnreachable(h *hypervisorType) fm_proto.ProbeStatus {
 	if m.ipmiPasswordFile == "" || m.ipmiUsername == "" {
-		return probeStatusUnreachable
+		return fm_proto.ProbeStatusUnreachable
 	}
 	var ipmiHostname string
 	if len(h.Machine.IPMI.HostIpAddress) > 0 {
@@ -125,30 +126,30 @@ func (m *Manager) probeUnreachable(h *hypervisorType) probeStatus {
 	} else if h.Machine.IPMI.Hostname != "" {
 		ipmiHostname = h.Machine.IPMI.Hostname
 	} else {
-		return probeStatusUnreachable
+		return fm_proto.ProbeStatusUnreachable
 	}
 	h.mutex.RLock()
-	previousProbeStatus := h.probeStatus
+	previousProbeStatus := h.ProbeStatus
 	h.mutex.RUnlock()
 	mimimumProbeInterval := time.Second * time.Duration(30+rand.Intn(30))
-	if previousProbeStatus == probeStatusOff &&
+	if previousProbeStatus == fm_proto.ProbeStatusOff &&
 		time.Until(h.lastIpmiProbe.Add(mimimumProbeInterval)) > 0 {
-		return probeStatusOff
+		return fm_proto.ProbeStatusOff
 	}
 	cmd := exec.Command("ipmitool", "-f", m.ipmiPasswordFile,
 		"-H", ipmiHostname, "-I", "lanplus", "-U", m.ipmiUsername,
 		"chassis", "power", "status")
 	h.lastIpmiProbe = time.Now()
 	if output, err := cmd.Output(); err != nil {
-		if previousProbeStatus == probeStatusOff {
-			return probeStatusOff
+		if previousProbeStatus == fm_proto.ProbeStatusOff {
+			return fm_proto.ProbeStatusOff
 		} else {
-			return probeStatusUnreachable
+			return fm_proto.ProbeStatusUnreachable
 		}
 	} else if strings.Contains(string(output), powerOff) {
-		return probeStatusOff
+		return fm_proto.ProbeStatusOff
 	}
-	return probeStatusUnreachable
+	return fm_proto.ProbeStatusUnreachable
 }
 
 func (m *Manager) readSerialNumber(ipmiHostname string) string {
