@@ -14,7 +14,11 @@ import (
 func getFileSubcommand(args []string, logger log.DebugLogger) error {
 	srpcClient := getSubClient(logger)
 	defer srpcClient.Close()
-	if err := getFile(srpcClient, args[0], args[1]); err != nil {
+	var outFileName string
+	if len(args) > 1 {
+		outFileName = args[1]
+	}
+	if err := getFile(srpcClient, args[0], outFileName); err != nil {
 		return fmt.Errorf("error getting file: %s", err)
 	}
 	return nil
@@ -22,14 +26,20 @@ func getFileSubcommand(args []string, logger log.DebugLogger) error {
 
 func getFile(srpcClient *srpc.Client, remoteFile, localFile string) error {
 	readerFunc := func(reader io.Reader, size uint64) error {
-		file, err := os.Create(localFile)
-		if err != nil {
-			return err
+		var file *os.File
+		if localFile == "" {
+			file = os.Stdout
+		} else {
+			var err error
+			file, err = os.Create(localFile)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
 		}
-		defer file.Close()
 		writer := bufio.NewWriter(file)
 		defer writer.Flush()
-		_, err = io.Copy(writer, &io.LimitedReader{R: reader, N: int64(size)})
+		_, err := io.Copy(writer, &io.LimitedReader{R: reader, N: int64(size)})
 		return err
 	}
 	rfiles := make([]string, 1)

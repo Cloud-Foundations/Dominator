@@ -135,7 +135,7 @@ var subcommands = []commands.Command{
 	{"fetch", "hashesFile", 1, 1, fetchSubcommand},
 	{"fetch-image", "image", 1, 1, fetchImageSubcommand},
 	{"get-config", "", 0, 0, getConfigSubcommand},
-	{"get-file", "remoteFile localFile", 2, 2, getFileSubcommand},
+	{"get-file", "remoteFile localFile", 1, 2, getFileSubcommand},
 	{"list-missing-objects", "image", 1, 1, listMissingObjectsSubcommand},
 	{"poll", "", 0, 0, pollSubcommand},
 	{"push-file", "source dest", 2, 2, pushFileSubcommand},
