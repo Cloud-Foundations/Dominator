@@ -3,6 +3,7 @@ package allocator
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -45,6 +46,7 @@ func addVmAllocationToTotals(vmSpec fm_proto.VmAllocationSpecification,
 
 // checkVmFitsOnMachine returns true if the VM will fit on the machine at this
 // time. The errorCannotFit error is returned if the VM will never fit.
+// If the VM can fit the lastAllocation field is updated.
 func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
 	machine *fm_proto.Machine,
 	hypervisorAllocations map[string]*hypervisorAllocation) (bool, error) {
@@ -116,7 +118,18 @@ func (m *manager) checkVmFitsOnMachine(vm fm_proto.VmAllocationSpecification,
 		types.Bytes(machine.TotalVolumeBytes) {
 		return false, nil
 	}
+	hyperData.lastAllocation = time.Now()
+	m.hypervisorDatas[machine.Hostname] = hyperData
 	return true, nil
+}
+
+// compareAllocationTimes will return true if the left machine was less recently
+// allocated on (i.e. longer since last allocation) than the right machine.
+func (m *manager) compareAllocationTimes(machines []*fm_proto.Machine,
+	left, right int) bool {
+	leftData := m.hypervisorDatas[machines[left].Hostname]
+	rightData := m.hypervisorDatas[machines[right].Hostname]
+	return leftData.lastAllocation.Before(rightData.lastAllocation)
 }
 
 func (m *manager) computeAllocationTotals() map[string]*hypervisorAllocation {
@@ -249,6 +262,11 @@ func (m *manager) tryToAllocateVm(vm fm_proto.VmAllocationSpecification,
 	if err != nil {
 		return nil, "", err
 	}
+	// Sort machines in decreasing order of time since last allocation (i.e.
+	// put the least recently used machine first). Primitive spreading.
+	sort.Slice(machines, func(left, right int) bool {
+		return m.compareAllocationTimes(machines, left, right)
+	})
 	tagsToMatch := tagmatcher.New(vm.HypervisorTagsToMatch, false)
 	var matchedSome bool
 	for _, machine := range machines {

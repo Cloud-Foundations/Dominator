@@ -20,6 +20,11 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type hypervisorDataType struct {
+	fm_proto.HypervisorData
+	lastAllocation time.Time
+}
+
 type manager struct {
 	allocateRequestChannel  <-chan allocateRequestType
 	allocations             map[fm_proto.RequestId]*allocationType
@@ -28,7 +33,7 @@ type manager struct {
 	deleted                 map[fm_proto.RequestId]*deletedType
 	getRequestChannel       <-chan getRequestType
 	heartbeatChannel        chan<- struct{}
-	hypervisorDatas         map[string]fm_proto.HypervisorData // Key: Hostname.
+	hypervisorDatas         map[string]hypervisorDataType // Key: Hostname.
 	lastIdTime              string
 	lastSequence            uint
 	listAllocationsChannel  <-chan chan<- []allocationEntryType
@@ -476,7 +481,7 @@ func (m *manager) expireRequests(loading bool) (time.Time, error) {
 
 func (m *manager) initialiseResources() {
 	m.machines = make(map[string]*fm_proto.Machine)
-	m.hypervisorDatas = make(map[string]fm_proto.HypervisorData)
+	m.hypervisorDatas = make(map[string]hypervisorDataType)
 	m.vmToHypervisor = make(map[string]string)
 	m.vms = make(map[string]*hyper_proto.VmInfo)
 }
@@ -649,7 +654,9 @@ func (m *manager) processUpdate(update fm_proto.Update, resetResources *bool) {
 		delete(m.vms, ipAddr)
 	}
 	for hostname, hypervisorData := range update.ChangedHypervisors {
-		m.hypervisorDatas[hostname] = hypervisorData
+		fullData := m.hypervisorDatas[hostname]
+		fullData.HypervisorData = hypervisorData
+		m.hypervisorDatas[hostname] = fullData
 	}
 }
 
