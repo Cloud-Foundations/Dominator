@@ -181,6 +181,7 @@ func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
 		cache:                       masterConfiguration.Cache,
 		mtimesCopyFilter:            mtimesCopyFilter,
 		createSlaveTimeout:          options.CreateSlaveTimeout,
+		enableDefaultInheritance:    options.EnableDefaultInheritance,
 		generateDependencyTrigger:   generateDependencyTrigger,
 		stateDir:                    options.StateDirectory,
 		imageRebuildInterval:        options.ImageRebuildInterval,
