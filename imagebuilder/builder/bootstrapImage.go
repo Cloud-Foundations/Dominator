@@ -92,19 +92,25 @@ func makeTempDirectory(dir, prefix string) (string, error) {
 
 func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	request proto.BuildImageRequest,
-	buildLog buildLogger) (*image.Image, error) {
+	buildLog buildLogger) (*image.Image, string, error) {
 	startTime := time.Now()
 	args := make([]string, 0, len(stream.BootstrapCommand))
 	rootDir, err := makeTempDirectory("",
 		strings.Replace(request.StreamName, "/", "_", -1))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vg := variablesGetter(request.Variables).copy()
 	vg.add("dir", rootDir)
 	request.Variables = vg
+	variant := expand.Expression(stream.Variant, func(name string) string {
+		return vg[name]
+	})
+	if variant != "" {
+		request.StreamName = request.StreamName + "/" + variant
+	}
 	for _, exp := range stream.BootstrapCommand {
 		arg := expand.Expression(exp, func(name string) string {
 			return vg[name]
@@ -117,7 +123,7 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	}
 	g, err := newNamespaceTarget()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer g.Quit()
 	ctx, cancel := makeContext2(b.maximumBuildDuration,
@@ -126,29 +132,30 @@ func (stream *bootstrapStream) build(b *Builder, client srpc.ClientI,
 	err = runInTarget(ctx, g, nil, buildLog, buildLog, "", nil,
 		args[0], args[1:]...)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	} else {
 		g.Run(func() { err = setupMounts(rootDir, nil) })
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		packager := b.packagerTypes[stream.PackagerType]
 		if err := packager.writePackageInstaller(rootDir); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := clearResolvConf(ctx, g, buildLog, rootDir); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		buildDuration := time.Since(startTime)
 		fmt.Fprintf(buildLog, "\nBuild time: %s\n",
 			format.Duration(buildDuration))
 		if err := cleanPackages(ctx, g, rootDir, buildLog); err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return packImage(ctx, g, client, request, rootDir,
+		img, err := packImage(ctx, g, client, request, rootDir,
 			stream.Filter, nil, nil, stream.imageFilter, stream.Owners,
 			stream.imageTags, stream.imageTriggers, b.mtimesCopyFilter,
 			buildLog, b.logger)
+		return img, variant, err
 	}
 }
 
