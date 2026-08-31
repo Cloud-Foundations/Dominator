@@ -32,13 +32,25 @@ func AppendFile(destFilename, sourceFilename string) error {
 	return appendFile(destFilename, sourceFilename)
 }
 
+// AppendFileWithRoot extends AppendFile with safe symlink evaluation. Relative
+// symlinks are clamped to the root boundary, and absolute symlinks are rebased
+// against the root using chroot-style semantics.
+func AppendFileWithRoot(rootFd int, destRelPath, sourcePath string) error {
+	return appendFileWithRoot(rootFd, destRelPath, sourcePath)
+}
+
 // AppendTree recursively merges sourceDir into destDir.
-// It appends contents to existing files or copies new ones
-// while preserving permissions.
-// Directory structures are mirrored.
-// Returns an error if symlinks or non-regular files are encountered.
+// Existing regular files will have data appended. Files which do not exist in
+// destDir will be copied with the source file permissions.
+// Directory structures will be mirrored. An error is returned if symlinks or
+// non-regular files are encountered in sourceDir. If a destination path is a
+// symlink, it is resolved within destDir using chroot-style semantics:
+// absolute targets are anchored at destDir and ".." is clamped at its root.
+// Dangling symlinks cause an error.
+// Valid symlink targets within destDir will have data appended
+// to the resolved file; the symlink itself is preserved.
 func AppendTree(destDir, sourceDir string) error {
-	return appendTree(destDir, sourceDir, AppendFile)
+	return appendTree(destDir, sourceDir, AppendFileWithRoot)
 }
 
 // CompareFile will read and compare the content of a file and buffer and will
