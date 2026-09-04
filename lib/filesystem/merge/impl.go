@@ -158,7 +158,7 @@ func (m *Merger) mergeEntry(lowerDirectory *filesystem.DirectoryInode,
 		}
 	}
 	if dir, ok := upperInode.(*filesystem.DirectoryInode); ok {
-		return m.mergeDirectory(dir, path.Join(pathname))
+		return m.mergeDirectory(dir, pathname)
 	}
 	return nil
 }
