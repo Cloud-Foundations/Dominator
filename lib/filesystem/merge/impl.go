@@ -64,6 +64,19 @@ func (m *Merger) addPrefixDirectory(dirname string) error {
 	return nil
 }
 
+func (m *Merger) compareInodes(
+	lowerInode, upperInode filesystem.GenericInode) bool {
+	sameType, sameMetadata, sameData := filesystem.CompareInodesIgnoreMtimes(
+		lowerInode, upperInode, nil)
+	if !sameType || !sameMetadata {
+		return false
+	}
+	if _, isDir := upperInode.(*filesystem.DirectoryInode); isDir {
+		return true // Don't care about "data" (directory entries).
+	}
+	return sameData
+}
+
 func (m *Merger) getFileSystem() *filesystem.FileSystem {
 	m.builder.Sort()
 	return m.builder.FileSystem
@@ -138,24 +151,10 @@ func (m *Merger) mergeEntry(lowerDirectory *filesystem.DirectoryInode,
 			return fmt.Errorf("%s: %s", pathname, err)
 		}
 		m.inodeTable[pathname] = inodeToAdd
-	} else {
-		// Lower entry exists: allow if both are directories with the same
-		// metadata.
-		lowerEntryDirectory, ok := lowerInode.(*filesystem.DirectoryInode)
-		if !ok {
-			return fmt.Errorf("inode in lower layer is not a directory: %s",
-				pathname)
-		}
-		upperEntryDirectory, ok := inodeToAdd.(*filesystem.DirectoryInode)
-		if !ok {
-			return fmt.Errorf("inode in upper layer is not a directory: %s",
-				pathname)
-		}
-		same := filesystem.CompareDirectoriesMetadata(lowerEntryDirectory,
-			upperEntryDirectory, nil)
-		if !same {
-			return fmt.Errorf("cannot change directory metadata: %s", pathname)
-		}
+	} else if !m.compareInodes(lowerInode, upperInode) {
+		return fmt.Errorf(
+			"inode in upper layer is different than lower layer: %s",
+			pathname)
 	}
 	if dir, ok := upperInode.(*filesystem.DirectoryInode); ok {
 		return m.mergeDirectory(dir, pathname)

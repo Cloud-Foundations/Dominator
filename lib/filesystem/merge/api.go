@@ -31,6 +31,9 @@ func (m *Merger) GetFileSystem() *filesystem.FileSystem {
 // error such as placing an inode over another inode, an error is returned.
 // Placing an empty directory inode over another directory inode with the same
 // permissions will not generate an error.
+// Placing an inode over another of the same type, data and metadata (igoring
+// mtimes) will not generate an error. The mtime of the lower inode will be
+// retained (i.e. the mtime of the upper inode is lost).
 // If not nil, the options specified will override the Merger options for the
 // duration of this call.
 func (m *Merger) Merge(fs *filesystem.FileSystem, options *Options) error {
