@@ -386,7 +386,12 @@ func CompareDirectoryEntries(left, right *DirectoryEntry,
 
 func CompareInodes(left, right GenericInode, logWriter io.Writer) (
 	sameType, sameMetadata, sameData bool) {
-	return compareInodes(left, right, logWriter)
+	return compareInodes(left, right, false, logWriter)
+}
+
+func CompareInodesIgnoreMtimes(left, right GenericInode, logWriter io.Writer) (
+	sameType, sameMetadata, sameData bool) {
+	return compareInodes(left, right, true, logWriter)
 }
 
 func CompareRegularInodes(left, right *RegularInode, logWriter io.Writer) bool {
@@ -395,7 +400,7 @@ func CompareRegularInodes(left, right *RegularInode, logWriter io.Writer) bool {
 
 func CompareRegularInodesMetadata(left, right *RegularInode,
 	logWriter io.Writer) bool {
-	return compareRegularInodesMetadata(left, right, logWriter)
+	return compareRegularInodesMetadata(left, right, false, logWriter)
 }
 
 func CompareRegularInodesData(left, right *RegularInode,
@@ -423,7 +428,7 @@ func CompareSpecialInodes(left, right *SpecialInode, logWriter io.Writer) bool {
 
 func CompareSpecialInodesMetadata(left, right *SpecialInode,
 	logWriter io.Writer) bool {
-	return compareSpecialInodesMetadata(left, right, logWriter)
+	return compareSpecialInodesMetadata(left, right, false, logWriter)
 }
 
 func CompareSpecialInodesData(left, right *SpecialInode,

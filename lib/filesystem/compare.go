@@ -115,8 +115,8 @@ func compareDirectoryEntries(left, right *DirectoryEntry,
 	return false
 }
 
-func compareInodes(left, right GenericInode, logWriter io.Writer) (
-	sameType, sameMetadata, sameData bool) {
+func compareInodes(left, right GenericInode, ignoreMtimes bool,
+	logWriter io.Writer) (sameType, sameMetadata, sameData bool) {
 	if left == right {
 		return true, true, true
 	}
@@ -124,7 +124,8 @@ func compareInodes(left, right GenericInode, logWriter io.Writer) (
 	case *RegularInode:
 		if right, ok := right.(*RegularInode); ok {
 			sameType = true
-			sameMetadata = compareRegularInodesMetadata(left, right, logWriter)
+			sameMetadata = compareRegularInodesMetadata(left, right,
+				ignoreMtimes, logWriter)
 			sameData = compareRegularInodesData(left, right, logWriter)
 		}
 	case *ComputedRegularInode:
@@ -143,7 +144,8 @@ func compareInodes(left, right GenericInode, logWriter io.Writer) (
 	case *SpecialInode:
 		if right, ok := right.(*SpecialInode); ok {
 			sameType = true
-			sameMetadata = compareSpecialInodesMetadata(left, right, logWriter)
+			sameMetadata = compareSpecialInodesMetadata(left, right,
+				ignoreMtimes, logWriter)
 			sameData = compareSpecialInodesData(left, right, logWriter)
 		}
 	case *DirectoryInode:
@@ -164,13 +166,13 @@ func compareRegularInodes(left, right *RegularInode, logWriter io.Writer) bool {
 	if left == right {
 		return true
 	}
-	if !compareRegularInodesMetadata(left, right, logWriter) {
+	if !compareRegularInodesMetadata(left, right, false, logWriter) {
 		return false
 	}
 	return compareRegularInodesData(left, right, logWriter)
 }
 
-func compareRegularInodesMetadata(left, right *RegularInode,
+func compareRegularInodesMetadata(left, right *RegularInode, ignoreMtimes bool,
 	logWriter io.Writer) bool {
 	if left.Mode != right.Mode {
 		if logWriter != nil {
@@ -192,6 +194,9 @@ func compareRegularInodesMetadata(left, right *RegularInode,
 				left.Gid, right.Gid)
 		}
 		return false
+	}
+	if ignoreMtimes {
+		return true
 	}
 	var leftMtime, rightMtime timespec
 	leftMtime.Sec = left.MtimeSeconds
@@ -330,13 +335,13 @@ func compareSpecialInodes(left, right *SpecialInode, logWriter io.Writer) bool {
 	if left == right {
 		return true
 	}
-	if !compareSpecialInodesMetadata(left, right, logWriter) {
+	if !compareSpecialInodesMetadata(left, right, false, logWriter) {
 		return false
 	}
 	return compareSpecialInodesData(left, right, logWriter)
 }
 
-func compareSpecialInodesMetadata(left, right *SpecialInode,
+func compareSpecialInodesMetadata(left, right *SpecialInode, ignoreMtimes bool,
 	logWriter io.Writer) bool {
 	if left == right {
 		return true
@@ -361,6 +366,9 @@ func compareSpecialInodesMetadata(left, right *SpecialInode,
 				left.Gid, right.Gid)
 		}
 		return false
+	}
+	if ignoreMtimes {
+		return true
 	}
 	var leftMtime, rightMtime timespec
 	leftMtime.Sec = left.MtimeSeconds

@@ -209,6 +209,7 @@ var subcommands = []commands.Command{
 	{"make-raw-image", "name rawfile", 2, 2, makeRawImageSubcommand},
 	{"match-triggers", "name triggers-file", 2, 2, matchTriggersSubcommand},
 	{"merge-filters", "filter-file...", 1, -1, mergeFiltersSubcommand},
+	{"merge-images", "name (layer prefix)...", 3, -1, mergeImagesSubcommand},
 	{"merge-triggers", "triggers-file...", 1, -1, mergeTriggersSubcommand},
 	{"mkdir", "name", 1, 1, makeDirectorySubcommand},
 	{"patch-directory", "name directory", 2, 2, patchDirectorySubcommand},
