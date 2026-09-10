@@ -208,13 +208,13 @@ func (m *Manager) loadImage(imageClient *srpc.Client, name string) (
 	img.FileSystem.ComputeTotalDataBytes()
 	img.FileSystem.BuildEntryMap()
 	if filt := img.Filter; filt != nil {
-		if err := filt.Compile; err != nil {
+		if err := filt.Compile(); err != nil {
 			m.logger.Printf("Error compiling filter for image: %s: %s\n",
 				name, err)
 		}
 	}
 	if trig := img.Triggers; trig != nil {
-		if err := trig.Compile; err != nil {
+		if err := trig.Compile(); err != nil {
 			m.logger.Printf("Error compiling triggers for image: %s: %s\n",
 				name, err)
 		}
