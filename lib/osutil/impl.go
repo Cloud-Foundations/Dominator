@@ -3,6 +3,7 @@ package osutil
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -66,6 +67,43 @@ func runCommandBackground(logger log.Logger, name string,
 		}
 	}()
 	return failureChannel
+}
+
+func runCommandWithFileOutput(cmd *exec.Cmd,
+	stdoutFilename, stderrFilename string, deleteAfter bool) (
+	stdoutData, stderrData []byte, err error) {
+	stdoutFile, err := os.Create(stdoutFilename)
+	if err != nil {
+		return nil, nil, err
+	}
+	stderrFile, err := os.Create(stderrFilename)
+	if err != nil {
+		stdoutFile.Close()
+		return nil, nil, err
+	}
+	if deleteAfter {
+		defer func() {
+			os.Remove(stdoutFilename)
+			os.Remove(stderrFilename)
+		}()
+	}
+	cmd.Stdout = stdoutFile
+	cmd.Stderr = stderrFile
+	err = cmd.Run()
+	stdoutFile.Close()
+	stderrFile.Close()
+	stdoutData, eo := os.ReadFile(stdoutFilename)
+	stderrData, ee := os.ReadFile(stderrFilename)
+	if err != nil {
+		return stdoutData, stderrData, err
+	}
+	if eo != nil {
+		return stdoutData, stderrData, eo
+	}
+	if ee != nil {
+		return stdoutData, stderrData, ee
+	}
+	return stdoutData, stderrData, nil
 }
 
 func syncAndWait(timeout time.Duration, logger log.Logger) {
