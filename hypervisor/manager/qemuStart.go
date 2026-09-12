@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/osutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -187,11 +188,18 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		"VM_OWNER_USERS="+strings.Join(vm.OwnerUsers, ","))
 	cmd.Env = append(cmd.Env, "VM_PRIMARY_IP_ADDRESS="+vm.ipAddress)
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
-	if output, err := cmd.CombinedOutput(); err != nil {
+	stdout, stderr, err := osutil.RunCommandWithFileOutput(cmd,
+		filepath.Join(vm.getLogsDirectory(), "qemu.stdout"),
+		filepath.Join(vm.getLogsDirectory(), "qemu.stderr"),
+		false)
+	if err != nil {
 		vm.logger.Printf("Failed QEMU command: %v\n", cmd.Args)
-		return fmt.Errorf("error starting QEMU: %s: %s", err, output)
-	} else if len(output) > 0 {
-		vm.logger.Printf("QEMU started. Output: \"%s\"\n", string(output))
+		return fmt.Errorf(
+			"error starting QEMU: %s: stdout: \"%s\", stderr: \"%s\"",
+			err, string(stdout), string(stderr))
+	} else if len(stdout) > 0 || len(stderr) > 0 {
+		vm.logger.Printf("QEMU started. stdout: \"%s\", stderr: \"%s\"",
+			string(stdout), string(stderr))
 	} else {
 		vm.logger.Println("QEMU started.")
 	}
