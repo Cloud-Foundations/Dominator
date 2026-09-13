@@ -503,11 +503,18 @@ func upgradeHypervisors(fleetManagerClientResource *srpc.ClientResource,
 func (h *hypervisorType) getFailingHealthChecks(
 	cpuSharer *cpusharer.FifoCpuSharer,
 	timeout time.Duration) ([]string, time.Time, error) {
+	var err error
+	var list []string
+	var timestamp time.Time
 	stopTime := time.Now().Add(timeout)
 	for ; time.Until(stopTime) >= 0; cpuSharer.Sleep(time.Second) {
-		if list, timestamp, err := h.getFailingHealthChecksOnce(); err == nil {
-			return list, timestamp, nil
+		list, timestamp, err = h.getFailingHealthChecksOnce()
+		if len(list) < 1 && err == nil {
+			return nil, timestamp, nil
 		}
+	}
+	if len(list) > 0 {
+		return list, timestamp, nil
 	}
 	return nil, time.Time{}, errors.New("timed out getting health status")
 }
@@ -636,7 +643,7 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 	} else {
 		for _, entry := range list {
 			if _, ok := h.initialUnhealthyList[entry]; !ok {
-				return fmt.Errorf("health check failed: %s:", entry)
+				return fmt.Errorf("health check failed: %s", entry)
 			}
 		}
 	}
