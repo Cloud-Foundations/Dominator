@@ -603,8 +603,15 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 			h.initialUnhealthyList[failed] = struct{}{}
 		}
 	}
+	// Construct environment for subprocesses.
+	commandEnviron := os.Environ()
+	commandEnviron = append(commandEnviron, "IMAGE_NAME="+imageName)
+	if *location != "" {
+		commandEnviron = append(commandEnviron, "LOCATION="+*location)
+	}
 	if *preUpdateCommand != "" {
 		cmd := exec.Command(*preUpdateCommand, h.hostname)
+		cmd.Env = commandEnviron
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -650,6 +657,7 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 	h.logger.Debugln(0, "still healthy")
 	if *postUpdateCommand != "" {
 		cmd := exec.Command(*postUpdateCommand, h.hostname)
+		cmd.Env = commandEnviron
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

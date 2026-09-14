@@ -191,9 +191,9 @@ and remain healthy. The upgrade may include a new kernel, in which case the
 machine will be rebooted as part of the upgrade, thus taking several minutes for
 the per-machine upgrade+health check cycle to complete (compared to less than
 one minute for most upgrades). The actual upgrades are performed by the
-[dominator](../dominator/README.md) which reads the tags to determine the image
-to push to the machine. Once the rollout is complete, the new tags are saved by
-committing to the Git repository containing the topology.
+[**Dominator**](../dominator/README.md) which reads the tags to determine the
+image to push to the machine. Once the rollout is complete, the new tags are
+saved by committing to the Git repository containing the topology.
 
 The following options must be provided:
 - `fleetManagerHostname`
@@ -207,3 +207,10 @@ location, run a command like this:
 ```
 hyper-control rollout-image $image_name
 ```
+
+Prior to upgrading each *Hypervisor*, the optional `preUpdateCommand` is run.
+After each upgraded *Hypervisor*, the optional `postUpdateCommand` is run.
+The hostname of the *Hypervisor* is passed as the first command-line argument.
+The following extra environment variables are provided:
+- `IMAGE_NAME`: the name of the image being rolled out
+- `LOCATION`: the value of the `location` option.
