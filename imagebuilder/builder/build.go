@@ -313,7 +313,8 @@ func (b *Builder) buildWithLogger(builder imageBuilder, client srpc.ClientI,
 			if request.ExpiresIn > 0 {
 				expiresIn = request.ExpiresIn
 			}
-			variables := variablesGetter(buildError.SourceImageBuildVariables)
+			variables := variablesGetter(
+				buildError.SourceImageBuildVariables).copy()
 			variables.merge(request.Variables)
 			sourceReq := proto.BuildImageRequest{
 				ExpiresIn:    expiresIn,
