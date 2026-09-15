@@ -624,7 +624,7 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 	if err != nil {
 		return err
 	}
-	stopTime := time.Now().Add(time.Minute * 15)
+	stopTime := time.Now().Add(*updateTimeout)
 	updateCompleted := false
 	var lastError string
 	for ; time.Until(stopTime) > 0; cpuSharer.Sleep(time.Second) {
