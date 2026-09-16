@@ -83,6 +83,13 @@ func (vg variablesGetter) getenv() map[string]string {
 	return vg
 }
 
+func (vg variablesGetter) makeIfNil() variablesGetter {
+	if vg == nil {
+		return make(variablesGetter)
+	}
+	return vg
+}
+
 func (vg variablesGetter) merge(vgToMerge variablesGetter) {
 	for key, value := range vgToMerge {
 		vg.add(key, value)
