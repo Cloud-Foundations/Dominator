@@ -562,6 +562,21 @@ func (h *hypervisorType) getLastImageName(cpuSharer *cpusharer.FifoCpuSharer) (
 	return reply.LastSuccessfulImageName, nil
 }
 
+func (h *hypervisorType) runCommand(command string, environ []string) error {
+	if command == "" {
+		return nil
+	}
+	cmd := exec.Command(command, h.hostname)
+	cmd.Env = environ
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %s", command, err)
+	}
+	h.logger.Debugf(0, "%s completed sucessfully\n", command)
+	return nil
+}
+
 func (h *hypervisorType) updateTagForHypervisor(
 	clientResource *srpc.ClientResource, key, value string) error {
 	newTags := h.initialTags.Copy()
@@ -609,19 +624,15 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 	if *location != "" {
 		commandEnviron = append(commandEnviron, "LOCATION="+*location)
 	}
-	if *preUpdateCommand != "" {
-		cmd := exec.Command(*preUpdateCommand, h.hostname)
-		cmd.Env = commandEnviron
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %s", *preUpdateCommand, err)
-		}
-		h.logger.Debugf(0, "%s completed sucessfully\n", *preUpdateCommand)
+	if err := h.runCommand(*preUpdateCommand, commandEnviron); err != nil {
+		return err
 	}
 	h.logger.Debugln(0, "upgrading")
 	err = h.updateTagForHypervisor(clientResource, "RequiredImage", imageName)
 	if err != nil {
+		return err
+	}
+	if err := h.runCommand(*postTagCommand, commandEnviron); err != nil {
 		return err
 	}
 	stopTime := time.Now().Add(*updateTimeout)
@@ -655,15 +666,8 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 		}
 	}
 	h.logger.Debugln(0, "still healthy")
-	if *postUpdateCommand != "" {
-		cmd := exec.Command(*postUpdateCommand, h.hostname)
-		cmd.Env = commandEnviron
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %s", *postUpdateCommand, err)
-		}
-		h.logger.Debugf(0, "%s completed sucessfully\n", *postUpdateCommand)
+	if err := h.runCommand(*postUpdateCommand, commandEnviron); err != nil {
+		return err
 	}
 	return nil
 }

@@ -209,6 +209,8 @@ hyper-control rollout-image $image_name
 ```
 
 Prior to upgrading each *Hypervisor*, the optional `preUpdateCommand` is run.
+After each *Hypervisor* is tagged for update, the optional `postTagCommand` is
+run.
 After each upgraded *Hypervisor*, the optional `postUpdateCommand` is run.
 The hostname of the *Hypervisor* is passed as the first command-line argument.
 The following extra environment variables are provided:
