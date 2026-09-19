@@ -128,7 +128,6 @@ func (m *Merger) mergeEntry(lowerDirectory *filesystem.DirectoryInode,
 	upperDirectory *filesystem.DirectoryInode, dirname string,
 	upperEntry *filesystem.DirectoryEntry) error {
 	pathname := path.Join(dirname, upperEntry.Name)
-	lowerInode, ok := m.inodeTable[pathname]
 	upperInode := upperEntry.Inode()
 	inodeToAdd := upperInode
 	if inode, ok := inodeToAdd.(*filesystem.DirectoryInode); ok {
@@ -140,7 +139,8 @@ func (m *Merger) mergeEntry(lowerDirectory *filesystem.DirectoryInode,
 			Gid:  inode.Gid,
 		}
 	}
-	if !ok {
+	lowerInode, alreadyExists := m.inodeTable[pathname]
+	if !alreadyExists {
 		// Simple case: lower entry doesn't exist. Just add it.
 		if err := m.builder.AddInode(inodeToAdd); err != nil {
 			return fmt.Errorf("%s: %s", pathname, err)
