@@ -102,6 +102,12 @@ func (fs *FileSystem) FilterUsingReference(reference *FileSystem) *FileSystem {
 	return fs.filterUsingReference(reference)
 }
 
+func (fs *FileSystem) ForEachDirectory(
+	fn func(name string, inodeNumber uint64,
+		inode *DirectoryInode) error) error {
+	return fs.forEachDirectory(fn)
+}
+
 func (fs *FileSystem) ForEachFile(
 	fn func(name string, inodeNumber uint64, inode GenericInode) error) error {
 	return fs.forEachFile(fn)
@@ -153,7 +159,7 @@ func (fs *FileSystem) String() string {
 
 type DirectoryInode struct {
 	EntryList     []*DirectoryEntry
-	EntriesByName map[string]*DirectoryEntry
+	EntriesByName map[string]*DirectoryEntry // Never save this.
 	Mode          FileMode
 	Uid           uint32
 	Gid           uint32
