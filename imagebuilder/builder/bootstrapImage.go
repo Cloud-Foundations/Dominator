@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +78,10 @@ func clearResolvConf(ctx context.Context, g *goroutine.Goroutine,
 }
 
 func makeTempDirectory(dir, prefix string) (string, error) {
-	tmpDir, err := ioutil.TempDir(dir, prefix)
+	if dir == "" {
+		dir = tmpRoot
+	}
+	tmpDir, err := os.MkdirTemp(dir, prefix)
 	if err != nil {
 		return "", err
 	}
