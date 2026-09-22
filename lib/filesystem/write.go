@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -11,6 +12,17 @@ import (
 )
 
 var modePerm FileMode = wsyscall.S_IRWXU | wsyscall.S_IRWXG | wsyscall.S_IRWXO
+
+func chown(pathname string, uid, gid uint32) error {
+	var statbuf wsyscall.Stat_t
+	if err := wsyscall.Lstat(pathname, &statbuf); err != nil {
+		return err
+	}
+	if uid == statbuf.Uid && gid == statbuf.Gid {
+		return nil
+	}
+	return os.Lchown(pathname, int(uid), int(gid))
+}
 
 func forceWriteMetadata(inode GenericInode, name string) error {
 	err := inode.WriteMetadata(name)
@@ -45,14 +57,14 @@ func (inode *DirectoryInode) make(name string) error {
 }
 
 func (inode *DirectoryInode) writeMetadata(name string) error {
-	if err := os.Lchown(name, int(inode.Uid), int(inode.Gid)); err != nil {
+	if err := chown(name, inode.Uid, inode.Gid); err != nil {
 		return err
 	}
 	return syscall.Chmod(name, uint32(inode.Mode))
 }
 
 func (inode *RegularInode) writeMetadata(name string) error {
-	if err := os.Lchown(name, int(inode.Uid), int(inode.Gid)); err != nil {
+	if err := chown(name, inode.Uid, inode.Gid); err != nil {
 		return err
 	}
 	if err := syscall.Chmod(name, uint32(inode.Mode)); err != nil {
@@ -77,7 +89,7 @@ func (inode *SymlinkInode) make(name string) error {
 }
 
 func (inode *SymlinkInode) writeMetadata(name string) error {
-	return os.Lchown(name, int(inode.Uid), int(inode.Gid))
+	return chown(name, inode.Uid, inode.Gid)
 }
 
 func (inode *SpecialInode) write(name string) error {
@@ -92,7 +104,11 @@ func (inode *SpecialInode) write(name string) error {
 
 func (inode *SpecialInode) make(name string) error {
 	if inode.Mode&syscall.S_IFBLK != 0 || inode.Mode&syscall.S_IFCHR != 0 {
-		return wsyscall.Mknod(name, uint32(inode.Mode), int(inode.Rdev))
+		err := wsyscall.Mknod(name, uint32(inode.Mode), int(inode.Rdev))
+		if err != nil {
+			return fmt.Errorf("error making device node: %s: %s", name, err)
+		}
+		return nil
 	} else if inode.Mode&syscall.S_IFIFO != 0 {
 		return wsyscall.Mkfifo(name, uint32(inode.Mode))
 	} else {
@@ -101,7 +117,7 @@ func (inode *SpecialInode) make(name string) error {
 }
 
 func (inode *SpecialInode) writeMetadata(name string) error {
-	if err := os.Lchown(name, int(inode.Uid), int(inode.Gid)); err != nil {
+	if err := chown(name, inode.Uid, inode.Gid); err != nil {
 		return err
 	}
 	if err := syscall.Chmod(name, uint32(inode.Mode)); err != nil {
