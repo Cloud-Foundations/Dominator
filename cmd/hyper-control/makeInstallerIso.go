@@ -48,12 +48,12 @@ func makeInstallerDirectory(hostname, rootDir string, logger log.DebugLogger) (
 	}
 	err = unpackInstallerImage(rootDir, imageClient, nulllogger.New())
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("error unpacking installer image: %s", err)
 	}
 	initrdFile := filepath.Join(rootDir, "initrd.img")
 	initrdRoot := filepath.Join(rootDir, "initrd.root")
 	if err := unpackInitrd(initrdRoot, initrdFile); err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("error unpacking initrd: %s", err)
 	}
 	configRoot := filepath.Join(initrdRoot, "tftpdata")
 	if err := writeConfigFiles(configRoot, configFiles); err != nil {
