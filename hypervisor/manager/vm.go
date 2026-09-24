@@ -504,6 +504,8 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		ipAddress = "0.0.0.0"
 	} else {
 		ipAddress = address.IpAddress.String()
+		m.Logger.Printf("allocateVm(%s): allocated %s\n",
+			authInfo.Username, ipAddress)
 	}
 	vm := &vmInfoType{
 		LocalVmInfo: proto.LocalVmInfo{
@@ -1487,7 +1489,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1504,6 +1506,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType:   request.ArchitectureType,
 			ExtraKernelOptions: request.ExtraKernelOptions,
@@ -1515,7 +1518,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs,
-			request.FirmwareType, writeRawOptions, request.SkipBootloader)
+			request.FirmwareType, writeRawOptions, request.SkipBootloader,
+			vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1730,7 +1734,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1739,6 +1743,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType: vm.ArchitectureType,
 			InitialImageName: imageName,
@@ -1748,7 +1753,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			RoundupPower:     request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".debug", client, fs,
-			vm.FirmwareType, writeRawOptions, false)
+			vm.FirmwareType, writeRawOptions, false, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1970,10 +1975,11 @@ func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
 	return &vmInfo, nil
 }
 
-func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
-	*srpc.Client, *image.Image, string, error) {
+func (m *Manager) getImage(searchName string, imageTimeout time.Duration,
+	logger log.DebugLogger) (*srpc.Client, *image.Image, string, error) {
 	// TODO(rgooch): Consider ways to re-use the connection while handling
 	//               multiple concurrent users.
+	startTime := time.Now()
 	client, err := srpc.DialHTTP("tcp", m.ImageServerAddress, 0)
 	if err != nil {
 		return nil, nil, "",
@@ -1986,6 +1992,7 @@ func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
 			client.Close()
 		}
 	}()
+	connectedTime := time.Now()
 	if isDir, err := imclient.CheckDirectory(client, searchName); err != nil {
 		return nil, nil, "", err
 	} else if isDir {
@@ -2001,8 +2008,15 @@ func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
 		if err != nil {
 			return nil, nil, "", err
 		}
+		loadedTime := time.Now()
 		img.FileSystem.RebuildInodePointers()
 		doClose = false
+		logger.Printf(
+			"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
+			imageName,
+			format.Duration(loadedTime.Sub(connectedTime)),
+			format.Duration(time.Since(loadedTime)),
+			format.Duration(connectedTime.Sub(startTime)))
 		return client, img, imageName, nil
 	}
 	img, err := imclient.GetImageWithTimeout(client, searchName, imageTimeout)
@@ -2012,9 +2026,16 @@ func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
 	if img == nil {
 		return nil, nil, "", errors.New("timeout getting image")
 	}
+	loadedTime := time.Now()
 	if err := img.FileSystem.RebuildInodePointers(); err != nil {
 		return nil, nil, "", err
 	}
+	logger.Printf(
+		"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
+		searchName,
+		format.Duration(loadedTime.Sub(connectedTime)),
+		format.Duration(time.Since(loadedTime)),
+		format.Duration(connectedTime.Sub(startTime)))
 	doClose = false
 	return client, img, searchName, nil
 }
@@ -3011,8 +3032,18 @@ func (m *Manager) openImageUrl(rawurl string) (urlutil.SizedReadCloser, error) {
 
 func (m *Manager) patchVmImage(conn *srpc.Conn,
 	request proto.PatchVmImageRequest) error {
+	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
+		conn.GetAuthInformation(), nil)
+	if err != nil {
+		return err
+	}
+	vm.blockMutations = true
+	haveLock := true
+	defer func() {
+		vm.allowMutationsAndUnlock(haveLock)
+	}()
 	client, img, imageName, err := m.getImage(request.ImageName,
-		request.ImageTimeout)
+		request.ImageTimeout, vm.logger)
 	if err != nil {
 		return err
 	}
@@ -3024,16 +3055,6 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	hashToInodesTable := img.FileSystem.HashToInodesTable()
 	img.FileSystem.BuildEntryMap()
 	var objectsGetter objectserver.ObjectsGetter
-	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
-		conn.GetAuthInformation(), nil)
-	if err != nil {
-		return err
-	}
-	vm.blockMutations = true
-	haveLock := true
-	defer func() {
-		vm.allowMutationsAndUnlock(haveLock)
-	}()
 	if vm.Volumes[0].Format != proto.VolumeFormatRaw {
 		return errors.New("cannot patch non-RAW volumes")
 	}
@@ -3509,7 +3530,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return err
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3526,6 +3547,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType:   vm.ArchitectureType,
 			ExtraKernelOptions: vm.ExtraKernelOptions,
@@ -3536,7 +3558,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
-			vm.FirmwareType, writeRawOptions, request.SkipBootloader)
+			vm.FirmwareType, writeRawOptions, request.SkipBootloader, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -4116,7 +4138,7 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) unpackImage(imageName, rootDir string,
 	timeout time.Duration, logger log.DebugLogger) error {
-	client, img, imageName, err := m.getImage(imageName, timeout)
+	client, img, imageName, err := m.getImage(imageName, timeout, logger)
 	if err != nil {
 		return err
 	}
@@ -4147,7 +4169,7 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	client *srpc.Client, fs *filesystem.FileSystem,
 	firmwareType proto.FirmwareType, writeRawOptions util.WriteRawOptions,
-	skipBootloader bool) error {
+	skipBootloader bool, logger log.DebugLogger) error {
 	startTime := time.Now()
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
@@ -4182,11 +4204,11 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, fsutil.PrivateFilePerms,
-		tableType, writeRawOptions, m.Logger)
+		tableType, writeRawOptions, logger)
 	if err != nil {
 		return err
 	}
-	m.Logger.Debugf(1, "Wrote root volume in %s\n",
+	logger.Debugf(1, "Wrote root volume in %s\n",
 		format.Duration(time.Since(startTime)))
 	return nil
 }
