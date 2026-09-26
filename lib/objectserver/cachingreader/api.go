@@ -24,6 +24,15 @@ type downloadingObject struct {
 	size uint64
 }
 
+type ObjectsReaderStats struct {
+	DownloadedBytes   uint64
+	DownloadedObjects uint
+	TotalObjects      uint
+	TotalBytes        uint64
+	WaitedBytes       uint64
+	WaitedObjects     uint
+}
+
 type ObjectServer struct {
 	flushTimer        *time.Timer
 	lruFlushRequestor chan<- chan<- error
@@ -67,6 +76,12 @@ func NewObjectServer(baseDir string, maxCachedBytes uint64,
 }
 
 func (objSrv *ObjectServer) FetchObjects(hashes []hash.Hash) error {
+	_, err := objSrv.fetchObjects(hashes)
+	return err
+}
+
+func (objSrv *ObjectServer) FetchObjectsWithStats(hashes []hash.Hash) (
+	ObjectsReaderStats, error) {
 	return objSrv.fetchObjects(hashes)
 }
 
