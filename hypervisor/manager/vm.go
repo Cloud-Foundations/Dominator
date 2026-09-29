@@ -22,7 +22,6 @@ import (
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
-	imclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -32,7 +31,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
-	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/images/qcow2"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
@@ -1975,71 +1973,6 @@ func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
 	return &vmInfo, nil
 }
 
-func (m *Manager) getImage(searchName string, imageTimeout time.Duration,
-	logger log.DebugLogger) (*srpc.Client, *image.Image, string, error) {
-	// TODO(rgooch): Consider ways to re-use the connection while handling
-	//               multiple concurrent users.
-	startTime := time.Now()
-	client, err := srpc.DialHTTP("tcp", m.ImageServerAddress, 0)
-	if err != nil {
-		return nil, nil, "",
-			fmt.Errorf("error connecting to image server: %s: %s",
-				m.ImageServerAddress, err)
-	}
-	doClose := true
-	defer func() {
-		if doClose {
-			client.Close()
-		}
-	}()
-	connectedTime := time.Now()
-	if isDir, err := imclient.CheckDirectory(client, searchName); err != nil {
-		return nil, nil, "", err
-	} else if isDir {
-		imageName, err := imclient.FindLatestImage(client, searchName, false)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		if imageName == "" {
-			return nil, nil, "",
-				errors.New("no images in directory: " + searchName)
-		}
-		img, err := imclient.GetImage(client, imageName)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		loadedTime := time.Now()
-		img.FileSystem.RebuildInodePointers()
-		doClose = false
-		logger.Printf(
-			"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
-			imageName,
-			format.Duration(loadedTime.Sub(connectedTime)),
-			format.Duration(time.Since(loadedTime)),
-			format.Duration(connectedTime.Sub(startTime)))
-		return client, img, imageName, nil
-	}
-	img, err := imclient.GetImageWithTimeout(client, searchName, imageTimeout)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	if img == nil {
-		return nil, nil, "", errors.New("timeout getting image")
-	}
-	loadedTime := time.Now()
-	if err := img.FileSystem.RebuildInodePointers(); err != nil {
-		return nil, nil, "", err
-	}
-	logger.Printf(
-		"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
-		searchName,
-		format.Duration(loadedTime.Sub(connectedTime)),
-		format.Duration(time.Since(loadedTime)),
-		format.Duration(connectedTime.Sub(startTime)))
-	doClose = false
-	return client, img, searchName, nil
-}
-
 func (m *Manager) getNumVMs() (uint, uint) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -3032,6 +2965,15 @@ func (m *Manager) openImageUrl(rawurl string) (urlutil.SizedReadCloser, error) {
 
 func (m *Manager) patchVmImage(conn *srpc.Conn,
 	request proto.PatchVmImageRequest) error {
+	client, img, imageName, err := m.getImage(request.ImageName,
+		request.ImageTimeout, m.Logger)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if img.Filter == nil {
+		return fmt.Errorf("%s contains no filter", imageName)
+	}
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
 		conn.GetAuthInformation(), nil)
 	if err != nil {
@@ -3042,14 +2984,6 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	defer func() {
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
-	client, img, imageName, err := m.getImage(request.ImageName,
-		request.ImageTimeout, vm.logger)
-	if err != nil {
-		return err
-	}
-	if img.Filter == nil {
-		return fmt.Errorf("%s contains no filter", imageName)
-	}
 	img.FileSystem.InodeToFilenamesTable()
 	img.FileSystem.FilenameToInodeTable()
 	hashToInodesTable := img.FileSystem.HashToInodesTable()
@@ -4167,7 +4101,7 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 }
 
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
-	client *srpc.Client, fs *filesystem.FileSystem,
+	client srpc.ClientI, fs *filesystem.FileSystem,
 	firmwareType proto.FirmwareType, writeRawOptions util.WriteRawOptions,
 	skipBootloader bool, logger log.DebugLogger) error {
 	startTime := time.Now()

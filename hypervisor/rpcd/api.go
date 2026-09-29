@@ -98,6 +98,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		"DiscardVmOldUserData",
 		"DiscardVmSnapshot",
 		"ExportLocalVm",
+		"FetchImage",
 		"GetCapacity",
 		"GetIdentityProvider",
 		"GetPublicKey",
