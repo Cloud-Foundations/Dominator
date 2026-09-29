@@ -71,6 +71,8 @@ Some of the sub-commands available are:
 - **export-virsh-vm**: export VM to a local virsh VM. The specified FQDN will
                        be used to specify the new virsh domain name. The VM
                        must first be stopped. The exported virsh VM is started
+- **fetch-image**: fetch the specified image and objects from the specified
+                   Hypervisors
 - **get-hypervisors**: get details of healthy Hypervisors in the specified
                        location
 - **get-ip-info**: get and show the *Hypervisor* that an IP address is

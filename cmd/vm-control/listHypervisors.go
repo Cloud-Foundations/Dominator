@@ -17,12 +17,12 @@ func listHypervisorsSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func listHypervisors(logger log.DebugLogger) error {
+func getHypervisorsList() ([]string, error) {
 	fleetManager := fmt.Sprintf("%s:%d",
 		*fleetManagerHostname, *fleetManagerPortNum)
 	client, err := dialFleetManager(fleetManager)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer client.Close()
 	request := proto.ListHypervisorsInLocationRequest{
@@ -36,13 +36,21 @@ func listHypervisors(logger log.DebugLogger) error {
 	err = client.RequestReply("FleetManager.ListHypervisorsInLocation",
 		request, &reply)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := errors.New(reply.Error); err != nil {
+		return nil, err
+	}
+	return reply.HypervisorAddresses, nil
+}
+
+func listHypervisors(logger log.DebugLogger) error {
+	hypervisorAddresses, err := getHypervisorsList()
+	if err != nil {
 		return err
 	}
-	hypervisors := make([]string, 0, len(reply.HypervisorAddresses))
-	for _, address := range reply.HypervisorAddresses {
+	hypervisors := make([]string, 0, len(hypervisorAddresses))
+	for _, address := range hypervisorAddresses {
 		hypervisors = append(hypervisors, strings.Split(address, ":")[0])
 	}
 	sort.Strings(hypervisors)
