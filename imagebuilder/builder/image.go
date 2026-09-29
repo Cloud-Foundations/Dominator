@@ -252,9 +252,11 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 	if err := json.Read(bytes.NewReader(manifestBytes), &manifest); err != nil {
 		return "", "", nil, nil, nil, err
 	}
+	vGetter := variablesGetter(stream.getenv()).copy()
+	vGetter.mergeManifest(manifest.Variables)
 	sourceImageName := expand.Expression(manifest.SourceImage,
 		func(name string) string {
-			return stream.getenv()[name]
+			return vGetter[name]
 		})
 	doRemove = false
 	return manifestDirectory, sourceImageName, gitInfo, manifestBytes,
@@ -309,6 +311,11 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	if err != nil {
 		return nil, err
 	}
+	// Read unexpanded, to pick up the variables the manifest declares.
+	rawManifestConfig, err := readManifestFile(manifestDir, nil)
+	if err != nil {
+		return nil, err
+	}
 	rootDir, err := makeTempDirectory("",
 		strings.Replace(request.StreamName, "/", "_", -1)+".root")
 	if err != nil {
@@ -317,6 +324,7 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vGetter := variablesGetter(envGetter.getenv()).copy()
+	vGetter.mergeManifest(rawManifestConfig.Variables)
 	vGetter.merge(request.Variables)
 	if gitInfo != nil {
 		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
