@@ -51,6 +51,7 @@ fields:
                             image
 - `SourceImageTagsToMatch`: key:[value] tag matches to use when searching for a
                             source image
+- `Variables`: key:value variables to add to the build environment
 
 Other fields may be present and they will be ignored by the
 *[imaginator](../cmd/imaginator/README.md)*. This is typically used to store
@@ -243,6 +244,10 @@ The build environment consists of the unpacked `SourceImage` specified in the
 - `IMAGE_STREAM_DIRECTORY_NAME`: all but the rightmost component of `IMAGE_STREAM`
 - `IMAGE_STREAM_LEAF_NAME`: the rightmost component of `IMAGE_STREAM`
 - `IMAGE_STREAM_#`: the numbered component of `IMAGE_STREAM`
+
+Variables set for the image stream, the `Variables` in the `manifest` file and
+variables supplied with the build request are also available, in increasing
+order of precedence.
 
 ## Template file format
 Template files use the go [text/template](https://pkg.go.dev/text/template)

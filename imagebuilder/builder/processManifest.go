@@ -200,12 +200,8 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
-	for key, value := range manifestConfig.SourceImageBuildVariables {
-		newValue := expand.Expression(value, func(name string) string {
-			return envGetter.getenv()[name]
-		})
-		manifestConfig.SourceImageBuildVariables[key] = newValue
-	}
+	manifestConfig.SourceImageBuildVariables = expandVariables(
+		manifestConfig.SourceImageBuildVariables, envGetter)
 	manifestConfig.SourceImageGitCommitId = expand.Expression(
 		manifestConfig.SourceImageGitCommitId,
 		func(name string) string {
