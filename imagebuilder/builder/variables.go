@@ -15,6 +15,23 @@ func archMapper(name string) string {
 	return ""
 }
 
+func expandVariables(variables map[string]string,
+	envGetter environmentGetter) map[string]string {
+	if len(variables) < 1 {
+		return variables
+	}
+	environment := envGetter.getenv()
+	// Expand into a new map, so the iteration order is not significant.
+	expandedVariables := make(map[string]string, len(variables))
+	for key, value := range variables {
+		expandedVariables[key] = expand.Expression(value,
+			func(name string) string {
+				return environment[name]
+			})
+	}
+	return expandedVariables
+}
+
 func (b *Builder) getVariableFunc(
 	extraVariables0, extraVariables1 map[string]string) func(string) string {
 	return func(varName string) string {
@@ -95,18 +112,4 @@ func (vg variablesGetter) merge(vgToMerge variablesGetter) {
 	for key, value := range vgToMerge {
 		vg.add(key, value)
 	}
-}
-
-func (vg variablesGetter) mergeManifest(manifestVariables map[string]string) {
-	if len(manifestVariables) < 1 {
-		return
-	}
-	expandedVariables := make(variablesGetter, len(manifestVariables))
-	for key, value := range manifestVariables {
-		expandedVariables[key] = expand.Expression(value,
-			func(name string) string {
-				return vg[name]
-			})
-	}
-	vg.merge(expandedVariables)
 }

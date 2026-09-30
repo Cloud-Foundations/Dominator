@@ -49,14 +49,15 @@ func TestSimpleExpressionExpansion(t *testing.T) {
 	}
 }
 
-func TestMergeManifestVariables(t *testing.T) {
+func TestExpandVariables(t *testing.T) {
 	vGetter := variablesGetter(testStream.getenv()).copy()
 	vGetter.add("RELEASE", "testing")
-	vGetter.mergeManifest(map[string]string{
+	expandedVariables := expandVariables(map[string]string{
 		"RELEASE": "stable",
 		"LEAF":    "${IMAGE_STREAM_LEAF_NAME}",
 		"UNKNOWN": "${NOT_SET}",
-	})
+	}, vGetter)
+	vGetter.merge(expandedVariables)
 	if result := vGetter.getenv()["RELEASE"]; result != "stable" {
 		t.Errorf("expected: %s got: %s", "stable", result)
 	}
@@ -99,7 +100,9 @@ func TestManifestVariablesExpansion(t *testing.T) {
 			t.Fatal(err)
 		}
 		vGetter := variablesGetter(testStream.getenv()).copy()
-		vGetter.mergeManifest(rawManifestConfig.Variables)
+		expandedVariables := expandVariables(
+			rawManifestConfig.Variables, vGetter)
+		vGetter.merge(expandedVariables)
 		vGetter.merge(tc.requestVariables)
 		manifestConfig, err := readManifestFile(manifestDir, vGetter)
 		if err != nil {
@@ -134,7 +137,9 @@ func TestManifestWithoutVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	vGetter := variablesGetter(testStream.getenv()).copy()
-	vGetter.mergeManifest(rawManifestConfig.Variables)
+	expandedVariables := expandVariables(rawManifestConfig.Variables,
+		vGetter)
+	vGetter.merge(expandedVariables)
 	manifestConfig, err := readManifestFile(manifestDir, vGetter)
 	if err != nil {
 		t.Fatal(err)

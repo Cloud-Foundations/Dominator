@@ -253,7 +253,8 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 		return "", "", nil, nil, nil, err
 	}
 	vGetter := variablesGetter(stream.getenv()).copy()
-	vGetter.mergeManifest(manifest.Variables)
+	expandedVariables := expandVariables(manifest.Variables, vGetter)
+	vGetter.merge(expandedVariables)
 	sourceImageName := expand.Expression(manifest.SourceImage,
 		func(name string) string {
 			return vGetter[name]
@@ -324,7 +325,9 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vGetter := variablesGetter(envGetter.getenv()).copy()
-	vGetter.mergeManifest(rawManifestConfig.Variables)
+	expandedVariables := expandVariables(rawManifestConfig.Variables,
+		vGetter)
+	vGetter.merge(expandedVariables)
 	vGetter.merge(request.Variables)
 	if gitInfo != nil {
 		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
