@@ -116,6 +116,8 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			cmd.Args = append(cmd.Args, qemuInfo.vncArgs...)
 		}
 	}
+
+	var hasDFM = false
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
 		var volumeInterface proto.VolumeInterface
@@ -136,8 +138,17 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 					volume.Filename, volumeFormat, volumeInterface))
 			continue
 		case proto.VolumeInterfaceDFM:
+			// Each DFM goes behind its own root port to
+			// allow for (guest-managed) hotplug
 			cmd.Args = append(cmd.Args,
-				"-device", fmt.Sprintf("dfm,filename=%s", volume.Filename))
+				"-device", fmt.Sprintf(
+					"pcie-root-port,id=rp%d,chassis=0,slot=%d",
+					index, index))
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"dfm,filename=%s,bus=rp%d",
+					volume.Filename, index))
+			hasDFM = true
 			continue
 		}
 		cmd.Args = append(cmd.Args,
@@ -161,6 +172,12 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		default:
 			return fmt.Errorf("invalid volume interface: %v", volumeInterface)
 		}
+	}
+	if hasDFM {
+		// Use PCIe native hotplug instead of ACPI hotplug
+		cmd.Args = append(cmd.Args,
+			"-global",
+			"ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off")
 	}
 	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
 		return err
