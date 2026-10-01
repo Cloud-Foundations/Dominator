@@ -15,6 +15,7 @@ const (
 	cIFF_TAP         = 0x0002
 	cIFF_NO_PI       = 0x1000
 	cIFF_MULTI_QUEUE = 0x0100
+	cIFF_VNET_HDR    = 0x4000
 
 	tunDevice = "/dev/net/tun"
 )
@@ -40,6 +41,9 @@ func createTapDevice(params TapDeviceParams) (*TapDevice, error) {
 		}
 	}()
 	req0 := ifReq{Flags: cIFF_TAP | cIFF_NO_PI}
+	if params.AddVnetHeader {
+		req0.Flags |= cIFF_VNET_HDR
+	}
 	if params.NumQueues > 1 {
 		req0.Flags |= cIFF_MULTI_QUEUE
 	}
