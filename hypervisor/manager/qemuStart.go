@@ -116,8 +116,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			cmd.Args = append(cmd.Args, qemuInfo.vncArgs...)
 		}
 	}
-
-	var hasDFM = false
+	var hasDFM bool
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
 		var volumeInterface proto.VolumeInterface
