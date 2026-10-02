@@ -133,14 +133,13 @@ func copyVolume(filename, qemuImgPath string, reader io.Reader,
 	}
 }
 
-func createTapDeviceOnBridge(bridge string, numQueues uint) (
+func createTapDeviceOnBridge(bridge string, params libnet.TapDeviceParams) (
 	*libnet.TapDevice, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
 	if err != nil {
 		return nil, err
 	}
-	tapDevice, err := libnet.CreateTapDeviceWithParams(
-		libnet.TapDeviceParams{NumQueues: numQueues})
+	tapDevice, err := libnet.CreateTapDeviceWithParams(params)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tap device: %s", err)
 	}
@@ -4857,7 +4856,11 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.NetworkEntries) {
 			numQueues = vm.NetworkEntries[index].NumQueues
 		}
-		tapDevice, err := createTapDeviceOnBridge(bridge, numQueues)
+		params := libnet.TapDeviceParams{
+			AddVnetHeader: !vm.DisableVirtIO,
+			NumQueues:     numQueues,
+		}
+		tapDevice, err := createTapDeviceOnBridge(bridge, params)
 		if err != nil {
 			return fmt.Errorf("error creating tap device: %s", err)
 		}
