@@ -10,6 +10,14 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
+func copyFileTimes(destFilename, sourceFilename string) error {
+	fi, err := os.Lstat(sourceFilename)
+	if err != nil {
+		return err
+	}
+	return os.Chtimes(destFilename, fi.ModTime(), fi.ModTime())
+}
+
 func copyToFile(destFilename string, perm os.FileMode, reader io.Reader,
 	length uint64) error {
 	tmpFilename := destFilename + "~"
@@ -161,7 +169,12 @@ func copyFile(destFilename, sourceFilename string, mode os.FileMode,
 	}
 	defer sourceFile.Close()
 	if exclusive {
-		return CopyToFileExclusive(destFilename, mode, sourceFile, 0)
+		err = CopyToFileExclusive(destFilename, mode, sourceFile, 0)
+	} else {
+		err = CopyToFile(destFilename, mode, sourceFile, 0)
 	}
-	return CopyToFile(destFilename, mode, sourceFile, 0)
+	if err != nil {
+		return err
+	}
+	return CopyFileTimes(destFilename, sourceFilename)
 }
