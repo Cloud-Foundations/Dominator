@@ -71,6 +71,12 @@ func CopyFileExclusive(destFilename, sourceFilename string,
 	return copyFile(destFilename, sourceFilename, mode, true)
 }
 
+// CopyFileTimes will copy the modification and access times from the
+// sourceFilename to the destFilename.
+func CopyFileTimes(destFilename, sourceFilename string) error {
+	return copyFileTimes(destFilename, sourceFilename)
+}
+
 // CopyToFile will create a new file, write length bytes from reader to a
 // tmpfile and then atomically renames the tmpfile to destFilename, ensuring
 // that the file never has incomplete data.

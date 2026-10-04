@@ -57,7 +57,10 @@ import (
 )
 
 const (
+	initrdLeafFilename   = "initrd"
+	kernelLeafFilename   = "kernel"
 	lastPatchLogFilename = "lastPatchLog"
+	logsDirectory        = "logs"
 	serialSockFilename   = "serial0.sock"
 	virtualiserDirname   = "virtualiser"
 
@@ -211,7 +214,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		return errors.New("kernel image is not a regular file")
 	}
 	inode.Size = 0
-	filename := filepath.Join(volume.DirectoryToCleanup, "kernel"+extension)
+	filename := filepath.Join(volume.DirectoryToCleanup, kernelLeafFilename+extension)
 	_, err := objectserver.LinkObject(filename, objectsGetter, inode.Hash)
 	if err != nil {
 		return err
@@ -224,7 +227,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		}
 		inode.Size = 0
 		filename := filepath.Join(volume.DirectoryToCleanup,
-			"initrd"+extension)
+			initrdLeafFilename+extension)
 		_, err = objectserver.LinkObject(filename, objectsGetter,
 			inode.Hash)
 		if err != nil {
@@ -1048,16 +1051,13 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 	} else if storageIndex == oldStorageIndex {
 		return nil
 	}
-	if vm.getActiveInitrdPath() != "" {
-		return errors.New("cannot move root volume with separate initrd")
-	}
-	if vm.getActiveKernelPath() != "" {
-		return errors.New("cannot move root volume with separate kernel")
-	}
 	if vm.State != proto.StateStopped {
 		return errors.New("VM is not stopped")
 	}
 	if volumeIndex == 0 {
+		if err := vm.deleteLogsDirectory(); err != nil {
+			return err
+		}
 		if _, err := os.Stat(localVolume.Filename + ".old"); err != nil {
 			if !os.IsNotExist(err) {
 				return err
@@ -1085,14 +1085,23 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 		return err
 	}
 	defer os.Remove(newVolumeDirectory)
-	err = fsutil.CopyFileExclusive(newLocalVolume.Filename,
-		localVolume.Filename, fsutil.PrivateFilePerms)
+	sourcePathnames, err := vm.listVolumePathnames(volumeIndex, true)
 	if err != nil {
 		return err
 	}
-	// TODO(rgooch): add support for initrd and kernel and remove checks above.
-	if err := os.Remove(localVolume.Filename); err != nil {
-		return err
+	for _, sourcePathname := range sourcePathnames {
+		destPathname := filepath.Join(newVolumeDirectory,
+			filepath.Base(sourcePathname))
+		err := fsutil.CopyFileExclusive(destPathname, sourcePathname,
+			fsutil.PrivateFilePerms)
+		if err != nil {
+			return err
+		}
+	}
+	for _, sourcePathname := range sourcePathnames {
+		if err := os.Remove(sourcePathname); err != nil {
+			return err
+		}
 	}
 	os.Remove(localVolume.DirectoryToCleanup)
 	vm.mutex.Lock()
@@ -2263,8 +2272,8 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	response := proto.GetVmVolumeResponse{}
 	if len(initrd) > 0 || len(kernel) > 0 {
 		response.ExtraFiles = make(map[string][]byte)
-		response.ExtraFiles["initrd"] = initrd
-		response.ExtraFiles["kernel"] = kernel
+		response.ExtraFiles[initrdLeafFilename] = initrd
+		response.ExtraFiles[kernelLeafFilename] = kernel
 	}
 	if request.VolumeIndex >= uint(len(vm.VolumeLocations)) {
 		return conn.Encode(proto.GetVmVolumeResponse{
@@ -2909,7 +2918,7 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		return nil
 	}
 	for name, data := range response.ExtraFiles {
-		if name != "initrd" && name != "kernel" {
+		if name != initrdLeafFilename && name != kernelLeafFilename {
 			return fmt.Errorf("received unsupported extra file: %s", name)
 		}
 		err := ioutil.WriteFile(filepath.Join(directory, name), data,
@@ -4268,10 +4277,8 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 
 // createLogsDirectory will delete an old logs directory and create a new one.
 func (vm *vmInfoType) createLogsDirectory() error {
-	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
+	if err := vm.deleteLogsDirectory(); err != nil {
+		return err
 	}
 	return os.Mkdir(vm.getLogsDirectory(), fsutil.PrivateDirPerms)
 }
@@ -4335,6 +4342,16 @@ func (vm *vmInfoType) delete() {
 	}
 	vm.mutex.Lock()
 	vm.logger.Debugln(2, "delete(): returning")
+}
+
+// deleteLogsDirectory will delete an old logs directory.
+func (vm *vmInfoType) deleteLogsDirectory() error {
+	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (vm *vmInfoType) destroy() {
@@ -4409,15 +4426,18 @@ func (vm *vmInfoType) getVirtualiserRootDirectory() string {
 }
 
 func (vm *vmInfoType) getInitrdPath() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "initrd")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		initrdLeafFilename)
 }
 
 func (vm *vmInfoType) getKernelPath() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "kernel")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		kernelLeafFilename)
 }
 
 func (vm *vmInfoType) getLogsDirectory() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "logs")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		logsDirectory)
 }
 
 func (vm *vmInfoType) kill() {
