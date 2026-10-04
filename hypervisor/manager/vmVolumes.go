@@ -38,6 +38,34 @@ func (vm *vmInfoType) checkVolumes(grabLock bool) error {
 	return nil
 }
 
+// listVolumePathnames will list all the possible pathnames for the specified
+// volume. If checkPresent is true, only pathnames which are present will be
+// returned.
+func (vm *vmInfoType) listVolumePathnames(volumeIndex uint, checkPresent bool) (
+	[]string, error) {
+	possiblePathnames := []string{vm.VolumeLocations[volumeIndex].Filename}
+	if volumeIndex < 1 {
+		possiblePathnames = append(possiblePathnames,
+			vm.getInitrdPath(),
+			vm.getKernelPath(),
+		)
+	}
+	if !checkPresent {
+		return possiblePathnames, nil
+	}
+	pathnames := make([]string, 0, len(possiblePathnames))
+	for _, pathname := range possiblePathnames {
+		if _, err := os.Stat(pathname); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		pathnames = append(pathnames, pathname)
+	}
+	return pathnames, nil
+}
+
 func (vm *vmInfoType) scanStorage() error {
 	// Build a map of all filenames in VM volume directories.
 	dirnameToFilenames := make(map[string]map[string]struct{})
@@ -78,7 +106,6 @@ func (vm *vmInfoType) scanStorage() error {
 				suffix := filename[len(snapshotBase):]
 				if suffix == "" {
 					snapshots[suffix] = uint64(fi.Size())
-
 				} else if suffix[0] == ':' {
 					snapshots[suffix[1:]] = uint64(fi.Size())
 				}
