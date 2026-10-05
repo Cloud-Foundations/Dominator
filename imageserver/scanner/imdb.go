@@ -79,6 +79,9 @@ func writeImage(filename string, img *image.Image, exclusive bool) (
 
 func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
+	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
+		return err
+	}
 	if err := img.Verify(); err != nil {
 		return err
 	}
@@ -97,9 +100,6 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 			imdb.Unlock()
 		}
 	}()
-	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
-		return err
-	}
 	exclusive := imdb.ReplicationMaster == ""
 	if err := imdb.writeImage(name, img, exclusive); err != nil {
 		if os.IsExist(err) {
