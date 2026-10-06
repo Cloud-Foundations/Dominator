@@ -108,6 +108,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		}
 	}
 	publicMethods := []string{
+		"AddImage",
 		"ChangeImageExpiration",
 		"CheckDirectory",
 		"CheckImage",
