@@ -141,7 +141,8 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			// allow for (guest-managed) hotplug
 			cmd.Args = append(cmd.Args,
 				"-device", fmt.Sprintf(
-					"pcie-root-port,id=rp%d,chassis=0,slot=%d",
+					"pcie-root-port,id=rp%d,chassis=0,slot=%d," +
+					"retain-device-on-power-off",
 					index, index))
 			cmd.Args = append(cmd.Args,
 				"-device", fmt.Sprintf(
