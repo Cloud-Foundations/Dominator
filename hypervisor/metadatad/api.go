@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
@@ -15,23 +16,29 @@ type rawHandlerFunc func(w http.ResponseWriter, ipAddr net.IP)
 type metadataWriter func(writer io.Writer, vmInfo proto.VmInfo) error
 
 type server struct {
-	bridges           []net.Interface
-	hypervisorPortNum uint
-	manager           *manager.Manager
-	logger            log.DebugLogger
-	fileHandlers      map[string]string
-	infoHandlers      map[string]metadataWriter
-	rawHandlers       map[string]rawHandlerFunc
-	paths             map[string]struct{}
+	bridges            []net.Interface
+	hypervisorHostname string
+	hypervisorPortNum  uint
+	manager            *manager.Manager
+	logger             log.DebugLogger
+	fileHandlers       map[string]string
+	infoHandlers       map[string]metadataWriter
+	rawHandlers        map[string]rawHandlerFunc
+	paths              map[string]struct{}
 }
 
 func StartServer(hypervisorPortNum uint, bridges []net.Interface,
 	managerObj *manager.Manager, logger log.DebugLogger) error {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
+	}
 	s := &server{
-		bridges:           bridges,
-		hypervisorPortNum: hypervisorPortNum,
-		manager:           managerObj,
-		logger:            logger,
+		bridges:            bridges,
+		hypervisorHostname: hostname,
+		hypervisorPortNum:  hypervisorPortNum,
+		manager:            managerObj,
+		logger:             logger,
 	}
 	s.fileHandlers = map[string]string{
 		constants.MetadataIdentityEd25519SshCert:  manager.IdentityEd25519SshCertFile,
