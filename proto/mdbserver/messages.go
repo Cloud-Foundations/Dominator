@@ -34,6 +34,17 @@ type MdbUpdate struct {
 	MachinesToDelete []string
 }
 
+// The GetFilteredMdbUpdates() RPC is fully streamed.
+// The client sends a single GetFilteredMdbUpdatesRequest message.
+// The server sends a stream of MdbUpdate messages for machines in or below the
+// requested locations. If no locations are requested, all machines are sent.
+// At connection start, the matching MDB data are presented in .MachinesToAdd
+// and .MachinesToUpdate and .MachinesToDelete will be nil.
+
+type GetFilteredMdbUpdatesRequest struct {
+	Locations []string
+}
+
 type ListImagesRequest struct{}
 
 type ListImagesResponse struct {
