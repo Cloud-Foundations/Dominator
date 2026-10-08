@@ -120,6 +120,12 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"    prefix:   optional prefix to add to Location fields")
 	fmt.Fprintln(os.Stderr,
+		"  mdb: host:port [location...]")
+	fmt.Fprintln(os.Stderr,
+		"    Stream machines from an MDB server")
+	fmt.Fprintln(os.Stderr,
+		"    location: optional locations to limit machines to")
+	fmt.Fprintln(os.Stderr,
 		"  text: url")
 	fmt.Fprintln(os.Stderr,
 		"    url: URL which yields lines. Each line contains:")
@@ -154,6 +160,7 @@ var drivers = []driver{
 	{"hostlist", 1, 3, newHostlistGenerator},
 	{"hypervisor", 0, 0, newHypervisorGenerator},
 	{"json", 1, 2, newJsonGenerator},
+	{"mdb", 1, -1, newMdbServerGenerator},
 	{"text", 1, 1, newTextGenerator},
 	{"topology", 1, 3, newTopologyGenerator},
 }
