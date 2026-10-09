@@ -40,6 +40,20 @@ type GetObjectsResponse struct {
 	ObjectSizes    []uint64
 } // Object datas are streamed afterwards.
 
+type ImportObjectsRequest struct {
+	BaseRemoteUrl string
+	// TODO(rgooch): add: CheckCollisions bool
+	Hashes      []hash.Hash
+	ObjectSizes []uint64
+}
+
+type ImportObjectsResponse struct {
+	BytesAdded   uint64
+	Error        string
+	FailedIndex  uint
+	ObjectsAdded uint64
+}
+
 type TestBandwidthRequest struct {
 	Duration     time.Duration // Ignored when sending to server.
 	ChunkSize    uint          // Maximum permitted: 65535.

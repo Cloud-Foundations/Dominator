@@ -35,6 +35,10 @@ func ChownDirectory(client srpc.ClientI, dirname, ownerGroup string) error {
 	return chownDirectory(client, dirname, ownerGroup)
 }
 
+func DeleteDirectory(client srpc.ClientI, name string) error {
+	return deleteDirectory(client, name)
+}
+
 func DeleteImage(client srpc.ClientI, name string) error {
 	return deleteImage(client, name)
 }
@@ -91,8 +95,19 @@ func GetImageWithTimeout(client srpc.ClientI, name string,
 	return getImage(client, name, timeout)
 }
 
+func GetObjectStatisticsForImages(client srpc.ClientI,
+	request proto.GetObjectStatisticsForImagesRequest) (
+	proto.GetObjectStatisticsForImagesResponse, error) {
+	return getObjectStatisticsForImages(client, request)
+}
+
 func GetReplicationMaster(client srpc.ClientI) (string, error) {
 	return getReplicationMaster(client)
+}
+
+func ImportTree(client srpc.ClientI, request proto.ImportTreeRequest) (
+	proto.ImportTreeResponse, error) {
+	return importTree(client, request)
 }
 
 func ListDirectories(client srpc.ClientI) ([]image.Directory, error) {

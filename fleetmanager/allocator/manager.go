@@ -20,6 +20,11 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
+type hypervisorDataType struct {
+	fm_proto.HypervisorData
+	lastAllocation time.Time
+}
+
 type manager struct {
 	allocateRequestChannel  <-chan allocateRequestType
 	allocations             map[fm_proto.RequestId]*allocationType
@@ -28,7 +33,7 @@ type manager struct {
 	deleted                 map[fm_proto.RequestId]*deletedType
 	getRequestChannel       <-chan getRequestType
 	heartbeatChannel        chan<- struct{}
-	hypervisorDatas         map[string]fm_proto.HypervisorData // Key: Hostname.
+	hypervisorDatas         map[string]hypervisorDataType // Key: Hostname.
 	lastIdTime              string
 	lastSequence            uint
 	listAllocationsChannel  <-chan chan<- []allocationEntryType
@@ -71,26 +76,46 @@ type requestType struct {
 }
 
 // checkVmMatchesSpec returns true if the VM matches the allocation spec.
-func checkVmMatchesSpec(vmInfo *hyper_proto.VmInfo,
-	vmSpec *fm_proto.VmAllocationSpecification) bool {
+func checkVmMatchesSpec(vmInfo *hyper_proto.VmInfo, vmId string,
+	vmSpec *fm_proto.VmAllocationSpecification, logger log.DebugLogger) bool {
 	if vmSpec.MemoryInMiB != vmInfo.MemoryInMiB {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): memory: %d does not match spec: %d\n",
+			vmId, vmInfo.MemoryInMiB, vmSpec.MemoryInMiB)
 		return false
 	}
 	if vmSpec.MilliCPUs != vmInfo.MilliCPUs {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): milliCPUs: %d does not match spec: %d\n",
+			vmId, vmInfo.MilliCPUs, vmSpec.MilliCPUs)
 		return false
 	}
 	if len(vmSpec.NetworkInterfaces) != len(vmInfo.SecondarySubnetIDs)+1 {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): num netif: %d does not match spec: %d\n",
+			vmId, len(vmInfo.SecondarySubnetIDs)+1,
+			len(vmSpec.NetworkInterfaces))
 		return false
 	}
 	if vmSpec.NetworkInterfaces[0].SubnetId != vmInfo.SubnetId {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): subnetId: %s does not match spec: %s\n",
+			vmId, vmInfo.SubnetId, vmSpec.NetworkInterfaces[0].SubnetId)
 		return false
 	}
 	for index, subnetId := range vmInfo.SecondarySubnetIDs {
 		if subnetId != vmSpec.NetworkInterfaces[index+1].SubnetId {
+			logger.Debugf(0,
+				"checkVmMatchesSpec(%s): subnetId[%d]: %s does not match spec: %s\n",
+				vmId, index, subnetId,
+				vmSpec.NetworkInterfaces[index+1].SubnetId)
 			return false
 		}
 	}
 	if len(vmSpec.Volumes) != len(vmInfo.Volumes) {
+		logger.Debugf(0,
+			"checkVmMatchesSpec(%s): num volumes: %d does not match spec: %d\n",
+			vmId, len(vmInfo.Volumes), len(vmSpec.Volumes))
 		return false
 	}
 	return true
@@ -157,6 +182,26 @@ func newManager(options Options, params Params) (*Manager, error) {
 	}
 	updateQueue, updateChannel, removeChannel := queue.NewBroadcastQueue[fm_proto.AllocationUpdateEntry](
 		startPosition, options.MaximumQueueSize)
+	// The removeChannel has a buffer length of 1 and if it fills the
+	// broadcast queue will be stuck waiting to drain the channel and thus the
+	// manager goroutine will lock up if it tries to send to the queue. Replace
+	// with an infinite buffer channel.
+	var peakQueueLength, queueLength uint
+	removeChannel = queue.RebufferReceiveChannel[queue.BroadcastEntry[fm_proto.AllocationUpdateEntry]](
+		removeChannel, func(length uint) {
+			queueLength = length
+			if length > peakQueueLength {
+				peakQueueLength = length
+			}
+		})
+	tricorder.RegisterMetric("allocator/remove-queue/current-length",
+		&queueLength,
+		units.None,
+		"current number of entries in remove queue")
+	tricorder.RegisterMetric("allocator/remove-queue/peak-length",
+		&peakQueueLength,
+		units.None,
+		"maximum number of entries in remove queue")
 	managerPublic := &Manager{
 		allocateRequestChannel:  allocateRequestChannel,
 		cancelAllocationChannel: cancelAllocationChannel,
@@ -168,7 +213,9 @@ func newManager(options Options, params Params) (*Manager, error) {
 		topologyChannel:         topologyChannel,
 		updateQueue:             updateQueue,
 	}
-	managerPublic.httpSetup()
+	if !params.skipDashboard {
+		managerPublic.httpSetup()
+	}
 	managerInternal := &manager{
 		allocateRequestChannel:  allocateRequestChannel,
 		allocations:             make(map[fm_proto.RequestId]*allocationType),
@@ -225,6 +272,9 @@ func newManager(options Options, params Params) (*Manager, error) {
 
 func (m *Manager) allocate(authInfo *srpc.AuthInformation,
 	request fm_proto.AllocateRequest) (fm_proto.AllocateResponse, error) {
+	if err := request.CheckValid(); err != nil {
+		return fm_proto.AllocateResponse{}, err
+	}
 	m.waitForReady()
 	if !m.active {
 		m.active = true
@@ -431,7 +481,7 @@ func (m *manager) expireRequests(loading bool) (time.Time, error) {
 
 func (m *manager) initialiseResources() {
 	m.machines = make(map[string]*fm_proto.Machine)
-	m.hypervisorDatas = make(map[string]fm_proto.HypervisorData)
+	m.hypervisorDatas = make(map[string]hypervisorDataType)
 	m.vmToHypervisor = make(map[string]string)
 	m.vms = make(map[string]*hyper_proto.VmInfo)
 }
@@ -460,19 +510,6 @@ func (m *manager) manage(nextExpiration time.Time,
 	expireTimer := time.NewTimer(time.Until(nextExpiration))
 	timer := time.NewTimer(m.params.managerInterval)
 	for {
-		// The removeChannel has a buffer length of 1 and if it fills the
-		// broadcast queue will be stuck waiting to drain the channel and thus
-		// this goroutine will lock up if it tries to send to the queue. Ensure
-		// that remove messages are all processed before doing anything else.
-		select {
-		case entry := <-removeChannel:
-			if err := m.params.Storer.DeleteUpdate(entry.Position); err != nil {
-				m.params.Logger.Println(err)
-			}
-			delete(m.deleted, entry.Value.RequestId)
-			continue
-		default:
-		}
 		var checkExpirations, recalculate bool
 		select {
 		case request := <-m.allocateRequestChannel:
@@ -552,7 +589,7 @@ func (m *manager) manage(nextExpiration time.Time,
 		}
 		clearTimer(timer)
 		timerInterval := m.params.managerInterval
-		if recalculate && m.topology != nil {
+		if recalculate && m.topology != nil && len(m.userQueues) > 0 {
 			startTime := time.Now()
 			requestId := m.recalculate()
 			timeTaken := time.Since(startTime)
@@ -617,7 +654,9 @@ func (m *manager) processUpdate(update fm_proto.Update, resetResources *bool) {
 		delete(m.vms, ipAddr)
 	}
 	for hostname, hypervisorData := range update.ChangedHypervisors {
-		m.hypervisorDatas[hostname] = hypervisorData
+		fullData := m.hypervisorDatas[hostname]
+		fullData.HypervisorData = hypervisorData
+		m.hypervisorDatas[hostname] = fullData
 	}
 }
 
@@ -644,14 +683,22 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 		return
 	}
 	foundVm := -1
+	vmId := vmIpAddr + "@" + hypervisorHostname
 	for vmIndex, vmSpec := range allocation.request.VMs {
 		if _, ok := allocation.indexToVmIp[vmIndex]; ok {
+			m.params.Logger.Debugf(0, "processVmUpdate(%s): already tracked\n",
+				vmId)
+
 			continue
 		}
 		if hypervisorHostname != allocation.vmHypervisors[vmIndex] {
+			m.params.Logger.Debugf(0,
+				"processVmUpdate(%s): on Hypervisor: %s, expected: %s\n",
+				vmId, hypervisorHostname, allocation.vmHypervisors[vmIndex])
+
 			continue
 		}
-		if !checkVmMatchesSpec(vm, &vmSpec) {
+		if !checkVmMatchesSpec(vm, vmId, &vmSpec, m.params.Logger) {
 			continue
 		}
 		foundVm = vmIndex
@@ -659,9 +706,12 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 	}
 	if foundVm < 0 {
 		m.params.Logger.Printf(
-			"processVmUpdate(): VM: %s does not match request: %s\n",
-			vmIpAddr, requestId)
+			"processVmUpdate(%s): does not match request: %s\n",
+			vmId, requestId)
 		return
+	} else {
+		m.params.Logger.Debugf(0, "processVmUpdate(%s): matches request: %s\n",
+			vmId, requestId)
 	}
 	allocation.indexToVmIp[foundVm] = vmIpAddr
 	allocation.vmIpToIndex[vmIpAddr] = foundVm
@@ -728,5 +778,6 @@ func (m *manager) sendUpdate(update fm_proto.AllocationUpdateEntry,
 		return err
 	}
 	m.updateChannel <- update
+	m.updateQueue.Sync() // Ensure queue position is updated now.
 	return nil
 }

@@ -616,6 +616,9 @@ func (left *VmInfo) Equal(right *VmInfo) bool {
 	if left.VirtualCPUs != right.VirtualCPUs {
 		return false
 	}
+	if left.VirtualiserImageName != right.VirtualiserImageName {
+		return false
+	}
 	if len(left.Volumes) != len(right.Volumes) {
 		return false
 	}

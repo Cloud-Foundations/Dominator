@@ -8,13 +8,15 @@ import (
 	"strings"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
+	"github.com/Cloud-Foundations/Dominator/lib/osutil"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
 func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	pidfile string, nCpus uint, netOptions []string,
 	tapFiles []*os.File) error {
-	qemuInfo, err := getQemuInfo(vm.ArchitectureType, vm.manager.Logger)
+	bindir := vm.getVirtualiserBinaryDirectory()
+	qemuInfo, err := getQemuInfo(vm.ArchitectureType, bindir, vm.manager.Logger)
 	if err != nil {
 		return err
 	}
@@ -22,7 +24,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 	if vm.ArchitectureType == proto.ArchitectureTypeRuntime {
 		machine = append(machine, "accel=kvm")
 	}
-	cmd := exec.Command(qemuInfo.command,
+	cmd := exec.Command(filepath.Join(bindir, qemuInfo.command),
 		"-machine", strings.Join(machine, ","),
 		"-cpu", qemuInfo.cpuModel,
 		"-rtc", "base=utc,clock=host", // TODO(rgooch): consider if needed.
@@ -114,6 +116,7 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 			cmd.Args = append(cmd.Args, qemuInfo.vncArgs...)
 		}
 	}
+	var hasDFM bool
 	for index, volume := range vm.VolumeLocations {
 		var volumeFormat proto.VolumeFormat
 		var volumeInterface proto.VolumeInterface
@@ -134,8 +137,18 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 					volume.Filename, volumeFormat, volumeInterface))
 			continue
 		case proto.VolumeInterfaceDFM:
+			// Each DFM goes behind its own root port to
+			// allow for (guest-managed) hotplug
 			cmd.Args = append(cmd.Args,
-				"-device", fmt.Sprintf("dfm,filename=%s", volume.Filename))
+				"-device", fmt.Sprintf(
+					"pcie-root-port,id=rp%d,chassis=0,slot=%d," +
+					"retain-device-on-power-off",
+					index, index))
+			cmd.Args = append(cmd.Args,
+				"-device", fmt.Sprintf(
+					"dfm,filename=%s,bus=rp%d",
+					volume.Filename, index))
+			hasDFM = true
 			continue
 		}
 		cmd.Args = append(cmd.Args,
@@ -159,6 +172,12 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		default:
 			return fmt.Errorf("invalid volume interface: %v", volumeInterface)
 		}
+	}
+	if hasDFM {
+		// Use PCIe native hotplug instead of ACPI hotplug
+		cmd.Args = append(cmd.Args,
+			"-global",
+			"ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off")
 	}
 	if cid, err := vm.manager.GetVmCID(vm.Address.IpAddress); err != nil {
 		return err
@@ -186,11 +205,18 @@ func (vm *vmInfoType) startQemuVm(enableNetboot, haveManagerLock bool,
 		"VM_OWNER_USERS="+strings.Join(vm.OwnerUsers, ","))
 	cmd.Env = append(cmd.Env, "VM_PRIMARY_IP_ADDRESS="+vm.ipAddress)
 	cmd.ExtraFiles = tapFiles // Start at fd=3 for QEMU.
-	if output, err := cmd.CombinedOutput(); err != nil {
+	stdout, stderr, err := osutil.RunCommandWithFileOutput(cmd,
+		filepath.Join(vm.getLogsDirectory(), "qemu.stdout"),
+		filepath.Join(vm.getLogsDirectory(), "qemu.stderr"),
+		false)
+	if err != nil {
 		vm.logger.Printf("Failed QEMU command: %v\n", cmd.Args)
-		return fmt.Errorf("error starting QEMU: %s: %s", err, output)
-	} else if len(output) > 0 {
-		vm.logger.Printf("QEMU started. Output: \"%s\"\n", string(output))
+		return fmt.Errorf(
+			"error starting QEMU: %s: stdout: \"%s\", stderr: \"%s\"",
+			err, string(stdout), string(stderr))
+	} else if len(stdout) > 0 || len(stderr) > 0 {
+		vm.logger.Printf("QEMU started. stdout: \"%s\", stderr: \"%s\"",
+			string(stdout), string(stderr))
 	} else {
 		vm.logger.Println("QEMU started.")
 	}

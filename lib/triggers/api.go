@@ -58,8 +58,48 @@ func Read(reader io.Reader) (*Triggers, error) {
 	return read(reader)
 }
 
+func (mt *MergeableTriggers) ExportTriggers() *Triggers {
+	return mt.exportTriggers()
+}
+
+func (mt *MergeableTriggers) Merge(triggers *Triggers) {
+	mt.merge(triggers)
+}
+
 func New() *Triggers {
 	return newTriggers()
+}
+
+// Compile will compile the regular expressions for later use.
+func (triggers *Triggers) Compile() error {
+	return triggers.compile()
+}
+
+// Clone will return a shallow copy of the triggers, with separate internal
+// state for matching.
+func (triggers *Triggers) Clone() *Triggers {
+	return triggers.clone()
+}
+
+// GetMatchedStatistics will return the number of matched and unmatched
+// triggers. This must not be called concurrently with itself or other methods
+// related to matching
+func (triggers *Triggers) GetMatchStatistics() (nMatched, nUnmatched uint) {
+	return triggers.getMatchStatistics()
+}
+
+// GetMatchedTriggers will return the list of matched triggers and clear the
+// internal match state. This must not be called concurrently with itself or
+// other methods related to matching
+func (triggers *Triggers) GetMatchedTriggers() []*Trigger {
+	return triggers.getMatchedTriggers()
+}
+
+// Match will check if the specified line matches any of the triggers. Internal
+// state is updated. This must not be called concurrently with itself or other
+// methods related to matching.
+func (triggers *Triggers) Match(line string) {
+	triggers.match(line)
 }
 
 func (triggers *Triggers) Len() int {
@@ -81,24 +121,4 @@ func (triggers *Triggers) ReplaceStrings(replaceFunc func(string) string) {
 func (triggers *Triggers) Swap(left, right int) {
 	triggers.Triggers[left], triggers.Triggers[right] =
 		triggers.Triggers[right], triggers.Triggers[left]
-}
-
-func (mt *MergeableTriggers) ExportTriggers() *Triggers {
-	return mt.exportTriggers()
-}
-
-func (mt *MergeableTriggers) Merge(triggers *Triggers) {
-	mt.merge(triggers)
-}
-
-func (triggers *Triggers) Match(line string) {
-	triggers.match(line)
-}
-
-func (triggers *Triggers) GetMatchedTriggers() []*Trigger {
-	return triggers.getMatchedTriggers()
-}
-
-func (triggers *Triggers) GetMatchStatistics() (nMatched, nUnmatched uint) {
-	return triggers.getMatchStatistics()
 }

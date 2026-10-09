@@ -14,6 +14,11 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type vmInfoType struct {
+	Hypervisor string
+	proto.VmInfo
+}
+
 func (s *server) computePaths() {
 	s.paths = make(map[string]struct{})
 	for path := range s.fileHandlers {
@@ -96,7 +101,12 @@ func (s *server) showTime(writer io.Writer, vmInfo proto.VmInfo) error {
 }
 
 func (s *server) showVM(writer io.Writer, vmInfo proto.VmInfo) error {
-	return json.WriteWithIndent(writer, "    ", vmInfo)
+	fullVmInfo := vmInfoType{
+		Hypervisor: fmt.Sprintf("%s:%d",
+			s.hypervisorHostname, s.hypervisorPortNum),
+		VmInfo: vmInfo,
+	}
+	return json.WriteWithIndent(writer, "    ", fullVmInfo)
 }
 
 func (s *server) showTrue(w http.ResponseWriter, ipAddr net.IP) {

@@ -23,21 +23,8 @@ func getObjectsSubcommand(args []string, logger log.DebugLogger) error {
 
 func getObjects(objSrv objectserver.ObjectServer,
 	hashesFilename, outputDirectory string) error {
-	hashesFile, err := os.Open(hashesFilename)
+	hashes, err := loadHashes(hashesFilename)
 	if err != nil {
-		return err
-	}
-	defer hashesFile.Close()
-	scanner := bufio.NewScanner(hashesFile)
-	var hashes []hash.Hash
-	for scanner.Scan() {
-		hashval, err := objectcache.FilenameToHash(scanner.Text())
-		if err != nil {
-			return err
-		}
-		hashes = append(hashes, hashval)
-	}
-	if err := scanner.Err(); err != nil {
 		return err
 	}
 	objectsReader, err := objSrv.GetObjects(hashes)
@@ -62,6 +49,27 @@ func getObjects(objSrv objectserver.ObjectServer,
 		}
 	}
 	return os.Rename(tmpDirname, outputDirectory)
+}
+
+func loadHashes(filename string) ([]hash.Hash, error) {
+	hashesFile, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer hashesFile.Close()
+	scanner := bufio.NewScanner(hashesFile)
+	var hashes []hash.Hash
+	for scanner.Scan() {
+		hashval, err := objectcache.FilenameToHash(scanner.Text())
+		if err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, hashval)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return hashes, nil
 }
 
 func readOne(dirname string, hash hash.Hash, length uint64,

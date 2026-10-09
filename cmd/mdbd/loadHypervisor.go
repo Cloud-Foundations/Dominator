@@ -14,8 +14,6 @@ import (
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
-var emptyTags = make(map[string]string)
-
 type hypervisorGeneratorType struct {
 	eventChannel chan<- struct{}
 	logger       log.DebugLogger
@@ -87,19 +85,15 @@ func (g *hypervisorGeneratorType) generate() *mdbType {
 	defer g.mutex.Unlock()
 	for ipAddr, vm := range g.vms {
 		if vm.State == proto.StateRunning {
-			tags := vm.Tags
-			if tags == nil {
-				tags = emptyTags
-			}
-			_, disableUpdates := tags["DisableUpdates"]
+			_, disableUpdates := vm.Tags["DisableUpdates"]
 			var ownerGroup string
 			if len(vm.OwnerGroups) > 0 {
 				ownerGroup = vm.OwnerGroups[0]
 			}
 			newMdb.Machines = append(newMdb.Machines, &mdb.Machine{
 				IpAddress:      ipAddr,
-				RequiredImage:  tags["RequiredImage"],
-				PlannedImage:   tags["PlannedImage"],
+				RequiredImage:  vm.Tags["RequiredImage"],
+				PlannedImage:   vm.Tags["PlannedImage"],
 				DisableUpdates: disableUpdates,
 				OwnerGroup:     ownerGroup,
 				OwnerGroups:    vm.OwnerGroups,

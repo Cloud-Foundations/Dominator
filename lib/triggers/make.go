@@ -8,6 +8,11 @@ func newTriggers() *Triggers {
 	return &Triggers{}
 }
 
+func (triggers *Triggers) clone() *Triggers {
+	newTriggers := *triggers
+	return &newTriggers
+}
+
 func (triggers *Triggers) compile() error {
 	if triggers.compiled {
 		return nil

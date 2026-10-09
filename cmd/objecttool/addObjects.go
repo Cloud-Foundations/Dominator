@@ -11,9 +11,10 @@ import (
 )
 
 func addObjectsSubcommand(args []string, logger log.DebugLogger) error {
-	if err := addObjects(fmt.Sprintf("%s:%d",
-		*objectServerHostname, *objectServerPortNum), args); err != nil {
-		return fmt.Errorf("error adding objects hash: %s", err)
+	err := addObjects(fmt.Sprintf("%s:%d",
+		*objectServerHostname, *objectServerPortNum), args)
+	if err != nil {
+		return fmt.Errorf("error adding objects: %s", err)
 	}
 	return nil
 }

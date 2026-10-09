@@ -79,6 +79,9 @@ func writeImage(filename string, img *image.Image, exclusive bool) (
 
 func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 	authInfo *srpc.AuthInformation) error {
+	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
+		return err
+	}
 	if err := img.Verify(); err != nil {
 		return err
 	}
@@ -97,9 +100,6 @@ func (imdb *ImageDataBase) addImage(img *image.Image, name string,
 			imdb.Unlock()
 		}
 	}()
-	if err := imdb.checkPermissions(name, nil, authInfo); err != nil {
-		return err
-	}
 	exclusive := imdb.ReplicationMaster == ""
 	if err := imdb.writeImage(name, img, exclusive); err != nil {
 		if os.IsExist(err) {
@@ -294,6 +294,24 @@ func (imdb *ImageDataBase) chownDirectory(dirname, ownerGroup string,
 		image.Directory{Name: dirname, Metadata: directoryMetadata})
 }
 
+func (imdb *ImageDataBase) getImages(imageNames []string,
+	ignoreMissing bool) ([]*image.Image, error) {
+	imdb.RLock()
+	defer imdb.RUnlock()
+	images := make([]*image.Image, 0, len(imageNames))
+	for _, imageName := range imageNames {
+		if img, _ := imdb.getImageWithLock(imageName); img == nil {
+			if !ignoreMissing {
+				return nil, fmt.Errorf("unknown image: %s", imageName)
+			}
+			images = append(images, nil)
+		} else {
+			images = append(images, img)
+		}
+	}
+	return images, nil
+}
+
 // prepareToWrite returns an error if the image already exists or is being
 // written, otherwise it marks the image as being written and returns nil.
 // The write lock is grabbed and released.
@@ -370,6 +388,26 @@ func (imdb *ImageDataBase) countImages() uint {
 	imdb.RLock()
 	defer imdb.RUnlock()
 	return uint(len(imdb.imageMap))
+}
+
+func (imdb *ImageDataBase) deleteDirectory(name string,
+	authInfo *srpc.AuthInformation) error {
+	if authInfo == nil {
+		return errNoAuthInfo
+	}
+	imdb.Lock()
+	defer imdb.Unlock()
+	if _, ok := imdb.directoryMap[name]; !ok {
+		return errors.New("directory: " + name + " does not exist")
+	} else {
+		dirname := filepath.Join(imdb.BaseDirectory, name)
+		if err := os.Remove(dirname); err != nil {
+			return err
+		}
+		delete(imdb.directoryMap, name)
+		imdb.rmdirNotifiers.sendPlain(name, "rmdir", imdb.Logger)
+		return nil
+	}
 }
 
 func (imdb *ImageDataBase) deleteImage(name string,
@@ -717,6 +755,14 @@ func (imdb *ImageDataBase) registerAddNotifier() <-chan string {
 	return channel
 }
 
+func (imdb *ImageDataBase) registerDeleteDirectoryNotifier() <-chan string {
+	channel := make(chan string, 1)
+	imdb.Lock()
+	defer imdb.Unlock()
+	imdb.rmdirNotifiers[channel] = channel
+	return channel
+}
+
 func (imdb *ImageDataBase) registerDeleteNotifier() <-chan string {
 	channel := make(chan string, 1)
 	imdb.Lock()
@@ -810,6 +856,13 @@ func (imdb *ImageDataBase) unregisterAddNotifier(channel <-chan string) {
 	delete(imdb.addNotifiers, channel)
 }
 
+func (imdb *ImageDataBase) unregisterDeleteDirectoryNotifier(
+	channel <-chan string) {
+	imdb.Lock()
+	defer imdb.Unlock()
+	delete(imdb.rmdirNotifiers, channel)
+}
+
 func (imdb *ImageDataBase) unregisterDeleteNotifier(channel <-chan string) {
 	imdb.Lock()
 	defer imdb.Unlock()
@@ -823,8 +876,8 @@ func (imdb *ImageDataBase) unregisterMakeDirectoryNotifier(
 	delete(imdb.mkdirNotifiers, channel)
 }
 
-// Write the specified image, assuming other writers are blocked and validation
-// checks have been performed.
+// Write the specified image and update refcounts, assuming other writers are
+// blocked and validation checks have been performed.
 func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	exclusive bool) error {
 	computedFiles := img.FileSystem.GetComputedFiles()
@@ -834,6 +887,10 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	filename := filepath.Join(imdb.BaseDirectory, name)
 	fileChecksum, err := writeImage(filename, img, exclusive)
 	if err != nil {
+		return err
+	}
+	if err := imdb.Params.ObjectServer.AdjustRefcounts(true, img); err != nil {
+		os.Remove(filename)
 		return err
 	}
 	imdb.scheduleExpiration(img, name)
@@ -848,7 +905,7 @@ func (imdb *ImageDataBase) writeImage(name string, img *image.Image,
 	}
 	imdb.addNotifiers.sendPlain(name, "add", imdb.Logger)
 	imdb.Unlock()
-	return imdb.Params.ObjectServer.AdjustRefcounts(true, img)
+	return nil
 }
 
 // This must be called with the modifying flag set to true.

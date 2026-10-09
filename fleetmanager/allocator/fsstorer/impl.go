@@ -206,11 +206,11 @@ func (s *Storer) writeUpdate(update proto.AllocationUpdateEntry,
 		return err
 	}
 	if allocation := update.Available; allocation != nil {
-		s.logger.Debugf(0, "writing update[%d] allocation: %s\n",
+		s.logger.Debugf(1, "writing update[%d] allocation: %s\n",
 			position, update.RequestId)
 	}
 	if deleted := update.Deleted; deleted != nil {
-		s.logger.Debugf(0, "writing update[%d] deleted: %s\n",
+		s.logger.Debugf(1, "writing update[%d] deleted: %s\n",
 			position, update.RequestId)
 	}
 	return fsutil.CopyToFileExclusive(filename, fsutil.PublicFilePerms, buffer,
@@ -218,7 +218,7 @@ func (s *Storer) writeUpdate(update proto.AllocationUpdateEntry,
 }
 
 func (s *Storer) writeUsersQueue(usernames []types.Username) error {
-	s.logger.Debugf(0, "writing users queue with %d entries\n", len(usernames))
+	s.logger.Debugf(1, "writing users queue with %d entries\n", len(usernames))
 	stringUsernames := make([]string, 0, len(usernames))
 	for _, username := range usernames {
 		stringUsernames = append(stringUsernames, string(username))
@@ -228,7 +228,7 @@ func (s *Storer) writeUsersQueue(usernames []types.Username) error {
 
 func (s *Storer) writeUserQueue(username types.Username,
 	requestIDs []proto.RequestId) error {
-	s.logger.Debugf(0, "writing user queue for: %s with %d entries\n",
+	s.logger.Debugf(1, "writing user queue for: %s with %d entries\n",
 		username, len(requestIDs))
 	subdir := filepath.Join(usersQueueDirectory,
 		filepath.Clean(string(username)))
@@ -245,7 +245,7 @@ func (s *Storer) writeUserQueue(username types.Username,
 
 func (s *Storer) writeUserRequest(username types.Username,
 	requestId proto.RequestId, request proto.AllocateRequest) error {
-	s.logger.Debugf(0, "writing user request for: %s, ID: %s\n",
+	s.logger.Debugf(1, "writing user request for: %s, ID: %s\n",
 		username, requestId)
 	subdir := filepath.Join(usersQueueDirectory,
 		filepath.Clean(string(username)))

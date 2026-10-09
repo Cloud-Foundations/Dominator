@@ -33,6 +33,12 @@ type hasher struct {
 	objQ *objectclient.ObjectAdderQueue
 }
 
+func deleteEntries(name string, inodeNumber uint64,
+	inode *filesystem.DirectoryInode) error {
+	inode.EntriesByName = nil
+	return nil
+}
+
 func addImage(imageSClient *srpc.Client, name string, img *image.Image,
 	logger log.DebugLogger) error {
 	if *expiresIn > 0 {
@@ -44,6 +50,10 @@ func addImage(imageSClient *srpc.Client, name string, img *image.Image,
 		return err
 	}
 	if err := img.VerifyRequiredPaths(requiredPaths); err != nil {
+		return err
+	}
+	// Ensure directory entry maps are not written.
+	if err := img.FileSystem.ForEachDirectory(deleteEntries); err != nil {
 		return err
 	}
 	startTime := time.Now()

@@ -140,3 +140,28 @@ func NewReceiveChannel[T any](size uint,
 	lengthRecorder LengthRecorder) (CloseSender[T], <-chan T) {
 	return newReceiveChannel[T](size, lengthRecorder)
 }
+
+// RebufferReceiveChannel creates and returns a channel that may be used for
+// reading and starts a goroutine which will read and queue data received from
+// ch and writes it to the created channel.
+// This effectively converts a receive channel into one with unlimited buffer
+// size.
+// If lengthRecorder is not nil, it will be called to record the length of the
+// queue whenever it changes.
+func RebufferReceiveChannel[T any](ch <-chan T,
+	lengthRecorder LengthRecorder) <-chan T {
+	return rebufferReceiveChannel(ch, lengthRecorder)
+}
+
+// RebufferSendChannel creates and returns a channel that may be used for
+// sending and starts a goroutine which will read from the channel and queue
+// data received on this channel for sending to ch.
+// The returned channel is always available for sending.
+// This effectively converts a send channel into one with unlimited buffer
+// size.
+// If lengthRecorder is not nil, it will be called to record the length of the
+// queue whenever it changes.
+func RebufferSendChannel[T any](ch chan<- T,
+	lengthRecorder LengthRecorder) chan<- T {
+	return rebufferSendChannel(ch, lengthRecorder)
+}

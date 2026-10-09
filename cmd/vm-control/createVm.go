@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	fmclient "github.com/Cloud-Foundations/Dominator/fleetmanager/client"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
 	imgclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
@@ -87,14 +88,9 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 		return err
 	}
 	defer allocatorClient.Close()
-	var allocateResponse fm_proto.AllocateResponse
-	err = allocatorClient.RequestReply("FleetManager.Allocate", allocateRequest,
-		&allocateResponse)
+	allocateResponse, err := fmclient.Allocate(allocatorClient, allocateRequest)
 	if err != nil {
 		return err
-	}
-	if allocateResponse.Error != "" {
-		return errors.New(allocateResponse.Error)
 	}
 	logger.Printf("RequestId: %s\n", allocateResponse.RequestId)
 	createRequest.Tags["AllocationRequestId"] =
@@ -150,26 +146,23 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	}
 	logger.Debugf(0, "creating VM on %s\n",
 		foundAllocation.VMs[0].HypervisorAddress)
+	var createSucceeded bool
 	err = createVmOnHypervisor(foundAllocation.VMs[0].HypervisorAddress,
-		*createRequest, logger)
-	if err != nil {
+		*createRequest, &createSucceeded, logger)
+	if err != nil && !createSucceeded {
 		logger.Debugf(0, "cancelling allocation request: %s\n",
 			allocateResponse.RequestId)
-		var response fm_proto.CancelAllocationResponse
-		err := allocatorClient.RequestReply("FleetManager.CancelAllocation",
-			fm_proto.CancelAllocationRequest{allocateResponse.RequestId},
-			&response)
+		err := fmclient.CancelAllocation(allocatorClient,
+			allocateResponse.RequestId)
 		if err != nil {
 			logger.Println(err)
-		} else if response.Error != "" {
-			logger.Println(response.Error)
 		}
 	}
 	return err
 }
 
-func approximateImageUsage() (uint64, error) {
-	size, err := getImageUsage()
+func approximateImageUsage(imageName string) (uint64, error) {
+	size, err := getImageUsage(imageName)
 	if err != nil {
 		return 0, err
 	}
@@ -188,13 +181,13 @@ func approximateImageUsage() (uint64, error) {
 func approximateVolumesForCreateRequest(
 	vmInfo hyper_proto.VmInfo) (*hyper_proto.VmInfo, error) {
 	vmInfo.Volumes = make([]hyper_proto.Volume, 1, len(secondaryVolumeSizes)+1)
-	for _, size := range secondaryVolumeSizes {
+	for _, volume := range vmInfo.Volumes[1:] {
 		vmInfo.Volumes = append(vmInfo.Volumes, hyper_proto.Volume{
-			Size: uint64(size),
+			Size: volume.Size,
 		})
 	}
-	if *imageName != "" {
-		imageSize, err := approximateImageUsage()
+	if vmInfo.ImageName != "" {
+		imageSize, err := approximateImageUsage(vmInfo.ImageName)
 		if err != nil {
 			return nil, err
 		}
@@ -319,6 +312,9 @@ func createVm(logger log.DebugLogger) error {
 	if err != nil {
 		return err
 	}
+	if err := validateVmCreateRequest(request); err != nil {
+		return err
+	}
 	tmpVmInfo, err := approximateVolumesForCreateRequest(request.VmInfo)
 	if err != nil {
 		return err
@@ -330,7 +326,7 @@ func createVm(logger log.DebugLogger) error {
 		return err
 	} else {
 		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		return createVmOnHypervisor(hypervisor, *request, logger)
+		return createVmOnHypervisor(hypervisor, *request, nil, logger)
 	}
 }
 
@@ -362,29 +358,30 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 		})
 	}
 	vmInfo := hyper_proto.VmInfo{
-		ArchitectureType:   architectureType,
-		ConsoleType:        consoleType,
-		CpuPriority:        *cpuPriority,
-		DestroyOnPowerdown: *destroyOnPowerdown,
-		DestroyProtection:  *destroyProtection,
-		DisableVirtIO:      *disableVirtIO,
-		ExtraKernelOptions: *extraKernelOptions,
-		FirmwareType:       firmwareType,
-		Hostname:           *vmHostname,
-		MachineType:        machineType,
-		MemoryInMiB:        uint64(memory >> 20),
-		MilliCPUs:          *milliCPUs,
-		NetworkEntries:     networkEntries,
-		OwnerGroups:        ownerGroups,
-		OwnerUsers:         ownerUsers,
-		Tags:               vmTags,
-		SecondarySubnetIDs: secondarySubnetIDs,
-		SpreadVolumes:      *spreadVolumes,
-		SubnetId:           *subnetId,
-		VirtualCPUs:        *virtualCPUs,
-		Volumes:            volumes,
-		WatchdogAction:     watchdogAction,
-		WatchdogModel:      watchdogModel,
+		ArchitectureType:     architectureType,
+		ConsoleType:          consoleType,
+		CpuPriority:          *cpuPriority,
+		DestroyOnPowerdown:   *destroyOnPowerdown,
+		DestroyProtection:    *destroyProtection,
+		DisableVirtIO:        *disableVirtIO,
+		ExtraKernelOptions:   *extraKernelOptions,
+		FirmwareType:         firmwareType,
+		Hostname:             *vmHostname,
+		MachineType:          machineType,
+		MemoryInMiB:          uint64(memory >> 20),
+		MilliCPUs:            *milliCPUs,
+		NetworkEntries:       networkEntries,
+		OwnerGroups:          ownerGroups,
+		OwnerUsers:           ownerUsers,
+		Tags:                 vmTags,
+		SecondarySubnetIDs:   secondarySubnetIDs,
+		SpreadVolumes:        *spreadVolumes,
+		SubnetId:             *subnetId,
+		VirtualCPUs:          *virtualCPUs,
+		VirtualiserImageName: *virtualiserImageName,
+		Volumes:              volumes,
+		WatchdogAction:       watchdogAction,
+		WatchdogModel:        watchdogModel,
 	}
 	if len(requestIPs) > 0 && requestIPs[0] != "" {
 		ipAddr := net.ParseIP(requestIPs[0])
@@ -411,8 +408,10 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 	return &vmInfo, nil
 }
 
-func createVmOnHypervisor(hypervisor string,
-	request createVmRequest, logger log.DebugLogger) error {
+// true is written to *createSucceeded if the VM was created, regardless if it
+// is then deleted.
+func createVmOnHypervisor(hypervisor string, request createVmRequest,
+	createSucceeded *bool, logger log.DebugLogger) error {
 	if request.imageReader != nil {
 		defer request.imageReader.Close()
 	}
@@ -439,6 +438,9 @@ func createVmOnHypervisor(hypervisor string,
 	if err != nil {
 		return err
 	}
+	if createSucceeded != nil {
+		*createSucceeded = true
+	}
 	if err := hyperclient.AcknowledgeVm(client, reply.IpAddress); err != nil {
 		return fmt.Errorf("error acknowledging VM: %s", err)
 	}
@@ -452,17 +454,38 @@ func createVmOnHypervisor(hypervisor string,
 			return err
 		}
 	}
-	fmt.Println(reply.IpAddress)
 	if *doNotStart {
+		fmt.Println(reply.IpAddress)
 		return nil
 	}
 	if reply.DhcpTimedOut {
+		if *destroyOnDhcpTimeout {
+			e := hyperclient.DestroyVm(client, reply.IpAddress, nil)
+			if e != nil {
+				logger.Println(e)
+			}
+		} else {
+			fmt.Println(reply.IpAddress)
+		}
 		return errors.New("DHCP ACK timed out")
 	}
 	if *dhcpTimeout > 0 {
 		logger.Debugln(0, "Received DHCP ACK")
 	}
-	return maybeWatchVm(client, hypervisor, reply.IpAddress, logger)
+	err = maybeWatchVm(client, hypervisor, reply.IpAddress, logger)
+	if err != nil {
+		if *destroyOnProbeTimeout {
+			e := hyperclient.DestroyVm(client, reply.IpAddress, nil)
+			if e != nil {
+				logger.Println(e)
+			}
+		} else {
+			fmt.Println(reply.IpAddress)
+		}
+		return err
+	}
+	fmt.Println(reply.IpAddress)
+	return nil
 }
 
 func getReader(filename string) (io.ReadCloser, int64, error) {
@@ -498,7 +521,7 @@ func getReader(filename string) (io.ReadCloser, int64, error) {
 	}
 }
 
-func getImageUsage() (uint64, error) {
+func getImageUsage(imageName string) (uint64, error) {
 	client, err := getImageServerClient()
 	if err != nil {
 		logger.Printf(
@@ -510,18 +533,18 @@ func getImageUsage() (uint64, error) {
 		return 2 << 30, nil
 	}
 	var name string
-	if isDir, err := imgclient.CheckDirectory(client, *imageName); err != nil {
+	if isDir, err := imgclient.CheckDirectory(client, imageName); err != nil {
 		return 0, err
 	} else if isDir {
-		name, err = imgclient.FindLatestImage(client, *imageName, false)
+		name, err = imgclient.FindLatestImage(client, imageName, false)
 		if err != nil {
 			return 0, err
 		}
 		if name == "" {
-			return 0, errors.New("no images in directory: " + *imageName)
+			return 0, errors.New("no images in directory: " + imageName)
 		}
 	} else {
-		name = *imageName
+		name = imageName
 	}
 	usage, exists, err := imgclient.GetImageUsageEstimate(client, name)
 	if err != nil {
@@ -796,6 +819,22 @@ func updateVolumeInitParams(vinitParams []volumeInitParams) error {
 			vinit.RootGroupId = types.GroupId(inode.GetGid())
 			vinit.RootUserId = types.UserId(inode.GetUid())
 			vinitParams[index] = vinit
+		}
+	}
+	return nil
+}
+
+func validateVmCreateRequest(request *createVmRequest) error {
+	if request.Hostname == "" {
+		return errors.New("no hostname specified")
+	}
+	if request.Tags["Name"] == "" {
+		return errors.New("no Name tag specified")
+	}
+	for index, volume := range request.SecondaryVolumes {
+		if volume.Size < 16<<20 {
+			return fmt.Errorf("secondary volume[%d] size: %d too small",
+				index, volume.Size)
 		}
 	}
 	return nil

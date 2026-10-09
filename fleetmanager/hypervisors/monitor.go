@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -16,8 +17,8 @@ var (
 		"time after which a Hypervisor is marked as unresponsive")
 )
 
-func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn,
-	closeClientChannel <-chan struct{}) {
+func (h *hypervisorType) monitorLoop(manager *Manager, client *srpc.Client,
+	conn *srpc.Conn, closeClientChannel <-chan struct{}) {
 	pingDeferChannel := make(chan struct{})
 	defer close(pingDeferChannel)
 	go h.pingLoop(conn, pingDeferChannel)
@@ -44,14 +45,9 @@ func (h *hypervisorType) monitorLoop(client *srpc.Client, conn *srpc.Conn,
 			default:
 			}
 			lastReceiveTime = time.Now()
-			h.mutex.Lock()
-			h.lastConnectedTime = lastReceiveTime
-			h.probeStatus = probeStatusConnected
-			h.mutex.Unlock()
 		case <-timer.C:
-			h.mutex.Lock()
-			h.probeStatus = probeStatusUnreachable
-			h.mutex.Unlock()
+			h.setProbeStatus(manager, fm_proto.ProbeStatusUnreachable,
+				time.Time{})
 			h.logger.Debugln(0, "shutting down unresponsive client")
 			client.Close()
 			return
@@ -73,9 +69,6 @@ func (h *hypervisorType) pingLoop(conn *srpc.Conn,
 				return
 			}
 			timer.Reset(*hypervisorProbeTimeout)
-			h.mutex.Lock()
-			h.probeStatus = probeStatusConnected
-			h.mutex.Unlock()
 			pingsSinceLastDefer = 0
 		case <-timer.C:
 			pingsSinceLastDefer++

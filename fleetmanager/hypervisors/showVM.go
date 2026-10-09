@@ -8,6 +8,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/url"
+	fm_proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 	hyper_proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -22,7 +23,7 @@ func (m *Manager) getVmInfoAndHypervisor(vmIpAddr string) (
 	if vm == nil {
 		return nil, ""
 	}
-	if vm.hypervisor.probeStatus == probeStatusConnected {
+	if vm.hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected {
 		return &vm.VmInfo, vm.hypervisor.Machine.Hostname
 	}
 	return &vm.VmInfo, ""

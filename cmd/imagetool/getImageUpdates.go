@@ -42,6 +42,8 @@ func getImageUpdates(imageSClient *srpc.Client) error {
 			} else {
 				fmt.Printf("INIT: %s\n", imageUpdate.Name)
 			}
+		case proto.OperationDeleteDirectory:
+			fmt.Printf("DELETE DIRECTORY: %s\n", imageUpdate.Name)
 		case proto.OperationDeleteImage:
 			fmt.Printf("DELETE: %s\n", imageUpdate.Name)
 		case proto.OperationMakeDirectory:

@@ -57,7 +57,12 @@ func (image *Image) verifyRequiredPaths(requiredPaths map[string]rune) error {
 			return errors.New(
 				"VerifyRequiredPaths(): missing path: " + pathName)
 		}
-		inode := fs.InodeTable[inum]
+		inode, ok := fs.InodeTable[inum]
+		if !ok {
+			return fmt.Errorf(
+				"VerifyRequiredPaths(): missing inode for inum: %d, path: %s",
+				inum, pathName)
+		}
 		switch pathType {
 		case 'b', 'c', 'p':
 			if _, ok := inode.(*filesystem.SpecialInode); !ok {

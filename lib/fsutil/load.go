@@ -7,6 +7,9 @@ import (
 )
 
 func loadLines(filename string) ([]string, error) {
+	if filename == "-" {
+		return readLines(os.Stdin)
+	}
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err

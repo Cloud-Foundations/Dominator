@@ -52,6 +52,7 @@ func (t *srpcType) replicator(finishedReplication chan<- struct{}) {
 				conn.Close()
 			}
 			client.Close()
+			t.imageserverResource.ScheduleClose()
 		}
 		time.Sleep(nextSleepStopTime.Sub(time.Now()))
 		if timeout < time.Minute {
@@ -65,8 +66,10 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 	request *imageserver.GetFilteredImageUpdatesRequest) error {
 	t.logger.Printf("Image replicator: connected to: %s\n", t.replicationMaster)
 	replicationStartTime := time.Now()
+	initialDirectories := make(map[string]struct{})
 	initialImages := make(map[string]struct{})
 	if t.archiveMode {
+		initialDirectories = nil
 		initialImages = nil
 	}
 	if request != nil {
@@ -89,6 +92,10 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 		switch imageUpdate.Operation {
 		case imageserver.OperationAddImage:
 			if imageUpdate.Name == "" { // Initial list has been sent.
+				if initialDirectories != nil {
+					t.deleteMissingDirectories(initialDirectories)
+					initialDirectories = nil
+				}
 				if initialImages != nil {
 					t.deleteMissingImages(initialImages)
 					initialImages = nil
@@ -126,6 +133,17 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 					imageUpdate.Name, err)
 				someImagesFailed = true
 			}
+		case imageserver.OperationDeleteDirectory:
+			if t.archiveMode {
+				continue
+			}
+			t.logger.Printf("Replicator(%s): delete directory\n",
+				imageUpdate.Name)
+			err := t.imageDataBase.DeleteDirectory(imageUpdate.Name,
+				&srpc.AuthInformation{HaveMethodAccess: true})
+			if err != nil {
+				return err
+			}
 		case imageserver.OperationDeleteImage:
 			if t.archiveMode {
 				continue
@@ -141,9 +159,33 @@ func (t *srpcType) getUpdates(conn *srpc.Conn,
 			if directory == nil {
 				return errors.New("nil imageUpdate.Directory")
 			}
+			if initialDirectories != nil {
+				initialDirectories[directory.Name] = struct{}{}
+			}
 			if err := t.imageDataBase.UpdateDirectory(*directory); err != nil {
 				return err
 			}
+		default:
+			t.logger.Printf("Replicator: unknown operation: %d\n",
+				imageUpdate.Operation)
+		}
+	}
+}
+
+func (t *srpcType) deleteMissingDirectories(
+	directoriesToKeep map[string]struct{}) {
+	missingDirectories := make([]string, 0)
+	for _, directory := range t.imageDataBase.ListDirectories() {
+		if _, ok := directoriesToKeep[directory.Name]; !ok {
+			missingDirectories = append(missingDirectories, directory.Name)
+		}
+	}
+	for _, dirname := range missingDirectories {
+		t.logger.Printf("Replicator(%s): delete missing directory\n", dirname)
+		err := t.imageDataBase.DeleteDirectory(dirname,
+			&srpc.AuthInformation{HaveMethodAccess: true})
+		if err != nil {
+			t.logger.Println(err)
 		}
 	}
 }

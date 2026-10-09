@@ -17,14 +17,18 @@ func New() *Goroutine {
 }
 
 // Quit causes the underlying goroutine to exit. If there is a currently running
-// function, it will wait for it to complete.
+// function, it will wait for it to complete. The Goroutine will be invalidated.
+// Quit should not be called concurrently with other methods.
 func (g *Goroutine) Quit() {
+	g.start <- nil
 	close(g.start)
 }
 
 // Run will run a function in the underlying goroutine and wait for it to
 // complete. If there is a currently running function, it will first wait for it
 // to complete.
+// If Run is called concurrently, it may not return until other called functions
+// complete.
 func (g *Goroutine) Run(fn Function) {
 	g.start <- fn
 	g.start <- nil

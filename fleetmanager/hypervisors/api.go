@@ -15,15 +15,6 @@ import (
 )
 
 const (
-	probeStatusNotYetProbed probeStatus = iota
-	probeStatusConnected
-	probeStatusAccessDenied
-	probeStatusNoSrpc
-	probeStatusNoService
-	probeStatusConnectionRefused
-	probeStatusUnreachable
-	probeStatusOff
-
 	selectHealthy = iota
 	selectAny
 	selectAll
@@ -37,7 +28,6 @@ type hypervisorType struct {
 	cachedSerialNumber string
 	closeClientChannel chan<- struct{}
 	deleteScheduled    bool
-	disabled           bool
 	healthStatus       string
 	lastConnectedTime  time.Time
 	lastIpmiProbe      time.Time
@@ -45,7 +35,6 @@ type hypervisorType struct {
 	location           string
 	migratingVms       map[string]*vmInfoType // Key: VM IP address.
 	ownerUsers         map[string]struct{}
-	probeStatus        probeStatus
 	serialNumber       string
 	subnets            []hyper_proto.Subnet   // nil on replica.
 	vms                map[string]*vmInfoType // Key: VM IP address.
@@ -85,8 +74,6 @@ type Manager struct {
 	subnets          map[string]*subnetType // Key: Gateway IP.
 	vms              map[string]*vmInfoType // Key: VM IP address.
 }
-
-type probeStatus uint
 
 type serialStorer interface {
 	ReadMachineSerialNumber(hypervisor net.IP) (string, error)

@@ -9,30 +9,37 @@ import (
 	"syscall"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/build"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
-	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
 
 type decoderData struct {
-	nextInodeNumber uint64
-	fileSystem      filesystem.FileSystem
-	inodeTable      map[string]uint64
-	directoryTable  map[string]*filesystem.DirectoryInode
+	builder        *build.Builder
+	directoryTable map[string]*filesystem.DirectoryInode // Key: full name.
+	inodeTable     map[string]filesystem.GenericInode    // Key: full name.
+}
+
+func normaliseFilename(filename string) string {
+	if filename[:2] == "./" {
+		filename = filename[1:]
+	} else if filename[0] != '/' {
+		filename = "/" + filename
+	}
+	length := len(filename)
+	if length > 1 && filename[length-1] == '/' {
+		filename = filename[:length-1]
+	}
+	return filename
 }
 
 func decode(tarReader *tar.Reader, hasher Hasher, filter *filter.Filter) (
 	*filesystem.FileSystem, error) {
-	var decoderData decoderData
-	decoderData.inodeTable = make(map[string]uint64)
-	decoderData.directoryTable = make(map[string]*filesystem.DirectoryInode)
-	fileSystem := &decoderData.fileSystem
-	fileSystem.InodeTable = make(filesystem.InodeTable)
-	// Create a default top-level directory which may be updated.
-	decoderData.addInode("/", &fileSystem.DirectoryInode)
-	fileSystem.DirectoryInode.Mode = wsyscall.S_IFDIR | wsyscall.S_IRWXU |
-		wsyscall.S_IRGRP | wsyscall.S_IXGRP | wsyscall.S_IROTH |
-		wsyscall.S_IXOTH
-	decoderData.directoryTable["/"] = &fileSystem.DirectoryInode
+	dd := decoderData{
+		builder:        build.New(),
+		directoryTable: make(map[string]*filesystem.DirectoryInode),
+		inodeTable:     make(map[string]filesystem.GenericInode),
+	}
+	dd.directoryTable["/"] = &dd.builder.FileSystem.DirectoryInode
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -49,69 +56,81 @@ func decode(tarReader *tar.Reader, hasher Hasher, filter *filter.Filter) (
 		if filter != nil && filter.Match(header.Name) {
 			continue
 		}
-		err = decoderData.addHeader(tarReader, hasher, header)
+		err = dd.addHeader(tarReader, hasher, header)
 		if err != nil {
 			return nil, err
 		}
 	}
-	delete(fileSystem.InodeTable, 0)
-	fileSystem.DirectoryCount = uint64(len(decoderData.directoryTable))
-	fileSystem.ComputeTotalDataBytes()
-	sortDirectory(&fileSystem.DirectoryInode)
-	return fileSystem, nil
+	dd.builder.Sort()
+	return dd.builder.FileSystem, nil
 }
 
-func normaliseFilename(filename string) string {
-	if filename[:2] == "./" {
-		filename = filename[1:]
-	} else if filename[0] != '/' {
-		filename = "/" + filename
+func (dd *decoderData) addDirectory(header *tar.Header,
+	parent *filesystem.DirectoryInode, leafName string) error {
+	newInode := filesystem.DirectoryInode{
+		Mode: filesystem.FileMode((header.Mode & ^syscall.S_IFMT) |
+			syscall.S_IFDIR),
+		Uid: uint32(header.Uid),
+		Gid: uint32(header.Gid),
 	}
-	length := len(filename)
-	if length > 1 && filename[length-1] == '/' {
-		filename = filename[:length-1]
+	if header.Name == "/" {
+		*dd.directoryTable[header.Name] = newInode
+		return nil
 	}
-	return filename
+	dd.directoryTable[header.Name] = &newInode
+	return dd.addInodeAndEntry(parent, header.Name, leafName, &newInode)
 }
 
-func (decoderData *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
+func (dd *decoderData) addInodeAndEntry(parent *filesystem.DirectoryInode,
+	fullName, leafName string, inode filesystem.GenericInode) error {
+	if _, ok := dd.inodeTable[fullName]; ok {
+		return fmt.Errorf("%s already added", fullName)
+	}
+	dd.inodeTable[fullName] = inode
+	if err := dd.builder.AddInode(inode); err != nil {
+		return err
+	}
+	return dd.builder.AddDirectoryEntry(parent, leafName, inode)
+}
+
+func (dd *decoderData) addHeader(tarReader *tar.Reader, hasher Hasher,
 	header *tar.Header) error {
-	parentDir, ok := decoderData.directoryTable[path.Dir(header.Name)]
+	parentDir, ok := dd.directoryTable[path.Dir(header.Name)]
 	if !ok {
 		return fmt.Errorf("no parent directory found for: %s", header.Name)
 	}
 	leafName := path.Base(header.Name)
 	if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeRegA {
-		return decoderData.addRegularFile(tarReader, hasher, header,
+		return dd.addRegularFile(tarReader, hasher, header,
 			parentDir, leafName)
 	} else if header.Typeflag == tar.TypeLink {
-		return decoderData.addHardlink(header, parentDir, leafName)
+		return dd.addHardlink(header, parentDir, leafName)
 	} else if header.Typeflag == tar.TypeSymlink {
-		return decoderData.addSymlink(header, parentDir, leafName)
+		return dd.addSymlink(header, parentDir, leafName)
 	} else if header.Typeflag == tar.TypeChar {
-		return decoderData.addSpecialFile(header, parentDir, leafName)
+		return dd.addSpecialFile(header, parentDir, leafName)
 	} else if header.Typeflag == tar.TypeBlock {
-		return decoderData.addSpecialFile(header, parentDir, leafName)
+		return dd.addSpecialFile(header, parentDir, leafName)
 	} else if header.Typeflag == tar.TypeDir {
-		return decoderData.addDirectory(header, parentDir, leafName)
+		return dd.addDirectory(header, parentDir, leafName)
 	} else if header.Typeflag == tar.TypeFifo {
-		return decoderData.addSpecialFile(header, parentDir, leafName)
+		return dd.addSpecialFile(header, parentDir, leafName)
 	} else {
 		return fmt.Errorf("unsupported file type: %v", header.Typeflag)
 	}
 }
 
-func (decoderData *decoderData) addRegularFile(tarReader *tar.Reader,
+func (dd *decoderData) addRegularFile(tarReader *tar.Reader,
 	hasher Hasher, header *tar.Header, parent *filesystem.DirectoryInode,
 	name string) error {
-	var newInode filesystem.RegularInode
-	newInode.Mode = filesystem.FileMode((header.Mode & ^syscall.S_IFMT) |
-		syscall.S_IFREG)
-	newInode.Uid = uint32(header.Uid)
-	newInode.Gid = uint32(header.Gid)
-	newInode.MtimeNanoSeconds = int32(header.ModTime.Nanosecond())
-	newInode.MtimeSeconds = header.ModTime.Unix()
-	newInode.Size = uint64(header.Size)
+	newInode := filesystem.RegularInode{
+		Mode: filesystem.FileMode((header.Mode & ^syscall.S_IFMT) |
+			syscall.S_IFREG),
+		Uid:              uint32(header.Uid),
+		Gid:              uint32(header.Gid),
+		MtimeNanoSeconds: int32(header.ModTime.Nanosecond()),
+		MtimeSeconds:     header.ModTime.Unix(),
+		Size:             uint64(header.Size)}
 	if header.Size > 0 {
 		var err error
 		newInode.Hash, err = hasher.Hash(tarReader, uint64(header.Size))
@@ -119,51 +138,20 @@ func (decoderData *decoderData) addRegularFile(tarReader *tar.Reader,
 			return err
 		}
 	}
-	decoderData.addEntry(parent, header.Name, name, &newInode)
-	return nil
+	return dd.addInodeAndEntry(parent, header.Name, name, &newInode)
 }
 
-func (decoderData *decoderData) addDirectory(header *tar.Header,
-	parent *filesystem.DirectoryInode, name string) error {
-	var newInode filesystem.DirectoryInode
-	newInode.Mode = filesystem.FileMode((header.Mode & ^syscall.S_IFMT) |
-		syscall.S_IFDIR)
-	newInode.Uid = uint32(header.Uid)
-	newInode.Gid = uint32(header.Gid)
-	if header.Name == "/" {
-		*decoderData.directoryTable[header.Name] = newInode
-		return nil
-	}
-	decoderData.addEntry(parent, header.Name, name, &newInode)
-	decoderData.directoryTable[header.Name] = &newInode
-	return nil
-}
-
-func (decoderData *decoderData) addHardlink(header *tar.Header,
-	parent *filesystem.DirectoryInode, name string) error {
+func (dd *decoderData) addHardlink(header *tar.Header,
+	parent *filesystem.DirectoryInode, leafName string) error {
 	header.Linkname = normaliseFilename(header.Linkname)
-	if inum, ok := decoderData.inodeTable[header.Linkname]; ok {
-		var newEntry filesystem.DirectoryEntry
-		newEntry.Name = name
-		newEntry.InodeNumber = inum
-		parent.EntryList = append(parent.EntryList, &newEntry)
-	} else {
+	if inode, ok := dd.inodeTable[header.Linkname]; !ok {
 		return fmt.Errorf("missing hardlink target: %s", header.Linkname)
+	} else {
+		return dd.builder.AddDirectoryEntry(parent, leafName, inode)
 	}
-	return nil
 }
 
-func (decoderData *decoderData) addSymlink(header *tar.Header,
-	parent *filesystem.DirectoryInode, name string) error {
-	var newInode filesystem.SymlinkInode
-	newInode.Uid = uint32(header.Uid)
-	newInode.Gid = uint32(header.Gid)
-	newInode.Symlink = header.Linkname
-	decoderData.addEntry(parent, header.Name, name, &newInode)
-	return nil
-}
-
-func (decoderData *decoderData) addSpecialFile(header *tar.Header,
+func (dd *decoderData) addSpecialFile(header *tar.Header,
 	parent *filesystem.DirectoryInode, name string) error {
 	var newInode filesystem.SpecialInode
 	if header.Typeflag == tar.TypeChar {
@@ -187,23 +175,14 @@ func (decoderData *decoderData) addSpecialFile(header *tar.Header,
 			header.Devminor)
 	}
 	newInode.Rdev = uint64(header.Devmajor<<8 | header.Devminor)
-	decoderData.addEntry(parent, header.Name, name, &newInode)
-	return nil
+	return dd.addInodeAndEntry(parent, header.Name, name, &newInode)
 }
 
-func (decoderData *decoderData) addEntry(parent *filesystem.DirectoryInode,
-	fullName, name string, inode filesystem.GenericInode) {
-	var newEntry filesystem.DirectoryEntry
-	newEntry.Name = name
-	newEntry.InodeNumber = decoderData.nextInodeNumber
-	newEntry.SetInode(inode)
-	parent.EntryList = append(parent.EntryList, &newEntry)
-	decoderData.addInode(fullName, inode)
-}
-
-func (decoderData *decoderData) addInode(fullName string,
-	inode filesystem.GenericInode) {
-	decoderData.inodeTable[fullName] = decoderData.nextInodeNumber
-	decoderData.fileSystem.InodeTable[decoderData.nextInodeNumber] = inode
-	decoderData.nextInodeNumber++
+func (dd *decoderData) addSymlink(header *tar.Header,
+	parent *filesystem.DirectoryInode, name string) error {
+	newInode := filesystem.SymlinkInode{
+		Uid:     uint32(header.Uid),
+		Gid:     uint32(header.Gid),
+		Symlink: header.Linkname}
+	return dd.addInodeAndEntry(parent, header.Name, name, &newInode)
 }

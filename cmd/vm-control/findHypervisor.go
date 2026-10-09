@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
+	"github.com/Cloud-Foundations/Dominator/lib/net/util"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/fleetmanager"
 )
@@ -43,12 +44,16 @@ func findHypervisorClient(client *srpc.Client,
 }
 
 func lookupIP(vmHostname string) (net.IP, error) {
-	if ips, err := net.LookupIP(vmHostname); err != nil {
+	ips, err := net.LookupIP(vmHostname)
+	if err != nil {
 		return nil, err
-	} else if len(ips) != 1 {
-		return nil, fmt.Errorf("num IPs: %d != 1", len(ips))
+	}
+	// TODO(rgooch): change this once IPv6 support is added.
+	ipv4s, _ := util.SplitIPs(ips)
+	if len(ipv4s) != 1 {
+		return nil, fmt.Errorf("num IPv4s: %d != 1", len(ipv4s))
 	} else {
-		return ips[0], nil
+		return ipv4s[0], nil
 	}
 }
 

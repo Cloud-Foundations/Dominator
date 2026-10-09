@@ -34,8 +34,12 @@ var (
 	consoleType      hyper_proto.ConsoleType
 	cpuPriority      = flag.Int("cpuPriority", 0,
 		"CPU priority (-20:+19) for VM process on Hypervisor")
+	destroyOnDhcpTimeout = flag.Bool("destroyOnDhcpTimeout", false,
+		"If true, destroy newly created VM if DHCP timeout is reached")
 	destroyOnPowerdown = flag.Bool("destroyOnPowerdown", false,
 		"If true, destroy VM if it powers down internally")
+	destroyOnProbeTimeout = flag.Bool("destroyOnProbeTimeout", false,
+		"If true, destroy newly created VM if probe timeout is reached")
 	destroyProtection = flag.Bool("destroyProtection", false,
 		"If true, do not destroy running VM")
 	disableVirtIO = flag.Bool("disableVirtIO", false,
@@ -153,6 +157,8 @@ var (
 		"Name file containing user-data accessible from the metadata server")
 	virtualCPUs = flag.Uint("vCPUs", 0,
 		"virtual CPUs (default rounds up milliCPUs)")
+	virtualiserImageName = flag.String("virtualiserImageName", "",
+		"Optional name of image containing virtualiser programme. This is currently a privileged operation")
 	vmHostname    = flag.String("vmHostname", "", "Hostname for VM")
 	vmTags        tags.Tags
 	vmTagsToMatch tags.MatchTags
@@ -265,6 +271,7 @@ var subcommands = []commands.Command{
 	{"discard-vm-snapshot", "IPaddr", 1, 1, discardVmSnapshotSubcommand},
 	{"export-local-vm", "IPaddr", 1, 1, exportLocalVmSubcommand},
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
+	{"fetch-image", "", 0, 0, fetchImageSubcommand},
 	{"get-allocation-updates", "starting-position", 1, 1,
 		getAllocationUpdatesSubcommand},
 	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},

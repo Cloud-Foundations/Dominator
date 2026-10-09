@@ -10,7 +10,6 @@ import (
 	stdlog "log"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -95,6 +94,9 @@ func (stream *imageStreamType) getenv() map[string]string {
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
 	envTable["IMAGE_STREAM_LEAF_NAME"] = filepath.Base(stream.name)
+	for index, component := range strings.Split(stream.name, "/") {
+		envTable[fmt.Sprintf("IMAGE_STREAM_%d", index)] = component
+	}
 	return envTable
 }
 
@@ -250,9 +252,12 @@ func (stream *imageStreamType) getSourceImage(b *Builder, buildLog io.Writer) (
 	if err := json.Read(bytes.NewReader(manifestBytes), &manifest); err != nil {
 		return "", "", nil, nil, nil, err
 	}
+	vGetter := variablesGetter(stream.getenv()).copy()
+	expandedVariables := expandVariables(manifest.Variables, vGetter)
+	vGetter.merge(expandedVariables)
 	sourceImageName := expand.Expression(manifest.SourceImage,
 		func(name string) string {
-			return stream.getenv()[name]
+			return vGetter[name]
 		})
 	doRemove = false
 	return manifestDirectory, sourceImageName, gitInfo, manifestBytes,
@@ -270,14 +275,6 @@ func listDirectory(directoryName string) ([]string, error) {
 		return nil, err
 	}
 	return filenames, nil
-}
-
-func runCommand(buildLog io.Writer, cwd string, args ...string) error {
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = cwd
-	cmd.Stdout = buildLog
-	cmd.Stderr = buildLog
-	return cmd.Run()
 }
 
 func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
@@ -315,6 +312,11 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	if err != nil {
 		return nil, err
 	}
+	// Read unexpanded, to pick up the variables the manifest declares.
+	rawManifestConfig, err := readManifestFile(manifestDir, nil)
+	if err != nil {
+		return nil, err
+	}
 	rootDir, err := makeTempDirectory("",
 		strings.Replace(request.StreamName, "/", "_", -1)+".root")
 	if err != nil {
@@ -323,6 +325,9 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	defer os.RemoveAll(rootDir)
 	fmt.Fprintf(buildLog, "Created image working directory: %s\n", rootDir)
 	vGetter := variablesGetter(envGetter.getenv()).copy()
+	expandedVariables := expandVariables(rawManifestConfig.Variables,
+		vGetter)
+	vGetter.merge(expandedVariables)
 	vGetter.merge(request.Variables)
 	if gitInfo != nil {
 		vGetter.add("MANIFEST_GIT_COMMIT_ID", gitInfo.commitId)
