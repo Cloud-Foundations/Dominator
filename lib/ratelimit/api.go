@@ -108,10 +108,8 @@ type Limiter struct {
 	global     *rate.Limiter
 	perMethod  map[string]*rate.Limiter
 	perUserCfg PerUserPerMethodLimits
-
-	mutex   sync.Mutex
-	perUser map[userMethodType]*rate.Limiter
-
+	mutex      sync.Mutex
+	perUser    map[userMethodType]*rate.Limiter
 	countersMu sync.Mutex
 	counters   map[denialKey]*uint64
 	metricsDir *tricorder.DirectorySpec
@@ -134,16 +132,16 @@ func New(limits Limits, opts Options) (*Limiter, error) {
 	return newLimiter(limits, opts)
 }
 
-// Allow tests a request against the tiers in order, returning nil if it is
-// admitted. On denial it returns a *errors.ResourceExhaustedError naming the
-// method and the LimitType which denied it, which callers may forward
+// CheckAllowed tests a request against the tiers in order, returning nil if
+// it is admitted. On denial it returns a *errors.ResourceExhaustedError naming
+// the method and the LimitType which denied it, which callers may forward
 // directly: it carries a GrpcCode() of codes.ResourceExhausted.
 //
 // An empty username, or a true bypassPerUser (such as a caller with method
 // powers), skips the per-user-per-method tier; the others still apply.
-func (l *Limiter) Allow(method, username string, protocol Protocol,
+func (l *Limiter) CheckAllowed(method, username string, protocol Protocol,
 	bypassPerUser bool) error {
-	return l.allow(method, username, protocol, bypassPerUser)
+	return l.checkAllowed(method, username, protocol, bypassPerUser)
 }
 
 // DeniedCount returns the denials recorded for a (method, limitType,

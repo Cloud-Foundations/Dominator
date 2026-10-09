@@ -10,12 +10,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 )
 
-// Bounds the time l.mutex is held reclaiming buckets on the request path.
-const maxBucketsSwept = 16
-
 const (
 	limitTypeUnknown = "UNKNOWN LimitType"
-	protocolUnknown  = "UNKNOWN Protocol"
+	// Bounds the time l.mutex is held reclaiming buckets on the request path.
+	maxBucketsSwept = 16
+	protocolUnknown = "UNKNOWN Protocol"
 )
 
 var (
@@ -155,7 +154,7 @@ func newBucket(ml MethodLimit, label string) (*rate.Limiter, error) {
 	return rate.NewLimiter(rate.Limit(ml.RequestsPerSecond), ml.Burst), nil
 }
 
-func (l *Limiter) allow(method, username string, protocol Protocol,
+func (l *Limiter) checkAllowed(method, username string, protocol Protocol,
 	bypassPerUser bool) error {
 	if l.global != nil && !l.global.Allow() {
 		l.recordDenial(method, LimitTypeGlobal, protocol, username)
