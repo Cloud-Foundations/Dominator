@@ -8,7 +8,7 @@ import (
 )
 
 func chownDirectorySubcommand(args []string, logger log.DebugLogger) error {
-	imageSClient, _ := getClients()
+	imageSClient, _ := getMasterClients()
 	if err := client.ChownDirectory(imageSClient, args[0],
 		args[1]); err != nil {
 		return fmt.Errorf("error changing directory ownership: %s", err)
