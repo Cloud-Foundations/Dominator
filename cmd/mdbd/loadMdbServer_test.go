@@ -7,16 +7,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
-
-func newTestMdbServerGenerator() *mdbServerGeneratorType {
-	return &mdbServerGeneratorType{
-		logger:    nulllogger.New(),
-		mdbServer: "test",
-		machines:  make(map[string]mdb.Machine),
-	}
-}
 
 func checkMdb(t *testing.T, gotMdb *mdbType, want ...mdb.Machine) {
 	t.Helper()
@@ -62,55 +53,6 @@ func waitForWaitGroup(t *testing.T, waitGroup *sync.WaitGroup) {
 	case <-time.After(time.Second * 5):
 		t.Fatal("timed out waiting for first update")
 	}
-}
-
-func TestGeneratorUpdate(t *testing.T) {
-	g := newTestMdbServerGenerator()
-	g.update(mdbserver.MdbUpdate{
-		MachinesToAdd: []mdb.Machine{
-			makeMachine("host-a", "dc1"),
-			makeMachine("host-b", "dc1"),
-		},
-	}, true)
-	g.update(mdbserver.MdbUpdate{
-		MachinesToAdd:    []mdb.Machine{makeMachine("host-c", "dc1")},
-		MachinesToUpdate: []mdb.Machine{makeMachine("host-a", "dc2")},
-		MachinesToDelete: []string{"host-b"},
-	}, false)
-	checkMdb(t, g.generate(),
-		makeMachine("host-a", "dc2"), makeMachine("host-c", "dc1"))
-}
-
-func TestGeneratorInitialUpdateReplaces(t *testing.T) {
-	g := newTestMdbServerGenerator()
-	g.update(mdbserver.MdbUpdate{
-		MachinesToAdd: []mdb.Machine{
-			makeMachine("host-a", "dc1"),
-			makeMachine("host-b", "dc1"),
-		},
-	}, true)
-	// After a reconnect, machines missing from the new dump must go.
-	g.update(mdbserver.MdbUpdate{
-		MachinesToAdd: []mdb.Machine{makeMachine("host-b", "dc1")},
-	}, true)
-	checkMdb(t, g.generate(), makeMachine("host-b", "dc1"))
-	g.update(mdbserver.MdbUpdate{}, true)
-	checkMdb(t, g.generate())
-}
-
-func TestGeneratorGenerateReturnsCopies(t *testing.T) {
-	g := newTestMdbServerGenerator()
-	g.update(mdbserver.MdbUpdate{
-		MachinesToAdd: []mdb.Machine{
-			makeMachine("host-a", "dc1"),
-			makeMachine("host-b", "dc1"),
-		},
-	}, true)
-	for _, machine := range g.generate().Machines {
-		machine.Location = "modified"
-	}
-	checkMdb(t, g.generate(),
-		makeMachine("host-a", "dc1"), makeMachine("host-b", "dc1"))
 }
 
 func startTestGenerator(t *testing.T, args ...string) (generator,
@@ -161,4 +103,28 @@ func TestGeneratorFollowsServer(t *testing.T) {
 	checkMdb(t, generateMdb(t, full), makeMachine("host-a", "dc2"),
 		makeMachine("host-b", "dc1/rack1"))
 	checkMdb(t, generateMdb(t, filtered), makeMachine("host-b", "dc1/rack1"))
+}
+
+func TestGeneratorGenerateReturnsCopies(t *testing.T) {
+	rpcObj, address := startTestServer(t)
+	rpcObj.pushUpdateToAll(nil,
+		makeMdb(makeMachine("host-a", "dc1"), makeMachine("host-b", "dc1")))
+	g, _ := startTestGenerator(t, address)
+	for _, machine := range generateMdb(t, g).Machines {
+		machine.Location = "modified"
+	}
+	checkMdb(t, generateMdb(t, g),
+		makeMachine("host-a", "dc1"), makeMachine("host-b", "dc1"))
+}
+
+func TestGeneratorEmptyFilteredMdb(t *testing.T) {
+	rpcObj, address := startTestServer(t)
+	mdb1 := makeMdb(makeMachine("host-a", "dc1"))
+	rpcObj.pushUpdateToAll(nil, mdb1)
+	g, events := startTestGenerator(t, address, "dc2")
+	checkMdb(t, generateMdb(t, g))
+	mdb2 := makeMdb(makeMachine("host-a", "dc2"))
+	rpcObj.pushUpdateToAll(mdb1, mdb2)
+	waitForEvent(t, events)
+	checkMdb(t, generateMdb(t, g), makeMachine("host-a", "dc2"))
 }

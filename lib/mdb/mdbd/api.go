@@ -26,6 +26,7 @@ type Config struct {
 	MdbFileName       string
 	MdbServerHostname string
 	MdbServerPortNum  uint
+	Locations         []string
 }
 
 type Params struct {
@@ -67,7 +68,8 @@ func StartMdbDaemon(mdbFileName string, logger log.Logger) <-chan *mdb.Mdb {
 // file is read only once at startup, and is replaced when MDB updates are
 // received. The file acts as a local cache of the MDB data received from the
 // server, in case the MDB server is not available at a subsequent restart of
-// the application.
+// the application. If config.Locations is not empty, only machines in or below
+// those locations are requested from the MDB server.
 //
 // The params.Logger will be used to log problems.
 func StartMdbDaemon2(config Config, params Params) <-chan *mdb.Mdb {

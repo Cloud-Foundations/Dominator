@@ -24,7 +24,7 @@ func startMdbDaemon(config Config, params Params) <-chan *mdb.Mdb {
 	mdbChannel := make(chan *mdb.Mdb, 1)
 	if config.MdbServerHostname != "" && config.MdbServerPortNum > 0 {
 		go serverWatchDaemon(config.MdbServerHostname, config.MdbServerPortNum,
-			config.MdbFileName, mdbChannel, params.Logger)
+			config.Locations, config.MdbFileName, mdbChannel, params.Logger)
 	} else {
 		go fileWatchDaemon(config.MdbFileName, mdbChannel, params.Logger)
 	}
@@ -58,7 +58,8 @@ func fileWatchDaemon(mdbFileName string, mdbChannel chan<- *mdb.Mdb,
 }
 
 func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
-	mdbFileName string, mdbChannel chan<- *mdb.Mdb, logger log.DebugLogger) {
+	locations []string, mdbFileName string, mdbChannel chan<- *mdb.Mdb,
+	logger log.DebugLogger) {
 	var lastMdb *mdb.Mdb
 	if mdbData := readFile(mdbFileName, logger); mdbData != nil {
 		mdbChannel <- mdbData
@@ -71,7 +72,7 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 			logger.Println(err)
 			continue
 		}
-		conn, err := client.Call("MdbServer.GetMdbUpdates")
+		conn, err := callGetMdbUpdates(client, locations)
 		if err != nil {
 			logger.Println(err)
 			client.Close()
@@ -111,6 +112,25 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 		conn.Close()
 		client.Close()
 	}
+}
+
+func callGetMdbUpdates(client *srpc.Client,
+	locations []string) (*srpc.Conn, error) {
+	if len(locations) < 1 {
+		return client.Call("MdbServer.GetMdbUpdates")
+	}
+	conn, err := client.Call("MdbServer.GetFilteredMdbUpdates")
+	if err != nil {
+		return nil, err
+	}
+	request := mdbserver.GetFilteredMdbUpdatesRequest{Locations: locations}
+	if err := conn.Encode(request); err != nil {
+		return nil, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
 func loadFile(reader io.Reader, filename string, logger log.Logger) *mdb.Mdb {
