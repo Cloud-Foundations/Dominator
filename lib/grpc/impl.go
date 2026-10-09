@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"strings"
 	"time"
 
@@ -15,15 +16,12 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
 
-type connKeyType struct{}
+type authInfoKeyType struct{}
 
-var connKey = connKeyType{}
+var authInfoKey = authInfoKeyType{}
 
 var publicMethods = make(map[string]struct{})
 var unauthenticatedMethods = make(map[string]struct{})
-
-// Interface check.
-var _ srpc.AuthConn = (*Conn)(nil)
 
 // wrappedStream overrides Context to include auth info.
 type wrappedStream struct {
@@ -35,54 +33,120 @@ func (w *wrappedStream) Context() context.Context {
 	return w.ctx
 }
 
-func authoriseRequest(ctx context.Context, fullMethod string) (context.Context, error) {
-	_, isPublic := publicMethods[fullMethod]
-	_, isUnauthenticated := unauthenticatedMethods[fullMethod]
-	if isUnauthenticated {
-		return ContextWithConn(ctx, &Conn{}), nil
+func authInfoFromContext(ctx context.Context) *AuthInfo {
+	if v := ctx.Value(authInfoKey); v != nil {
+		return v.(*AuthInfo)
 	}
-	conn, err := buildAuthConn(ctx)
+	return nil
+}
+
+func contextWithAuthInfo(ctx context.Context,
+	authInfo *AuthInfo) context.Context {
+	return context.WithValue(ctx, authInfoKey, authInfo)
+}
+
+func (a *AuthInfo) getAuthInformation() *srpc.AuthInformation {
+	if a == nil {
+		return nil
+	}
+	return a.authInformation
+}
+
+func registerServiceOptions(serviceName string, options ServiceOptions) {
+	allMethods := make(map[string]struct{})
+	for _, method := range options.PublicMethods {
+		fullMethod := "/" + serviceName + "/" + method
+		publicMethods[fullMethod] = struct{}{}
+		allMethods[fullMethod] = struct{}{}
+	}
+	for _, method := range options.UnauthenticatedMethods {
+		fullMethod := "/" + serviceName + "/" + method
+		unauthenticatedMethods[fullMethod] = struct{}{}
+		allMethods[fullMethod] = struct{}{}
+	}
+	registerMethodMetrics(serviceName, allMethods)
+}
+
+func streamAuthInterceptor(srv interface{}, ss grpc.ServerStream,
+	info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	ctx, err := authoriseRequest(ss.Context(), info.FullMethod)
+	if err != nil {
+		return err
+	}
+	wrapped := &wrappedStream{ServerStream: ss, ctx: ctx}
+	recordCallStart()
+	startTime := time.Now()
+	defer func() {
+		if r := recover(); r != nil {
+			recordPanic()
+			panic(r)
+		}
+	}()
+	err = handler(srv, wrapped)
+	recordCallEnd(info.FullMethod, startTime, err)
+	return err
+}
+
+func unaryAuthInterceptor(ctx context.Context, req interface{},
+	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	ctx, err := authoriseRequest(ctx, info.FullMethod)
 	if err != nil {
 		return nil, err
 	}
-	if conn.GetAuthInformation() == nil {
-		return nil, status.Error(codes.Unauthenticated, "no auth information")
+	recordCallStart()
+	startTime := time.Now()
+	defer func() {
+		if r := recover(); r != nil {
+			recordPanic()
+			panic(r)
+		}
+	}()
+	resp, err := handler(ctx, req)
+	recordCallEnd(info.FullMethod, startTime, err)
+	return resp, err
+}
+
+func authoriseRequest(ctx context.Context,
+	fullMethod string) (context.Context, error) {
+	_, isPublic := publicMethods[fullMethod]
+	_, isUnauthenticated := unauthenticatedMethods[fullMethod]
+	if isUnauthenticated {
+		return contextWithAuthInfo(ctx, &AuthInfo{}), nil
 	}
-	srpcMethod := grpcToSrpcMethod(fullMethod)
-	authorised, haveMethodAccess := srpc.CheckAuthorisation(srpcMethod, conn,
-		srpc.GetDefaultGrantMethod(), isPublic, false)
+	tlsState, err := tlsStateFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	authInformation, authorised, err := srpc.CheckTlsAuthorisation(
+		grpcToSrpcMethod(fullMethod), tlsState,
+		!doNotUseMethodPowersFromMetadata(ctx), isPublic)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
 	if !authorised {
 		recordDeniedCall(fullMethod)
 		return nil, status.Error(codes.PermissionDenied, "call on "+fullMethod)
 	}
-	conn.GetAuthInformation().HaveMethodAccess = haveMethodAccess
-	return ContextWithConn(ctx, conn), nil
+	return contextWithAuthInfo(ctx,
+		&AuthInfo{authInformation: authInformation}), nil
 }
 
-func buildAuthConn(ctx context.Context) (*Conn, error) {
+func tlsStateFromContext(ctx context.Context) (tls.ConnectionState, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "no peer info in context")
+		return tls.ConnectionState{},
+			status.Error(codes.Unauthenticated, "no peer info in context")
 	}
 	if p.AuthInfo == nil {
-		return nil, status.Error(codes.Unauthenticated, "no TLS auth info")
+		return tls.ConnectionState{},
+			status.Error(codes.Unauthenticated, "no TLS auth info")
 	}
 	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "unexpected auth info type")
+		return tls.ConnectionState{},
+			status.Error(codes.Unauthenticated, "unexpected auth info type")
 	}
-	username, permittedMethods, groupList, err := srpc.GetAuth(tlsInfo.State)
-	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, err.Error())
-	}
-	return &Conn{
-		authInfo: &srpc.AuthInformation{
-			Username:  username,
-			GroupList: groupList,
-		},
-		permittedMethods:  permittedMethods,
-		allowMethodPowers: !doNotUseMethodPowersFromMetadata(ctx),
-	}, nil
+	return tlsInfo.State, nil
 }
 
 // doNotUseMethodPowersFromMetadata returns true if the incoming request

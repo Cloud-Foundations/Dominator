@@ -496,7 +496,7 @@ func httpHandler(w http.ResponseWriter, req *http.Request, doTls bool,
 		}
 		myConn.isEncrypted = true
 		myConn.username, myConn.permittedMethods, myConn.groupList, err =
-			GetAuth(tlsConn.ConnectionState())
+			getAuth(tlsConn.ConnectionState())
 		if err != nil {
 			logger.Println(err)
 			return
@@ -532,9 +532,7 @@ func checkVerifiedChains(verifiedChains [][]*x509.Certificate,
 	return false
 }
 
-// GetAuth extracts authentication information from a TLS connection state.
-// Returns username, permitted methods, group list, and any error.
-func GetAuth(state tls.ConnectionState) (string, map[string]struct{},
+func getAuth(state tls.ConnectionState) (string, map[string]struct{},
 	map[string]struct{}, error) {
 	var username string
 	permittedMethods := make(map[string]struct{})
@@ -647,12 +645,14 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	if !ok {
 		return nil, errors.New(serviceName + ": unknown method: " + methodName)
 	}
-	grantMethod := func(_ string, auth *AuthInformation) bool {
-		return receiver.grantMethod(serviceName, auth)
+	grantMethod := func(_ string, authInfo *AuthInformation) bool {
+		return receiver.grantMethod(serviceName, authInfo)
 	}
 	var authorised bool
-	authorised, conn.haveMethodAccess = CheckAuthorisation(serviceMethod, conn,
-		grantMethod, method.public, method.unauthenticatedPermitted)
+	authorised, conn.haveMethodAccess = checkAuthorisation(serviceMethod,
+		conn.getAuthInformation(), conn.permittedMethods,
+		conn.allowMethodPowers, grantMethod, method.public,
+		method.unauthenticatedPermitted)
 	if !authorised {
 		method.metricsMutex.Lock()
 		method.numDeniedCalls++
@@ -670,17 +670,16 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 
 // checkMethodAccess implements the built-in authorisation checks. It returns
 // true if the method is permitted, else false if denied.
-func checkMethodAccess(methodName string, conn AuthConn) bool {
-	permittedMethods := conn.GetPermittedMethods()
+func checkMethodAccess(serviceMethod string, authInfo *AuthInformation,
+	permittedMethods map[string]struct{}) bool {
 	if permittedMethods == nil {
 		return true
 	}
 	for sm := range permittedMethods {
-		if matched, _ := filepath.Match(sm, methodName); matched {
+		if matched, _ := filepath.Match(sm, serviceMethod); matched {
 			return true
 		}
 	}
-	authInfo := conn.GetAuthInformation()
 	if authInfo != nil && authInfo.Username != "" {
 		if _, ok := srpcTrustedUsers[authInfo.Username]; ok {
 			return true
@@ -707,17 +706,16 @@ func checkMethodAccess(methodName string, conn AuthConn) bool {
 	return false
 }
 
-// CheckAuthorisation checks if access should be granted.
-func CheckAuthorisation(methodName string, conn AuthConn,
-	grantMethod func(string, *AuthInformation) bool,
-	isPublic, isUnauthenticated bool) (authorised, haveMethodAccess bool) {
-
-	authInfo := conn.GetAuthInformation()
-	if conn.AllowMethodPowers() && checkMethodAccess(methodName, conn) {
+func checkAuthorisation(serviceMethod string, authInfo *AuthInformation,
+	permittedMethods map[string]struct{}, allowMethodPowers bool,
+	grantMethod func(serviceMethod string, authInfo *AuthInformation) bool,
+	isPublic, isUnauthenticated bool) (bool, bool) {
+	if allowMethodPowers &&
+		checkMethodAccess(serviceMethod, authInfo, permittedMethods) {
 		return true, true
 	}
-	if conn.AllowMethodPowers() &&
-		grantMethod != nil && grantMethod(methodName, authInfo) {
+	if allowMethodPowers &&
+		grantMethod != nil && grantMethod(serviceMethod, authInfo) {
 		return true, true
 	}
 	if isPublic && authInfo != nil && authInfo.Username != "" {
@@ -727,6 +725,23 @@ func CheckAuthorisation(methodName string, conn AuthConn,
 		return true, false
 	}
 	return false, false
+}
+
+func checkTlsAuthorisation(serviceMethod string, state tls.ConnectionState,
+	allowMethodPowers, isPublic bool) (*AuthInformation, bool, error) {
+	username, permittedMethods, groupList, err := getAuth(state)
+	if err != nil {
+		return nil, false, err
+	}
+	authInfo := &AuthInformation{
+		GroupList: groupList,
+		Username:  username,
+	}
+	authorised, haveMethodAccess := checkAuthorisation(serviceMethod,
+		authInfo, permittedMethods, allowMethodPowers, defaultGrantMethod,
+		isPublic, false)
+	authInfo.HaveMethodAccess = haveMethodAccess
+	return authInfo, authorised, nil
 }
 
 func listMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {

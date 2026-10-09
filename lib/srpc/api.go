@@ -104,6 +104,15 @@ var (
 	srpcTrustedUsers  flagutil.StringSet
 )
 
+// CheckTlsAuthorisation applies the SRPC method access checks to a client
+// with the given TLS state. It returns the client's authentication
+// information and true if the call is authorised.
+func CheckTlsAuthorisation(serviceMethod string, state tls.ConnectionState,
+	allowMethodPowers, isPublic bool) (*AuthInformation, bool, error) {
+	return checkTlsAuthorisation(serviceMethod, state, allowMethodPowers,
+		isPublic)
+}
+
 // CheckTlsRequired returns true if the server requires TLS connections with
 // trusted certificates. It returns false if unencrypted or unauthenticated
 // connections are permitted (i.e. insecure mode).
@@ -174,13 +183,6 @@ type Decoder interface {
 
 type Encoder interface {
 	Encode(e interface{}) error
-}
-
-// AuthConn defines the interface for authorisation checks.
-type AuthConn interface {
-	GetAuthInformation() *AuthInformation
-	GetPermittedMethods() map[string]struct{}
-	AllowMethodPowers() bool
 }
 
 type FakeClientOptions struct{}
@@ -274,11 +276,6 @@ type ClientResource struct {
 func SetDefaultGrantMethod(grantMethod func(serviceMethod string,
 	authInfo *AuthInformation) bool) {
 	defaultGrantMethod = grantMethod
-}
-
-// GetDefaultGrantMethod returns the default grant method for all receivers.
-func GetDefaultGrantMethod() func(serviceMethod string, authInfo *AuthInformation) bool {
-	return defaultGrantMethod
 }
 
 // SetDefaultLogger will override the default logger used.
@@ -550,16 +547,6 @@ func (conn *Conn) RequestReply(request interface{}, reply interface{}) error {
 // connection, then Username will panic.
 func (conn *Conn) Username() string {
 	return conn.getUsername()
-}
-
-// GetPermittedMethods returns the methods permitted by the client certificate.
-func (conn *Conn) GetPermittedMethods() map[string]struct{} {
-	return conn.permittedMethods
-}
-
-// AllowMethodPowers returns true if the client has method powers.
-func (conn *Conn) AllowMethodPowers() bool {
-	return conn.allowMethodPowers
 }
 
 type ReceiverOptions struct {
