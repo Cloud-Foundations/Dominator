@@ -503,11 +503,18 @@ func upgradeHypervisors(fleetManagerClientResource *srpc.ClientResource,
 func (h *hypervisorType) getFailingHealthChecks(
 	cpuSharer *cpusharer.FifoCpuSharer,
 	timeout time.Duration) ([]string, time.Time, error) {
+	var err error
+	var list []string
+	var timestamp time.Time
 	stopTime := time.Now().Add(timeout)
 	for ; time.Until(stopTime) >= 0; cpuSharer.Sleep(time.Second) {
-		if list, timestamp, err := h.getFailingHealthChecksOnce(); err == nil {
-			return list, timestamp, nil
+		list, timestamp, err = h.getFailingHealthChecksOnce()
+		if len(list) < 1 && err == nil {
+			return nil, timestamp, nil
 		}
+	}
+	if len(list) > 0 {
+		return list, timestamp, nil
 	}
 	return nil, time.Time{}, errors.New("timed out getting health status")
 }
@@ -555,6 +562,21 @@ func (h *hypervisorType) getLastImageName(cpuSharer *cpusharer.FifoCpuSharer) (
 	return reply.LastSuccessfulImageName, nil
 }
 
+func (h *hypervisorType) runCommand(command string, environ []string) error {
+	if command == "" {
+		return nil
+	}
+	cmd := exec.Command(command, h.hostname)
+	cmd.Env = environ
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %s", command, err)
+	}
+	h.logger.Debugf(0, "%s completed sucessfully\n", command)
+	return nil
+}
+
 func (h *hypervisorType) updateTagForHypervisor(
 	clientResource *srpc.ClientResource, key, value string) error {
 	newTags := h.initialTags.Copy()
@@ -596,21 +618,24 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 			h.initialUnhealthyList[failed] = struct{}{}
 		}
 	}
-	if *preUpdateCommand != "" {
-		cmd := exec.Command(*preUpdateCommand, h.hostname)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %s", *preUpdateCommand, err)
-		}
-		h.logger.Debugf(0, "%s completed sucessfully\n", *preUpdateCommand)
+	// Construct environment for subprocesses.
+	commandEnviron := os.Environ()
+	commandEnviron = append(commandEnviron, "IMAGE_NAME="+imageName)
+	if *location != "" {
+		commandEnviron = append(commandEnviron, "LOCATION="+*location)
+	}
+	if err := h.runCommand(*preUpdateCommand, commandEnviron); err != nil {
+		return err
 	}
 	h.logger.Debugln(0, "upgrading")
 	err = h.updateTagForHypervisor(clientResource, "RequiredImage", imageName)
 	if err != nil {
 		return err
 	}
-	stopTime := time.Now().Add(time.Minute * 15)
+	if err := h.runCommand(*postTagCommand, commandEnviron); err != nil {
+		return err
+	}
+	stopTime := time.Now().Add(*updateTimeout)
 	updateCompleted := false
 	var lastError string
 	for ; time.Until(stopTime) > 0; cpuSharer.Sleep(time.Second) {
@@ -636,19 +661,13 @@ func (h *hypervisorType) upgrade(clientResource *srpc.ClientResource,
 	} else {
 		for _, entry := range list {
 			if _, ok := h.initialUnhealthyList[entry]; !ok {
-				return fmt.Errorf("health check failed: %s:", entry)
+				return fmt.Errorf("health check failed: %s", entry)
 			}
 		}
 	}
 	h.logger.Debugln(0, "still healthy")
-	if *postUpdateCommand != "" {
-		cmd := exec.Command(*postUpdateCommand, h.hostname)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %s", *postUpdateCommand, err)
-		}
-		h.logger.Debugf(0, "%s completed sucessfully\n", *postUpdateCommand)
+	if err := h.runCommand(*postUpdateCommand, commandEnviron); err != nil {
+		return err
 	}
 	return nil
 }

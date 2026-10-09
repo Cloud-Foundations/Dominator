@@ -324,6 +324,11 @@ func (m *Manager) ExportLocalVm(authInfo *srpc.AuthInformation,
 	return m.exportLocalVm(authInfo, request)
 }
 
+func (m *Manager) FetchImage(searchName string, imageTimeout time.Duration) (
+	proto.FetchImageResponse, error) {
+	return m.fetchImage(searchName, imageTimeout)
+}
+
 // Flush will flush any pending state changes to persistent storage (e.g.
 // object cache LRU).
 func (m *Manager) Flush() error {

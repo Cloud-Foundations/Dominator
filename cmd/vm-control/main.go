@@ -271,6 +271,7 @@ var subcommands = []commands.Command{
 	{"discard-vm-snapshot", "IPaddr", 1, 1, discardVmSnapshotSubcommand},
 	{"export-local-vm", "IPaddr", 1, 1, exportLocalVmSubcommand},
 	{"export-virsh-vm", "IPaddr", 1, 1, exportVirshVmSubcommand},
+	{"fetch-image", "", 0, 0, fetchImageSubcommand},
 	{"get-allocation-updates", "starting-position", 1, 1,
 		getAllocationUpdatesSubcommand},
 	{"get-hypervisors", "", 0, 0, getHypervisorsSubcommand},

@@ -71,6 +71,7 @@ Some of the sub-commands available are:
 - **make-raw-image**: make a bootable RAW image from an image
 - **match-triggers**: match a path to a triggers file
 - **merge-filters**: merge filter files
+- **merge-images**: merge images
 - **merge-triggers**: merge trigger files
 - **mkdir**: make a directory
 - **patch-directory**: patch (update) a local directory with an image

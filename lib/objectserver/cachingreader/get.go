@@ -23,17 +23,12 @@ const (
 )
 
 type objectsReader struct {
-	downloadedObjects  uint
-	downloadedBytes    uint64
 	completionChannels map[<-chan struct{}]chan<- struct{}
 	objectsToRead      []*objectType // nil: read from upstream, no caching.
 	objectClient       *client.ObjectClient
 	objectsReader      objectserver.FullObjectsReader
 	objSrv             *ObjectServer
-	totalBytes         uint64
-	totalObjects       uint
-	waitedObjects      uint
-	waitedBytes        uint64
+	ObjectsReaderStats
 }
 
 type readerObject struct {
@@ -62,28 +57,30 @@ func saveObject(filename string,
 	}
 }
 
-func (objSrv *ObjectServer) fetchObjects(hashes []hash.Hash) error {
+func (objSrv *ObjectServer) fetchObjects(hashes []hash.Hash) (
+	ObjectsReaderStats, error) {
 	or, err := objSrv.getObjects(hashes)
 	if err != nil {
-		return err
+		return ObjectsReaderStats{}, err
 	}
+	defer or.Close()
 	for range hashes {
 		length, reader, err := or.nextObject(true)
 		if err != nil {
-			return err
+			return ObjectsReaderStats{}, err
 		}
 		if reader != nil {
 			_, err := io.CopyN(ioutil.Discard, reader, int64(length))
 			if err != nil {
 				reader.Close()
-				return err
+				return ObjectsReaderStats{}, err
 			}
 			if err := reader.Close(); err != nil {
-				return err
+				return ObjectsReaderStats{}, err
 			}
 		}
 	}
-	return nil
+	return or.ObjectsReaderStats, nil
 }
 
 func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
@@ -158,9 +155,9 @@ func (objSrv *ObjectServer) getStats(grabLock bool) Stats {
 func (or *objectsReader) Close() error {
 	or.objSrv.params.Logger.Printf(
 		"objectcache: total: %d (%s), downloaded: %d (%s), waited: %d (%s)\n",
-		or.totalObjects, format.FormatBytes(or.totalBytes),
-		or.downloadedObjects, format.FormatBytes(or.downloadedBytes),
-		or.waitedObjects, format.FormatBytes(or.waitedBytes))
+		or.TotalObjects, format.FormatBytes(or.TotalBytes),
+		or.DownloadedObjects, format.FormatBytes(or.DownloadedBytes),
+		or.WaitedObjects, format.FormatBytes(or.WaitedBytes))
 	timeoutFunction(or.objSrv.rwLock.Lock, time.Second*10)
 	for _, object := range or.objectsToRead {
 		if object != nil {
@@ -222,24 +219,24 @@ func (or *objectsReader) nextObject(skipOpen bool) (
 			if err != nil {
 				return 0, nil, err
 			}
-			or.downloadedObjects++
-			or.downloadedBytes += object.size
+			or.DownloadedObjects++
+			or.DownloadedBytes += object.size
 		} else { // Someone else is the downloader.
 			<-downloadingChannel // It's still downloading: wait.
-			or.waitedObjects++
-			or.waitedBytes += object.size
+			or.WaitedObjects++
+			or.WaitedBytes += object.size
 		}
 	}
 	if skipOpen {
-		or.totalObjects++
-		or.totalBytes += object.size
+		or.TotalObjects++
+		or.TotalBytes += object.size
 		return object.size, nil, nil
 	}
 	if file, err := os.Open(filename); err != nil {
 		return 0, nil, err
 	} else {
-		or.totalObjects++
-		or.totalBytes += object.size
+		or.TotalObjects++
+		or.TotalBytes += object.size
 		return object.size, &readerObject{object, file, or.objSrv}, nil
 	}
 }

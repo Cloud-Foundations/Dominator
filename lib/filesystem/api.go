@@ -102,6 +102,12 @@ func (fs *FileSystem) FilterUsingReference(reference *FileSystem) *FileSystem {
 	return fs.filterUsingReference(reference)
 }
 
+func (fs *FileSystem) ForEachDirectory(
+	fn func(name string, inodeNumber uint64,
+		inode *DirectoryInode) error) error {
+	return fs.forEachDirectory(fn)
+}
+
 func (fs *FileSystem) ForEachFile(
 	fn func(name string, inodeNumber uint64, inode GenericInode) error) error {
 	return fs.forEachFile(fn)
@@ -153,7 +159,7 @@ func (fs *FileSystem) String() string {
 
 type DirectoryInode struct {
 	EntryList     []*DirectoryEntry
-	EntriesByName map[string]*DirectoryEntry
+	EntriesByName map[string]*DirectoryEntry // Never save this.
 	Mode          FileMode
 	Uid           uint32
 	Gid           uint32
@@ -386,7 +392,12 @@ func CompareDirectoryEntries(left, right *DirectoryEntry,
 
 func CompareInodes(left, right GenericInode, logWriter io.Writer) (
 	sameType, sameMetadata, sameData bool) {
-	return compareInodes(left, right, logWriter)
+	return compareInodes(left, right, false, logWriter)
+}
+
+func CompareInodesIgnoreMtimes(left, right GenericInode, logWriter io.Writer) (
+	sameType, sameMetadata, sameData bool) {
+	return compareInodes(left, right, true, logWriter)
 }
 
 func CompareRegularInodes(left, right *RegularInode, logWriter io.Writer) bool {
@@ -395,7 +406,7 @@ func CompareRegularInodes(left, right *RegularInode, logWriter io.Writer) bool {
 
 func CompareRegularInodesMetadata(left, right *RegularInode,
 	logWriter io.Writer) bool {
-	return compareRegularInodesMetadata(left, right, logWriter)
+	return compareRegularInodesMetadata(left, right, false, logWriter)
 }
 
 func CompareRegularInodesData(left, right *RegularInode,
@@ -423,7 +434,7 @@ func CompareSpecialInodes(left, right *SpecialInode, logWriter io.Writer) bool {
 
 func CompareSpecialInodesMetadata(left, right *SpecialInode,
 	logWriter io.Writer) bool {
-	return compareSpecialInodesMetadata(left, right, logWriter)
+	return compareSpecialInodesMetadata(left, right, false, logWriter)
 }
 
 func CompareSpecialInodesData(left, right *SpecialInode,

@@ -562,6 +562,23 @@ func exportLocalVm(client srpc.ClientI, ipAddr net.IP,
 	return reply.VmInfo, nil
 }
 
+func fetchImage(client srpc.ClientI, searchName string, timeout time.Duration) (
+	proto.FetchImageResponse, error) {
+	request := proto.FetchImageRequest{
+		ImageTimeout: timeout,
+		SearchName:   searchName,
+	}
+	var reply proto.FetchImageResponse
+	err := client.RequestReply("Hypervisor.FetchImage", request, &reply)
+	if err != nil {
+		return proto.FetchImageResponse{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.FetchImageResponse{}, err
+	}
+	return reply, nil
+}
+
 func getCapacity(client srpc.ClientI) (proto.GetCapacityResponse, error) {
 	request := proto.GetCapacityRequest{}
 	var reply proto.GetCapacityResponse

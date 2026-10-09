@@ -93,9 +93,16 @@ func getBootDirectory(fs *filesystem.FileSystem) (
 	if !ok {
 		return nil, errors.New("missing /boot directory")
 	}
-	bootDirectory, ok := dirent.Inode().(*filesystem.DirectoryInode)
+	inode := dirent.Inode()
+	if inode == nil {
+		_, ok := fs.InodeTable[dirent.InodeNumber]
+		return nil,
+			fmt.Errorf("no inode for /boot dirent, inum: %d, in table: %v",
+				dirent.InodeNumber, ok)
+	}
+	bootDirectory, ok := inode.(*filesystem.DirectoryInode)
 	if !ok {
-		return nil, errors.New("/boot is not a directory")
+		return nil, fmt.Errorf("/boot is not a directory, type: %T", inode)
 	}
 	return bootDirectory, nil
 }

@@ -200,12 +200,8 @@ func readManifestFile(manifestDir string, envGetter environmentGetter) (
 		func(name string) string {
 			return envGetter.getenv()[name]
 		})
-	for key, value := range manifestConfig.SourceImageBuildVariables {
-		newValue := expand.Expression(value, func(name string) string {
-			return envGetter.getenv()[name]
-		})
-		manifestConfig.SourceImageBuildVariables[key] = newValue
-	}
+	manifestConfig.SourceImageBuildVariables = expandVariables(
+		manifestConfig.SourceImageBuildVariables, envGetter)
 	manifestConfig.SourceImageGitCommitId = expand.Expression(
 		manifestConfig.SourceImageGitCommitId,
 		func(name string) string {
@@ -506,11 +502,11 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		startTime := time.Now()
 		err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 			packagerPathname, "run", filepath.Join("/.scripts", name))
-		if err != nil {
-			return errors.New("error running script: " + name + ": " +
-				err.Error())
-		}
 		timeTaken := time.Since(startTime)
+		if err != nil {
+			return fmt.Errorf("error running script: %s: %s: took %s",
+				name, err, format.Duration(timeTaken))
+		}
 		fmt.Fprintf(buildLog, "Script: %s took %s\n",
 			name, format.Duration(timeTaken))
 		fmt.Fprintln(buildLog,

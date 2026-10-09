@@ -10,16 +10,16 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
 	github.com/pin/tftp v2.1.0+incompatible
-	golang.org/x/crypto v0.52.0
-	golang.org/x/net v0.55.0
-	golang.org/x/sys v0.45.0
+	golang.org/x/crypto v0.55.0
+	golang.org/x/net v0.58.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/time v0.15.0
-	google.golang.org/grpc v1.82.1
+	google.golang.org/grpc v1.83.2
 )
 
 require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	golang.org/x/term v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	golang.org/x/term v0.45.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

@@ -22,7 +22,6 @@ import (
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
-	imclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -32,7 +31,6 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
-	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/images/qcow2"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
@@ -59,7 +57,10 @@ import (
 )
 
 const (
+	initrdLeafFilename   = "initrd"
+	kernelLeafFilename   = "kernel"
 	lastPatchLogFilename = "lastPatchLog"
+	logsDirectory        = "logs"
 	serialSockFilename   = "serial0.sock"
 	virtualiserDirname   = "virtualiser"
 
@@ -135,14 +136,13 @@ func copyVolume(filename, qemuImgPath string, reader io.Reader,
 	}
 }
 
-func createTapDeviceOnBridge(bridge string, numQueues uint) (
+func createTapDeviceOnBridge(bridge string, params libnet.TapDeviceParams) (
 	*libnet.TapDevice, error) {
 	bridgeIf, err := net.InterfaceByName(bridge)
 	if err != nil {
 		return nil, err
 	}
-	tapDevice, err := libnet.CreateTapDeviceWithParams(
-		libnet.TapDeviceParams{NumQueues: numQueues})
+	tapDevice, err := libnet.CreateTapDeviceWithParams(params)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tap device: %s", err)
 	}
@@ -214,7 +214,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		return errors.New("kernel image is not a regular file")
 	}
 	inode.Size = 0
-	filename := filepath.Join(volume.DirectoryToCleanup, "kernel"+extension)
+	filename := filepath.Join(volume.DirectoryToCleanup, kernelLeafFilename+extension)
 	_, err := objectserver.LinkObject(filename, objectsGetter, inode.Hash)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		}
 		inode.Size = 0
 		filename := filepath.Join(volume.DirectoryToCleanup,
-			"initrd"+extension)
+			initrdLeafFilename+extension)
 		_, err = objectserver.LinkObject(filename, objectsGetter,
 			inode.Hash)
 		if err != nil {
@@ -504,6 +504,8 @@ func (m *Manager) allocateVm(req proto.CreateVmRequest,
 		ipAddress = "0.0.0.0"
 	} else {
 		ipAddress = address.IpAddress.String()
+		m.Logger.Printf("allocateVm(%s): allocated %s\n",
+			authInfo.Username, ipAddress)
 	}
 	vm := &vmInfoType{
 		LocalVmInfo: proto.LocalVmInfo{
@@ -1049,16 +1051,13 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 	} else if storageIndex == oldStorageIndex {
 		return nil
 	}
-	if vm.getActiveInitrdPath() != "" {
-		return errors.New("cannot move root volume with separate initrd")
-	}
-	if vm.getActiveKernelPath() != "" {
-		return errors.New("cannot move root volume with separate kernel")
-	}
 	if vm.State != proto.StateStopped {
 		return errors.New("VM is not stopped")
 	}
 	if volumeIndex == 0 {
+		if err := vm.deleteLogsDirectory(); err != nil {
+			return err
+		}
 		if _, err := os.Stat(localVolume.Filename + ".old"); err != nil {
 			if !os.IsNotExist(err) {
 				return err
@@ -1086,14 +1085,23 @@ func (m *Manager) changeVmVolumeStorageIndex(ipAddr net.IP,
 		return err
 	}
 	defer os.Remove(newVolumeDirectory)
-	err = fsutil.CopyFileExclusive(newLocalVolume.Filename,
-		localVolume.Filename, fsutil.PrivateFilePerms)
+	sourcePathnames, err := vm.listVolumePathnames(volumeIndex, true)
 	if err != nil {
 		return err
 	}
-	// TODO(rgooch): add support for initrd and kernel and remove checks above.
-	if err := os.Remove(localVolume.Filename); err != nil {
-		return err
+	for _, sourcePathname := range sourcePathnames {
+		destPathname := filepath.Join(newVolumeDirectory,
+			filepath.Base(sourcePathname))
+		err := fsutil.CopyFileExclusive(destPathname, sourcePathname,
+			fsutil.PrivateFilePerms)
+		if err != nil {
+			return err
+		}
+	}
+	for _, sourcePathname := range sourcePathnames {
+		if err := os.Remove(sourcePathname); err != nil {
+			return err
+		}
 	}
 	os.Remove(localVolume.DirectoryToCleanup)
 	vm.mutex.Lock()
@@ -1487,7 +1495,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return err
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1504,6 +1512,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType:   request.ArchitectureType,
 			ExtraKernelOptions: request.ExtraKernelOptions,
@@ -1515,7 +1524,8 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs,
-			request.FirmwareType, writeRawOptions, request.SkipBootloader)
+			request.FirmwareType, writeRawOptions, request.SkipBootloader,
+			vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1730,7 +1740,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1739,6 +1749,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType: vm.ArchitectureType,
 			InitialImageName: imageName,
@@ -1748,7 +1759,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			RoundupPower:     request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".debug", client, fs,
-			vm.FirmwareType, writeRawOptions, false)
+			vm.FirmwareType, writeRawOptions, false, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -1968,55 +1979,6 @@ func (m *Manager) exportLocalVm(authInfo *srpc.AuthInformation,
 		LocalVmInfo: vm.LocalVmInfo,
 	}
 	return &vmInfo, nil
-}
-
-func (m *Manager) getImage(searchName string, imageTimeout time.Duration) (
-	*srpc.Client, *image.Image, string, error) {
-	// TODO(rgooch): Consider ways to re-use the connection while handling
-	//               multiple concurrent users.
-	client, err := srpc.DialHTTP("tcp", m.ImageServerAddress, 0)
-	if err != nil {
-		return nil, nil, "",
-			fmt.Errorf("error connecting to image server: %s: %s",
-				m.ImageServerAddress, err)
-	}
-	doClose := true
-	defer func() {
-		if doClose {
-			client.Close()
-		}
-	}()
-	if isDir, err := imclient.CheckDirectory(client, searchName); err != nil {
-		return nil, nil, "", err
-	} else if isDir {
-		imageName, err := imclient.FindLatestImage(client, searchName, false)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		if imageName == "" {
-			return nil, nil, "",
-				errors.New("no images in directory: " + searchName)
-		}
-		img, err := imclient.GetImage(client, imageName)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		img.FileSystem.RebuildInodePointers()
-		doClose = false
-		return client, img, imageName, nil
-	}
-	img, err := imclient.GetImageWithTimeout(client, searchName, imageTimeout)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	if img == nil {
-		return nil, nil, "", errors.New("timeout getting image")
-	}
-	if err := img.FileSystem.RebuildInodePointers(); err != nil {
-		return nil, nil, "", err
-	}
-	doClose = false
-	return client, img, searchName, nil
 }
 
 func (m *Manager) getNumVMs() (uint, uint) {
@@ -2310,8 +2272,8 @@ func (m *Manager) getVmVolume(conn *srpc.Conn) error {
 	response := proto.GetVmVolumeResponse{}
 	if len(initrd) > 0 || len(kernel) > 0 {
 		response.ExtraFiles = make(map[string][]byte)
-		response.ExtraFiles["initrd"] = initrd
-		response.ExtraFiles["kernel"] = kernel
+		response.ExtraFiles[initrdLeafFilename] = initrd
+		response.ExtraFiles[kernelLeafFilename] = kernel
 	}
 	if request.VolumeIndex >= uint(len(vm.VolumeLocations)) {
 		return conn.Encode(proto.GetVmVolumeResponse{
@@ -2956,7 +2918,7 @@ func migrateVmVolume(hypervisor *srpc.Client, directory, filename string,
 		return nil
 	}
 	for name, data := range response.ExtraFiles {
-		if name != "initrd" && name != "kernel" {
+		if name != initrdLeafFilename && name != kernelLeafFilename {
 			return fmt.Errorf("received unsupported extra file: %s", name)
 		}
 		err := ioutil.WriteFile(filepath.Join(directory, name), data,
@@ -3012,18 +2974,14 @@ func (m *Manager) openImageUrl(rawurl string) (urlutil.SizedReadCloser, error) {
 func (m *Manager) patchVmImage(conn *srpc.Conn,
 	request proto.PatchVmImageRequest) error {
 	client, img, imageName, err := m.getImage(request.ImageName,
-		request.ImageTimeout)
+		request.ImageTimeout, m.Logger)
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	if img.Filter == nil {
 		return fmt.Errorf("%s contains no filter", imageName)
 	}
-	img.FileSystem.InodeToFilenamesTable()
-	img.FileSystem.FilenameToInodeTable()
-	hashToInodesTable := img.FileSystem.HashToInodesTable()
-	img.FileSystem.BuildEntryMap()
-	var objectsGetter objectserver.ObjectsGetter
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
 		conn.GetAuthInformation(), nil)
 	if err != nil {
@@ -3034,6 +2992,11 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	defer func() {
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
+	img.FileSystem.InodeToFilenamesTable()
+	img.FileSystem.FilenameToInodeTable()
+	hashToInodesTable := img.FileSystem.HashToInodesTable()
+	img.FileSystem.BuildEntryMap()
+	var objectsGetter objectserver.ObjectsGetter
 	if vm.Volumes[0].Format != proto.VolumeFormatRaw {
 		return errors.New("cannot patch non-RAW volumes")
 	}
@@ -3509,7 +3472,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			return err
 		}
 		client, img, imageName, err := m.getImage(request.ImageName,
-			request.ImageTimeout)
+			request.ImageTimeout, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -3526,6 +3489,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		if err != nil {
 			return err
 		}
+		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType:   vm.ArchitectureType,
 			ExtraKernelOptions: vm.ExtraKernelOptions,
@@ -3536,7 +3500,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			RoundupPower:       request.RoundupPower,
 		}
 		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
-			vm.FirmwareType, writeRawOptions, request.SkipBootloader)
+			vm.FirmwareType, writeRawOptions, request.SkipBootloader, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -4116,7 +4080,7 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 
 func (m *Manager) unpackImage(imageName, rootDir string,
 	timeout time.Duration, logger log.DebugLogger) error {
-	client, img, imageName, err := m.getImage(imageName, timeout)
+	client, img, imageName, err := m.getImage(imageName, timeout, logger)
 	if err != nil {
 		return err
 	}
@@ -4145,9 +4109,9 @@ func (m *Manager) unregisterVmMetadataNotifier(ipAddr net.IP,
 }
 
 func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
-	client *srpc.Client, fs *filesystem.FileSystem,
+	client srpc.ClientI, fs *filesystem.FileSystem,
 	firmwareType proto.FirmwareType, writeRawOptions util.WriteRawOptions,
-	skipBootloader bool) error {
+	skipBootloader bool, logger log.DebugLogger) error {
 	startTime := time.Now()
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
@@ -4182,11 +4146,11 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	err := util.WriteRawWithOptions(fs, objectsGetter,
 		volume.Filename+extension, fsutil.PrivateFilePerms,
-		tableType, writeRawOptions, m.Logger)
+		tableType, writeRawOptions, logger)
 	if err != nil {
 		return err
 	}
-	m.Logger.Debugf(1, "Wrote root volume in %s\n",
+	logger.Debugf(1, "Wrote root volume in %s\n",
 		format.Duration(time.Since(startTime)))
 	return nil
 }
@@ -4313,10 +4277,8 @@ func (vm *vmInfoType) copyRootVolume(request proto.CreateVmRequest,
 
 // createLogsDirectory will delete an old logs directory and create a new one.
 func (vm *vmInfoType) createLogsDirectory() error {
-	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
+	if err := vm.deleteLogsDirectory(); err != nil {
+		return err
 	}
 	return os.Mkdir(vm.getLogsDirectory(), fsutil.PrivateDirPerms)
 }
@@ -4380,6 +4342,16 @@ func (vm *vmInfoType) delete() {
 	}
 	vm.mutex.Lock()
 	vm.logger.Debugln(2, "delete(): returning")
+}
+
+// deleteLogsDirectory will delete an old logs directory.
+func (vm *vmInfoType) deleteLogsDirectory() error {
+	if err := os.RemoveAll(vm.getLogsDirectory()); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (vm *vmInfoType) destroy() {
@@ -4454,15 +4426,18 @@ func (vm *vmInfoType) getVirtualiserRootDirectory() string {
 }
 
 func (vm *vmInfoType) getInitrdPath() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "initrd")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		initrdLeafFilename)
 }
 
 func (vm *vmInfoType) getKernelPath() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "kernel")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		kernelLeafFilename)
 }
 
 func (vm *vmInfoType) getLogsDirectory() string {
-	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup, "logs")
+	return filepath.Join(vm.VolumeLocations[0].DirectoryToCleanup,
+		logsDirectory)
 }
 
 func (vm *vmInfoType) kill() {
@@ -4901,7 +4876,11 @@ func (vm *vmInfoType) startVm(enableNetboot, haveManagerLock bool) error {
 		if index < len(vm.NetworkEntries) {
 			numQueues = vm.NetworkEntries[index].NumQueues
 		}
-		tapDevice, err := createTapDeviceOnBridge(bridge, numQueues)
+		params := libnet.TapDeviceParams{
+			AddVnetHeader: !vm.DisableVirtIO,
+			NumQueues:     numQueues,
+		}
+		tapDevice, err := createTapDeviceOnBridge(bridge, params)
 		if err != nil {
 			return fmt.Errorf("error creating tap device: %s", err)
 		}

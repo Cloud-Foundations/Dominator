@@ -27,6 +27,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/url/urlutil"
 )
 
+var (
+	tmpRoot = filepath.Join(os.TempDir(), "imaginator")
+)
+
 // expandArchStrings will opportunistically expand the $ARCH expression in a
 // slice of strings. We need to use opportunistic expansion here because the
 // "$dir" expression in bootstrap command arguments must be passed through so
@@ -99,6 +103,15 @@ func imageStreamsRealDecoder(reader io.Reader) (
 }
 
 func load(options BuilderOptions, params BuilderParams) (*Builder, error) {
+	if err := os.RemoveAll(tmpRoot); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	if err := os.Mkdir(tmpRoot, dirPerms); err != nil {
+		return nil, err
+	}
+	params.Logger.Printf("Recreated temporary directories root: %s\n", tmpRoot)
 	if options.CreateSlaveTimeout <= 0 {
 		options.CreateSlaveTimeout = time.Hour
 		if options.ImageRebuildInterval > 0 &&

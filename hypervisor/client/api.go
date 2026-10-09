@@ -177,6 +177,11 @@ func ExportLocalVm(client srpc.ClientI, ipAddress net.IP,
 	return exportLocalVm(client, ipAddress, verificationCookie)
 }
 
+func FetchImage(client srpc.ClientI, searchName string, timeout time.Duration) (
+	proto.FetchImageResponse, error) {
+	return fetchImage(client, searchName, timeout)
+}
+
 func GetCapacity(client srpc.ClientI) (proto.GetCapacityResponse, error) {
 	return getCapacity(client)
 }

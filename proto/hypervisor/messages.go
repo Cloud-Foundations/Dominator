@@ -433,6 +433,23 @@ type ExportLocalVmResponse struct {
 	VmInfo ExportLocalVmInfo
 }
 
+type FetchImageRequest struct {
+	ImageTimeout time.Duration // Negative: wait forever.
+	SearchName   string        // Name of image or stream to search for.
+}
+
+type FetchImageResponse struct {
+	DownloadTime      time.Duration // Time taken to download objects.
+	DownloadedBytes   uint64        // Number of object bytes downloaded.
+	DownloadedObjects uint          // Number of objects downloaded.
+	Error             string
+	ImageBytes        uint64        // Number of unique object bytes referenced.
+	ImageFetchTime    time.Duration // If zero: image already fetched.
+	ImageName         string        // Name of image fetched.
+	ImageObjects      uint          // Number of unique objects referenced.
+	ImageRebuildTime  time.Duration // If zero: image already fetched.
+}
+
 type FirmwareType uint
 
 type GetCapacityRequest struct{}

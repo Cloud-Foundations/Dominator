@@ -1,6 +1,7 @@
 package osutil
 
 import (
+	"os/exec"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -28,6 +29,17 @@ func RunCommand(logger log.Logger, name string, args ...string) bool {
 func RunCommandBackground(logger log.Logger, name string,
 	args ...string) <-chan struct{} {
 	return runCommandBackground(logger, name, args...)
+}
+
+// RunCommandWithFileOutput will run the specified command using the specified
+// filenames to write stdandard outout and standard error to. After the command
+// completes, the contents of the files are read and will be returned.
+// If deleteAfter is true then the files are deleted after being read.
+func RunCommandWithFileOutput(cmd *exec.Cmd,
+	stdoutFilename, stderrFilename string, deleteAfter bool) (
+	stdoutData, stderrData []byte, err error) {
+	return runCommandWithFileOutput(cmd, stdoutFilename, stderrFilename,
+		deleteAfter)
 }
 
 // SyncTimeout will try to sync file-system data and then waits up to the

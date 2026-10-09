@@ -78,6 +78,8 @@ var (
 		"File containing network interfaces for show-network-configuration")
 	numAcknowledgementsToWaitFor = flag.Uint("numAcknowledgementsToWaitFor",
 		2, "Number of DHCP ACKs to wait for")
+	postTagCommand = flag.String("postTagCommand", "",
+		"Optional command to run after tagging update for Hypervisor. The Hypervisor name is given as the argument")
 	postUpdateCommand = flag.String("postUpdateCommand", "",
 		"Optional command to run after reboot update of Hypervisor. The Hypervisor name is given as the argument")
 	preUpdateCommand = flag.String("preUpdateCommand", "",
@@ -92,6 +94,8 @@ var (
 		"Name of image to install for netboot-{host,vm}")
 	topologyDir = flag.String("topologyDir", "",
 		"Name of local topology directory in Git repository")
+	updateTimeout = flag.Duration("updateTimeout", 15*time.Minute,
+		"Time to wait for a Hypervisor to complete update")
 	useKexec = flag.Bool("useKexec", false,
 		"If true, use kexec to reboot into newly installed OS")
 	vncViewer   = flag.String("vncViewer", "", "Path to VNC viewer for VM")

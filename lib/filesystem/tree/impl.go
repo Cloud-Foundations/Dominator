@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/build"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fstree"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
@@ -15,29 +16,22 @@ import (
 )
 
 type decoderData struct {
-	directoryTable  map[string]*filesystem.DirectoryInode
-	fileSystem      filesystem.FileSystem
-	nextInodeNumber uint64
-	startTime       time.Time
+	builder        *build.Builder
+	directoryTable map[string]*filesystem.DirectoryInode
+	startTime      time.Time
 }
 
 func get(getter fstree.Getter, treeUrl string, logger log.DebugLogger) (
 	*filesystem.FileSystem, []hash.Hash, []uint64, error) {
 	dd := decoderData{
+		builder:        build.New(),
 		directoryTable: make(map[string]*filesystem.DirectoryInode),
 		startTime:      time.Now(),
 	}
-	fileSystem := &dd.fileSystem
-	fileSystem.InodeTable = make(filesystem.InodeTable)
-	// Create a default top-level directory.
-	dd.addInode(&fileSystem.DirectoryInode)
-	fileSystem.DirectoryInode.Mode = wsyscall.S_IFDIR | wsyscall.S_IRWXU |
-		wsyscall.S_IRGRP | wsyscall.S_IXGRP | wsyscall.S_IROTH |
-		wsyscall.S_IXOTH
-	dd.directoryTable["/"] = &fileSystem.DirectoryInode
+	dd.directoryTable["/"] = &dd.builder.FileSystem.DirectoryInode
 	// Start walking trees.
 	hashes := make(map[hash.Hash]uint64)
-	var numBytes, numDirectories, numSymlinks uint64
+	var numBytes, numSymlinks uint64
 	var mutex sync.Mutex
 	fn := func(getter fstree.Getter, dirname string,
 		entry *fstree.TreeEntry) error {
@@ -47,15 +41,12 @@ func get(getter fstree.Getter, treeUrl string, logger log.DebugLogger) (
 			if entry.Size != 0 {
 				hashes[entry.Hash] = entry.Size
 			}
-			fileSystem.NumRegularInodes++
-			fileSystem.TotalDataBytes += entry.Size
 			if err := dd.addFile(dirname, entry); err != nil {
 				return err
 			}
 			mutex.Unlock()
 		case fstree.TypeTree:
 			mutex.Lock()
-			numDirectories++
 			numBytes += entry.Size
 			if err := dd.addDirectory(dirname, entry); err != nil {
 				return err
@@ -92,7 +83,8 @@ func get(getter fstree.Getter, treeUrl string, logger log.DebugLogger) (
 		duration/time.Second,
 		format.Duration(duration),
 		format.FormatBytes(uint64(speed)),
-		fileSystem.NumRegularInodes, numDirectories, numSymlinks,
+		dd.builder.FileSystem.NumRegularInodes,
+		dd.builder.FileSystem.DirectoryCount, numSymlinks,
 	)
 	logger.Printf("Num unique objects: %d\n", len(hashes))
 	hashList := make([]hash.Hash, 0, len(hashes))
@@ -101,7 +93,7 @@ func get(getter fstree.Getter, treeUrl string, logger log.DebugLogger) (
 		hashList = append(hashList, hashVal)
 		objectSizes = append(objectSizes, size)
 	}
-	return fileSystem, hashList, objectSizes, nil
+	return dd.builder.FileSystem, hashList, objectSizes, nil
 }
 
 func (dd *decoderData) addDirectory(dirname string,
@@ -123,33 +115,26 @@ func (dd *decoderData) addEntry(dirname, name string,
 	if !ok {
 		return fmt.Errorf("no parent directory found for: %s", dirname)
 	}
-	var newEntry filesystem.DirectoryEntry
-	newEntry.Name = name
-	newEntry.InodeNumber = dd.nextInodeNumber
-	newEntry.SetInode(inode)
-	parent.EntryList = append(parent.EntryList, &newEntry)
-	dd.addInode(inode)
-	return nil
+	if err := dd.builder.AddInode(inode); err != nil {
+		return err
+	}
+	return dd.builder.AddDirectoryEntry(parent, name, inode)
 }
 
 func (dd *decoderData) addFile(dirname string, entry *fstree.TreeEntry) error {
-	var newInode filesystem.RegularInode
-	newInode.Mode = filesystem.FileMode(
-		(entry.Permissions & ^uint32(wsyscall.S_IFMT)) |
-			uint32(wsyscall.S_IFREG))
-	newInode.Uid = entry.UserId
-	newInode.Gid = entry.GroupId
-	newInode.MtimeNanoSeconds = int32(dd.startTime.Nanosecond())
-	newInode.MtimeSeconds = dd.startTime.Unix()
-	newInode.Size = entry.Size
-	newInode.Hash = entry.Hash
-	dd.addEntry(dirname, entry.Filename, &newInode)
+	newInode := &filesystem.RegularInode{
+		Mode: filesystem.FileMode(
+			(entry.Permissions & ^uint32(wsyscall.S_IFMT)) |
+				uint32(wsyscall.S_IFREG)),
+		Uid:              entry.UserId,
+		Gid:              entry.GroupId,
+		MtimeNanoSeconds: int32(dd.startTime.Nanosecond()),
+		MtimeSeconds:     dd.startTime.Unix(),
+		Size:             entry.Size,
+		Hash:             entry.Hash,
+	}
+	dd.addEntry(dirname, entry.Filename, newInode)
 	return nil
-}
-
-func (dd *decoderData) addInode(inode filesystem.GenericInode) {
-	dd.fileSystem.InodeTable[dd.nextInodeNumber] = inode
-	dd.nextInodeNumber++
 }
 
 func (dd *decoderData) addSymlink(dirname string, entry *fstree.TreeEntry,
