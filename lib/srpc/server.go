@@ -645,18 +645,15 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 	if !ok {
 		return nil, errors.New(serviceName + ": unknown method: " + methodName)
 	}
-	if conn.allowMethodPowers &&
-		conn.checkMethodAccess(serviceMethod) {
-		conn.haveMethodAccess = true
-	} else if conn.allowMethodPowers &&
-		receiver.grantMethod(serviceName, conn.GetAuthInformation()) {
-		conn.haveMethodAccess = true
-	} else if method.public && conn.username != "" {
-		conn.haveMethodAccess = false
-	} else if method.unauthenticatedPermitted {
-		conn.haveMethodAccess = false
-	} else {
-		conn.haveMethodAccess = false
+	grantMethod := func(_ string, authInfo *AuthInformation) bool {
+		return receiver.grantMethod(serviceName, authInfo)
+	}
+	var authorised bool
+	authorised, conn.haveMethodAccess = checkAuthorisation(serviceMethod,
+		conn.getAuthInformation(), conn.permittedMethods,
+		conn.allowMethodPowers, grantMethod, method.public,
+		method.unauthenticatedPermitted)
+	if !authorised {
 		method.metricsMutex.Lock()
 		method.numDeniedCalls++
 		method.metricsMutex.Unlock()
@@ -673,39 +670,78 @@ func (conn *Conn) findMethod(serviceMethod string) (*methodWrapper, error) {
 
 // checkMethodAccess implements the built-in authorisation checks. It returns
 // true if the method is permitted, else false if denied.
-func (conn *Conn) checkMethodAccess(serviceMethod string) bool {
-	if conn.permittedMethods == nil {
+func checkMethodAccess(serviceMethod string, authInfo *AuthInformation,
+	permittedMethods map[string]struct{}) bool {
+	if permittedMethods == nil {
 		return true
 	}
-	for sm := range conn.permittedMethods {
+	for sm := range permittedMethods {
 		if matched, _ := filepath.Match(sm, serviceMethod); matched {
 			return true
 		}
 	}
-	if conn.username != "" {
-		if _, ok := srpcTrustedUsers[conn.username]; ok {
+	if authInfo != nil && authInfo.Username != "" {
+		if _, ok := srpcTrustedUsers[authInfo.Username]; ok {
 			return true
 		}
 		if len(srpcTrustedGroups) > 0 {
 			for _, group := range srpcTrustedGroups {
-				if _, ok := conn.groupList[group]; ok {
+				if _, ok := authInfo.GroupList[group]; ok {
 					return true
 				}
 			}
 		}
 		smallStackOwners := getSmallStackOwners()
 		if smallStackOwners != nil {
-			if _, ok := smallStackOwners.users[conn.username]; ok {
+			if _, ok := smallStackOwners.users[authInfo.Username]; ok {
 				return true
 			}
 			for _, group := range smallStackOwners.groups {
-				if _, ok := conn.groupList[group]; ok {
+				if _, ok := authInfo.GroupList[group]; ok {
 					return true
 				}
 			}
 		}
 	}
 	return false
+}
+
+func checkAuthorisation(serviceMethod string, authInfo *AuthInformation,
+	permittedMethods map[string]struct{}, allowMethodPowers bool,
+	grantMethod func(serviceMethod string, authInfo *AuthInformation) bool,
+	isPublic, isUnauthenticated bool) (bool, bool) {
+	if allowMethodPowers &&
+		checkMethodAccess(serviceMethod, authInfo, permittedMethods) {
+		return true, true
+	}
+	if allowMethodPowers &&
+		grantMethod != nil && grantMethod(serviceMethod, authInfo) {
+		return true, true
+	}
+	if isPublic && authInfo != nil && authInfo.Username != "" {
+		return true, false
+	}
+	if isUnauthenticated {
+		return true, false
+	}
+	return false, false
+}
+
+func checkTlsAuthorisation(serviceMethod string, state tls.ConnectionState,
+	allowMethodPowers, isPublic bool) (*AuthInformation, bool, error) {
+	username, permittedMethods, groupList, err := getAuth(state)
+	if err != nil {
+		return nil, false, err
+	}
+	authInfo := &AuthInformation{
+		GroupList: groupList,
+		Username:  username,
+	}
+	authorised, haveMethodAccess := checkAuthorisation(serviceMethod,
+		authInfo, permittedMethods, allowMethodPowers, defaultGrantMethod,
+		isPublic, false)
+	authInfo.HaveMethodAccess = haveMethodAccess
+	return authInfo, authorised, nil
 }
 
 func listMethodsHttpHandler(w http.ResponseWriter, req *http.Request) {
