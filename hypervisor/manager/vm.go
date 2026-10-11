@@ -2116,6 +2116,20 @@ func (m *Manager) getVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return os.Open(filename)
 }
 
+func (m *Manager) getVmBootLogSize(ipAddr net.IP) (uint64, error) {
+	vm, err := m.getVmAndLock(ipAddr, false)
+	if err != nil {
+		return 0, err
+	}
+	filename := vm.getBootLogFilename()
+	vm.mutex.RUnlock()
+	fi, err := os.Stat(filename)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(fi.Size()), nil
+}
+
 func (m *Manager) getVmCreateRequest(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) (*proto.CreateVmRequest, error) {
 	vm, err := m.getVmLockAndAuth(ipAddr, false, authInfo, nil)
