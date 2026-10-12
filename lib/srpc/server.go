@@ -706,6 +706,9 @@ func checkMethodAccess(serviceMethod string, authInfo *AuthInformation,
 	return false
 }
 
+// checkAuthorisation returns true if the call to serviceMethod is authorised,
+// and a second true if that came from method powers rather than the method
+// being public or unauthenticated.
 func checkAuthorisation(serviceMethod string, authInfo *AuthInformation,
 	permittedMethods map[string]struct{}, allowMethodPowers bool,
 	grantMethod func(serviceMethod string, authInfo *AuthInformation) bool,
@@ -727,6 +730,9 @@ func checkAuthorisation(serviceMethod string, authInfo *AuthInformation,
 	return false, false
 }
 
+// checkTlsAuthorisation runs checkAuthorisation for a client with the given TLS
+// state. It returns the client's authentication information and true if the
+// call is authorised, or an error if the certificate cannot be decoded.
 func checkTlsAuthorisation(serviceMethod string, state tls.ConnectionState,
 	allowMethodPowers, isPublic bool) (*AuthInformation, bool, error) {
 	username, permittedMethods, groupList, err := getAuth(state)
