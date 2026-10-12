@@ -232,6 +232,8 @@ var subcommands = []commands.Command{
 	{"showunrefobj", "", 0, 0, showUnreferencedObjectsSubcommand},
 	{"tar", "name [file]", 1, 2, tarImageSubcommand},
 	{"test-download-speed", "name", 1, 1, testDownloadSpeedSubcommand},
+	{"test-fs-tree-download-speed", "treeUrl", 1, 1,
+		testFsTreeDownloadSpeedSubcommand},
 	{"trace-inode-history", "name inodePath", 2, 2,
 		traceInodeHistorySubcommand},
 	{"unpack-fs-tree", "dirname treeUrl", 2, 2, unpackFsTreeSubcommand},

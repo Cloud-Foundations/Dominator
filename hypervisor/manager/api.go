@@ -378,6 +378,10 @@ func (m *Manager) GetVmBootLog(ipAddr net.IP) (io.ReadCloser, error) {
 	return m.getVmBootLog(ipAddr)
 }
 
+func (m *Manager) GetVmBootLogSize(ipAddr net.IP) (uint64, error) {
+	return m.getVmBootLogSize(ipAddr)
+}
+
 func (m *Manager) GetVmCID(ipAddr net.IP) (uint32, error) {
 	return m.getVmCID(ipAddr)
 }

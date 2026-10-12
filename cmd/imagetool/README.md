@@ -96,6 +96,8 @@ Some of the sub-commands available are:
 - **showunrefobj**: list the unreferenced objects on the server and their sizes
 - **tar**: create a tarfile from an image
 - **test-download-speed**: test the speed for downloading objects for an image
+- **test-fs-tree-download-speed**: test the speed for downloading a recursive
+                                   file-system tree from a specified URL
 - **trace-inode-history**: trace the change history of an inode in an image and its sources
 - **unpack-fs-tree**: fetch and unpack a recursive file-system tree from a
                       specified URL and unpack in the specified local directory

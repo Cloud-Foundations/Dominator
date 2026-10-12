@@ -47,6 +47,7 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	writer := bufio.NewWriter(w)
 	defer writer.Flush()
+	bootLogSize, _ := s.manager.GetVmBootLogSize(netIpAddr)
 	if parsedQuery.OutputType() == url.OutputTypeJson {
 		json.WriteWithIndent(writer, "    ", vm)
 	} else {
@@ -110,8 +111,11 @@ func (s state) showVMHandler(w http.ResponseWriter, req *http.Request) {
 					vm.IdentityName, makeExpiration(vm.IdentityExpires)))
 		}
 		writeBool(writer, "Spread volumes", vm.SpreadVolumes)
-		writeString(writer, "Latest boot",
-			fmt.Sprintf("<a href=\"showVmBootLog?%s\">log</a>", ipAddr))
+		if bootLogSize > 0 {
+			writeString(writer, "Latest boot",
+				fmt.Sprintf("<a href=\"showVmBootLog?%s\">log</a> (%s)",
+					ipAddr, format.FormatBytes(bootLogSize)))
+		}
 		rc, size, lastPatchTime, err := s.manager.GetVmLastPatchLog(netIpAddr)
 		if err == nil {
 			rc.Close()
