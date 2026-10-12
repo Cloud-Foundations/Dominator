@@ -70,6 +70,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	if startOptions.BootLogMaximumBytes < 1 {
+		startOptions.BootLogMaximumBytes = 1 << 20
+	}
 	manager := &Manager{
 		StartOptions:  startOptions,
 		rootCookie:    rootCookie,

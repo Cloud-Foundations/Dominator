@@ -25,6 +25,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -45,6 +46,7 @@ type flushLogger interface {
 var (
 	allowUnauthenticatedReads = flag.Bool("allowUnauthenticatedReads", false,
 		"If true, allow unauthenticated access to read-only methods")
+	bootLogMaximumSize      = flagutil.Size(1 << 20)
 	dhcpServerOnBridgesOnly = flag.Bool("dhcpServerOnBridgesOnly", false,
 		"If true, run the DHCP server on bridge interfaces only")
 	identityProvider = flag.String("identityProvider", "",
@@ -80,6 +82,8 @@ var (
 )
 
 func init() {
+	flag.Var(&bootLogMaximumSize, "bootLogMaximumSize",
+		"maximum size of boot log")
 	flag.Var(&objectCacheSize, "objectCacheSize",
 		"maximum size of object cache")
 	flag.Var(&volumeDirectories, "volumeDirectories",
@@ -210,6 +214,7 @@ func run() {
 		logger.Fatalf("Cannot start tftpboot server: %s\n", err)
 	}
 	managerObj, err := manager.New(manager.StartOptions{
+		BootLogMaximumBytes:  types.Bytes(bootLogMaximumSize),
 		BridgeMap:            bridgeMap,
 		DhcpServer:           dhcpServer,
 		IdentityProvider:     *identityProvider,

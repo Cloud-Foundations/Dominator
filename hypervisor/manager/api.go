@@ -15,6 +15,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/tags"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
@@ -79,6 +80,7 @@ type Manager struct {
 }
 
 type StartOptions struct {
+	BootLogMaximumBytes  types.Bytes
 	BridgeMap            map[string]net.Interface // Key: interface name.
 	DhcpServer           DhcpServer
 	IdentityProvider     string
