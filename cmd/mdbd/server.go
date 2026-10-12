@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -24,6 +25,11 @@ type rpcType struct {
 	updateChannels map[*srpc.Conn]chan<- mdbserver.MdbUpdate
 }
 
+type locationFilterType struct {
+	locations []string
+	sent      map[string]struct{} // Key: hostname sent to the client.
+}
+
 func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 	logger log.Logger) *rpcType {
 	rpcObj := &rpcType{
@@ -32,18 +38,20 @@ func startRpcd(eventChannel chan<- struct{}, pauseTable *pauseTableType,
 		pauseTable:   pauseTable,
 		PerUserMethodLimiter: serverutil.NewPerUserMethodLimiter(
 			map[string]uint{
-				"GetMachine":    1,
-				"GetMdb":        1,
-				"GetMdbUpdates": 1,
-				"ListImages":    1,
-				"PauseUpdates":  1,
-				"ResumeUpdates": 1,
+				"GetFilteredMdbUpdates": 1,
+				"GetMachine":            1,
+				"GetMdb":                1,
+				"GetMdbUpdates":         1,
+				"ListImages":            1,
+				"PauseUpdates":          1,
+				"ResumeUpdates":         1,
 			}),
 
 		updateChannels: make(map[*srpc.Conn]chan<- mdbserver.MdbUpdate),
 	}
 	srpc.RegisterNameWithOptions("MdbServer", rpcObj, srpc.ReceiverOptions{
 		PublicMethods: []string{
+			"GetFilteredMdbUpdates",
 			"GetMachine",
 			"GetMdb",
 			"GetMdbUpdates",
@@ -82,7 +90,20 @@ func (t *rpcType) GetMdb(conn *srpc.Conn, request mdbserver.GetMdbRequest,
 	return nil
 }
 
+func (t *rpcType) GetFilteredMdbUpdates(conn *srpc.Conn) error {
+	var request mdbserver.GetFilteredMdbUpdatesRequest
+	if err := conn.Decode(&request); err != nil {
+		return err
+	}
+	return t.getMdbUpdates(conn, newLocationFilter(request.Locations))
+}
+
 func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
+	return t.getMdbUpdates(conn, nil)
+}
+
+func (t *rpcType) getMdbUpdates(conn *srpc.Conn,
+	filter *locationFilterType) error {
 	updateChannel := make(chan mdbserver.MdbUpdate, 10)
 	t.rwMutex.Lock()
 	t.updateChannels[conn] = updateChannel
@@ -101,6 +122,8 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 		for _, machine := range currentMdb.Machines {
 			mdbUpdate.MachinesToAdd = append(mdbUpdate.MachinesToAdd, *machine)
 		}
+		// Sent even if filtered to empty, as it replaces the client's data.
+		mdbUpdate = filter.filterUpdate(mdbUpdate)
 		if err := conn.Encode(mdbUpdate); err != nil {
 			return err
 		}
@@ -116,6 +139,10 @@ func (t *rpcType) GetMdbUpdates(conn *srpc.Conn) error {
 			if isEmptyUpdate(mdbUpdate) {
 				t.logger.Printf("Queue for: %s is filling up: dropping client")
 				return errors.New("update queue too full")
+			}
+			mdbUpdate = filter.filterUpdate(mdbUpdate)
+			if isEmptyUpdate(mdbUpdate) {
+				continue
 			}
 			if err = conn.Encode(mdbUpdate); err != nil {
 				return err
@@ -235,6 +262,64 @@ func isEmptyUpdate(mdbUpdate mdbserver.MdbUpdate) bool {
 		return false
 	}
 	return true
+}
+
+func newLocationFilter(locations []string) *locationFilterType {
+	if len(locations) < 1 {
+		return nil
+	}
+	return &locationFilterType{
+		locations: locations,
+		sent:      make(map[string]struct{}),
+	}
+}
+
+func (f *locationFilterType) filterUpdate(
+	mdbUpdate mdbserver.MdbUpdate) mdbserver.MdbUpdate {
+	if f == nil {
+		return mdbUpdate
+	}
+	var filtered mdbserver.MdbUpdate
+	for _, machine := range mdbUpdate.MachinesToAdd {
+		if f.match(machine.Location) {
+			filtered.MachinesToAdd = append(filtered.MachinesToAdd, machine)
+			f.sent[machine.Hostname] = struct{}{}
+		}
+	}
+	for _, machine := range mdbUpdate.MachinesToUpdate {
+		_, sent := f.sent[machine.Hostname]
+		if f.match(machine.Location) {
+			if sent {
+				filtered.MachinesToUpdate = append(filtered.MachinesToUpdate,
+					machine)
+			} else {
+				filtered.MachinesToAdd = append(filtered.MachinesToAdd, machine)
+				f.sent[machine.Hostname] = struct{}{}
+			}
+		} else if sent {
+			filtered.MachinesToDelete = append(filtered.MachinesToDelete,
+				machine.Hostname)
+			delete(f.sent, machine.Hostname)
+		}
+	}
+	for _, hostname := range mdbUpdate.MachinesToDelete {
+		if _, sent := f.sent[hostname]; sent {
+			filtered.MachinesToDelete = append(filtered.MachinesToDelete,
+				hostname)
+			delete(f.sent, hostname)
+		}
+	}
+	return filtered
+}
+
+func (f *locationFilterType) match(location string) bool {
+	for _, enclosingLocation := range f.locations {
+		if location == enclosingLocation ||
+			strings.HasPrefix(location, enclosingLocation+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func sendUpdate(channel chan<- mdbserver.MdbUpdate,

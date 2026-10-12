@@ -1,2 +1,4 @@
 FleetManager.GetUpdates
 Hypervisor.GetUpdates
+MdbServer.GetFilteredMdbUpdates
+MdbServer.GetMdbUpdates
