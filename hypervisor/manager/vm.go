@@ -2121,13 +2121,7 @@ func (m *Manager) getVmBootLogSize(ipAddr net.IP) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	filename := vm.getBootLogFilename()
-	vm.mutex.RUnlock()
-	fi, err := os.Stat(filename)
-	if err != nil {
-		return 0, err
-	}
-	return uint64(fi.Size()), nil
+	return vm.getBootLogSize(true)
 }
 
 func (m *Manager) getVmCreateRequest(ipAddr net.IP,
@@ -4416,6 +4410,18 @@ func (vm *vmInfoType) getBootLogFilename() string {
 	return filepath.Join(vm.dirname, "bootlog")
 }
 
+func (vm *vmInfoType) getBootLogSize(releaseRlock bool) (uint64, error) {
+	filename := vm.getBootLogFilename()
+	if releaseRlock {
+		vm.mutex.RUnlock()
+	}
+	fi, err := os.Stat(filename)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(fi.Size()), nil
+}
+
 func (vm *vmInfoType) getDebugRoot() string {
 	filename := vm.VolumeLocations[0].Filename + ".debug"
 	if _, err := os.Stat(filename); err == nil {
@@ -4560,9 +4566,18 @@ func (vm *vmInfoType) serialManager() {
 	defer serialSock.Close()
 	vm.mutex.Lock()
 	vm.serialInput = serialSock
+	bytesWritten, _ := vm.getBootLogSize(false)
 	vm.mutex.Unlock()
 	buffer := make([]byte, 256)
 	for {
+		if bytesWritten > uint64(vm.manager.BootLogMaximumBytes) {
+			if err := bootlogFile.Truncate(0); err != nil {
+				vm.logger.Printf("error truncating boot log: %s\n", err)
+			} else {
+				bytesWritten = 0
+				vm.logger.Println("truncated boot log")
+			}
+		}
 		if nRead, err := serialSock.Read(buffer); err != nil {
 			if err != io.EOF {
 				vm.logger.Printf("error reading from serial port: %s\n", err)
@@ -4580,6 +4595,7 @@ func (vm *vmInfoType) serialManager() {
 			} else {
 				vm.mutex.RUnlock()
 				bootlogFile.Write(buffer[:nRead])
+				bytesWritten += uint64(nRead)
 			}
 		}
 	}
