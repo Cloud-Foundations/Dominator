@@ -1,15 +1,20 @@
 package version
 
 import (
-	_ "embed"
 	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
 )
 
-//go:embed BUILD_INFO
-var buildInfoRaw string
+// Set at link time by the Makefile with -ldflags -X.
+var (
+	buildVersion = "unknown"
+	buildOrigin  = "unknown"
+	buildBranch  = "unknown"
+	buildBehind  = "-1"
+	buildFork    = "false"
+)
 
 type vcsInfo struct {
 	revision  string
@@ -17,28 +22,23 @@ type vcsInfo struct {
 	dirty     bool
 }
 
-type buildInfo struct {
-	version string
-	origin  string
-	branch  string
-	behind  int
-	isFork  bool
-}
-
 func get() Info {
 	vcs := getVCSInfo()
-	bi := parseBuildInfo()
-	version := bi.version
+	version := buildVersion
 	if vcs.dirty {
 		version += "-dirty"
+	}
+	behind, err := strconv.Atoi(buildBehind)
+	if err != nil {
+		behind = -1
 	}
 	return Info{
 		Version:       version,
 		GitCommit:     vcs.revision,
-		GitOrigin:     bi.origin,
-		GitBranch:     bi.branch,
-		CommitsBehind: bi.behind,
-		IsFork:        bi.isFork,
+		GitOrigin:     buildOrigin,
+		GitBranch:     buildBranch,
+		CommitsBehind: behind,
+		IsFork:        buildFork == "true",
 		BuildDate:     vcs.buildTime,
 		GoVersion:     runtime.Version(),
 	}
@@ -68,42 +68,6 @@ func (i Info) behind() string {
 	default:
 		return strconv.Itoa(i.CommitsBehind) + " commits"
 	}
-}
-
-func parseBuildInfo() buildInfo {
-	info := buildInfo{
-		version: "unknown",
-		origin:  "unknown",
-		branch:  "unknown",
-		behind:  -1,
-	}
-	for _, line := range strings.Split(buildInfoRaw, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		switch key {
-		case "version":
-			info.version = val
-		case "origin":
-			info.origin = val
-		case "branch":
-			info.branch = val
-		case "behind":
-			if n, err := strconv.Atoi(val); err == nil {
-				info.behind = n
-			}
-		case "fork":
-			info.isFork = val == "true"
-		}
-	}
-	return info
 }
 
 func getVCSInfo() vcsInfo {

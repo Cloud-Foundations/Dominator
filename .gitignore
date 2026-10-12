@@ -1,5 +1,2 @@
 go.work
 go.work.sum
-
-# Generated build info
-lib/version/BUILD_INFO

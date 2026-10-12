@@ -17,7 +17,7 @@ fi
 readonly bin="$GOPATH/bin/$command"
 readonly target="/tmp/$LOGNAME/$command.tar.gz"
 
-CGO_ENABLED=0 go install -buildvcs=true ./cmd/$command
+CGO_ENABLED=0 go install -buildvcs=true -ldflags "${GO_LDFLAGS:-}" ./cmd/$command
 
 strip -o "$bin~" "$bin"
 if cmp -s "$bin~" "$bin"; then
