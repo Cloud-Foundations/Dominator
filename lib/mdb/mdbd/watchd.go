@@ -123,6 +123,12 @@ func callGetMdbUpdates(client *srpc.Client,
 	if err != nil {
 		return nil, err
 	}
+	doClose := true
+	defer func() {
+		if doClose {
+			conn.Close()
+		}
+	}()
 	request := mdbserver.GetFilteredMdbUpdatesRequest{Locations: locations}
 	if err := conn.Encode(request); err != nil {
 		return nil, err
@@ -130,6 +136,7 @@ func callGetMdbUpdates(client *srpc.Client,
 	if err := conn.Flush(); err != nil {
 		return nil, err
 	}
+	doClose = false
 	return conn, nil
 }
 
