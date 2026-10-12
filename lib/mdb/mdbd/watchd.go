@@ -23,8 +23,7 @@ import (
 func startMdbDaemon(config Config, params Params) <-chan *mdb.Mdb {
 	mdbChannel := make(chan *mdb.Mdb, 1)
 	if config.MdbServerHostname != "" && config.MdbServerPortNum > 0 {
-		go serverWatchDaemon(config.MdbServerHostname, config.MdbServerPortNum,
-			config.Locations, config.MdbFileName, mdbChannel, params.Logger)
+		go serverWatchDaemon(config, params, mdbChannel)
 	} else {
 		go fileWatchDaemon(config.MdbFileName, mdbChannel, params.Logger)
 	}
@@ -57,24 +56,24 @@ func fileWatchDaemon(mdbFileName string, mdbChannel chan<- *mdb.Mdb,
 	}
 }
 
-func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
-	locations []string, mdbFileName string, mdbChannel chan<- *mdb.Mdb,
-	logger log.DebugLogger) {
+func serverWatchDaemon(config Config, params Params,
+	mdbChannel chan<- *mdb.Mdb) {
 	var lastMdb *mdb.Mdb
-	if mdbData := readFile(mdbFileName, logger); mdbData != nil {
+	if mdbData := readFile(config.MdbFileName, params.Logger); mdbData != nil {
 		mdbChannel <- mdbData
 		lastMdb = mdbData
 	}
-	address := fmt.Sprintf("%s:%d", mdbServerHostname, mdbServerPortNum)
+	address := fmt.Sprintf("%s:%d", config.MdbServerHostname,
+		config.MdbServerPortNum)
 	for ; ; time.Sleep(time.Second) {
 		client, err := srpc.DialHTTP("tcp", address, time.Second*15)
 		if err != nil {
-			logger.Println(err)
+			params.Logger.Println(err)
 			continue
 		}
-		conn, err := callGetMdbUpdates(client, locations)
+		conn, err := callGetMdbUpdates(client, config.Locations)
 		if err != nil {
-			logger.Println(err)
+			params.Logger.Println(err)
 			client.Close()
 			continue
 		}
@@ -82,7 +81,7 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 		for {
 			var mdbUpdate mdbserver.MdbUpdate
 			if err := conn.Decode(&mdbUpdate); err != nil {
-				logger.Println(err)
+				params.Logger.Println(err)
 				break
 			} else {
 				newMdb = processUpdate(newMdb, mdbUpdate)
@@ -96,15 +95,15 @@ func serverWatchDaemon(mdbServerHostname string, mdbServerPortNum uint,
 							compareStartTime))
 					}
 					mdbChannel <- newMdb
-					if err := writeFile(mdbFileName, newMdb); err != nil {
-						logger.Println(err)
+					if err := writeFile(config.MdbFileName, newMdb); err != nil {
+						params.Logger.Println(err)
 					} else {
-						logger.Debugf(0,
+						params.Logger.Debugf(0,
 							"Wrote MDB data (%d machines) to: %s\n",
-							len(newMdb.Machines), mdbFileName)
+							len(newMdb.Machines), config.MdbFileName)
 					}
 				} else {
-					logger.Debugln(1, "MDB update made no changes")
+					params.Logger.Debugln(1, "MDB update made no changes")
 				}
 				lastMdb = newMdb // Always dereference old data.
 			}
