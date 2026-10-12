@@ -104,6 +104,15 @@ var (
 	srpcTrustedUsers  flagutil.StringSet
 )
 
+// CheckTlsAuthorisation applies the SRPC method access checks to a client
+// with the given TLS state. It returns the client's authentication
+// information and true if the call is authorised.
+func CheckTlsAuthorisation(serviceMethod string, state tls.ConnectionState,
+	allowMethodPowers, isPublic bool) (*AuthInformation, bool, error) {
+	return checkTlsAuthorisation(serviceMethod, state, allowMethodPowers,
+		isPublic)
+}
+
 // CheckTlsRequired returns true if the server requires TLS connections with
 // trusted certificates. It returns false if unencrypted or unauthenticated
 // connections are permitted (i.e. insecure mode).
