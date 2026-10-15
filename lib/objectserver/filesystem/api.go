@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
@@ -41,9 +42,10 @@ type objectType struct {
 }
 
 type Config struct {
-	BaseDirectory     string
-	LockCheckInterval time.Duration
-	LockLogTimeout    time.Duration
+	BaseDirectory       string
+	FileOpenerQueueSize uint
+	LockCheckInterval   time.Duration
+	LockLogTimeout      time.Duration
 }
 
 type ObjectServer struct {
@@ -195,13 +197,14 @@ func (objSrv *ObjectServer) WriteHtml(writer io.Writer) {
 
 type ObjectsReader struct {
 	objectServer *ObjectServer
+	filesOpener  *fsutil.FilesOpener
 	hashes       []hash.Hash
 	nextIndex    int64
 	sizes        []uint64
 }
 
 func (or *ObjectsReader) Close() error {
-	return nil
+	return or.close()
 }
 
 func (or *ObjectsReader) NextObject() (uint64, io.ReadCloser, error) {

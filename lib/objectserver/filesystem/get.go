@@ -3,9 +3,9 @@ package filesystem
 import (
 	"errors"
 	"io"
-	"os"
 	"path"
 
+	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/objectcache"
 )
@@ -18,6 +18,7 @@ func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
 		nextIndex:    -1,
 		sizes:        make([]uint64, 0, len(hashes)),
 	}
+	pathnames := make([]string, 0, len(hashes))
 	for _, hashVal := range hashes {
 		size, err := objSrv.checkObject(hashVal)
 		if err != nil {
@@ -27,10 +28,18 @@ func (objSrv *ObjectServer) getObjects(hashes []hash.Hash) (
 			hashStr, _ := hashVal.MarshalText()
 			return nil, errors.New("missing object: " + string(hashStr))
 		}
+		pathnames = append(pathnames, path.Join(objSrv.BaseDirectory,
+			objectcache.HashToFilename(hashVal)))
 		objectsReader.sizes = append(objectsReader.sizes, size)
 	}
-
+	objectsReader.filesOpener = fsutil.OpenFiles(nil, pathnames,
+		objSrv.FileOpenerQueueSize)
 	return &objectsReader, nil
+}
+
+func (or *ObjectsReader) close() error {
+	or.filesOpener.Cancel()
+	return nil
 }
 
 func (or *ObjectsReader) nextObject() (uint64, io.ReadCloser, error) {
@@ -38,9 +47,7 @@ func (or *ObjectsReader) nextObject() (uint64, io.ReadCloser, error) {
 	if or.nextIndex >= int64(len(or.hashes)) {
 		return 0, nil, errors.New("all objects have been consumed")
 	}
-	filename := path.Join(or.objectServer.BaseDirectory,
-		objectcache.HashToFilename(or.hashes[or.nextIndex]))
-	file, err := os.Open(filename)
+	file, err := or.filesOpener.OpenNext()
 	if err != nil {
 		return 0, nil, err
 	}

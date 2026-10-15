@@ -33,6 +33,8 @@ var (
 		"If true, allow unauthenticated access to read-only methods")
 	debug = flag.Bool("debug", false,
 		"If true, show debugging output")
+	fileOpenerQueueSize = flag.Uint("fileOpenerQueueSize", 8,
+		"Number of files to open-ahead when serving a GetObjects request")
 	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
 		"If true, generate a missing webcert (for SRPC server)")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
@@ -89,9 +91,10 @@ func main() {
 	}
 	objSrv, err := filesystem.NewObjectServerWithConfigAndParams(
 		filesystem.Config{
-			BaseDirectory:     *objectDir,
-			LockCheckInterval: *lockCheckInterval,
-			LockLogTimeout:    *lockLogTimeout,
+			BaseDirectory:       *objectDir,
+			FileOpenerQueueSize: *fileOpenerQueueSize,
+			LockCheckInterval:   *lockCheckInterval,
+			LockLogTimeout:      *lockLogTimeout,
 		},
 		filesystem.Params{
 			Logger:           logger,
