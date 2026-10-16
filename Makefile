@@ -3,8 +3,12 @@ all:
 	@cd c; make
 	go vet -composites=false ./cmd/*
 
+# Linux-only commands, skipped by build-darwin.
+LINUX_ONLY_CMDS := ./cmd/installer ./cmd/subd
+DARWIN_CMDS := $(filter-out $(LINUX_ONLY_CMDS),$(wildcard ./cmd/*))
+
 build-darwin:
-	(CGO_ENABLED=0 GOOS=darwin go build $(GO_BUILD_FLAGS) ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go build $(GO_BUILD_FLAGS) $(DARWIN_CMDS))
 
 build-linux:
 	(CGO_ENABLED=0 GOOS=linux go build $(GO_BUILD_FLAGS) ./cmd/*)
@@ -13,7 +17,7 @@ build-windows:
 	(CGO_ENABLED=0 GOOS=windows go build $(GO_BUILD_FLAGS) ./cmd/*)
 
 install-darwin:
-	(CGO_ENABLED=0 GOOS=darwin go install $(GO_BUILD_FLAGS) ./cmd/*)
+	(CGO_ENABLED=0 GOOS=darwin go install $(GO_BUILD_FLAGS) $(DARWIN_CMDS))
 
 install-linux:
 	(CGO_ENABLED=0 GOOS=linux go install $(GO_BUILD_FLAGS) ./cmd/*)
