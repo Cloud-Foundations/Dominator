@@ -12,7 +12,7 @@ import (
 )
 
 func importFsTreeSubcommand(args []string, logger log.DebugLogger) error {
-	imageSClient, _ := getClients()
+	imageSClient, _ := getMasterClients()
 	err := importFsTree(imageSClient, args[0], args[1], logger)
 	if err != nil {
 		return fmt.Errorf("error importing FsTree: %s", err)
