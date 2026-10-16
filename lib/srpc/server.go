@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ const (
 	jsonTlsRpcPath = "/_SRPC_/TLS/JSON"
 
 	getHostnamePath       = rpcPath + "getHostname"
+	getServiceArchPath    = rpcPath + "getServiceArch"
 	listMethodsPath       = rpcPath + "listMethods"
 	listPublicMethodsPath = rpcPath + "listPublicMethods"
 
@@ -111,6 +113,7 @@ func init() {
 	flag.Var(&srpcTrustedUsers, "srpcTrustedUsers",
 		"List of users trusted for all method access")
 	http.HandleFunc(getHostnamePath, getHostnameHttpHandler)
+	http.HandleFunc(getServiceArchPath, getServiceArchHttpHandler)
 	http.HandleFunc(rpcPath, gobUnsecuredHttpHandler)
 	http.HandleFunc(tlsRpcPath, gobTlsHttpHandler)
 	http.HandleFunc(jsonRpcPath, jsonUnsecuredHttpHandler)
@@ -357,6 +360,10 @@ func getHostnameHttpHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	fmt.Fprintln(w, hostname)
+}
+
+func getServiceArchHttpHandler(w http.ResponseWriter, _ *http.Request) {
+	fmt.Fprintln(w, runtime.GOARCH)
 }
 
 func gobTlsHttpHandler(w http.ResponseWriter, req *http.Request) {
