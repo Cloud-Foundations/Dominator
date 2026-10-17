@@ -290,7 +290,7 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 	if err != nil {
 		return nil, err
 	}
-	imageFilter, addFilter, err := loadFilter(manifestDir)
+	imageFilter, addFilter, sparseFilter, err := loadFilter(manifestDir)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +368,7 @@ func buildImageFromManifest(ctx context.Context, client srpc.ClientI,
 		mergeableFilter.Merge(manifest.sourceImageInfo.filter)
 		mergeableFilter.Merge(imageFilter)
 		imageFilter = mergeableFilter.ExportFilter()
-	} else if enableDefaultInheritance && imageFilter == nil {
+	} else if enableDefaultInheritance && imageFilter == nil && !sparseFilter {
 		imageFilter = manifest.sourceImageInfo.filter
 	}
 	if addTriggers {
@@ -558,34 +558,57 @@ func loadComputedFiles(manifestDir string) ([]util.ComputedFile, bool, error) {
 	}
 }
 
-func loadFilter(manifestDir string) (*filter.Filter, bool, error) {
-	imageFilter, err := filter.Load(filepath.Join(manifestDir, "filter"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, false, err
+func loadOptionalFilter(filename string) (*filter.Filter, error) {
+	f, err := filter.Load(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	if imageFilter != nil {
-		if err := imageFilter.Compile(); err != nil {
-			return nil, false, fmt.Errorf("error compiling filter: %s", err)
+	if err := f.Compile(); err != nil {
+		return nil, fmt.Errorf("error compiling %s: %s",
+			filepath.Base(filename), err)
+	}
+	return f, nil
+}
+
+func loadFilter(manifestDir string) (*filter.Filter, bool, bool, error) {
+	imageFilter, err := loadOptionalFilter(
+		filepath.Join(manifestDir, "filter"))
+	if err != nil {
+		return nil, false, false, err
+	}
+	addFilter, err := loadOptionalFilter(
+		filepath.Join(manifestDir, "filter.add"))
+	if err != nil {
+		return nil, false, false, err
+	}
+	sparseFilter, err := filter.Load(filepath.Join(manifestDir, "filter.none"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, false, false, err
+	}
+	if sparseFilter != nil && len(sparseFilter.FilterLines) > 0 {
+		return nil, false, false, errors.New("filter.none file must be empty")
+	}
+	present := 0
+	for _, f := range []*filter.Filter{imageFilter, addFilter, sparseFilter} {
+		if f != nil {
+			present++
 		}
 	}
-	addFilter, err := filter.Load(filepath.Join(manifestDir, "filter.add"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, false, err
+	if present > 1 {
+		return nil, false, false, errors.New(
+			"only one of filter, filter.add and filter.none files may be present")
 	}
-	if addFilter != nil {
-		if err := addFilter.Compile(); err != nil {
-			return nil, false, fmt.Errorf("error compiling filter.add: %s", err)
-		}
-	}
-	if imageFilter == nil && addFilter == nil {
-		return nil, false, nil
-	} else if imageFilter != nil && addFilter != nil {
-		return nil, false, errors.New(
-			"filter and filter.add files both present")
+	if sparseFilter != nil {
+		return nil, false, true, nil
 	} else if imageFilter != nil {
-		return imageFilter, false, nil
+		return imageFilter, false, false, nil
+	} else if addFilter != nil {
+		return addFilter, true, false, nil
 	} else {
-		return addFilter, true, nil
+		return nil, false, false, nil
 	}
 }
 

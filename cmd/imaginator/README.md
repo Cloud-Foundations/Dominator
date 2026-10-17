@@ -63,7 +63,9 @@ file (such as `filter`) nor its `.add` variant, the value from the *SourceImage*
 is inherited automatically.
 If `filter` or `filter.add` (and the equivalents for *computed-files* and  
 *triggers*) are present, they retain their existing meanings. The flag only  
-affects cases where neither file is defined.
+affects cases where none of the filter files is defined. A `filter.none` file,
+which must be empty, gives a sparse image (a nil filter) with or without the
+flag, and the *SourceImage* filter is never inherited in that case.
 
 ## Security
 RPC access is restricted using TLS client authentication. *Imaginator* expects
