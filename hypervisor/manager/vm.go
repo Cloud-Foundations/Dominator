@@ -22,6 +22,7 @@ import (
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -2852,6 +2853,29 @@ func migratevmUserData(hypervisor *srpc.Client, filename string,
 		return err
 	}
 	return nil
+}
+
+func (vm *vmInfoType) waitForProcessExit() error {
+	pid, err := vm.readPid()
+	if err != nil {
+		return err
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
+	startTime := time.Now()
+	timeoutTime := startTime.Add(15 * time.Second)
+	for time.Until(timeoutTime) > 0 {
+		if err := process.Signal(syscall.Signal(0)); err != nil {
+			vm.logger.Debugf(0, "virtualiser process took %s to exit\n",
+				format.Duration(time.Since(startTime)))
+			return nil
+		}
+		sleeper.Sleep()
+	}
+	return fmt.Errorf("timed out waiting for virtualiser process to exit")
 }
 
 func (vm *vmInfoType) makeExtraLogger(filename string) (
