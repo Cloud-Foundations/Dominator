@@ -105,6 +105,9 @@ func (vm *vmInfoType) processMonitorResponses(monitorSock net.Conn,
 		}
 	}
 	close(commandOutput)
+	if err := vm.waitForProcessExit(); err != nil {
+		vm.logger.Printf("error waiting for process exit: %s\n", err)
+	}
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
 	close(vm.commandInput)
