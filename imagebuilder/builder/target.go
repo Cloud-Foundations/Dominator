@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -14,6 +15,18 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/goroutine"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 )
+
+var environmentToCopy = map[string]struct{}{
+	"TZ": {},
+}
+
+var environmentToSet = map[string]string{
+	"ARCH":    runtime.GOARCH,
+	"HOME":    "/",
+	"LOGNAME": "root",
+	"PATH":    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+	"USER":    "root",
+}
 
 // newNamespaceTarget will create a goroutine which is locked to an OS
 // thread with a separate mount namespace.
@@ -100,19 +113,23 @@ func setupMounts(rootDir string, bindMounts []bindMountType) error {
 
 func stripVariables(input []string, varsToCopy map[string]struct{},
 	varsToSet ...map[string]string) []string {
-	output := make([]string, 0)
+	newTable := make(map[string]string)
 	for _, nameValue := range input {
 		split := strings.SplitN(nameValue, "=", 2)
 		if len(split) == 2 {
 			if _, ok := varsToCopy[split[0]]; ok {
-				output = append(output, nameValue)
+				newTable[split[0]] = split[1]
 			}
 		}
 	}
 	for _, varTable := range varsToSet {
 		for name, value := range varTable {
-			output = append(output, name+"="+value)
+			newTable[name] = value
 		}
+	}
+	output := make([]string, len(newTable))
+	for name, value := range newTable {
+		output = append(output, name+"="+value)
 	}
 	sort.Strings(output)
 	return output
