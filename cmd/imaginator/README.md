@@ -53,6 +53,20 @@ special variables which may be used for variable expansion. These are typically
 used to store secrets for accessing Git repositories which require
 authentication. Each line should contain a single `NAME=Value` entry.
 
+### Default inheritance
+By default, an *[image manifest](../../user-guide/image-manifest.md)* inherits  
+*computed-files*, *filters*, or *triggers* from the *SourceImage* only if the  
+corresponding `.add` file is included (for example, `filter.add`).
+When the *imaginator* is started with the `-enableDefaultInheritance` flag,  
+this behavior becomes more permissive. If a manifest includes neither the base  
+file (such as `filter`) nor its `.add` variant, the value from the *SourceImage*  
+is inherited automatically.
+If `filter` or `filter.add` (and the equivalents for *computed-files* and  
+*triggers*) are present, they retain their existing meanings. The flag only  
+affects cases where none of the filter files is defined. A `filter.none` file,
+which must be empty, gives a sparse image (a nil filter) with or without the
+flag, and the *SourceImage* filter is never inherited in that case.
+
 ## Security
 RPC access is restricted using TLS client authentication. *Imaginator* expects
 a root certificate in the file `/etc/ssl/CA.pem` which it trusts to sign

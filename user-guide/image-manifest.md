@@ -30,6 +30,15 @@ regions if desired. Machines may be live-patched with these images using the
 across multiple AWS accounts and regions in a couple of minutes to create new
 virtual machines.
 
+Several files can be combined with the *SourceImage*: `computed-files`,
+`filter` and `triggers`. A file with an `.add` suffix (for example `filter.add`)
+is merged with the matching value from the *SourceImage*, while the plain file
+replaces it. If neither file is present, the value is inherited only when the
+*[imaginator](../cmd/imaginator/README.md)* is started with
+`-enableDefaultInheritance`; otherwise nothing is inherited. The one exception is
+`filter.none`, which always gives a sparse image (a nil filter), with or without
+the flag.
+
 ## Manifest Components
 The image manifest has multiple components. These are processed and combined in
 the following order to build the image contents.
@@ -184,12 +193,26 @@ An optional file containing a newline-separated list of regular expressions
 matching files which should not be updated on target machines. This is relevant
 only for images which will be lived patched onto machines with the
 *[dominator](../cmd/dominator/README.md)*. This must not be present if the
-`filter.add` file is present.
+`filter.add` or `filter.none` file is present.
 
 ### `filter.add` file
 This is similar to the `filter` file, except that the filter expressions are
-*added* to the filter of the *SourceImage*, thus inheriting and (if not empty)
-extending the filter. This must not be present if the `filter` file is present.
+*added* to the filter of the *SourceImage*, extending it. An empty file leaves the
+inherited filter unchanged. This must not be present if the `filter` or
+`filter.none` file is present.
+
+### `filter.none` file
+An optional file that must be empty. If present, the image has a nil (sparse)
+filter, whether or not the *[imaginator](../cmd/imaginator/README.md)* is started
+with `-enableDefaultInheritance`. The filter from the *SourceImage* is never
+inherited. This must not be present if the `filter` or `filter.add` file is
+present.
+
+Without `-enableDefaultInheritance`, a manifest with no filter files already gives
+a sparse image. With it, those manifests inherit the *SourceImage* filter, so
+`filter.none` is the only way to get a sparse image that does not depend on the
+source. An empty `filter` file does not help: it gives an empty filter, not a nil
+one.
 
 ### `owners.json` file
 An optional JSON encoded file containing a list of group and user owners for the
