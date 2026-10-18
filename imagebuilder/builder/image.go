@@ -573,8 +573,18 @@ func loadOptionalFilter(filename string) (*filter.Filter, error) {
 	return f, nil
 }
 
-func loadFilter(manifestDir string) (*filter.Filter, bool, bool, error) {
-	imageFilter, err := loadOptionalFilter(
+// loadFilter reads the filter, filter.add and filter.none files in manifestDir.
+// A missing file is not an error. It returns:
+//   - imageFilter: the filter from the filter or filter.add file. It is nil for
+//     a sparse image or when neither file is present.
+//   - isAdd: true if imageFilter came from filter.add, so it merges with the
+//     SourceImage filter.
+//   - isSparse: true if filter.none is present.
+//   - err: set if more than one of the files is present, or if filter.none is
+//     not empty. The other results are zero values in that case.
+func loadFilter(manifestDir string) (
+	imageFilter *filter.Filter, isAdd, isSparse bool, err error) {
+	imageFilter, err = loadOptionalFilter(
 		filepath.Join(manifestDir, "filter"))
 	if err != nil {
 		return nil, false, false, err
