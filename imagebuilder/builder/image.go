@@ -90,7 +90,7 @@ func (stream *imageStreamType) getenv() map[string]string {
 			return ""
 		})
 	}
-	envTable["ARCH"] = runtime.GOARCH
+	envTable["ARCH"] = runtime.GOARCH // Need this here for variable expansion.
 	envTable["IMAGE_STREAM"] = stream.name
 	envTable["IMAGE_STREAM_DIRECTORY_NAME"] = filepath.Dir(stream.name)
 	envTable["IMAGE_STREAM_LEAF_NAME"] = filepath.Base(stream.name)

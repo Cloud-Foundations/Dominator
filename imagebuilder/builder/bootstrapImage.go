@@ -31,17 +31,6 @@ const (
 	packagerPathname = "/bin/generic-packager"
 )
 
-var environmentToCopy = map[string]struct{}{
-	"TZ": {},
-}
-
-var environmentToSet = map[string]string{
-	"HOME":    "/",
-	"LOGNAME": "root",
-	"PATH":    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	"USER":    "root",
-}
-
 func cleanPackages(ctx context.Context, g *goroutine.Goroutine, rootDir string,
 	buildLog io.Writer) error {
 	fmt.Fprintln(buildLog, "\nCleaning packages:")
