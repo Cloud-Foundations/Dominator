@@ -16,6 +16,7 @@ import (
 	jsonwriter "github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
@@ -71,72 +72,54 @@ func serverWatchDaemon(config Config, params Params,
 			params.Logger.Println(err)
 			continue
 		}
-		conn, err := callGetMdbUpdates(client, config.Locations)
-		if err != nil {
-			params.Logger.Println(err)
-			client.Close()
-			continue
-		}
 		newMdb := &mdb.Mdb{}
-		for {
-			var mdbUpdate mdbserver.MdbUpdate
-			if err := conn.Decode(&mdbUpdate); err != nil {
-				params.Logger.Println(err)
-				break
-			} else {
-				newMdb = processUpdate(newMdb, mdbUpdate)
-				sortStartTime := time.Now()
-				sort.Sort(newMdb)
-				mdbSortTimeDistribution.Add(time.Since(sortStartTime))
-				compareStartTime := time.Now()
-				if lastMdb == nil || !reflect.DeepEqual(lastMdb, newMdb) {
-					if lastMdb != nil {
-						mdbCompareTimeDistribution.Add(time.Since(
-							compareStartTime))
-					}
-					mdbChannel <- newMdb
-					if err := writeFile(config.MdbFileName, newMdb); err != nil {
-						params.Logger.Println(err)
-					} else {
-						params.Logger.Debugf(0,
-							"Wrote MDB data (%d machines) to: %s\n",
-							len(newMdb.Machines), config.MdbFileName)
-					}
-				} else {
-					params.Logger.Debugln(1, "MDB update made no changes")
-				}
+		err = getMdbUpdates(client, config.Locations,
+			func(mdbUpdate mdbserver.MdbUpdate) error {
+				newMdb = handleMdbUpdate(config, params, mdbChannel,
+					lastMdb, newMdb, mdbUpdate)
 				lastMdb = newMdb // Always dereference old data.
-			}
-		}
-		conn.Close()
+				return nil
+			})
+		params.Logger.Println(err)
 		client.Close()
 	}
 }
 
-func callGetMdbUpdates(client *srpc.Client,
-	locations []string) (*srpc.Conn, error) {
-	if len(locations) < 1 {
-		return client.Call("MdbServer.GetMdbUpdates")
-	}
-	conn, err := client.Call("MdbServer.GetFilteredMdbUpdates")
-	if err != nil {
-		return nil, err
-	}
-	doClose := true
-	defer func() {
-		if doClose {
-			conn.Close()
+// handleMdbUpdate applies mdbUpdate to newMdb. If the result differs from
+// lastMdb it is sent to mdbChannel and written to the MDB file. It returns the
+// updated MDB.
+func handleMdbUpdate(config Config, params Params, mdbChannel chan<- *mdb.Mdb,
+	lastMdb, newMdb *mdb.Mdb, mdbUpdate mdbserver.MdbUpdate) *mdb.Mdb {
+	newMdb = processUpdate(newMdb, mdbUpdate)
+	sortStartTime := time.Now()
+	sort.Sort(newMdb)
+	mdbSortTimeDistribution.Add(time.Since(sortStartTime))
+	compareStartTime := time.Now()
+	if lastMdb == nil || !reflect.DeepEqual(lastMdb, newMdb) {
+		if lastMdb != nil {
+			mdbCompareTimeDistribution.Add(time.Since(compareStartTime))
 		}
-	}()
-	request := mdbserver.GetFilteredMdbUpdatesRequest{Locations: locations}
-	if err := conn.Encode(request); err != nil {
-		return nil, err
+		mdbChannel <- newMdb
+		if err := writeFile(config.MdbFileName, newMdb); err != nil {
+			params.Logger.Println(err)
+		} else {
+			params.Logger.Debugf(0, "Wrote MDB data (%d machines) to: %s\n",
+				len(newMdb.Machines), config.MdbFileName)
+		}
+	} else {
+		params.Logger.Debugln(1, "MDB update made no changes")
 	}
-	if err := conn.Flush(); err != nil {
-		return nil, err
+	return newMdb
+}
+
+// getMdbUpdates streams MDB updates for the specified locations (all machines
+// if none) to updateFunc. It returns the error that ended the stream.
+func getMdbUpdates(client srpc.ClientI, locations []string,
+	updateFunc func(mdbserver.MdbUpdate) error) error {
+	if len(locations) < 1 {
+		return mdbclient.GetMdbUpdates(client, updateFunc)
 	}
-	doClose = false
-	return conn, nil
+	return mdbclient.GetFilteredMdbUpdates(client, locations, updateFunc)
 }
 
 func loadFile(reader io.Reader, filename string, logger log.Logger) *mdb.Mdb {

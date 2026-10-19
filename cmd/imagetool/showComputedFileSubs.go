@@ -5,14 +5,13 @@ import (
 	"os"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/text"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func showComputedFileSubsSubcommand(args []string,
@@ -35,16 +34,11 @@ func showComputedFileSubsSubcommand(args []string,
 func showComputedFileSubs(imageSClient, mdbdSClient srpc.ClientI,
 	computedFile filesystem.ComputedFile) error {
 	// Get data from MDB.
-	request := mdbserver.GetMdbRequest{}
-	var reply mdbserver.GetMdbResponse
-	err := mdbdSClient.RequestReply("MdbServer.GetMdb", request, &reply)
+	machines, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
 		return err
 	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	imageToMachinesMap := computeImageToMachinesMap(reply.Machines, false)
+	imageToMachinesMap := computeImageToMachinesMap(machines, false)
 	machinesMap := make(map[*mdb.Machine]struct{})
 	for imageName, imageMachines := range imageToMachinesMap {
 		computedFiles, _, err := client.GetImageComputedFiles(imageSClient,

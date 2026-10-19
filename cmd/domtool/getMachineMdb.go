@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mdb"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 )
 
 func getMachineMdbSubcommand(args []string, logger log.DebugLogger) error {
@@ -25,14 +24,5 @@ func getMachineMdb(hostname string) (mdb.Machine, error) {
 		return mdb.Machine{}, err
 	}
 	defer client.Close()
-	request := mdbserver.GetMachineRequest{Hostname: hostname}
-	var reply mdbserver.GetMachineResponse
-	err = client.RequestReply("MdbServer.GetMachine", request, &reply)
-	if err != nil {
-		return mdb.Machine{}, err
-	}
-	if err := errors.New(reply.Error); err != nil {
-		return mdb.Machine{}, err
-	}
-	return reply.Machine, nil
+	return mdbclient.GetMachine(client, hostname)
 }

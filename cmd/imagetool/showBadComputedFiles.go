@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func showBadComputedFilesSubcommand(args []string,
@@ -28,16 +27,11 @@ func showBadComputedFilesSubcommand(args []string,
 
 func showBadComputedFiles(imageSClient, mdbdSClient srpc.ClientI) error {
 	// Get data from MDB.
-	request := mdbserver.GetMdbRequest{}
-	var reply mdbserver.GetMdbResponse
-	err := mdbdSClient.RequestReply("MdbServer.GetMdb", request, &reply)
+	machines, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
 		return err
 	}
-	if err := errors.New(reply.Error); err != nil {
-		return err
-	}
-	imageToMachinesMap := computeImageToMachinesMap(reply.Machines, true)
+	imageToMachinesMap := computeImageToMachinesMap(machines, true)
 	// Compute mapping from image to computed files and list of sources.
 	filegenSources := make(map[string]struct{})
 	imageToComputedFiles := make(map[string][]filesystem.ComputedFile,

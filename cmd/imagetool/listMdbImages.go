@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func listMdbImagesSubcommand(args []string, logger log.DebugLogger) error {
@@ -22,9 +22,7 @@ func listMdbImagesSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func listMdbImages(mdbdClient *srpc.Client) error {
-	request := mdbserver.ListImagesRequest{}
-	var reply mdbserver.ListImagesResponse
-	err := mdbdClient.RequestReply("MdbServer.ListImages", request, &reply)
+	reply, err := mdbclient.ListImages(mdbdClient)
 	if err != nil {
 		return err
 	}

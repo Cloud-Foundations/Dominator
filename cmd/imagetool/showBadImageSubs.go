@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/Dominator/lib/text"
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 type expirationData struct {
@@ -45,19 +44,14 @@ func showBadImageSubs(imageSClient, mdbdSClient srpc.ClientI) error {
 	}
 	goodImages := stringutil.ConvertListToMap(imageNames, false)
 	// Get data from MDB.
-	request := mdbserver.GetMdbRequest{}
-	var reply mdbserver.GetMdbResponse
-	err = mdbdSClient.RequestReply("MdbServer.GetMdb", request, &reply)
+	machines, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
 	// Loop over machines, skipping those with good images.
 	imageExpirations := make(map[string]*expirationData)
 	columnCollector := &text.ColumnCollector{}
-	for _, machine := range reply.Machines {
+	for _, machine := range machines {
 		if machine.RequiredImage == "" {
 			continue
 		}
