@@ -127,7 +127,7 @@ func stripVariables(input []string, varsToCopy map[string]struct{},
 			newTable[name] = value
 		}
 	}
-	output := make([]string, len(newTable))
+	output := make([]string, 0, len(newTable))
 	for name, value := range newTable {
 		output = append(output, name+"="+value)
 	}
