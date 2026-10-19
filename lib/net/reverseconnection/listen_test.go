@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/testlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 )
@@ -34,21 +34,24 @@ type serverType struct {
 }
 
 func createTestListener(logger log.DebugLogger) (*Listener, uint) {
-	portNumber := 30000 + uint(rand.Intn(10000))
-	listener, err := Listen("tcp", portNumber, logger)
-	if err != nil {
-		logger.Fatal(err)
+	for attempt := 0; attempt < 100; attempt++ {
+		portNumber := 30000 + uint(rand.Intn(10000))
+		if listener, err := Listen("tcp", portNumber, logger); err == nil {
+			return listener, portNumber
+		}
 	}
-	return listener, portNumber
+	panic("no free port for test listener")
 }
 
 func createTestRealListener(logger log.DebugLogger) (net.Listener, uint) {
-	portNumber := 30000 + uint(rand.Intn(10000))
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNumber))
-	if err != nil {
-		logger.Fatal(err)
+	for attempt := 0; attempt < 100; attempt++ {
+		portNumber := 30000 + uint(rand.Intn(10000))
+		if listener, err := net.Listen("tcp",
+			fmt.Sprintf(":%d", portNumber)); err == nil {
+			return listener, portNumber
+		}
 	}
-	return listener, portNumber
+	panic("no free port for test listener")
 }
 
 func createAcceptChannel(listener *Listener) <-chan testAcceptEvent {
@@ -214,15 +217,20 @@ func TestListenAndHttpServe(t *testing.T) {
 	}
 }
 
+func hasDialerConnection(d *Dialer, address string) bool {
+	d.connectionMapLock.Lock()
+	defer d.connectionMapLock.Unlock()
+	_, ok := d.connectionMap[address]
+	return ok
+}
+
 func TestReverseListenTcp(t *testing.T) {
-	tLogger := testlogger.New(t)
 	// Set up slave.
-	slaveListener, slavePortNumber := createTestListener(
-		prefixlogger.New("slave: ", tLogger))
+	slaveListener, slavePortNumber := createTestListener(nulllogger.New())
 	slaveAddress := fmt.Sprintf("127.0.0.1:%d", slavePortNumber)
 	t.Logf("slaveAddress: %s", slaveAddress)
 	// Set up master
-	masterLogger := prefixlogger.New("master: ", tLogger)
+	masterLogger := nulllogger.New()
 	masterListener, masterPortNumber := createTestRealListener(masterLogger)
 	masterMux := http.NewServeMux()
 	go http.Serve(masterListener, masterMux)
@@ -240,17 +248,20 @@ func TestReverseListenTcp(t *testing.T) {
 	go slaveListener.connectLoop(ReverseListenerConfig{
 		Network:         "tcp",
 		ServerAddress:   fmt.Sprintf("127.0.0.1:%d", masterPortNumber),
-		MinimumInterval: time.Millisecond,
+		MinimumInterval: time.Second,
 	},
 		"127.0.0.1")
-	time.Sleep(time.Millisecond * 50)
+	deadline := time.Now().Add(10 * time.Second)
+	for !hasDialerConnection(dialer, slaveAddress) {
+		if time.Now().After(deadline) {
+			t.Fatal("master dialer does not have a connection yet")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if slaveListener.connectionMap[loopbackIP] > 0 {
 		t.Fatalf(
 			"slave listener has %d loopback connections, expected none",
 			slaveListener.connectionMap[loopbackIP])
-	}
-	if dialer.connectionMap[slaveAddress] == nil {
-		t.Fatalf("master dialer does not have a connection yet")
 	}
 	time.Sleep(time.Millisecond * 50)
 	t.Log("making and testing connection")
@@ -286,16 +297,15 @@ func TestReverseListenTcp(t *testing.T) {
 }
 
 func TestReverseListenHttp(t *testing.T) {
-	tLogger := testlogger.New(t)
 	// Set up slave.
-	slaveLogger := prefixlogger.New("slave: ", tLogger)
+	slaveLogger := nulllogger.New()
 	slaveListener, slavePortNumber := createTestListener(slaveLogger)
 	slaveMux := http.NewServeMux()
 	server := &serverType{slaveLogger}
 	slaveMux.HandleFunc(testUrlPath, server.connectHandler)
 	go http.Serve(slaveListener, slaveMux)
 	// Set up master
-	masterLogger := prefixlogger.New("master: ", tLogger)
+	masterLogger := nulllogger.New()
 	masterListener, masterPortNumber := createTestRealListener(masterLogger)
 	masterMux := http.NewServeMux()
 	go http.Serve(masterListener, masterMux)
