@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/log/testlogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
 )
 
 var errorTimeout = errors.New("timeout")
@@ -41,7 +41,7 @@ func TestWatchFileCwd(t *testing.T) {
 }
 
 func testWatchFile(t *testing.T, dirname string) {
-	logger := testlogger.New(t)
+	logger := nulllogger.New()
 	pathNotExist := path.Join(dirname, "never-exists")
 	ch := WatchFile(pathNotExist, logger)
 	rc, err := watchTimeout(ch, time.Millisecond*50)
@@ -56,7 +56,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	}
 	file.Close()
 	ch = WatchFile(pathExists, logger)
-	rc, err = watchTimeout(ch, time.Millisecond*50)
+	rc, err = watchTimeout(ch, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -77,7 +77,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	if err != errorTimeout {
 		t.Fatal("Expected timeout error for non-existent file")
 	}
-	rc, err = watchTimeout(ch, time.Millisecond*90)
+	rc, err = watchTimeout(ch, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -97,7 +97,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	if err := os.Rename(pathWillBeRenamed, pathExistsLater); err != nil {
 		t.Fatal(err)
 	}
-	rc, err = watchTimeout(ch, time.Millisecond*50)
+	rc, err = watchTimeout(ch, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	} else {
