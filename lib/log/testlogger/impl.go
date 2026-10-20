@@ -25,11 +25,13 @@ func plainSprintf(format string, v ...interface{}) string {
 }
 
 func newTestlogger(logger TestLogger) *Logger {
-	return &Logger{
+	l := &Logger{
 		logger:  logger,
 		sprint:  plainSprint,
 		sprintf: plainSprintf,
 	}
+	l.stopAfterCompletion()
+	return l
 }
 
 func newWithTimestamps(logger TestLogger) *Logger {
@@ -39,7 +41,37 @@ func newWithTimestamps(logger TestLogger) *Logger {
 	}
 	l.sprint = l.sprintWithTimestamp
 	l.sprintf = l.sprintfWithTimestamp
+	l.stopAfterCompletion()
 	return l
+}
+
+// Stop logging once the test completes; background goroutines may still log.
+func (l *Logger) stopAfterCompletion() {
+	if cleaner, ok := l.logger.(interface{ Cleanup(func()) }); ok {
+		cleaner.Cleanup(func() {
+			l.mutex.Lock()
+			defer l.mutex.Unlock()
+			l.done = true
+		})
+	}
+}
+
+// Log unless the test has completed.
+func (l *Logger) emit(message string) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if !l.done {
+		l.logger.Log(message)
+	}
+}
+
+// Fatal unless the test has completed.
+func (l *Logger) emitFatal(message string) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if !l.done {
+		l.logger.Fatal(message)
+	}
 }
 
 func (l *Logger) sprintWithTimestamp(v ...interface{}) string {
