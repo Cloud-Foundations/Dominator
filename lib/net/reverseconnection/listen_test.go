@@ -34,24 +34,30 @@ type serverType struct {
 }
 
 func createTestListener(logger log.DebugLogger) (*Listener, uint) {
+	var err error
 	for attempt := 0; attempt < 100; attempt++ {
 		portNumber := 30000 + uint(rand.Intn(10000))
-		if listener, err := Listen("tcp", portNumber, logger); err == nil {
+		var listener *Listener
+		if listener, err = Listen("tcp", portNumber, logger); err == nil {
 			return listener, portNumber
 		}
 	}
-	panic("no free port for test listener")
+	logger.Fatal(err)
+	return nil, 0
 }
 
 func createTestRealListener(logger log.DebugLogger) (net.Listener, uint) {
+	var err error
 	for attempt := 0; attempt < 100; attempt++ {
 		portNumber := 30000 + uint(rand.Intn(10000))
-		if listener, err := net.Listen("tcp",
+		var listener net.Listener
+		if listener, err = net.Listen("tcp",
 			fmt.Sprintf(":%d", portNumber)); err == nil {
 			return listener, portNumber
 		}
 	}
-	panic("no free port for test listener")
+	logger.Fatal(err)
+	return nil, 0
 }
 
 func createAcceptChannel(listener *Listener) <-chan testAcceptEvent {
