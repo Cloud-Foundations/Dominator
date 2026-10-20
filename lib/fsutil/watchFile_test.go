@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/testlogger"
 )
 
 var errorTimeout = errors.New("timeout")
@@ -41,7 +41,7 @@ func TestWatchFileCwd(t *testing.T) {
 }
 
 func testWatchFile(t *testing.T, dirname string) {
-	logger := nulllogger.New()
+	logger := testlogger.New(t)
 	pathNotExist := path.Join(dirname, "never-exists")
 	ch := WatchFile(pathNotExist, logger)
 	rc, err := watchTimeout(ch, time.Millisecond*50)

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	"github.com/Cloud-Foundations/Dominator/lib/log/nulllogger"
+	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/log/testlogger"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 )
@@ -225,12 +225,14 @@ func hasDialerConnection(d *Dialer, address string) bool {
 }
 
 func TestReverseListenTcp(t *testing.T) {
+	tLogger := testlogger.New(t)
 	// Set up slave.
-	slaveListener, slavePortNumber := createTestListener(nulllogger.New())
+	slaveListener, slavePortNumber := createTestListener(
+		prefixlogger.New("slave: ", tLogger))
 	slaveAddress := fmt.Sprintf("127.0.0.1:%d", slavePortNumber)
 	t.Logf("slaveAddress: %s", slaveAddress)
 	// Set up master
-	masterLogger := nulllogger.New()
+	masterLogger := prefixlogger.New("master: ", tLogger)
 	masterListener, masterPortNumber := createTestRealListener(masterLogger)
 	masterMux := http.NewServeMux()
 	go http.Serve(masterListener, masterMux)
@@ -297,15 +299,16 @@ func TestReverseListenTcp(t *testing.T) {
 }
 
 func TestReverseListenHttp(t *testing.T) {
+	tLogger := testlogger.New(t)
 	// Set up slave.
-	slaveLogger := nulllogger.New()
+	slaveLogger := prefixlogger.New("slave: ", tLogger)
 	slaveListener, slavePortNumber := createTestListener(slaveLogger)
 	slaveMux := http.NewServeMux()
 	server := &serverType{slaveLogger}
 	slaveMux.HandleFunc(testUrlPath, server.connectHandler)
 	go http.Serve(slaveListener, slaveMux)
 	// Set up master
-	masterLogger := nulllogger.New()
+	masterLogger := prefixlogger.New("master: ", tLogger)
 	masterListener, masterPortNumber := createTestRealListener(masterLogger)
 	masterMux := http.NewServeMux()
 	go http.Serve(masterListener, masterMux)
