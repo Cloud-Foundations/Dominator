@@ -80,22 +80,23 @@ type Manager struct {
 }
 
 type StartOptions struct {
-	BootLogMaximumBytes  types.Bytes
-	BridgeMap            map[string]net.Interface // Key: interface name.
-	DhcpServer           DhcpServer
-	IdentityProvider     string
-	ImageServerAddress   string
-	LockCheckInterval    time.Duration
-	LockLogTimeout       time.Duration
-	LocalImagesDirectory string
-	Logger               log.DebugLogger
-	ObjectCacheDirectory string
-	ObjectCacheBytes     uint64
-	ShowVgaConsole       bool
-	StateDir             string
-	Username             string
-	VlanIdToBridge       map[uint]string // Key: VLAN ID, value: bridge interface.
-	VolumeDirectories    []string
+	BootLogMaximumBytes    types.Bytes
+	BridgeMap              map[string]net.Interface // Key: interface name.
+	DhcpServer             DhcpServer
+	IdentityProvider       string
+	ImageServerAddress     string
+	LockCheckInterval      time.Duration
+	LockLogTimeout         time.Duration
+	LocalImagesDirectory   string
+	Logger                 log.DebugLogger
+	ObjectCacheDirectory   string
+	ObjectCacheBytes       uint64
+	ShowVgaConsole         bool
+	StateDir               string
+	Username               string
+	VirtualiserExitTimeout time.Duration   // Default: 15 seconds.
+	VlanIdToBridge         map[uint]string // Key: VLAN ID, value: bridge interface.
+	VolumeDirectories      []string
 }
 
 type summaryData struct {

@@ -2866,7 +2866,7 @@ func (vm *vmInfoType) waitForProcessExit() error {
 	}
 	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
 	startTime := time.Now()
-	timeoutTime := startTime.Add(15 * time.Second)
+	timeoutTime := startTime.Add(vm.manager.VirtualiserExitTimeout)
 	for time.Until(timeoutTime) > 0 {
 		if err := process.Signal(syscall.Signal(0)); err != nil {
 			vm.logger.Debugf(0, "virtualiser process took %s to exit\n",
