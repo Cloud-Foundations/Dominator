@@ -188,6 +188,8 @@ var subcommands = []commands.Command{
 		diffImagePackageListsSubcommand},
 	{"diff-triggers", "tool left right", 3, 3, diffTriggersInImagesSubcommand},
 	{"estimate-usage", "name", 1, 1, estimateImageUsageSubcommand},
+	{"fetch-image-objects", "name directory", 2, 2,
+		fetchImageObjectsSubcommand},
 	{"find-latest-image", "directory", 1, 1, findLatestImageSubcommand},
 	{"get", "name directory", 2, 2, getImageSubcommand},
 	{"get-archive-data", "name outfile", 2, 2, getImageArchiveDataSubcommand},

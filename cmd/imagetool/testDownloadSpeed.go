@@ -43,11 +43,15 @@ func testDownloadSpeed(imageName string, logger log.Logger) error {
 	finishedTime := time.Now()
 	logger.Printf("downloaded image metadata in %s\n",
 		format.Duration(finishedTime.Sub(startTime)))
+	hashMap := make(map[hash.Hash]struct{}, len(img.FileSystem.InodeTable))
 	hashes := make([]hash.Hash, 0, len(img.FileSystem.InodeTable))
 	for _, inode := range img.FileSystem.InodeTable {
 		if inode, ok := inode.(*filesystem.RegularInode); ok {
 			if inode.Size > 0 {
-				hashes = append(hashes, inode.Hash)
+				if _, found := hashMap[inode.Hash]; !found {
+					hashMap[inode.Hash] = struct{}{}
+					hashes = append(hashes, inode.Hash)
+				}
 			}
 		}
 	}
