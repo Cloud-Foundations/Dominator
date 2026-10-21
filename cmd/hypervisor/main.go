@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -78,6 +79,9 @@ var (
 		"Name of default image stream for network booting")
 	username = flag.String("username", "nobody",
 		"Name of user to run VMs")
+	virtualiserExitTimeout = flag.Duration("virtualiserExitTimeout",
+		15*time.Second,
+		"Time to wait for virtualiser process to exit")
 	volumeDirectories flagutil.StringList
 )
 
@@ -214,22 +218,23 @@ func run() {
 		logger.Fatalf("Cannot start tftpboot server: %s\n", err)
 	}
 	managerObj, err := manager.New(manager.StartOptions{
-		BootLogMaximumBytes:  types.Bytes(bootLogMaximumSize),
-		BridgeMap:            bridgeMap,
-		DhcpServer:           dhcpServer,
-		IdentityProvider:     *identityProvider,
-		ImageServerAddress:   imageServerAddress,
-		LockCheckInterval:    *lockCheckInterval,
-		LockLogTimeout:       *lockLogTimeout,
-		LocalImagesDirectory: *localImagesDirectory,
-		Logger:               logger,
-		ObjectCacheDirectory: *objectCacheDirectory,
-		ObjectCacheBytes:     uint64(objectCacheSize),
-		ShowVgaConsole:       *showVGA,
-		StateDir:             *stateDir,
-		Username:             *username,
-		VlanIdToBridge:       vlanIdToBridge,
-		VolumeDirectories:    volumeDirectories,
+		BootLogMaximumBytes:    types.Bytes(bootLogMaximumSize),
+		BridgeMap:              bridgeMap,
+		DhcpServer:             dhcpServer,
+		IdentityProvider:       *identityProvider,
+		ImageServerAddress:     imageServerAddress,
+		LockCheckInterval:      *lockCheckInterval,
+		LockLogTimeout:         *lockLogTimeout,
+		LocalImagesDirectory:   *localImagesDirectory,
+		Logger:                 logger,
+		ObjectCacheDirectory:   *objectCacheDirectory,
+		ObjectCacheBytes:       uint64(objectCacheSize),
+		ShowVgaConsole:         *showVGA,
+		StateDir:               *stateDir,
+		Username:               *username,
+		VirtualiserExitTimeout: *virtualiserExitTimeout,
+		VlanIdToBridge:         vlanIdToBridge,
+		VolumeDirectories:      volumeDirectories,
 	})
 	if err != nil {
 		logger.Fatalf("Cannot start hypervisor: %s\n", err)
