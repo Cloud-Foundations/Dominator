@@ -73,6 +73,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if startOptions.BootLogMaximumBytes < 1 {
 		startOptions.BootLogMaximumBytes = 1 << 20
 	}
+	if startOptions.VirtualiserExitTimeout < 1 {
+		startOptions.VirtualiserExitTimeout = 15 * time.Second
+	}
 	manager := &Manager{
 		StartOptions:  startOptions,
 		rootCookie:    rootCookie,
