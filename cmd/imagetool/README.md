@@ -49,6 +49,7 @@ Some of the sub-commands available are:
 - **diff-package-lists**: compare the package lists for two images
 - **diff-triggers**: compare the triggers for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image
+- **fetch-image-objects**: fetch objects from image
 - **find-latest-image**: find the latest image in a directory
 - **get**: get and unpack an image
 - **get-archive-data**: get archive (audit) data for an image
