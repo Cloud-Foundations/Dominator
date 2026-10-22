@@ -24,8 +24,10 @@ func fetchImageObjectsSubcommand(args []string, logger log.DebugLogger) error {
 	return nil
 }
 
-func fetchImageObjects(imageName, dirname string, logger log.Logger) error {
-	imageSClient, objClient := getClients()
+func fetchImageObjects(imageName, dirname string,
+	logger log.DebugLogger) error {
+	imageSClient, _ := getClients()
+	objectsGetter := getObjectsGetter(logger)
 	isDir, err := imgclient.CheckDirectory(imageSClient, imageName)
 	if err != nil {
 		return err
@@ -59,7 +61,7 @@ func fetchImageObjects(imageName, dirname string, logger log.Logger) error {
 		}
 	}
 	startTime = time.Now()
-	objectsReader, err := objClient.GetObjects(hashes)
+	objectsReader, err := objectsGetter.GetObjects(hashes)
 	if err != nil {
 		return err
 	}
