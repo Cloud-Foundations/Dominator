@@ -26,6 +26,13 @@ type TestLogger interface {
 	Logf(format string, v ...interface{})
 }
 
+// Cleaner is an interface for registering teardown operations.
+// It is satisfied by standard testing types (like *testing.T) to safely
+// halt background tasks and prevent panics after a test completes.
+type Cleaner interface {
+	Cleanup(f func())
+}
+
 // New will create a Logger from a TestLogger. The Logger that is created
 // satisfies the log.DebugLogger interface and thus may be used widely. It
 // serves as an adaptor between the testing.T type from the standard library and
