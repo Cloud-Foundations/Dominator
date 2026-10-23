@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// Cleaner is an interface for registering teardown operations.
+// It is satisfied by standard testing types (like *testing.T) to safely
+// halt background tasks and prevent panics after a test completes.
+type cleaner interface {
+	Cleanup(f func())
+}
+
 func strip(s string) string {
 	length := len(s)
 	if length < 1 {
@@ -47,7 +54,7 @@ func newWithTimestamps(logger TestLogger) *Logger {
 
 // Stop logging once the test completes; background goroutines may still log.
 func (l *Logger) stopAfterCompletion() {
-	if cleaner, ok := l.logger.(Cleaner); ok {
+	if cleaner, ok := l.logger.(cleaner); ok {
 		cleaner.Cleanup(func() {
 			l.mutex.Lock()
 			defer l.mutex.Unlock()
