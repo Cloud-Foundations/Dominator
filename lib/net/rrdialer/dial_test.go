@@ -15,8 +15,9 @@ import (
 var nextPortNumber = 12340
 
 type counterType struct {
-	mutex   sync.Mutex // Protect everything below.
-	counter uint
+	listening chan struct{} // Closed once the listener is up.
+	mutex     sync.Mutex    // Protect everything below.
+	counter   uint
 }
 
 func (c *counterType) get() uint {
@@ -31,27 +32,50 @@ func (c *counterType) increment() {
 	c.counter++
 }
 
-func (e *endpointType) makeListener(delay time.Duration,
+// makeListener listens immediately if start is nil, else once start is closed.
+func (e *endpointType) makeListener(start <-chan struct{},
 	logger log.Logger) *counterType {
-	var acceptCounter counterType
+	acceptCounter := &counterType{listening: make(chan struct{})}
 	e.address = "localhost:" + strconv.Itoa(nextPortNumber)
 	nextPortNumber++
-	go func() {
-		time.Sleep(delay)
-		if listener, err := net.Listen("tcp", e.address); err != nil {
+	listen := func() net.Listener {
+		listener, err := net.Listen("tcp", e.address)
+		if err != nil {
 			panic(err)
-		} else {
-			for {
-				if conn, err := listener.Accept(); err != nil {
-					logger.Println(err)
-				} else {
-					acceptCounter.increment()
-					conn.Close()
-				}
+		}
+		close(acceptCounter.listening)
+		return listener
+	}
+	var listener net.Listener
+	if start == nil {
+		listener = listen()
+	}
+	go func() {
+		if start != nil {
+			<-start
+			listener = listen()
+		}
+		for {
+			if conn, err := listener.Accept(); err != nil {
+				logger.Println(err)
+			} else {
+				acceptCounter.increment()
+				conn.Close()
 			}
 		}
 	}()
-	return &acceptCounter
+	return acceptCounter
+}
+
+func waitFor(t *testing.T, condition func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal(message)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func TestDialNoConnections(t *testing.T) {
@@ -88,19 +112,21 @@ func TestDialOneIsFastEnough(t *testing.T) {
 	endpoint100 := &endpointType{
 		MeanLatency: 100e-3,
 	}
-	counter50 := endpoint50.makeListener(0, dialer.logger)
-	counter100 := endpoint100.makeListener(time.Millisecond*40, dialer.logger)
+	counter50 := endpoint50.makeListener(nil, dialer.logger)
+	start100 := make(chan struct{})
+	counter100 := endpoint100.makeListener(start100, dialer.logger)
 	endpoints := []*endpointType{endpoint50, endpoint100}
-	time.Sleep(time.Millisecond * 20)
 	_, err := dialer.dialEndpoints(context.Background(), "tcp",
 		"localhost:1", endpoints, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Millisecond * 20)
-	if counter50.get() != 1 {
-		t.Fatal("endpoint50 did not connect")
-	}
+	// endpoint100 comes online only after all dial attempts have finished.
+	dialer.waitForBackgroundResults(time.Second)
+	close(start100)
+	<-counter100.listening
+	waitFor(t, func() bool { return counter50.get() == 1 },
+		"endpoint50 did not connect")
 	if counter100.get() != 0 {
 		t.Fatal("endpoint100 connected")
 	}
@@ -121,20 +147,23 @@ func TestDialTwoAreFastEnough(t *testing.T) {
 		LastUpdate:  time.Now(),
 		MeanLatency: 150e-3,
 	}
-	counter50 := endpoint50.makeListener(0, dialer.logger)
-	counter100 := endpoint100.makeListener(time.Millisecond*40, dialer.logger)
-	counter150 := endpoint150.makeListener(0, dialer.logger)
+	counter50 := endpoint50.makeListener(nil, dialer.logger)
+	start100 := make(chan struct{})
+	counter100 := endpoint100.makeListener(start100, dialer.logger)
+	counter150 := endpoint150.makeListener(nil, dialer.logger)
 	endpoints := []*endpointType{endpoint50, endpoint100, endpoint150}
-	time.Sleep(time.Millisecond * 20)
 	_, err := dialer.dialEndpoints(context.Background(), "tcp",
 		"localhost:1", endpoints, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Millisecond * 20)
-	if counter50.get() != 1 && counter150.get() != 1 {
-		t.Fatal("endpoint50 and endpoint150 did not connect")
-	}
+	// endpoint100 comes online only after all dial attempts have finished.
+	dialer.waitForBackgroundResults(time.Second)
+	close(start100)
+	<-counter100.listening
+	waitFor(t, func() bool {
+		return counter50.get() == 1 || counter150.get() == 1
+	}, "endpoint50 and endpoint150 did not connect")
 	if counter100.get() != 0 {
 		t.Fatal("endpoint100 connected")
 	}

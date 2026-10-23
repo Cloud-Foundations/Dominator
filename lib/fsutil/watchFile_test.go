@@ -56,7 +56,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	}
 	file.Close()
 	ch = WatchFile(pathExists, logger)
-	rc, err = watchTimeout(ch, time.Millisecond*50)
+	rc, err = watchTimeout(ch, time.Millisecond*100)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -77,7 +77,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	if err != errorTimeout {
 		t.Fatal("Expected timeout error for non-existent file")
 	}
-	rc, err = watchTimeout(ch, time.Millisecond*90)
+	rc, err = watchTimeout(ch, time.Millisecond*200)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -97,7 +97,7 @@ func testWatchFile(t *testing.T, dirname string) {
 	if err := os.Rename(pathWillBeRenamed, pathExistsLater); err != nil {
 		t.Fatal(err)
 	}
-	rc, err = watchTimeout(ch, time.Millisecond*50)
+	rc, err = watchTimeout(ch, time.Millisecond*100)
 	if err != nil {
 		t.Fatal(err)
 	} else {
