@@ -47,6 +47,7 @@ type GetHypervisorForVMResponse struct {
 type GetHypervisorsInLocationRequest struct {
 	ArchitectureType      proto.ArchitectureType
 	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeDisabled       bool
 	IncludeUnhealthy      bool
 	IncludeVMs            bool
 	Location              string
@@ -130,6 +131,7 @@ type ListHypervisorLocationsResponse struct {
 type ListHypervisorsInLocationRequest struct {
 	ArchitectureType      proto.ArchitectureType
 	HypervisorTagsToMatch tags.MatchTags // Empty: match all tags.
+	IncludeDisabled       bool
 	IncludeUnhealthy      bool
 	Location              string
 	SubnetId              string
