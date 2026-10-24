@@ -28,6 +28,7 @@ func getHypervisorsList() ([]string, error) {
 	request := proto.ListHypervisorsInLocationRequest{
 		ArchitectureType:      hypervisorArchitectureToMatch,
 		HypervisorTagsToMatch: hypervisorTagsToMatch,
+		IncludeDisabled:       *includeDisabled,
 		IncludeUnhealthy:      *includeUnhealthy,
 		Location:              *location,
 		SubnetId:              *subnetId,
