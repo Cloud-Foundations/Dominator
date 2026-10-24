@@ -74,6 +74,8 @@ var (
 		"Identity name for requesting role certificates from IdentityProvider")
 	includeAllocationRequests = flag.Bool("includeAllocationRequests", false,
 		"If true, include allocation requests in get-allocation-updates")
+	includeDisabled = flag.Bool("includeDisabled", false,
+		"If true, list connected but disabled hypervisors")
 	includeUnhealthy = flag.Bool("includeUnhealthy", false,
 		"If true, list connected but unhealthy hypervisors")
 	includeVMs = flag.Bool("includeVMs", true,
