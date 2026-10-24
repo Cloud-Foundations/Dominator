@@ -44,14 +44,14 @@ func showBadImageSubs(imageSClient, mdbdSClient srpc.ClientI) error {
 	}
 	goodImages := stringutil.ConvertListToMap(imageNames, false)
 	// Get data from MDB.
-	machines, err := mdbclient.GetMdb(mdbdSClient)
+	reply, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
 		return err
 	}
 	// Loop over machines, skipping those with good images.
 	imageExpirations := make(map[string]*expirationData)
 	columnCollector := &text.ColumnCollector{}
-	for _, machine := range machines {
+	for _, machine := range reply.Machines {
 		if machine.RequiredImage == "" {
 			continue
 		}

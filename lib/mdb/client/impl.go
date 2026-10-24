@@ -2,37 +2,37 @@ package client
 
 import (
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
-	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
-// getMachine returns the machine data, or the RPC or server error.
-func getMachine(client srpc.ClientI, hostname string) (mdb.Machine, error) {
+// getMachine returns the response, or the RPC or server error.
+func getMachine(client srpc.ClientI,
+	hostname string) (proto.GetMachineResponse, error) {
 	request := proto.GetMachineRequest{Hostname: hostname}
 	var reply proto.GetMachineResponse
 	err := client.RequestReply("MdbServer.GetMachine", request, &reply)
 	if err != nil {
-		return mdb.Machine{}, err
+		return proto.GetMachineResponse{}, err
 	}
 	if err := errors.New(reply.Error); err != nil {
-		return mdb.Machine{}, err
+		return proto.GetMachineResponse{}, err
 	}
-	return reply.Machine, nil
+	return reply, nil
 }
 
-// getMdb returns all machines, or the RPC or server error.
-func getMdb(client srpc.ClientI) ([]mdb.Machine, error) {
+// getMdb returns the response, or the RPC or server error.
+func getMdb(client srpc.ClientI) (proto.GetMdbResponse, error) {
 	request := proto.GetMdbRequest{}
 	var reply proto.GetMdbResponse
 	err := client.RequestReply("MdbServer.GetMdb", request, &reply)
 	if err != nil {
-		return nil, err
+		return proto.GetMdbResponse{}, err
 	}
 	if err := errors.New(reply.Error); err != nil {
-		return nil, err
+		return proto.GetMdbResponse{}, err
 	}
-	return reply.Machines, nil
+	return reply, nil
 }
 
 // getMdbUpdates returns the error that ended the update stream.

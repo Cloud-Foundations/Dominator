@@ -30,11 +30,11 @@ func processMdbTemplate(client srpc.ClientI) error {
 	if err != nil {
 		return err
 	}
-	machines, err := mdbclient.GetMdb(client)
+	reply, err := mdbclient.GetMdb(client)
 	if err != nil {
 		return err
 	}
-	for _, machine := range machines {
+	for _, machine := range reply.Machines {
 		if err := tmpl.Execute(os.Stdout, machine); err != nil {
 			return err
 		}

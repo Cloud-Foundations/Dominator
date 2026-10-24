@@ -24,5 +24,9 @@ func getMachineMdb(hostname string) (mdb.Machine, error) {
 		return mdb.Machine{}, err
 	}
 	defer client.Close()
-	return mdbclient.GetMachine(client, hostname)
+	reply, err := mdbclient.GetMachine(client, hostname)
+	if err != nil {
+		return mdb.Machine{}, err
+	}
+	return reply.Machine, nil
 }

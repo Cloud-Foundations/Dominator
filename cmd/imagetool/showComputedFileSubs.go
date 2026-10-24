@@ -34,11 +34,11 @@ func showComputedFileSubsSubcommand(args []string,
 func showComputedFileSubs(imageSClient, mdbdSClient srpc.ClientI,
 	computedFile filesystem.ComputedFile) error {
 	// Get data from MDB.
-	machines, err := mdbclient.GetMdb(mdbdSClient)
+	reply, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
 		return err
 	}
-	imageToMachinesMap := computeImageToMachinesMap(machines, false)
+	imageToMachinesMap := computeImageToMachinesMap(reply.Machines, false)
 	machinesMap := make(map[*mdb.Machine]struct{})
 	for imageName, imageMachines := range imageToMachinesMap {
 		computedFiles, _, err := client.GetImageComputedFiles(imageSClient,

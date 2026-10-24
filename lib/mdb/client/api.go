@@ -1,20 +1,21 @@
 package client
 
 import (
-	"github.com/Cloud-Foundations/Dominator/lib/mdb"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
-// GetMachine returns the MDB data for the machine with the specified
-// hostname, or an error if the RPC fails or the server reports one.
-func GetMachine(client srpc.ClientI, hostname string) (mdb.Machine, error) {
+// GetMachine returns the response containing the MDB data for the machine with
+// the specified hostname, or an error if the RPC fails or the server reports
+// one.
+func GetMachine(client srpc.ClientI,
+	hostname string) (proto.GetMachineResponse, error) {
 	return getMachine(client, hostname)
 }
 
-// GetMdb returns the MDB data for all machines, or an error if the RPC fails
-// or the server reports one.
-func GetMdb(client srpc.ClientI) ([]mdb.Machine, error) {
+// GetMdb returns the response containing the MDB data for all machines, or an
+// error if the RPC fails or the server reports one.
+func GetMdb(client srpc.ClientI) (proto.GetMdbResponse, error) {
 	return getMdb(client)
 }
 

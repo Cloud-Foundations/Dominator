@@ -23,9 +23,9 @@ func getMdbSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func getMdb(client srpc.ClientI) error {
-	machines, err := mdbclient.GetMdb(client)
+	reply, err := mdbclient.GetMdb(client)
 	if err != nil {
 		return err
 	}
-	return json.WriteWithIndent(os.Stdout, "    ", machines)
+	return json.WriteWithIndent(os.Stdout, "    ", reply.Machines)
 }

@@ -27,11 +27,11 @@ func showBadComputedFilesSubcommand(args []string,
 
 func showBadComputedFiles(imageSClient, mdbdSClient srpc.ClientI) error {
 	// Get data from MDB.
-	machines, err := mdbclient.GetMdb(mdbdSClient)
+	reply, err := mdbclient.GetMdb(mdbdSClient)
 	if err != nil {
 		return err
 	}
-	imageToMachinesMap := computeImageToMachinesMap(machines, true)
+	imageToMachinesMap := computeImageToMachinesMap(reply.Machines, true)
 	// Compute mapping from image to computed files and list of sources.
 	filegenSources := make(map[string]struct{})
 	imageToComputedFiles := make(map[string][]filesystem.ComputedFile,
