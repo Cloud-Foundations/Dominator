@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
@@ -35,10 +36,5 @@ func pauseSubUpdates(client srpc.ClientI, hostname, reason string) error {
 		Remove:   *removePaused,
 		Until:    time.Now().Add(*pauseDuration),
 	}
-	var reply mdbserver.PauseUpdatesResponse
-	err := client.RequestReply("MdbServer.PauseUpdates", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return mdbclient.PauseUpdates(client, request)
 }

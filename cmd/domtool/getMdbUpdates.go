@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
@@ -23,17 +24,8 @@ func getMdbUpdatesSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func getMdbUpdates(client srpc.ClientI) error {
-	conn, err := client.Call("MdbServer.GetMdbUpdates")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	for {
-		var mdbUpdate mdbserver.MdbUpdate
-		if err := conn.Decode(&mdbUpdate); err != nil {
-			return err
-		} else {
-			json.WriteWithIndent(os.Stdout, "    ", mdbUpdate)
-		}
-	}
+	return mdbclient.GetMdbUpdates(client,
+		func(mdbUpdate mdbserver.MdbUpdate) error {
+			return json.WriteWithIndent(os.Stdout, "    ", mdbUpdate)
+		})
 }

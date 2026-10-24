@@ -3,10 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func resumeSubUpdatesSubcommand(args []string, logger log.DebugLogger) error {
@@ -22,11 +21,5 @@ func resumeSubUpdatesSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func resumeSubUpdates(client srpc.ClientI, hostname string) error {
-	request := mdbserver.ResumeUpdatesRequest{Hostname: hostname}
-	var reply mdbserver.ResumeUpdatesResponse
-	err := client.RequestReply("MdbServer.ResumeUpdates", request, &reply)
-	if err != nil {
-		return err
-	}
-	return errors.New(reply.Error)
+	return mdbclient.ResumeUpdates(client, hostname)
 }

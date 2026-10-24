@@ -5,10 +5,10 @@ import (
 
 	"github.com/Cloud-Foundations/Dominator/imageserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/verstr"
 	"github.com/Cloud-Foundations/Dominator/proto/imageserver"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func listImagesNotInMdbSubcommand(args []string, logger log.DebugLogger) error {
@@ -31,9 +31,7 @@ func listImagesNotInMdb(imageSClient, mdbdSClient *srpc.Client) error {
 	if err != nil {
 		return err
 	}
-	request := mdbserver.ListImagesRequest{}
-	var reply mdbserver.ListImagesResponse
-	err = mdbdSClient.RequestReply("MdbServer.ListImages", request, &reply)
+	reply, err := mdbclient.ListImages(mdbdSClient)
 	if err != nil {
 		return err
 	}

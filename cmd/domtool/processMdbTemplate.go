@@ -5,10 +5,9 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func processMdbTemplateSubcommand(args []string, logger log.DebugLogger) error {
@@ -31,13 +30,8 @@ func processMdbTemplate(client srpc.ClientI) error {
 	if err != nil {
 		return err
 	}
-	request := mdbserver.GetMdbRequest{}
-	var reply mdbserver.GetMdbResponse
-	err = client.RequestReply("MdbServer.GetMdb", request, &reply)
+	reply, err := mdbclient.GetMdb(client)
 	if err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
 	for _, machine := range reply.Machines {

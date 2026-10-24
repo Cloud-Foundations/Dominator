@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	mdbclient "github.com/Cloud-Foundations/Dominator/lib/mdb/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
-	"github.com/Cloud-Foundations/Dominator/proto/mdbserver"
 )
 
 func getMdbSubcommand(args []string, logger log.DebugLogger) error {
@@ -24,13 +23,8 @@ func getMdbSubcommand(args []string, logger log.DebugLogger) error {
 }
 
 func getMdb(client srpc.ClientI) error {
-	request := mdbserver.GetMdbRequest{}
-	var reply mdbserver.GetMdbResponse
-	err := client.RequestReply("MdbServer.GetMdb", request, &reply)
+	reply, err := mdbclient.GetMdb(client)
 	if err != nil {
-		return err
-	}
-	if err := errors.New(reply.Error); err != nil {
 		return err
 	}
 	return json.WriteWithIndent(os.Stdout, "    ", reply.Machines)
