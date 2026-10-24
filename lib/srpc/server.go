@@ -175,6 +175,15 @@ func defaultMethodGranter(serviceMethod string,
 	return defaultGrantMethod(serviceMethod, authInfo)
 }
 
+// getServerTlsConfig returns a clone of the server TLS config, or nil if none
+// has been registered.
+func getServerTlsConfig() *tls.Config {
+	if serverTlsConfig == nil {
+		return nil
+	}
+	return serverTlsConfig.Clone()
+}
+
 func registerServerTlsConfig(config *tls.Config, requireTls bool) {
 	serverTlsConfig = config
 	tlsRequired = requireTls
