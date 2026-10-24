@@ -19,6 +19,7 @@ import (
 
 const (
 	showOK = iota
+	showOKorDisabled
 	showConnected
 	showDisabled
 	showAll
@@ -227,6 +228,13 @@ func (m *Manager) listHypervisors(topologyDir string, showFilter int,
 		switch showFilter {
 		case showOK:
 			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected &&
+				!hypervisor.Disabled &&
+				(hypervisor.healthStatus == "" ||
+					hypervisor.healthStatus == "healthy") {
+				hypervisors = append(hypervisors, hypervisor)
+			}
+		case showOKorDisabled:
+			if hypervisor.ProbeStatus == fm_proto.ProbeStatusConnected &&
 				(hypervisor.healthStatus == "" ||
 					hypervisor.healthStatus == "healthy") {
 				hypervisors = append(hypervisors, hypervisor)
@@ -322,6 +330,8 @@ func (m *Manager) listHypervisorsInLocation(
 	showFilter := showOK
 	if request.IncludeUnhealthy {
 		showFilter = showConnected
+	} else if request.IncludeDisabled {
+		showFilter = showOKorDisabled
 	}
 	hypervisors, err := m.listHypervisors(request.Location, showFilter,
 		request.SubnetId, request.ArchitectureType,
