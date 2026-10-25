@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/Cloud-Foundations/Dominator/hypervisor/dhcpd"
 	"github.com/Cloud-Foundations/Dominator/hypervisor/httpd"
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
@@ -21,9 +23,11 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	lib_grpc "github.com/Cloud-Foundations/Dominator/lib/grpc"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net"
+	"github.com/Cloud-Foundations/Dominator/lib/server"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
 	"github.com/Cloud-Foundations/Dominator/lib/types"
@@ -268,8 +272,19 @@ func run() {
 		logger.Fatalf("Cannot start metadata server: %s\n", err)
 	}
 	go handleSignals(managerObj, logger)
-	if err := httpd.StartServer(*portNum, managerObj, false); err != nil {
-		logger.Fatalf("Unable to create http server: %s\n", err)
+	httpd.RegisterHandlers(managerObj)
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(lib_grpc.UnaryAuthInterceptor),
+		grpc.StreamInterceptor(lib_grpc.StreamAuthInterceptor),
+	)
+	// The hypervisor gRPC service gets registered here once it exists.
+	// rpcd.SetupGRPC(grpcServer, rpcConfig, rpcParams)
+	err = server.Start(server.Config{Port: *portNum}, server.Params{
+		GrpcHandler: grpcServer,
+		Logger:      logger,
+	})
+	if err != nil {
+		logger.Fatalf("Server failed: %s\n", err)
 	}
 }
 
