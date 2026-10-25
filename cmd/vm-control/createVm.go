@@ -144,12 +144,10 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	if err := watchConn.Close(); err != nil {
 		return err
 	}
-	logger.Debugf(0, "creating VM on %s\n",
-		foundAllocation.VMs[0].HypervisorAddress)
-	var createSucceeded bool
-	err = createVmOnHypervisor(foundAllocation.VMs[0].HypervisorAddress,
-		*createRequest, &createSucceeded, logger)
-	if err != nil && !createSucceeded {
+	hypervisorAddress := foundAllocation.VMs[0].HypervisorAddress
+	logger.Debugf(0, "creating VM on %s\n", hypervisorAddress)
+	vmIP, err := createVmOnHypervisor(hypervisorAddress, *createRequest, logger)
+	if err != nil && vmIP == nil {
 		logger.Debugf(0, "cancelling allocation request: %s\n",
 			allocateResponse.RequestId)
 		err := fmclient.CancelAllocation(allocatorClient,
@@ -226,6 +224,18 @@ func approximateVolumesForCreateRequest(
 		return &vmInfo, nil
 	}
 	return &vmInfo, nil
+}
+
+// createOneVm will select a Hypervisor and create a VM. It does not use an
+// Allocation Manager. The IP of the VM is returned.
+func createOneVm(request createVmRequest, vmInfo hyper_proto.VmInfo,
+	logger log.DebugLogger) (net.IP, error) {
+	if hypervisor, err := getHypervisorAddress(vmInfo, logger); err != nil {
+		return nil, err
+	} else {
+		logger.Debugf(0, "creating VM on %s\n", hypervisor)
+		return createVmOnHypervisor(hypervisor, request, logger)
+	}
 }
 
 func createVmSubcommand(args []string, logger log.DebugLogger) error {
@@ -308,11 +318,11 @@ func checkTags(logger log.DebugLogger) {
 }
 
 func createVm(logger log.DebugLogger) error {
-	request, err := makeVmCreateRequest(logger)
+	request, err := makeCreateVmRequest(logger)
 	if err != nil {
 		return err
 	}
-	if err := validateVmCreateRequest(request); err != nil {
+	if err := validateVmCreateRequest(&request.CreateVmRequest); err != nil {
 		return err
 	}
 	tmpVmInfo, err := approximateVolumesForCreateRequest(request.VmInfo)
@@ -322,12 +332,8 @@ func createVm(logger log.DebugLogger) error {
 	if *allocationManagerHostname != "" {
 		return allocateAndCreateVM(request, tmpVmInfo)
 	}
-	if hypervisor, err := getHypervisorAddress(*tmpVmInfo, logger); err != nil {
-		return err
-	} else {
-		logger.Debugf(0, "creating VM on %s\n", hypervisor)
-		return createVmOnHypervisor(hypervisor, *request, nil, logger)
-	}
+	_, err = createOneVm(*request, *tmpVmInfo, logger)
+	return err
 }
 
 func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
@@ -411,7 +417,7 @@ func createVmInfoFromFlags() (*hyper_proto.VmInfo, error) {
 // true is written to *createSucceeded if the VM was created, regardless if it
 // is then deleted.
 func createVmOnHypervisor(hypervisor string, request createVmRequest,
-	createSucceeded *bool, logger log.DebugLogger) error {
+	logger log.DebugLogger) (net.IP, error) {
 	if request.imageReader != nil {
 		defer request.imageReader.Close()
 	}
@@ -419,7 +425,7 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 	if *userDataFile != "" {
 		file, size, err := getReader(*userDataFile)
 		if err != nil {
-			return err
+			return nil, err
 		} else {
 			defer file.Close()
 			request.UserDataSize = uint64(size)
@@ -428,7 +434,7 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 	}
 	client, err := dialHypervisor(hypervisor)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer client.Close()
 	var reply hyper_proto.CreateVmResponse
@@ -436,13 +442,10 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 		request.imageReader, userDataReader, int64(request.ImageDataSize),
 		int64(request.UserDataSize), logger)
 	if err != nil {
-		return err
-	}
-	if createSucceeded != nil {
-		*createSucceeded = true
+		return nil, err
 	}
 	if err := hyperclient.AcknowledgeVm(client, reply.IpAddress); err != nil {
-		return fmt.Errorf("error acknowledging VM: %s", err)
+		return nil, fmt.Errorf("error acknowledging VM: %s", err)
 	}
 	if *identityName != "" {
 		err := setupVmWithIdentity(client, hypervisor, reply.IpAddress, logger)
@@ -451,12 +454,12 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 			if e != nil {
 				logger.Println(e)
 			}
-			return err
+			return nil, err
 		}
 	}
 	if *doNotStart {
 		fmt.Println(reply.IpAddress)
-		return nil
+		return reply.IpAddress, nil
 	}
 	if reply.DhcpTimedOut {
 		if *destroyOnDhcpTimeout {
@@ -467,7 +470,7 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 		} else {
 			fmt.Println(reply.IpAddress)
 		}
-		return errors.New("DHCP ACK timed out")
+		return reply.IpAddress, errors.New("DHCP ACK timed out")
 	}
 	if *dhcpTimeout > 0 {
 		logger.Debugln(0, "Received DHCP ACK")
@@ -482,10 +485,10 @@ func createVmOnHypervisor(hypervisor string, request createVmRequest,
 		} else {
 			fmt.Println(reply.IpAddress)
 		}
-		return err
+		return reply.IpAddress, err
 	}
 	fmt.Println(reply.IpAddress)
-	return nil
+	return reply.IpAddress, nil
 }
 
 func getReader(filename string) (io.ReadCloser, int64, error) {
@@ -566,7 +569,7 @@ func loadOverlayFiles() (map[string][]byte, error) {
 	return fsutil.ReadFileTree(*overlayDirectory, *overlayPrefix)
 }
 
-func makeVmCreateRequest(logger log.DebugLogger) (*createVmRequest, error) {
+func makeCreateVmRequest(logger log.DebugLogger) (*createVmRequest, error) {
 	if *requestFile != "" {
 		var request createVmRequest
 		if err := json.ReadFromFile(*requestFile, &request); err != nil {
@@ -824,7 +827,7 @@ func updateVolumeInitParams(vinitParams []volumeInitParams) error {
 	return nil
 }
 
-func validateVmCreateRequest(request *createVmRequest) error {
+func validateVmCreateRequest(request *hyper_proto.CreateVmRequest) error {
 	if request.Hostname == "" {
 		return errors.New("no hostname specified")
 	}

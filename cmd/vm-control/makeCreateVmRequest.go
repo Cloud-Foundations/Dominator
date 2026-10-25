@@ -17,7 +17,7 @@ func makeCreateVmRequestSubcommand(args []string,
 }
 
 func showCreateVmRequest(logger log.DebugLogger) error {
-	request, err := makeVmCreateRequest(logger)
+	request, err := makeCreateVmRequest(logger)
 	if err != nil {
 		return err
 	}
