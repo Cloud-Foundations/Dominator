@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -44,13 +43,9 @@ type detectingListener struct {
 	err       error
 }
 
-// start returns an error if the TLS config is missing or the port cannot be
-// listened on, otherwise it returns the error which stopped serving.
+// start returns an error if the port cannot be listened on, otherwise it
+// returns the error which stopped serving.
 func start(config Config, params Params) error {
-	tlsConfig := srpc.GetServerTlsConfig()
-	if tlsConfig == nil {
-		return errors.New("no server TLS config registered")
-	}
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.Port))
 	if err != nil {
 		return fmt.Errorf("cannot create listener: %w", err)
@@ -59,29 +54,39 @@ func start(config Config, params Params) error {
 		params.Logger.Printf("Serving SRPC, HTML and gRPC on port %d\n",
 			config.Port)
 	}
-	return serve(listener, tlsConfig, params)
+	return serve(listener, srpc.GetServerTlsConfig(), params)
 }
 
 // serve returns the error which stopped serving on listener, which it closes.
-// It modifies tlsConfig, which the caller must not use afterwards.
+// It modifies tlsConfig, which the caller must not use afterwards. If there is
+// no gRPC handler it serves as an SRPC server does without this package. If
+// tlsConfig is nil gRPC is served over cleartext HTTP/2 (h2c).
 func serve(listener net.Listener, tlsConfig *tls.Config, params Params) error {
-	tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
-	tlsConfig.NextProtos = append(tlsConfig.NextProtos, "h2", "http/1.1")
+	if params.GrpcHandler == nil {
+		return http.Serve(listener, params.HttpHandler)
+	}
 	httpHandler := params.HttpHandler
 	if httpHandler == nil {
 		httpHandler = http.DefaultServeMux
 	}
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter,
-			req *http.Request) {
-			if strings.HasPrefix(req.Header.Get("Content-Type"),
-				grpcContentType) {
-				params.GrpcHandler.ServeHTTP(w, req)
-			} else {
-				httpHandler.ServeHTTP(w, req)
-			}
-		}),
+	handler := http.HandlerFunc(func(w http.ResponseWriter,
+		req *http.Request) {
+		if strings.HasPrefix(req.Header.Get("Content-Type"),
+			grpcContentType) {
+			params.GrpcHandler.ServeHTTP(w, req)
+		} else {
+			httpHandler.ServeHTTP(w, req)
+		}
+	})
+	if tlsConfig == nil {
+		server := &http.Server{Handler: handler, Protocols: new(http.Protocols)}
+		server.Protocols.SetHTTP1(true)
+		server.Protocols.SetUnencryptedHTTP2(true)
+		return server.Serve(listener)
 	}
+	tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+	tlsConfig.NextProtos = append(tlsConfig.NextProtos, "h2", "http/1.1")
+	server := &http.Server{Handler: handler}
 	if err := http2.ConfigureServer(server, &http2.Server{}); err != nil {
 		_ = listener.Close()
 		return fmt.Errorf("cannot configure HTTP/2: %w", err)

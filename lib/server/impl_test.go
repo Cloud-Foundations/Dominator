@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/http2"
 
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 )
@@ -65,12 +68,19 @@ func makeTlsConfig(t *testing.T) *tls.Config {
 // startServer serves params on a new localhost listener until the test ends.
 // It returns the listener's address.
 func startServer(t *testing.T, params Params) string {
+	return startServerWithTls(t, makeTlsConfig(t), params)
+}
+
+// startServerWithTls is like startServer, with the given TLS config, which may
+// be nil.
+func startServerWithTls(t *testing.T, tlsConfig *tls.Config,
+	params Params) string {
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
-	go func() { _ = serve(listener, makeTlsConfig(t), params) }()
+	go func() { _ = serve(listener, tlsConfig, params) }()
 	return listener.Addr().String()
 }
 
@@ -221,5 +231,87 @@ func TestNilHttpHandlerServesDefaultServeMux(t *testing.T) {
 		"http://"+addr+"/nilHttpHandlerTest", "")
 	if body != "default mux" {
 		t.Fatalf("got %q, want default mux", body)
+	}
+}
+
+func TestNilGrpcHandlerServesPlainHttpOnly(t *testing.T) {
+	addr := startServer(t, Params{
+		HttpHandler: http.HandlerFunc(func(w http.ResponseWriter,
+			req *http.Request) {
+			_, _ = io.WriteString(w, "http")
+		}),
+	})
+	body, _ := get(t, plainClient, "http://"+addr+"/", "application/grpc")
+	if body != "http" {
+		t.Fatalf("plain GET: got %q, want http", body)
+	}
+	resp, err := newTlsClient().Get("https://" + addr + "/")
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("TLS connection accepted without a gRPC handler")
+	}
+}
+
+func TestNilTlsConfigServesGrpcOverH2c(t *testing.T) {
+	addr := startServerWithTls(t, nil, Params{
+		GrpcHandler: http.HandlerFunc(func(w http.ResponseWriter,
+			req *http.Request) {
+			_, _ = io.WriteString(w, "grpc")
+		}),
+		HttpHandler: http.HandlerFunc(func(w http.ResponseWriter,
+			req *http.Request) {
+			_, _ = io.WriteString(w, "http")
+		}),
+	})
+	h2cClient := &http.Client{
+		Timeout: clientTimeout,
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network,
+				addr string, _ *tls.Config) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, addr)
+			},
+		},
+	}
+	body, proto := get(t, h2cClient, "http://"+addr+"/", "application/grpc")
+	if body != "grpc" || proto != 2 {
+		t.Fatalf("h2c gRPC: got %q over HTTP/%d, want grpc over HTTP/2",
+			body, proto)
+	}
+	body, _ = get(t, plainClient, "http://"+addr+"/", "")
+	if body != "http" {
+		t.Fatalf("plain GET: got %q, want http", body)
+	}
+}
+
+func TestNilTlsConfigSupportsTakeOver(t *testing.T) {
+	result := make(chan bool, 1)
+	addr := startServerWithTls(t, nil, Params{
+		GrpcHandler: http.NotFoundHandler(),
+		HttpHandler: http.HandlerFunc(func(w http.ResponseWriter,
+			req *http.Request) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+			result <- err == nil
+		}),
+	})
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	_, err = io.WriteString(conn, "CONNECT /x HTTP/1.1\r\nHost: x\r\n\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ok := <-result:
+		if !ok {
+			t.Fatal("cannot take over the connection")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler not reached")
 	}
 }

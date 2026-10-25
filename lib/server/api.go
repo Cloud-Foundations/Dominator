@@ -23,15 +23,18 @@ type Config struct {
 
 // Params holds the other arguments of Start.
 type Params struct {
-	GrpcHandler http.Handler // Required. Typically a *grpc.Server.
+	// If nil: the port is served as an SRPC server serves it without this
+	// package, with plain HTTP only. Typically a *grpc.Server.
+	GrpcHandler http.Handler
 	// If nil: http.DefaultServeMux, where SRPC registers its handlers. A
 	// non-nil handler must delegate SRPC requests to http.DefaultServeMux.
 	HttpHandler http.Handler
 	Logger      log.DebugLogger
 }
 
-// Start serves the port until it fails, returning the error. The SRPC server
-// TLS config must have been registered with srpc.RegisterServerTlsConfig.
+// Start serves the port until it fails, returning the error. If an SRPC server
+// TLS config has been registered with srpc.RegisterServerTlsConfig, gRPC is
+// served over TLS, otherwise over cleartext HTTP/2.
 func Start(config Config, params Params) error {
 	return start(config, params)
 }
