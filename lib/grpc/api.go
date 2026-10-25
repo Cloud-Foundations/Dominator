@@ -17,11 +17,13 @@ package grpc
 
 import (
 	"context"
+	"net"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 // CodedError is implemented by errors that provide a gRPC status code.
@@ -67,16 +69,43 @@ func (a *AuthInfo) GetAuthInformation() *srpc.AuthInformation {
 	return a.getAuthInformation()
 }
 
+// IPToString returns the text form of ip, or the empty string if ip is empty.
+func IPToString(ip net.IP) string {
+	return ipToString(ip)
+}
+
+// MapToTags returns a copy of m as tags.Tags, or nil if m is nil.
+func MapToTags(m map[string]string) tags.Tags {
+	return mapToTags(m)
+}
+
 // RegisterServiceOptions registers public and unauthenticated methods for a
 // service. Method names must match the SRPC method names exactly.
 func RegisterServiceOptions(serviceName string, options ServiceOptions) {
 	registerServiceOptions(serviceName, options)
 }
 
+// StringToIP parses s as an IP address. It returns a nil address and no error
+// if s is empty. It returns an invalid argument error if s is malformed.
+func StringToIP(s string) (net.IP, error) {
+	return stringToIP(s)
+}
+
+// StringToMAC parses s as a MAC address. It returns a nil address and no error
+// if s is empty. It returns an invalid argument error if s is malformed.
+func StringToMAC(s string) (net.HardwareAddr, error) {
+	return stringToMAC(s)
+}
+
 // StreamAuthInterceptor authenticates and authorises streaming RPCs.
 func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream,
 	info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	return streamAuthInterceptor(srv, ss, info, handler)
+}
+
+// TagsToMap returns a copy of t as a map, or nil if t is nil.
+func TagsToMap(t tags.Tags) map[string]string {
+	return tagsToMap(t)
 }
 
 // UnaryAuthInterceptor authenticates and authorises unary RPCs.

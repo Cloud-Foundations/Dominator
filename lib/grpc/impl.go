@@ -3,6 +3,8 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"maps"
+	"net"
 	"strings"
 	"time"
 
@@ -13,7 +15,9 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
+	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
+	"github.com/Cloud-Foundations/Dominator/lib/tags"
 )
 
 type authInfoKeyType struct{}
@@ -181,3 +185,48 @@ func recordCallStart()                                                      {}
 func recordCallEnd(fullMethod string, startTime time.Time, err error)       {}
 func recordPanic()                                                          {}
 func registerMethodMetrics(serviceName string, methods map[string]struct{}) {}
+
+// ipToString returns the text form of ip, or "" if ip is empty.
+func ipToString(ip net.IP) string {
+	if len(ip) < 1 {
+		return ""
+	}
+	return ip.String()
+}
+
+// mapToTags returns a copy of m, or nil if m is nil.
+func mapToTags(m map[string]string) tags.Tags {
+	return maps.Clone(tags.Tags(m))
+}
+
+// stringToIP returns the address parsed from s, or nil if s is empty. The
+// error is an *errors.InvalidArgumentError if s is not an IP address.
+func stringToIP(s string) (net.IP, error) {
+	if s == "" {
+		return nil, nil
+	}
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return nil, errors.NewInvalidArgumentError("ip_address",
+			"malformed IP address: "+s)
+	}
+	return ip, nil
+}
+
+// stringToMAC returns the address parsed from s, or nil if s is empty. The
+// error is an *errors.InvalidArgumentError if s is not a MAC address.
+func stringToMAC(s string) (net.HardwareAddr, error) {
+	if s == "" {
+		return nil, nil
+	}
+	mac, err := net.ParseMAC(s)
+	if err != nil {
+		return nil, errors.NewInvalidArgumentError("mac_address", err.Error())
+	}
+	return mac, nil
+}
+
+// tagsToMap returns a copy of t, or nil if t is nil.
+func tagsToMap(t tags.Tags) map[string]string {
+	return maps.Clone(map[string]string(t))
+}
