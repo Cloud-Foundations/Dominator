@@ -194,11 +194,6 @@ func ipToString(ip net.IP) string {
 	return ip.String()
 }
 
-// macToString returns the text form of mac, or "" if mac is empty.
-func macToString(mac net.HardwareAddr) string {
-	return mac.String()
-}
-
 // mapToTags returns a copy of m, or nil if m is nil.
 func mapToTags(m map[string]string) tags.Tags {
 	return maps.Clone(tags.Tags(m))

@@ -45,8 +45,8 @@ func TestMACRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StringToMAC(%q): %s", s, err)
 		}
-		if got := MACToString(mac); got != s {
-			t.Errorf("MACToString(%q) = %q", s, got)
+		if got := mac.String(); got != s {
+			t.Errorf("mac.String() of %q = %q", s, got)
 		}
 	}
 	_, err := StringToMAC("not-a-mac")
