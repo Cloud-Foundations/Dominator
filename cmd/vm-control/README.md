@@ -56,6 +56,8 @@ Some of the sub-commands available are:
 - **connect-to-vm-serial-port**: connect to the specified VM serial port
 - **copy-vm**: make a copy of a VM. The new VM will have a different IP address
 - **create-vm**: create a VM
+- **create-vms**: create multiple VMs. If using an Allocation Manager, the VMs
+                  will be created concurrently
 - **debug-vm-image**: (re)start a VM with a temporary debug image. The old root
                       volume will become the first secondary volume. Debugging
                       ends when the VM is stopped or (re)started
@@ -100,6 +102,9 @@ Some of the sub-commands available are:
 - **make-create-vm-request**: make a VM create request message (may be used
                               later with the *-requestFile* option for
                               **create-vm**
+- **make-create-vms-request**: make a series of VM create request messages (may
+                               be used later with the *-requestFile* option for
+                               **create-vms**
 - **migrate-vm**: migrate a VM to another Hypervisor
 - **parse-virsh-xml**: parse the XML for a virsh VM
 - **patch-vm-image**: patch the root image for a VM. Files listed in the image

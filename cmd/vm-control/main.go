@@ -110,7 +110,9 @@ var (
 		"Command to make placement decisions when creating/copying/moving VM")
 	preDelete = flag.Bool("preDelete", false,
 		"If true, delete old VM image before replacing")
-	minFreeBytes     = flagutil.Size(256 << 20)
+	minFreeBytes = flagutil.Size(256 << 20)
+	numVMs       = flag.Uint("numVMs", 0,
+		"Number of VMs to create VM request entries for")
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
 	overlayPrefix = flag.String("overlayPrefix", "/",
@@ -263,6 +265,7 @@ var subcommands = []commands.Command{
 		connectToVmSerialPortSubcommand},
 	{"copy-vm", "IPaddr", 1, 1, copyVmSubcommand},
 	{"create-vm", "", 0, 0, createVmSubcommand},
+	{"create-vms", "", 0, 0, createVMsSubcommand},
 	{"debug-vm-image", "IPaddr", 1, 1, debugVmImageSubcommand},
 	{"delete-vm-volume", "IPaddr", 1, 1, deleteVmVolumeSubcommand},
 	{"destroy-vm", "IPaddr", 1, 1, destroyVmSubcommand},
@@ -297,6 +300,7 @@ var subcommands = []commands.Command{
 		listVmVirtualiserLogFilesSubcommand},
 	{"list-vms", "", 0, 0, listVMsSubcommand},
 	{"make-create-vm-request", "", 0, 0, makeCreateVmRequestSubcommand},
+	{"make-create-vms-request", "", 0, 0, makeCreateVMsRequestSubcommand},
 	{"migrate-vm", "IPaddr", 1, 1, migrateVmSubcommand},
 	{"parse-virsh-xml", "filename", 1, 1, parseVirshXmlSubcommand},
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
