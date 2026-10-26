@@ -50,10 +50,12 @@ import (
 	"crypto/x509"
 	"errors"
 	"flag"
+	"io"
 	stdlog "log"
 	"net"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
@@ -74,8 +76,11 @@ var (
 
 	ErrorCloseClient = errors.New("close client")
 
-	// Interface check.
-	_ ClientI = (*Client)(nil)
+	// Interface checks.
+	_ ClientI       = (*Client)(nil)
+	_ io.ReaderFrom = (*Conn)(nil) // Prevent performance regressions.
+	_ io.WriterTo   = (*Conn)(nil) // Prevent performance regressions.
+	_ syscall.Conn  = (*Conn)(nil) // Prevent performance regressions.
 )
 
 var (
@@ -96,6 +101,9 @@ var (
 	srpcDefaultTlsHandshakeTimeout = flag.Duration(
 		"srpcDefaultTlsHandshakeTimeout",
 		time.Minute, "Default timeout (I/O deadline) during TLS handshake")
+	srpcExperimentalDisableZeroCopy = flag.Bool(
+		"srpcExperimentalDisableZeroCopy", false,
+		"If true, disable zero-copy. WILL BE REMOVED!")
 	srpcProxy = flag.String("srpcProxy", "",
 		"Proxy to use (only works for some operations)")
 	srpcTrustVmOwners = flag.Bool("srpcTrustVmOwners", true,
@@ -499,6 +507,8 @@ type Conn struct {
 	localAddr         string
 	parent            *Client             // nil: server-side connection.
 	permittedMethods  map[string]struct{} // nil: all, empty: none permitted.
+	rawConn           syscall.RawConn
+	rawConnError      error
 	releaseNotifier   func()
 	remoteAddr        string
 	username          string // Empty string for unauthenticated.
@@ -539,6 +549,12 @@ func (conn *Conn) RemoteAddr() string {
 // The request and reply messages are GOB encoded and decoded, respectively.
 func (conn *Conn) RequestReply(request interface{}, reply interface{}) error {
 	return conn.requestReply(request, reply)
+}
+
+// SyscallConn returns a raw network connection, if available. This implements
+// the syscall.Conn interface.
+func (conn *Conn) SyscallConn() (syscall.RawConn, error) {
+	return conn.syscallConn()
 }
 
 // Username will return the username of the client who holds the certificate

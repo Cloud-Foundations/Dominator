@@ -1,7 +1,9 @@
 package srpc
 
 import (
+	"errors"
 	"io"
+	"syscall"
 	"time"
 )
 
@@ -49,4 +51,24 @@ func (conn *Conn) getUsername() string {
 		panic("cannot call GetUsername() for client connection")
 	}
 	return conn.username
+}
+
+func (conn *Conn) syscallConn() (syscall.RawConn, error) {
+	if *srpcExperimentalDisableZeroCopy {
+		return nil, errors.New("zero-copy disabled")
+	}
+	if conn.rawConnError != nil {
+		return nil, conn.rawConnError
+	}
+	if conn.Reader.Buffered() > 0 {
+		err := errors.New("buffer not drained: cannot use zero-copy")
+		logger.Println(err)
+		return nil, err
+	}
+	if conn.Writer.Buffered() > 0 {
+		err := errors.New("buffer not flushed: cannot use zero-copy")
+		logger.Println(err)
+		return nil, err
+	}
+	return conn.rawConn, nil
 }
