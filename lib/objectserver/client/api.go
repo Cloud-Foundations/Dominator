@@ -54,6 +54,7 @@ type ObjectsReader struct {
 	sizes     []uint64
 	client    *ObjectClient
 	reader    *srpc.Conn
+	sharedOR  *objectReader // Share this to reduce allocations.
 	nextIndex int64
 }
 
