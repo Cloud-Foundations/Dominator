@@ -253,6 +253,10 @@ func (ro *readerObject) Read(p []byte) (int, error) {
 	return ro.file.Read(p)
 }
 
+func (ro *readerObject) WriteTo(w io.Writer) (int64, error) {
+	return ro.file.WriteTo(w)
+}
+
 func timeoutFunction(f func(), timeout time.Duration) {
 	if timeout < 0 {
 		f()
