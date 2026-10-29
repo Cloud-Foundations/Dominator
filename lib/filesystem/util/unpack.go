@@ -158,8 +158,7 @@ func writeObject(objectsReader objectserver.ObjectsReader, inodeNumber uint64,
 		}
 	}()
 	iLength := int64(length)
-	nCopied, err := io.CopyBuffer(destFile, io.LimitReader(reader, iLength),
-		buffer)
+	nCopied, err := io.CopyBuffer(destFile, reader, buffer)
 	if err != nil {
 		return fmt.Errorf("error copying: %s", err)
 	}
