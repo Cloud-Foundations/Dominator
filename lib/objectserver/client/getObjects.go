@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/proto/objectserver"
 )
+
+type objectReader struct {
+	*io.LimitedReader
+}
 
 func (objClient *ObjectClient) getObjects(hashes []hash.Hash) (
 	*ObjectsReader, error) {
@@ -24,13 +27,19 @@ func (objClient *ObjectClient) getObjects(hashes []hash.Hash) (
 	var reply objectserver.GetObjectsResponse
 	request.Exclusive = objClient.exclusiveGet
 	request.Hashes = hashes
-	conn.Encode(request)
-	conn.Flush()
+	if err := conn.Encode(request); err != nil {
+		return nil, err
+	}
+	if err := conn.Flush(); err != nil {
+		return nil, err
+	}
 	var objectsReader ObjectsReader
 	objectsReader.client = objClient
 	objectsReader.reader = conn
-	err = conn.Decode(&reply)
-	if err != nil {
+	objectsReader.sharedOR = &objectReader{
+		LimitedReader: &io.LimitedReader{R: conn},
+	}
+	if err := conn.Decode(&reply); err != nil {
 		return nil, err
 	}
 	if reply.ResponseString != "" {
@@ -51,6 +60,14 @@ func (or *ObjectsReader) nextObject() (uint64, io.ReadCloser, error) {
 		return 0, nil, errors.New("all objects have been consumed")
 	}
 	size := or.sizes[or.nextIndex]
-	return size,
-		ioutil.NopCloser(&io.LimitedReader{R: or.reader, N: int64(size)}), nil
+	or.sharedOR.N = int64(size)
+	return size, or.sharedOR, nil
+}
+
+func (r *objectReader) Close() error {
+	return nil
+}
+
+func (r *objectReader) WriteTo(w io.Writer) (int64, error) {
+	return io.Copy(w, r.LimitedReader)
 }

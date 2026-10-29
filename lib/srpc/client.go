@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
@@ -312,6 +313,13 @@ func (client *Client) call(serviceMethod string) (*Conn, error) {
 		clientMetricsMutex.Lock()
 		numOpenCallConnections--
 		clientMetricsMutex.Unlock()
+		return nil, err
+	}
+	if sc, ok := client.conn.(syscall.Conn); ok {
+		conn.rawConn, conn.rawConnError = sc.SyscallConn()
+	} else {
+		conn.rawConn = nil
+		conn.rawConnError = errorNotSyscallConn
 	}
 	return conn, err
 }

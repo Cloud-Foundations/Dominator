@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
@@ -98,6 +99,8 @@ var (
 	computeHostname sync.Once
 	hostname        string
 	hostnameError   error
+
+	errorNotSyscallConn = errors.New("connection not a syscall.Conn")
 )
 
 // Precompute some reflect types. Can't use the types directly because Typeof
@@ -811,6 +814,12 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 	m.numPermittedCalls++
 	m.numRunningCalls++
 	m.metricsMutex.Unlock()
+	if sc, ok := conn.conn.(syscall.Conn); ok {
+		conn.rawConn, conn.rawConnError = sc.SyscallConn()
+	} else {
+		conn.rawConn = nil
+		conn.rawConnError = errorNotSyscallConn
+	}
 	startTime := time.Now()
 	err := m._call(conn, makeCoder)
 	timeTaken := time.Since(startTime)
@@ -819,6 +828,8 @@ func (m *methodWrapper) call(conn *Conn, makeCoder coderMaker) error {
 	} else {
 		m.failedCallsDistribution.Add(timeTaken)
 	}
+	conn.rawConn = nil
+	conn.rawConnError = errorNotSyscallConn
 	m.metricsMutex.Lock()
 	m.numRunningCalls--
 	m.metricsMutex.Unlock()
