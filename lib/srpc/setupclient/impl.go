@@ -50,7 +50,7 @@ func loadLoop(params Params) {
 	refresher := newRefresher()
 	for {
 		sleepInterval := refresher.WaitInterval()
-		params.Logger.Debugf(0, "Certificate refetch at: %s (%s)\n",
+		params.Logger.Debugf(1, "Certificate refetch at: %s (%s)\n",
 			time.Now().Add(sleepInterval).Format(dateTime),
 			format.Duration(sleepInterval))
 		time.Sleep(sleepInterval)
