@@ -46,6 +46,7 @@ Some of the sub-commands available are:
 - **diff-build-logs**: compare the build logs for two images
 - **diff-files**: compare the specified file in two images
 - **diff-filters**: compare the filters for two images
+- **diff-impact**: list the reboots and service restarts between two images
 - **diff-package-lists**: compare the package lists for two images
 - **diff-triggers**: compare the triggers for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image

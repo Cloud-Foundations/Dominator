@@ -184,6 +184,8 @@ var subcommands = []commands.Command{
 	{"diff-files", "tool left right filename", 4, 4,
 		diffFileInImagesSubcommand},
 	{"diff-filters", "tool left right", 3, 3, diffFilterInImagesSubcommand},
+	{Command: "diff-impact", Args: "left right", MinArgs: 2, MaxArgs: 2,
+		CmdFunc: diffImpactSubcommand},
 	{"diff-package-lists", "tool left right", 3, 3,
 		diffImagePackageListsSubcommand},
 	{"diff-triggers", "tool left right", 3, 3, diffTriggersInImagesSubcommand},
