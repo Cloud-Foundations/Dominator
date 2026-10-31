@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
+	lib_grpc "github.com/Cloud-Foundations/Dominator/lib/grpc"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
@@ -151,5 +152,6 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		PublicMethods:          publicMethods,
 		UnauthenticatedMethods: unauthenticatedMethods,
 	})
+	SetupGRPC(lib_grpc.DefaultServer(), config, params)
 	return (*htmlWriter)(srpcObj), nil
 }
