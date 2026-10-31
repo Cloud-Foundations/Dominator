@@ -1,10 +1,13 @@
 package httpd
 
 import (
+	"fmt"
 	"io"
+	"net"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/server"
 )
 
 type HtmlWriter interface {
@@ -17,8 +20,11 @@ type state struct {
 	manager *manager.Manager
 }
 
-// RegisterHandlers registers the HTML handlers on http.DefaultServeMux.
-func RegisterHandlers(managerObj *manager.Manager) {
+func StartServer(portNum uint, managerObj *manager.Manager, daemon bool) error {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
+	if err != nil {
+		return err
+	}
 	myState := state{managerObj}
 	html.HandleFunc("/", myState.statusHandler)
 	html.HandleFunc("/listAvailableAddresses",
@@ -34,6 +40,11 @@ func RegisterHandlers(managerObj *manager.Manager) {
 	html.HandleFunc("/showVM", myState.showVMHandler)
 	html.HandleFunc("/showVolumeDirectories",
 		myState.showVolumeDirectoriesHandler)
+	if daemon {
+		go func() { _ = server.Serve(listener, server.Params{}) }()
+		return nil
+	}
+	return server.Serve(listener, server.Params{})
 }
 
 func AddHtmlWriter(htmlWriter HtmlWriter) {
