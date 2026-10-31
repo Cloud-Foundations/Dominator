@@ -38,6 +38,10 @@ type Standalone struct {
 	Name string
 }
 
+type Blob []byte
+
+type Labels tags.Tags
+
 type State uint
 
 type VmInfo struct {
