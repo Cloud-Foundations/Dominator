@@ -137,10 +137,10 @@ func getQemuInfo(architectureType proto.ArchitectureType,
 		version:       qemuVersion,
 		vncArgs:       vncArgs,
 	}
-	if *qemuWrapperCommand != "" {
-		qemuInfo.command = *qemuWrapperCommand
-	}
 	if binaryDirectory == "" {
+		if *qemuWrapperCommand != "" {
+			qemuInfo.command = *qemuWrapperCommand
+		}
 		qemuInfoMutex.Lock()
 		if qemuInfo, ok := qemuInfos[qemuCommand]; ok {
 			qemuInfoMutex.Unlock()
