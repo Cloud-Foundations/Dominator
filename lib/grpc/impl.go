@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -23,6 +24,9 @@ import (
 type authInfoKeyType struct{}
 
 var authInfoKey = authInfoKeyType{}
+
+var defaultServerOnce sync.Once
+var defaultServerObj *grpc.Server
 
 var publicMethods = make(map[string]struct{})
 var unauthenticatedMethods = make(map[string]struct{})
@@ -54,6 +58,20 @@ func (a *AuthInfo) getAuthInformation() *srpc.AuthInformation {
 		return nil
 	}
 	return a.authInformation
+}
+
+// defaultServer returns the shared gRPC server, creating it on the first call.
+func defaultServer() *grpc.Server {
+	defaultServerOnce.Do(func() { defaultServerObj = newServer() })
+	return defaultServerObj
+}
+
+// newServer returns a gRPC server with the authentication interceptors.
+func newServer() *grpc.Server {
+	return grpc.NewServer(
+		grpc.UnaryInterceptor(unaryAuthInterceptor),
+		grpc.StreamInterceptor(streamAuthInterceptor),
+	)
 }
 
 func registerServiceOptions(serviceName string, options ServiceOptions) {
