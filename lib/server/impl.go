@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+	"google.golang.org/grpc"
 
+	lib_grpc "github.com/Cloud-Foundations/Dominator/lib/grpc"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 )
@@ -54,7 +56,29 @@ func start(config Config, params Params) error {
 		params.Logger.Printf("Serving SRPC, HTML and gRPC on port %d\n",
 			config.Port)
 	}
+	return serveListener(listener, params)
+}
+
+// serveListener returns the error which stopped serving on listener, which it
+// closes. It serves gRPC with the default gRPC server if params has no gRPC
+// handler and services are registered on it.
+func serveListener(listener net.Listener, params Params) error {
+	params.GrpcHandler = grpcHandler(params.GrpcHandler,
+		lib_grpc.DefaultServer())
 	return serve(listener, srpc.GetServerTlsConfig(), params)
+}
+
+// grpcHandler returns handler if it is not nil, otherwise defaultServer if any
+// services are registered on it, otherwise nil.
+func grpcHandler(handler http.Handler,
+	defaultServer *grpc.Server) http.Handler {
+	if handler != nil {
+		return handler
+	}
+	if len(defaultServer.GetServiceInfo()) > 0 {
+		return defaultServer
+	}
+	return nil
 }
 
 // serve returns the error which stopped serving on listener, which it closes.

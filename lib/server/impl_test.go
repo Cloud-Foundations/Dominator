@@ -8,16 +8,23 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/net/http2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	lib_grpc "github.com/Cloud-Foundations/Dominator/lib/grpc"
 	libnet "github.com/Cloud-Foundations/Dominator/lib/net"
 )
 
@@ -313,5 +320,95 @@ func TestNilTlsConfigSupportsTakeOver(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("handler not reached")
+	}
+}
+
+func TestGrpcHandlerDefaults(t *testing.T) {
+	empty := grpc.NewServer()
+	registered := grpc.NewServer()
+	healthpb.RegisterHealthServer(registered, health.NewServer())
+	explicit := http.NotFoundHandler()
+	if got := grpcHandler(nil, empty); got != nil {
+		t.Errorf("no services: got %v, want nil", got)
+	}
+	if got := grpcHandler(nil, registered); got != http.Handler(registered) {
+		t.Errorf("registered services: got %v, want the default server", got)
+	}
+	got := grpcHandler(explicit, registered)
+	if fmt.Sprintf("%p", got) != fmt.Sprintf("%p", explicit) {
+		t.Errorf("explicit handler: got %v, want the explicit handler", got)
+	}
+}
+
+func TestServeUsesCallersListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_ = Serve(listener, Params{
+			HttpHandler: http.HandlerFunc(func(w http.ResponseWriter,
+				req *http.Request) {
+				_, _ = io.WriteString(w, "http")
+			}),
+		})
+	}()
+	body, _ := get(t, plainClient, "http://"+listener.Addr().String()+"/", "")
+	if body != "http" {
+		t.Fatalf("plain GET: got %q, want http", body)
+	}
+	_ = listener.Close()
+}
+
+// registerHealthOnDefaultServer registers the health service on the default
+// gRPC server, once per process because the server is global. Its methods are
+// unauthenticated, so that a call without a TLS identity succeeds.
+var registerHealthOnDefaultServer sync.Once
+
+// TestServeUsesDefaultGrpcServer checks that, with no gRPC handler given, gRPC
+// requests reach a service registered on the default gRPC server.
+func TestServeUsesDefaultGrpcServer(t *testing.T) {
+	registerHealthOnDefaultServer.Do(func() {
+		lib_grpc.RegisterServiceOptions("grpc.health.v1.Health",
+			lib_grpc.ServiceOptions{
+				UnauthenticatedMethods: []string{"Check", "Watch"},
+			})
+		healthpb.RegisterHealthServer(lib_grpc.DefaultServer(),
+			health.NewServer())
+	})
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() { _ = Serve(listener, Params{}) }()
+	check(t, listener.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+// check makes a unary and a streaming health call to addr and fails the test if
+// either does not succeed.
+func check(t *testing.T, addr string, creds grpc.DialOption) {
+	conn, err := grpc.NewClient(addr, creds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client := healthpb.NewHealthClient(conn)
+	resp, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != healthpb.HealthCheckResponse_SERVING {
+		t.Fatalf("health status %v, want SERVING", resp.Status)
+	}
+	stream, err := client.Watch(ctx, &healthpb.HealthCheckRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stream.Recv(); err != nil {
+		t.Fatal(err)
 	}
 }
