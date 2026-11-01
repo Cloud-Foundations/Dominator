@@ -204,7 +204,7 @@ func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
 }
 
 func extractKernel(volume proto.LocalVolume, extension string,
-	objectsGetter objectserver.ObjectsGetter, fs *filesystem.FileSystem,
+	objectsGetter objectserver.ObjectsGetter,
 	bootInfo *util.BootInfoType) error {
 	dirent := bootInfo.KernelImageDirent
 	if dirent == nil {
@@ -215,7 +215,8 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		return errors.New("kernel image is not a regular file")
 	}
 	inode.Size = 0
-	filename := filepath.Join(volume.DirectoryToCleanup, kernelLeafFilename+extension)
+	filename := filepath.Join(volume.DirectoryToCleanup,
+		kernelLeafFilename+extension)
 	_, err := objectserver.LinkObject(filename, objectsGetter, inode.Hash)
 	if err != nil {
 		return err
@@ -1501,10 +1502,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn, err)
 		}
 		defer client.Close()
-		fs := img.FileSystem
+		fs := img.image.FileSystem
 		vm.ImageName = imageName
 		rootVolume.Size = computeSize(request.MinimumFreeBytes,
-			request.RoundupPower, fs.EstimateUsage(0))
+			request.RoundupPower, img.usageEstimate)
 		err = vm.setupVolumes(rootVolume, request.SecondaryVolumes,
 			request.SpreadVolumes, request.StorageIndices)
 		if err != nil {
@@ -1746,7 +1747,7 @@ func (m *Manager) debugVmImage(conn *srpc.Conn,
 			return sendError(conn, err)
 		}
 		defer client.Close()
-		fs := img.FileSystem
+		fs := img.image.FileSystem
 		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
 			return err
 		}
@@ -3011,7 +3012,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer client.Close()
-	if img.Filter == nil {
+	if img.image.Filter == nil {
 		return fmt.Errorf("%s contains no filter", imageName)
 	}
 	vm, err := m.getVmLockAndAuth(request.IpAddress, true,
@@ -3024,10 +3025,9 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	defer func() {
 		vm.allowMutationsAndUnlock(haveLock)
 	}()
-	img.FileSystem.InodeToFilenamesTable()
-	img.FileSystem.FilenameToInodeTable()
-	hashToInodesTable := img.FileSystem.HashToInodesTable()
-	img.FileSystem.BuildEntryMap()
+	img.buildExtraData()
+	imageFS := img.image.FileSystem
+	hashToInodesTable := imageFS.HashToInodesTable()
 	var objectsGetter objectserver.ObjectsGetter
 	if vm.Volumes[0].Format != proto.VolumeFormatRaw {
 		return errors.New("cannot patch non-RAW volumes")
@@ -3063,7 +3063,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	} else {
 		objectsGetter = m.objectCache
 	}
-	bootInfo, err := util.GetBootInfoWithParams(img.FileSystem,
+	var skipBootloader bool
+	if _, err := os.Stat(vm.getKernelPath()); err == nil { // No bootloader.
+		skipBootloader = true
+		startTime := time.Now()
+		imageFS = imageFS.Copy()
+		vm.logger.Debugf(0, "copied file-system in %s\n",
+			format.Duration(time.Since(startTime)))
+	}
+	bootInfo, err := util.GetBootInfoWithParams(imageFS,
 		util.MakeKernelOptionsParams{
 			ArchitectureType: vm.ArchitectureType,
 			ExtraOptions:     "net.ifnames=0",
@@ -3140,14 +3148,15 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err := sendVmPatchImageMessage(conn, "scanning root"); err != nil {
 		return err
 	}
-	fs, err := scanner.ScanFileSystem(rootDir, nil, img.Filter, nil, nil, nil)
+	vmFS, err := scanner.ScanFileSystem(rootDir, nil, img.image.Filter, nil,
+		nil, nil)
 	if err != nil {
 		return err
 	}
-	if err := fs.FileSystem.RebuildInodePointers(); err != nil {
+	if err := vmFS.FileSystem.RebuildInodePointers(); err != nil {
 		return err
 	}
-	fs.FileSystem.BuildEntryMap()
+	vmFS.FileSystem.BuildEntryMap()
 	initrdFilename := vm.getInitrdPath()
 	tmpInitrdFilename := initrdFilename + ".new"
 	defer os.Remove(tmpInitrdFilename)
@@ -3155,9 +3164,9 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	tmpKernelFilename := kernelFilename + ".new"
 	defer os.Remove(tmpKernelFilename)
 	writeBootloaderConfig := false
-	if _, err := os.Stat(vm.getKernelPath()); err == nil { // No bootloader.
+	if skipBootloader {
 		err := extractKernel(vm.VolumeLocations[0], ".new", objectsGetter,
-			img.FileSystem, bootInfo)
+			bootInfo)
 		if err != nil {
 			return err
 		}
@@ -3169,8 +3178,8 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 		return err
 	}
 	defer patchLogger.Close()
-	subObj := domlib.Sub{FileSystem: &fs.FileSystem}
-	fetchMap, _ := domlib.BuildMissingLists(subObj, img, false, true,
+	subObj := domlib.Sub{FileSystem: &vmFS.FileSystem}
+	fetchMap, _ := domlib.BuildMissingLists(subObj, img.image, false, true,
 		patchLogger)
 	objectsToFetch := objectcache.ObjectMapToCache(fetchMap)
 	objectsDir := filepath.Join(rootDir, ".subd", "objects")
@@ -3185,8 +3194,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	if err != nil {
 		return err
 	}
-	err = deleteFilesNotInImage(img.FileSystem, &fs.FileSystem, rootDir,
-		patchLogger)
+	err = deleteFilesNotInImage(imageFS, &vmFS.FileSystem, rootDir, patchLogger)
 	if err != nil {
 		return err
 	}
@@ -3217,7 +3225,7 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	vm.logger.Debugln(0, msg)
 	subObj.ObjectCache = append(subObj.ObjectCache, objectsToFetch...)
 	var subRequest subproto.UpdateRequest
-	if domlib.BuildUpdateRequest(subObj, img, &subRequest, false, true,
+	if domlib.BuildUpdateRequest(subObj, img.image, &subRequest, false, true,
 		patchLogger) {
 		return errors.New("failed building update: missing computed files")
 	}
@@ -3510,7 +3518,7 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 		}
 		defer client.Close()
 		estimatedSize := computeSize(request.MinimumFreeBytes,
-			request.RoundupPower, img.FileSystem.EstimateUsage(0))
+			request.RoundupPower, img.usageEstimate)
 		err = m.checkFreeSpaceForVolume(vm.VolumeLocations[0], nil, nil,
 			estimatedSize)
 		if err != nil {
@@ -3531,8 +3539,9 @@ func (m *Manager) replaceVmImage(conn *srpc.Conn,
 			RootLabel:          vm.rootLabelSaved(false),
 			RoundupPower:       request.RoundupPower,
 		}
-		err = m.writeRaw(vm.VolumeLocations[0], ".new", client, img.FileSystem,
-			vm.FirmwareType, writeRawOptions, request.SkipBootloader, vm.logger)
+		err = m.writeRaw(vm.VolumeLocations[0], ".new", client,
+			img.image.FileSystem, vm.FirmwareType, writeRawOptions,
+			request.SkipBootloader, vm.logger)
 		if err != nil {
 			return sendError(conn, err)
 		}
@@ -4117,7 +4126,7 @@ func (m *Manager) unpackImage(imageName, rootDir string,
 		return err
 	}
 	defer client.Close()
-	fs := img.FileSystem
+	fs := img.image.FileSystem
 	var objectsGetter objectserver.ObjectsGetter
 	if m.objectCache == nil {
 		objectClient := objclient.AttachObjectClient(client)
@@ -4155,6 +4164,10 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 	}
 	writeRawOptions.AllocateBlocks = true
 	if skipBootloader {
+		startTime := time.Now()
+		fs = fs.Copy()
+		logger.Debugf(0, "copied file-system in %s\n",
+			format.Duration(time.Since(startTime)))
 		bootInfo, err := util.GetBootInfoWithParams(fs,
 			util.MakeKernelOptionsParams{
 				ArchitectureType: writeRawOptions.ArchitectureType,
@@ -4163,7 +4176,7 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 		if err != nil {
 			return err
 		}
-		err = extractKernel(volume, extension, objectsGetter, fs, bootInfo)
+		err = extractKernel(volume, extension, objectsGetter, bootInfo)
 		if err != nil {
 			return err
 		}
