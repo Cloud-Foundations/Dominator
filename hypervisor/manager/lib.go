@@ -6,8 +6,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"syscall"
+	"time"
 	"unicode"
 
+	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 )
 
@@ -109,4 +112,20 @@ func validateHostname(hostname string) error {
 			hostname, char)
 	}
 	return nil
+}
+
+// waitForProcessExit will wait for the specified process to exit, up to the
+// specified timeout. The time spent waiting is returned, or -1 indicating
+// timeout.
+func waitForProcessExit(p *os.Process, timeout time.Duration) time.Duration {
+	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
+	startTime := time.Now()
+	timeoutTime := startTime.Add(timeout)
+	for time.Until(timeoutTime) > 0 {
+		if err := p.Signal(syscall.Signal(0)); err != nil {
+			return time.Since(startTime)
+		}
+		sleeper.Sleep()
+	}
+	return -1
 }
