@@ -5,13 +5,13 @@ authorisation logic, and a helper to convert Go errors into gRPC status
 errors.
 
 A gRPC server registers UnaryAuthInterceptor and StreamAuthInterceptor when
-constructing the server, and registers per-service public/unauthenticated
-method options via RegisterServiceOptions. gRPC method names of the form
-"/package.Service/Method" are stripped to the SRPC form "Service.Method"
-before being passed to the shared authorisation check, so a single set of
-permitted-method entries in the caller's X509 client certificate governs
-access over both protocols. Method names in the gRPC service definition
-must therefore match the SRPC method names exactly.
+constructing the server (DefaultServer does so), and registers per-service
+public/unauthenticated method options via RegisterServiceOptions. gRPC method
+names of the form "/package.Service/Method" are stripped to the SRPC form
+"Service.Method" before being passed to the shared authorisation check, so a
+single set of permitted-method entries in the caller's X509 client certificate
+governs access over both protocols. Method names in the gRPC service
+definition must therefore match the SRPC method names exactly.
 */
 package grpc
 
@@ -62,6 +62,14 @@ func AuthInfoFromContext(ctx context.Context) *AuthInfo {
 func ContextWithAuthInfo(ctx context.Context,
 	authInfo *AuthInfo) context.Context {
 	return contextWithAuthInfo(ctx, authInfo)
+}
+
+// DefaultServer returns the gRPC server shared by the services in this
+// process, creating it on first use. Services register on it as SRPC services
+// register on http.DefaultServeMux. It authenticates and authorises every call
+// with UnaryAuthInterceptor and StreamAuthInterceptor.
+func DefaultServer() *grpc.Server {
+	return defaultServer()
 }
 
 // GetAuthInformation returns the authentication information or nil.
