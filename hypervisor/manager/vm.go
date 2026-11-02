@@ -22,7 +22,6 @@ import (
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	hyperclient "github.com/Cloud-Foundations/Dominator/hypervisor/client"
-	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
 	"github.com/Cloud-Foundations/Dominator/lib/errors"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem/scanner"
@@ -2865,18 +2864,23 @@ func (vm *vmInfoType) waitForProcessExit() error {
 	if err != nil {
 		return err
 	}
-	sleeper := backoffdelay.NewExponential(time.Millisecond, time.Second, 0)
-	startTime := time.Now()
-	timeoutTime := startTime.Add(vm.manager.VirtualiserExitTimeout)
-	for time.Until(timeoutTime) > 0 {
-		if err := process.Signal(syscall.Signal(0)); err != nil {
-			vm.logger.Debugf(0, "virtualiser process took %s to exit\n",
-				format.Duration(time.Since(startTime)))
-			return nil
-		}
-		sleeper.Sleep()
+	timeTaken := waitForProcessExit(process, vm.manager.VirtualiserExitTimeout)
+	if timeTaken >= 0 {
+		vm.logger.Printf("virtualiser process took %s to exit\n",
+			format.Duration(timeTaken))
+		return nil
 	}
-	return fmt.Errorf("timed out waiting for virtualiser process to exit")
+	if err := process.Signal(syscall.SIGKILL); err != nil {
+		return fmt.Errorf(
+			"timed out waiting for virtualiser process to exit, error sending SIGKILL: %s",
+			err)
+	}
+	timeTaken = waitForProcessExit(process, vm.manager.VirtualiserExitTimeout)
+	if timeTaken >= 0 {
+		return fmt.Errorf("virtualiser process took %s to die",
+			format.Duration(timeTaken))
+	}
+	return fmt.Errorf("timed out waiting for virtualiser process to die")
 }
 
 func (vm *vmInfoType) makeExtraLogger(filename string) (
