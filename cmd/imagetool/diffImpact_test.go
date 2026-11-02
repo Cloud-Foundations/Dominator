@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
@@ -65,5 +66,28 @@ func TestMakeImpactsReloadSkippedWhenRestarted(t *testing.T) {
 func TestMakeImpactsNoMatch(t *testing.T) {
 	if impacts := makeImpacts(nil); len(impacts) != 0 {
 		t.Errorf("got %d impacts, expected none", len(impacts))
+	}
+}
+
+func TestMakeReport(t *testing.T) {
+	trig, err := triggers.Decode([]byte(testTriggers))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := makeReport(makeImpacts(trig.Triggers))
+	expected := impactReport{
+		Disruptive: []string{"reboot", "restart sshd"},
+		Other:      []string{"reload motd", "restart rsyslog"},
+	}
+	if !reflect.DeepEqual(report, expected) {
+		t.Errorf("got %v, expected %v", report, expected)
+	}
+}
+
+func TestMakeReportNoMatch(t *testing.T) {
+	report := makeReport(nil)
+	if report.Disruptive == nil || report.Other == nil ||
+		len(report.Disruptive) != 0 || len(report.Other) != 0 {
+		t.Errorf("got %#v, expected empty non-nil lists", report)
 	}
 }

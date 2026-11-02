@@ -3,16 +3,23 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
+	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
 	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
+
+type impactReport struct {
+	Disruptive []string
+	Other      []string
+}
 
 type impact struct {
 	trigger    *triggers.Trigger
@@ -24,8 +31,7 @@ func diffImpactSubcommand(args []string, logger log.DebugLogger) error {
 	if err != nil {
 		return fmt.Errorf("error diffing impact: %s", err)
 	}
-	printImpacts(impacts)
-	return nil
+	return printImpacts(impacts)
 }
 
 func diffImpact(lName, rName string, logger log.DebugLogger) ([]*impact,
@@ -96,22 +102,19 @@ func getAction(trg *triggers.Trigger) string {
 	return "restart " + trg.Service
 }
 
-func printImpacts(impacts []*impact) {
-	var disruptive, other []*impact
-	for _, imp := range impacts {
-		if imp.disruptive {
-			disruptive = append(disruptive, imp)
-		} else {
-			other = append(other, imp)
-		}
-	}
-	printGroup("Disruptive", disruptive)
-	printGroup("Other", other)
+func printImpacts(impacts []*impact) error {
+	return json.WriteWithIndent(os.Stdout, "    ", makeReport(impacts))
 }
 
-func printGroup(title string, impacts []*impact) {
-	fmt.Printf("%s: %d\n", title, len(impacts))
+func makeReport(impacts []*impact) impactReport {
+	report := impactReport{Disruptive: []string{}, Other: []string{}}
 	for _, imp := range impacts {
-		fmt.Printf("  %s\n", getAction(imp.trigger))
+		action := getAction(imp.trigger)
+		if imp.disruptive {
+			report.Disruptive = append(report.Disruptive, action)
+		} else {
+			report.Other = append(report.Other, action)
+		}
 	}
+	return report
 }
