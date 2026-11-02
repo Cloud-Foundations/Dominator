@@ -52,6 +52,8 @@ var (
 		"If true, run the DHCP server on bridge interfaces only")
 	identityProvider = flag.String("identityProvider", "",
 		"Base URL of identity provider which can issue role certificates")
+	imageCacheSize = flag.Uint("imageCacheSize", 10,
+		"Maximum size of image cache")
 	imageServerHostname = flag.String("imageServerHostname", "localhost",
 		"Hostname of image server")
 	imageServerPortNum = flag.Uint("imageServerPortNum",
@@ -87,9 +89,9 @@ var (
 
 func init() {
 	flag.Var(&bootLogMaximumSize, "bootLogMaximumSize",
-		"maximum size of boot log")
+		"Maximum size of boot log")
 	flag.Var(&objectCacheSize, "objectCacheSize",
-		"maximum size of object cache")
+		"Maximum size of object cache")
 	flag.Var(&volumeDirectories, "volumeDirectories",
 		"Comma separated list of volume directories. If empty, scan for space")
 }
@@ -222,6 +224,7 @@ func run() {
 		BridgeMap:              bridgeMap,
 		DhcpServer:             dhcpServer,
 		IdentityProvider:       *identityProvider,
+		ImageCacheSize:         *imageCacheSize,
 		ImageServerAddress:     imageServerAddress,
 		LockCheckInterval:      *lockCheckInterval,
 		LockLogTimeout:         *lockLogTimeout,

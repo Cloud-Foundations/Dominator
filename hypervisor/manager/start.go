@@ -14,6 +14,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/firmware"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/lockwatcher"
 	"github.com/Cloud-Foundations/Dominator/lib/log/prefixlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/meminfo"
@@ -73,6 +74,9 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 	if startOptions.BootLogMaximumBytes < 1 {
 		startOptions.BootLogMaximumBytes = 1 << 20
 	}
+	if startOptions.ImageCacheSize < 1 {
+		startOptions.ImageCacheSize = 10
+	}
 	if startOptions.VirtualiserExitTimeout < 1 {
 		startOptions.VirtualiserExitTimeout = 15 * time.Second
 	}
@@ -86,6 +90,8 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		vms:           make(map[string]*vmInfoType),
 		uuid:          uuid,
 	}
+	manager.imageCache.list = list.NewUnique[string]()
+	manager.imageCache.nameToImage = make(map[string]*imageType)
 	err = fsutil.CopyToFile(manager.GetRootCookiePath(),
 		fsutil.PrivateFilePerms, bytes.NewReader(rootCookie), 0)
 	if err != nil {

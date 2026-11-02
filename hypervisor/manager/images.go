@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	imclient "github.com/Cloud-Foundations/Dominator/imageserver/client"
@@ -10,21 +11,78 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/hash"
 	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
-	// "github.com/Cloud-Foundations/Dominator/lib/objectcache"
-	// "github.com/Cloud-Foundations/Dominator/lib/objectserver"
-	// objclient "github.com/Cloud-Foundations/Dominator/lib/objectserver/client"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
 
+type imageCacheType struct {
+	mutex       sync.Mutex
+	list        *list.UniqueList[string] // K: name. Front most recently used.
+	nameToImage map[string]*imageType    // Key: name.
+}
+
+type imageType struct {
+	image         *image.Image
+	usageEstimate uint64
+	mutex         sync.Mutex // Protect everything below.
+	builtExtras   bool
+}
+
 type imageDownloadData struct {
 	connectTime time.Duration
-	fetchTime   time.Duration
-	image       *image.Image
+	fetchTime   time.Duration // 0: was cached.
+	image       *imageType
 	imageName   string
 	rebuildTime time.Duration
 	srpcClient  srpc.ClientI
+}
+
+func (img *imageType) buildExtraData() {
+	// TODO(rgooch): Consider moving this into the lib/filesystem package.
+	img.mutex.Lock()
+	defer img.mutex.Unlock()
+	if img.builtExtras {
+		return
+	}
+	img.image.FileSystem.InodeToFilenamesTable()
+	img.image.FileSystem.FilenameToInodeTable()
+	img.image.FileSystem.HashToInodesTable()
+	img.image.FileSystem.BuildEntryMap()
+	img.builtExtras = true
+}
+
+func (m *Manager) cacheImage(imageName string,
+	rawImage *image.Image) *imageType {
+	m.imageCache.mutex.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			m.imageCache.mutex.Unlock()
+		}
+	}()
+	img, ok := m.imageCache.nameToImage[imageName]
+	if ok {
+		m.imageCache.list.PushFront(imageName)
+		return img // Return existing, drop new.
+	}
+	img = &imageType{
+		image:         rawImage,
+		usageEstimate: rawImage.FileSystem.EstimateUsage(0),
+	}
+	m.imageCache.nameToImage[imageName] = img
+	m.imageCache.list.PushFront(imageName)
+	if m.imageCache.list.Length() < m.ImageCacheSize {
+		return img
+	}
+	oldestEntry := m.imageCache.list.Back()
+	delete(m.imageCache.nameToImage, oldestEntry.Value())
+	oldestEntry.Remove()
+	m.imageCache.mutex.Unlock()
+	locked = false
+	m.Logger.Printf("Dropped: %s from the image cache\n", imageName)
+	return img
 }
 
 // downloadImage will download an image and return the image and information
@@ -57,16 +115,26 @@ func (m *Manager) downloadImage(searchName string, imageTimeout time.Duration) (
 		if imageName == "" {
 			return nil, errors.New("no images in directory: " + searchName)
 		}
-		img, err := imclient.GetImage(client, imageName)
+		if img := m.getCachedImage(imageName); img != nil {
+			doClose = false
+			return &imageDownloadData{
+				connectTime: connectedTime.Sub(startTime),
+				image:       img,
+				imageName:   imageName,
+				srpcClient:  client,
+			}, nil
+		}
+		rawImage, err := imclient.GetImage(client, imageName)
 		if err != nil {
 			return nil, err
 		}
 		loadedTime := time.Now()
-		if err := img.FileSystem.RebuildInodePointers(); err != nil {
+		if err := rawImage.FileSystem.RebuildInodePointers(); err != nil {
 			return nil, err
 		}
 		rebuiltTime := time.Now()
 		doClose = false
+		img := m.cacheImage(imageName, rawImage)
 		return &imageDownloadData{
 			connectTime: connectedTime.Sub(startTime),
 			fetchTime:   loadedTime.Sub(connectedTime),
@@ -76,18 +144,29 @@ func (m *Manager) downloadImage(searchName string, imageTimeout time.Duration) (
 			srpcClient:  client,
 		}, nil
 	}
-	img, err := imclient.GetImageWithTimeout(client, searchName, imageTimeout)
+	if img := m.getCachedImage(searchName); img != nil {
+		doClose = false
+		return &imageDownloadData{
+			connectTime: connectedTime.Sub(startTime),
+			image:       img,
+			imageName:   searchName,
+			srpcClient:  client,
+		}, nil
+	}
+	rawImage, err := imclient.GetImageWithTimeout(client, searchName,
+		imageTimeout)
 	if err != nil {
 		return nil, err
 	}
-	if img == nil {
+	if rawImage == nil {
 		return nil, errors.New("timeout getting image")
 	}
 	loadedTime := time.Now()
-	if err := img.FileSystem.RebuildInodePointers(); err != nil {
+	if err := rawImage.FileSystem.RebuildInodePointers(); err != nil {
 		return nil, err
 	}
 	rebuiltTime := time.Now()
+	img := m.cacheImage(searchName, rawImage)
 	doClose = false
 	return &imageDownloadData{
 		connectTime: connectedTime.Sub(startTime),
@@ -111,10 +190,11 @@ func (m *Manager) fetchImage(searchName string, imageTimeout time.Duration) (
 		return proto.FetchImageResponse{}, err
 	}
 	defer dd.srpcClient.Close()
-	hashes := make([]hash.Hash, 0, len(dd.image.FileSystem.InodeTable))
-	hashMap := make(map[hash.Hash]struct{}, len(dd.image.FileSystem.InodeTable))
+	fs := dd.image.image.FileSystem
+	hashes := make([]hash.Hash, 0, len(fs.InodeTable))
+	hashMap := make(map[hash.Hash]struct{}, len(fs.InodeTable))
 	var imageBytes uint64
-	for _, inode := range dd.image.FileSystem.InodeTable {
+	for _, inode := range fs.InodeTable {
 		if inode, ok := inode.(*filesystem.RegularInode); ok {
 			if inode.Size > 0 {
 				if _, exists := hashMap[inode.Hash]; !exists {
@@ -131,6 +211,26 @@ func (m *Manager) fetchImage(searchName string, imageTimeout time.Duration) (
 		return proto.FetchImageResponse{}, err
 	}
 	fetchedTime := time.Now()
+	if dd.fetchTime > 0 {
+		m.Logger.Printf(
+			"Fetched: %s in %s, rebuilt inodes in: %s, downloaded %d/%d objects, %s/%s in: %s\n",
+			dd.imageName,
+			format.Duration(dd.fetchTime),
+			format.Duration(dd.rebuildTime),
+			stats.DownloadedObjects,
+			len(hashes),
+			format.FormatBytes(stats.DownloadedBytes),
+			format.FormatBytes(imageBytes),
+			format.Duration(fetchedTime.Sub(startTime)))
+	} else {
+		m.Logger.Printf(
+			"Downloaded %d/%d objects, %s/%s in: %s\n",
+			stats.DownloadedObjects,
+			len(hashes),
+			format.FormatBytes(stats.DownloadedBytes),
+			format.FormatBytes(imageBytes),
+			format.Duration(fetchedTime.Sub(startTime)))
+	}
 	return proto.FetchImageResponse{
 		DownloadTime:      fetchedTime.Sub(startTime),
 		DownloadedBytes:   stats.DownloadedBytes,
@@ -143,17 +243,38 @@ func (m *Manager) fetchImage(searchName string, imageTimeout time.Duration) (
 	}, nil
 }
 
+func (m *Manager) getCachedImage(imageName string) *imageType {
+	m.imageCache.mutex.Lock()
+	defer m.imageCache.mutex.Unlock()
+	img, ok := m.imageCache.nameToImage[imageName]
+	if !ok {
+		return nil
+	}
+	rawImage := img.image
+	if !rawImage.ExpiresAt.IsZero() && time.Since(rawImage.ExpiresAt) > 0 {
+		delete(m.imageCache.nameToImage, imageName)
+		m.imageCache.list.Remove(imageName)
+		return nil
+	}
+	m.imageCache.list.PushFront(imageName)
+	return img
+}
+
 func (m *Manager) getImage(searchName string, imageTimeout time.Duration,
-	logger log.DebugLogger) (srpc.ClientI, *image.Image, string, error) {
+	logger log.DebugLogger) (srpc.ClientI, *imageType, string, error) {
 	dd, err := m.downloadImage(searchName, imageTimeout)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	logger.Printf(
-		"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
-		dd.imageName,
-		format.Duration(dd.fetchTime),
-		format.Duration(dd.rebuildTime),
-		format.Duration(dd.connectTime))
+	if dd.fetchTime > 0 {
+		logger.Printf(
+			"loaded: %s in %s, built inode pointers in: %s, connected in: %s\n",
+			dd.imageName,
+			format.Duration(dd.fetchTime),
+			format.Duration(dd.rebuildTime),
+			format.Duration(dd.connectTime))
+	} else {
+		logger.Printf("connected in: %s\n", format.Duration(dd.connectTime))
+	}
 	return dd.srpcClient, dd.image, dd.imageName, nil
 }

@@ -32,6 +32,7 @@ type ComputedFile struct {
 }
 
 type GenericInode interface {
+	copy(*FileSystem) GenericInode
 	GetGid() uint32
 	GetUid() uint32
 	List(w io.Writer, name string, numLinksTable NumLinksTable,
@@ -76,6 +77,12 @@ func (fs *FileSystem) BuildNumLinksTable() NumLinksTable {
 
 func (fs *FileSystem) ComputeTotalDataBytes() {
 	fs.computeTotalDataBytes()
+}
+
+// Copy will create a full copy of a FileSystem. The inode pointers must already
+// be built. The new FileSystem will have built inode pointers.
+func (fs *FileSystem) Copy() *FileSystem {
+	return fs.copy()
 }
 
 func (fs *FileSystem) Encode(writer io.Writer) error {

@@ -49,6 +49,7 @@ type Manager struct {
 	StartOptions
 	healthStatusMutex sync.RWMutex
 	healthStatus      string
+	imageCache        imageCacheType
 	lockWatcher       *lockwatcher.LockWatcher
 	memTotalInMiB     uint64
 	notifiersMutex    sync.Mutex
@@ -84,6 +85,7 @@ type StartOptions struct {
 	BridgeMap              map[string]net.Interface // Key: interface name.
 	DhcpServer             DhcpServer
 	IdentityProvider       string
+	ImageCacheSize         uint // Default: 10.
 	ImageServerAddress     string
 	LockCheckInterval      time.Duration
 	LockLogTimeout         time.Duration
