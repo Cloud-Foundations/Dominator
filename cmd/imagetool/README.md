@@ -46,7 +46,6 @@ Some of the sub-commands available are:
 - **diff-build-logs**: compare the build logs for two images
 - **diff-files**: compare the specified file in two images
 - **diff-filters**: compare the filters for two images
-- **diff-impact**: list the reboots and service restarts between two images
 - **diff-package-lists**: compare the package lists for two images
 - **diff-triggers**: compare the triggers for two images
 - **estimate-usage**: estimate the file-system space needed to unpack an image
@@ -92,6 +91,7 @@ Some of the sub-commands available are:
 			       useful if you want to deprecate a computed file
 			       and need to see where it is being used
 - **show-filter**: show the filter for an image
+- **show-impact**: list the reboots and service restarts between two images
 - **show-inode**: show metadata for an inode in an image
 - **show-metadata**: show metadata for an image
 - **show-triggers**: show triggers for an image

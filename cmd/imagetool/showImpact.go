@@ -16,26 +16,26 @@ import (
 	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
 
-type impactReport struct {
-	Disruptive []string
-	Other      []string
-}
+// The most disruptive levels come first. Reboot and high impact are disruptive.
+type impactLevel uint
 
-type impact struct {
-	trigger    *triggers.Trigger
-	disruptive bool
-}
+const (
+	levelReboot impactLevel = iota
+	levelHighImpact
+	levelRestart
+	levelReload
+)
 
-func diffImpactSubcommand(args []string, logger log.DebugLogger) error {
-	impacts, err := diffImpact(args[0], args[1], logger)
+func showImpactSubcommand(args []string, logger log.DebugLogger) error {
+	trgs, err := showImpact(args[0], args[1], logger)
 	if err != nil {
-		return fmt.Errorf("error diffing impact: %s", err)
+		return fmt.Errorf("error showing impact: %s", err)
 	}
-	return printImpacts(impacts)
+	return json.WriteWithIndent(os.Stdout, "    ", trgs)
 }
 
-func diffImpact(lName, rName string, logger log.DebugLogger) ([]*impact,
-	error) {
+func showImpact(lName, rName string, logger log.DebugLogger) (
+	[]*triggers.Trigger, error) {
 	lfs, err := getTypedFileSystem(lName)
 	if err != nil {
 		return nil, fmt.Errorf("error getting left image: %s", err)
@@ -64,57 +64,44 @@ func diffImpact(lName, rName string, logger log.DebugLogger) ([]*impact,
 	if domlib.BuildUpdateRequest(subObj, img, &request, false, true, logger) {
 		return nil, errors.New("failed building update: missing computed files")
 	}
-	return makeImpacts(sublib.MatchTriggersInUpdate(request)), nil
+	return sortByImpact(sublib.MatchTriggersInUpdate(request)), nil
 }
 
-func makeImpacts(matched []*triggers.Trigger) []*impact {
+func sortByImpact(matched []*triggers.Trigger) []*triggers.Trigger {
 	restarting := make(map[string]struct{})
 	for _, trg := range matched {
 		if !trg.DoReload {
 			restarting[trg.Service] = struct{}{}
 		}
 	}
-	impacts := make([]*impact, 0, len(matched))
+	impacts := make([]*triggers.Trigger, 0, len(matched))
 	for _, trg := range matched {
 		if _, ok := restarting[trg.Service]; ok && trg.DoReload {
 			continue // This service will be restarted: skip reload.
 		}
-		highImpact, reboot := sublib.CheckImpact([]*triggers.Trigger{trg})
-		impacts = append(impacts, &impact{
-			trigger:    trg,
-			disruptive: highImpact || reboot,
-		})
+		impacts = append(impacts, trg)
 	}
 	sort.Slice(impacts, func(left, right int) bool {
-		return getAction(impacts[left].trigger) <
-			getAction(impacts[right].trigger)
+		lLevel := getImpactLevel(impacts[left])
+		rLevel := getImpactLevel(impacts[right])
+		if lLevel != rLevel {
+			return lLevel < rLevel
+		}
+		return impacts[left].Service < impacts[right].Service
 	})
 	return impacts
 }
 
-func getAction(trg *triggers.Trigger) string {
-	if trg.DoReboot {
-		return "reboot"
+func getImpactLevel(trg *triggers.Trigger) impactLevel {
+	highImpact, reboot := sublib.CheckImpact([]*triggers.Trigger{trg})
+	switch {
+	case reboot:
+		return levelReboot
+	case highImpact:
+		return levelHighImpact
+	case trg.DoReload:
+		return levelReload
+	default:
+		return levelRestart
 	}
-	if trg.DoReload {
-		return "reload " + trg.Service
-	}
-	return "restart " + trg.Service
-}
-
-func printImpacts(impacts []*impact) error {
-	return json.WriteWithIndent(os.Stdout, "    ", makeReport(impacts))
-}
-
-func makeReport(impacts []*impact) impactReport {
-	report := impactReport{Disruptive: []string{}, Other: []string{}}
-	for _, imp := range impacts {
-		action := getAction(imp.trigger)
-		if imp.disruptive {
-			report.Disruptive = append(report.Disruptive, action)
-		} else {
-			report.Other = append(report.Other, action)
-		}
-	}
-	return report
 }
