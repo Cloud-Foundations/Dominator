@@ -958,6 +958,15 @@ type TraceVmMetadataResponse struct {
 	Error string
 } // A stream of strings (trace paths) follow.
 
+type TruncateVmVirtualiserLogFileRequest struct {
+	Filename  string
+	IpAddress net.IP
+}
+
+type TruncateVmVirtualiserLogFileResponse struct {
+	Error string
+}
+
 type UpdateSubnetsRequest struct {
 	Add    []Subnet
 	Change []Subnet
