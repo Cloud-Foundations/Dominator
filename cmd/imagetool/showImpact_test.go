@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/Cloud-Foundations/Dominator/lib/image"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 )
 
@@ -107,6 +108,27 @@ func TestImpactJson(t *testing.T) {
 		}
 		if string(data) != test.expected {
 			t.Errorf("got %s, expected %s", data, test.expected)
+		}
+	}
+}
+
+func TestGetSubAndImage(t *testing.T) {
+	img := &typedImage{image: &image.Image{}}
+	other := &typedImage{image: &image.Image{}}
+	sub := &typedImage{}
+	for _, test := range []struct {
+		name          string
+		left, right   *typedImage
+		expectedSub   *typedImage
+		expectedImage *typedImage
+	}{
+		{"two images", other, img, other, img},
+		{"image then sub", img, sub, sub, img},
+		{"sub then image", sub, img, sub, img},
+	} {
+		gotSub, gotImage := getSubAndImage(test.left, test.right)
+		if gotSub != test.expectedSub || gotImage != test.expectedImage {
+			t.Errorf("%s: wrong sub or image", test.name)
 		}
 	}
 }

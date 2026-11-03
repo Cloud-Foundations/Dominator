@@ -7,16 +7,19 @@ import (
 	"sort"
 
 	domlib "github.com/Cloud-Foundations/Dominator/dom/lib"
+	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/filter"
 	"github.com/Cloud-Foundations/Dominator/lib/json"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/triggers"
 	subproto "github.com/Cloud-Foundations/Dominator/proto/sub"
+	subclient "github.com/Cloud-Foundations/Dominator/sub/client"
 	sublib "github.com/Cloud-Foundations/Dominator/sub/lib"
 )
 
-// The most disruptive levels come first. Reboot and high impact are disruptive.
+// Ordered from most to least disruptive.
 type impactLevel uint
 
 const (
@@ -54,21 +57,33 @@ func showImpactSubcommand(args []string, logger log.DebugLogger) error {
 
 func showImpact(lName, rName string, logger log.DebugLogger) (
 	[]*triggers.Trigger, error) {
-	lfs, err := getTypedFileSystem(lName)
+	lti, err := getTypedImageType(lName)
 	if err != nil {
 		return nil, fmt.Errorf("error getting left image: %s", err)
 	}
-	img, err := getTypedImage(rName)
+	rti, err := getTypedImageType(rName)
 	if err != nil {
 		return nil, fmt.Errorf("error getting right image: %s", err)
+	}
+	subTi, imgTi := getSubAndImage(lti, rti)
+	img, err := imgTi.getImage()
+	if err != nil {
+		return nil, fmt.Errorf("error getting image: %s", err)
+	}
+	subFs, err := subTi.getFileSystem()
+	if err != nil {
+		return nil, fmt.Errorf("error getting sub: %s", err)
+	}
+	subTriggers, err := getSubTriggers(subTi)
+	if err != nil {
+		return nil, fmt.Errorf("error getting sub triggers: %s", err)
 	}
 	if *ignoreFilters {
 		img.Filter = &filter.Filter{}
 	}
-	// Treat the left image as the sub, so the filter and triggers of the right
-	// image apply, as in a push.
-	subObj := domlib.Sub{FileSystem: lfs}
-	for _, fs := range []*filesystem.FileSystem{lfs, img.FileSystem} {
+	// The filter and triggers of the image apply, as in a push.
+	subObj := domlib.Sub{FileSystem: subFs}
+	for _, fs := range []*filesystem.FileSystem{subFs, img.FileSystem} {
 		if err := fs.RebuildInodePointers(); err != nil {
 			return nil, err
 		}
@@ -82,7 +97,47 @@ func showImpact(lName, rName string, logger log.DebugLogger) (
 	if domlib.BuildUpdateRequest(subObj, img, &request, false, true, logger) {
 		return nil, errors.New("failed building update: missing computed files")
 	}
+	// Like subd, match the triggers of the old and new image.
+	var merged triggers.MergeableTriggers
+	merged.Merge(subTriggers)
+	merged.Merge(img.Triggers)
+	request.Triggers = merged.ExportTriggers()
 	return sortByImpact(sublib.MatchTriggersInUpdate(request)), nil
+}
+
+// getSubTriggers returns the triggers of the sub's last successful image.
+func getSubTriggers(subTi *typedImage) (*triggers.Triggers, error) {
+	if subTi.imageType != imageTypeSub {
+		return subTi.triggers, nil
+	}
+	clientName := fmt.Sprintf("%s:%d", subTi.specifier,
+		constants.SubPortNumber)
+	srpcClient, err := srpc.DialHTTP("tcp", clientName, 0)
+	if err != nil {
+		return nil, fmt.Errorf("error dialing %s", err)
+	}
+	defer srpcClient.Close()
+	request := subproto.PollRequest{ShortPollOnly: true}
+	var reply subproto.PollResponse
+	if err := subclient.CallPoll(srpcClient, request, &reply); err != nil {
+		return nil, err
+	}
+	if reply.LastSuccessfulImageName == "" {
+		return nil, nil
+	}
+	img, err := getTypedImage(reply.LastSuccessfulImageName)
+	if err != nil {
+		return nil, err
+	}
+	return img.Triggers, nil
+}
+
+// getSubAndImage allows an image and a sub to be given in either order.
+func getSubAndImage(left, right *typedImage) (*typedImage, *typedImage) {
+	if left.image != nil && right.image == nil {
+		return right, left
+	}
+	return left, right
 }
 
 func sortByImpact(matched []*triggers.Trigger) []*triggers.Trigger {
