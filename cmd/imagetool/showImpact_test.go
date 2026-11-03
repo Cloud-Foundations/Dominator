@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -46,5 +47,66 @@ func checkServices(t *testing.T, impacts []*triggers.Trigger,
 	}
 	if !reflect.DeepEqual(services, expected) {
 		t.Errorf("got %v, expected %v", services, expected)
+	}
+}
+
+func TestMakeSummary(t *testing.T) {
+	trig, err := triggers.Decode([]byte(testTriggers))
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := makeSummary(sortByImpact(trig.Triggers))
+	expected := impactSummary{
+		DoReboot:               true,
+		HighlyImpactedServices: []string{"sshd"},
+	}
+	if !reflect.DeepEqual(summary, expected) {
+		t.Errorf("got %v, expected %v", summary, expected)
+	}
+}
+
+func TestMakeSummaryNoHighImpact(t *testing.T) {
+	summary := makeSummary(sortByImpact([]*triggers.Trigger{
+		{Service: "ntp"},
+		{Service: "motd", DoReload: true},
+	}))
+	if !reflect.DeepEqual(summary, impactSummary{}) {
+		t.Errorf("got %v, expected nothing", summary)
+	}
+}
+
+func TestMakeSummaryDuplicateService(t *testing.T) {
+	summary := makeSummary(sortByImpact([]*triggers.Trigger{
+		{Service: "docker", HighImpact: true},
+		{Service: "docker", HighImpact: true},
+	}))
+	if len(summary.HighlyImpactedServices) != 1 {
+		t.Errorf("got %v, expected docker once", summary)
+	}
+}
+
+func TestImpactJson(t *testing.T) {
+	for _, test := range []struct {
+		value    interface{}
+		expected string
+	}{
+		{impactSummary{}, `{}`},
+		{impactSummary{DoReboot: true}, `{"DoReboot":true}`},
+		{impactDetail{impactSummary{}, []*triggers.Trigger{}},
+			`{"Triggers":[]}`},
+		{impactDetail{
+			impactSummary{HighlyImpactedServices: []string{"docker"}},
+			[]*triggers.Trigger{{Service: "docker", HighImpact: true}}},
+			`{"HighlyImpactedServices":["docker"],` +
+				`"Triggers":[{"MatchLines":null,"Service":"docker",` +
+				`"HighImpact":true}]}`},
+	} {
+		data, err := json.Marshal(test.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != test.expected {
+			t.Errorf("got %s, expected %s", data, test.expected)
+		}
 	}
 }

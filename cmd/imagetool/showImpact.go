@@ -26,12 +26,30 @@ const (
 	levelReload
 )
 
+type impactSummary struct {
+	DoReboot               bool     `json:",omitempty"`
+	HighlyImpactedServices []string `json:",omitempty"`
+}
+
+type impactDetail struct {
+	impactSummary
+	Triggers []*triggers.Trigger
+}
+
 func showImpactSubcommand(args []string, logger log.DebugLogger) error {
 	trgs, err := showImpact(args[0], args[1], logger)
 	if err != nil {
 		return fmt.Errorf("error showing impact: %s", err)
 	}
-	return json.WriteWithIndent(os.Stdout, "    ", trgs)
+	summary := makeSummary(trgs)
+	if *showTriggers {
+		return json.WriteWithIndent(os.Stdout, "    ",
+			impactDetail{summary, trgs})
+	}
+	if summary.DoReboot { // The reboot restarts every service.
+		summary.HighlyImpactedServices = nil
+	}
+	return json.WriteWithIndent(os.Stdout, "    ", summary)
 }
 
 func showImpact(lName, rName string, logger log.DebugLogger) (
@@ -104,4 +122,20 @@ func getImpactLevel(trg *triggers.Trigger) impactLevel {
 	default:
 		return levelRestart
 	}
+}
+
+func makeSummary(trgs []*triggers.Trigger) impactSummary {
+	var summary impactSummary
+	for _, trg := range trgs {
+		switch getImpactLevel(trg) {
+		case levelReboot:
+			summary.DoReboot = true
+		case levelHighImpact:
+			services := summary.HighlyImpactedServices
+			if len(services) < 1 || services[len(services)-1] != trg.Service {
+				summary.HighlyImpactedServices = append(services, trg.Service)
+			}
+		}
+	}
+	return summary
 }

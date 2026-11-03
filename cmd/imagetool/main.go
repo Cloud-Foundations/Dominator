@@ -102,7 +102,9 @@ var (
 	runTriggers = flag.Bool("runTriggers", false,
 		"If true, run image triggers when patching /")
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
-	skipFields                          = flag.String("skipFields", "",
+	showTriggers                        = flag.Bool("showTriggers", false,
+		"If true, also list the matching triggers for show-impact")
+	skipFields = flag.String("skipFields", "",
 		"Fields to skip when showing or diffing images")
 	tableType   mbr.TableType = mbr.TABLE_TYPE_MSDOS
 	tagsToMatch tags.MatchTags
