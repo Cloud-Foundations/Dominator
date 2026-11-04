@@ -60,6 +60,15 @@ func findMethods(dir string) ([]methodInfo, error) {
 	return methods, nil
 }
 
+// rootTypeNames returns the names of the request and reply types of methods.
+func rootTypeNames(methods []methodInfo) []string {
+	var names []string
+	for _, method := range methods {
+		names = append(names, method.RequestType, method.ResponseType)
+	}
+	return names
+}
+
 // parseDir parses the non-test Go files in dir. Build constraints are ignored.
 // It returns the parsed files in file name order.
 func parseDir(dir string) ([]*ast.File, error) {

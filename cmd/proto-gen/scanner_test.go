@@ -114,3 +114,21 @@ type Inner struct{ F chan int }
 		}
 	}
 }
+
+func TestScanNamedTypes(t *testing.T) {
+	named, err := scanNamedTypes("testdata/proto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"Blob":   "[]byte",
+		"Labels": "tags.Tags",
+		"State":  "uint",
+	}
+	if !reflect.DeepEqual(named, want) {
+		t.Errorf("got %v, want %v", named, want)
+	}
+	if _, ok := named["VmInfo"]; ok {
+		t.Error("struct VmInfo reported as a named non-struct type")
+	}
+}
