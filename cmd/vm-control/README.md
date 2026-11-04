@@ -86,7 +86,7 @@ Some of the sub-commands available are:
 - **get-vm-info**: get and show the information for a VM
 - **get-vm-infos**: get and show the information for all VMs on a *Hypervisor*
 - **get-vm-user-data**: get (copy) the user data for a VM
-- **get-vm-virtualiser-log-file**: get the specified virtualise (i.e. QEMU) log
+- **get-vm-virtualiser-log-file**: get the specified virtualiser (i.e. QEMU) log
                                    file for a VM
 - **get-vm-volume**: get (copy) a specified VM volume
 - **get-vm-volume-storage-configuration**: get and show the volume storage information for a VM
@@ -136,10 +136,14 @@ Some of the sub-commands available are:
 - **scan-vm-root**: scan the root file-system of stopped VM and write to
                     scanFilename
 - **set-vm-migrating**: change the VM state to migrating. For debugging only
+- **show-vm-virtualiser-log-files**: show the virtualiser log files for a VM
+                                     including lengths
 - **snapshot-vm**: create a snapshot of the VM volumes, discarding previous one
 - **start-vm**: start a stopped VM
 - **stop-vm**: stop a running VM. All data and metadata are preserved
 - **trace-vm-metadata**: trace the requests a VM makes to the metadata service
+- **truncate-vm-virtualiser-log-file**: truncate the specified virtualiser log
+                                        file for a VM
 - **unset-vm-migrating**: change the VM state to stopped. For debugging only
 
 ## Security

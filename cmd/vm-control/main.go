@@ -320,10 +320,14 @@ var subcommands = []commands.Command{
 	{"save-vm", "IPaddr destination", 2, 2, saveVmSubcommand},
 	{"scan-vm-root", "IPaddr", 1, 1, scanVmRootSubcommand},
 	{"set-vm-migrating", "IPaddr", 1, 1, setVmMigratingSubcommand},
+	{"show-vm-virtualiser-log-files", "IPaddr", 1, 1,
+		showVmVirtualiserLogFilesSubcommand},
 	{"snapshot-vm", "IPaddr", 1, 1, snapshotVmSubcommand},
 	{"start-vm", "IPaddr", 1, 1, startVmSubcommand},
 	{"stop-vm", "IPaddr", 1, 1, stopVmSubcommand},
 	{"trace-vm-metadata", "IPaddr", 1, 1, traceVmMetadataSubcommand},
+	{"truncate-vm-virtualiser-log-file", "IPaddr filename", 2, 2,
+		truncateVmVirtualiserLogFileSubcommand},
 	{"unset-vm-migrating", "IPaddr", 1, 1, unsetVmMigratingSubcommand},
 }
 
