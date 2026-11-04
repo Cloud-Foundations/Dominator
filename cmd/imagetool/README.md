@@ -91,6 +91,7 @@ Some of the sub-commands available are:
 			       useful if you want to deprecate a computed file
 			       and need to see where it is being used
 - **show-filter**: show the filter for an image
+- **show-impact**: list the reboots and service restarts between two images
 - **show-inode**: show metadata for an inode in an image
 - **show-metadata**: show metadata for an image
 - **show-triggers**: show triggers for an image

@@ -102,7 +102,9 @@ var (
 	runTriggers = flag.Bool("runTriggers", false,
 		"If true, run image triggers when patching /")
 	scanExcludeList flagutil.StringList = constants.ScanExcludeList
-	skipFields                          = flag.String("skipFields", "",
+	showTriggers                        = flag.Bool("showTriggers", false,
+		"If true, also list the matching triggers for show-impact")
+	skipFields = flag.String("skipFields", "",
 		"Fields to skip when showing or diffing images")
 	tableType   mbr.TableType = mbr.TABLE_TYPE_MSDOS
 	tagsToMatch tags.MatchTags
@@ -228,6 +230,7 @@ var subcommands = []commands.Command{
 	{"show-computed-file-subs", "filename source", 2, 2,
 		showComputedFileSubsSubcommand},
 	{"show-filter", "name", 1, 1, showImageFilterSubcommand},
+	{"show-impact", "left right", 2, 2, showImpactSubcommand},
 	{"show-inode", "name inodePath", 2, 2, showImageInodeSubcommand},
 	{"show-metadata", "name", 1, 1, showImageMetadataSubcommand},
 	{"show-triggers", "name", 1, 1, showImageTriggersSubcommand},

@@ -1,0 +1,134 @@
+package main
+
+import (
+	"encoding/json"
+	"reflect"
+	"testing"
+
+	"github.com/Cloud-Foundations/Dominator/lib/image"
+	"github.com/Cloud-Foundations/Dominator/lib/triggers"
+)
+
+const testTriggers = `[
+  {"MatchLines": ["^/etc/ssh/"], "Service": "sshd", "HighImpact": true},
+  {"MatchLines": ["^/etc/rsyslog"], "Service": "rsyslog"},
+  {"MatchLines": ["^/etc/motd"], "Service": "motd", "DoReload": true},
+  {"MatchLines": ["^/boot/vmlinuz"], "Service": "kernel", "DoReboot": true}
+]`
+
+func TestSortByImpact(t *testing.T) {
+	trig, err := triggers.Decode([]byte(testTriggers))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []string{"kernel", "sshd", "rsyslog", "motd"}
+	checkServices(t, sortByImpact(trig.Triggers), expected)
+}
+
+func TestSortByImpactReloadSkippedWhenRestarted(t *testing.T) {
+	impacts := sortByImpact([]*triggers.Trigger{
+		{Service: "ssh", DoReload: true},
+		{Service: "ssh", HighImpact: true},
+		{Service: "motd", DoReload: true},
+	})
+	checkServices(t, impacts, []string{"ssh", "motd"})
+}
+
+func TestSortByImpactNoMatch(t *testing.T) {
+	if impacts := sortByImpact(nil); len(impacts) != 0 {
+		t.Errorf("got %d impacts, expected none", len(impacts))
+	}
+}
+
+func checkServices(t *testing.T, impacts []*triggers.Trigger,
+	expected []string) {
+	var services []string
+	for _, trg := range impacts {
+		services = append(services, trg.Service)
+	}
+	if !reflect.DeepEqual(services, expected) {
+		t.Errorf("got %v, expected %v", services, expected)
+	}
+}
+
+func TestMakeSummary(t *testing.T) {
+	trig, err := triggers.Decode([]byte(testTriggers))
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := makeSummary(sortByImpact(trig.Triggers))
+	expected := impactSummary{
+		DoReboot:               true,
+		HighlyImpactedServices: []string{"sshd"},
+	}
+	if !reflect.DeepEqual(summary, expected) {
+		t.Errorf("got %v, expected %v", summary, expected)
+	}
+}
+
+func TestMakeSummaryNoHighImpact(t *testing.T) {
+	summary := makeSummary(sortByImpact([]*triggers.Trigger{
+		{Service: "ntp"},
+		{Service: "motd", DoReload: true},
+	}))
+	if !reflect.DeepEqual(summary, impactSummary{}) {
+		t.Errorf("got %v, expected nothing", summary)
+	}
+}
+
+func TestMakeSummaryDuplicateService(t *testing.T) {
+	summary := makeSummary(sortByImpact([]*triggers.Trigger{
+		{Service: "docker", HighImpact: true},
+		{Service: "docker", HighImpact: true},
+	}))
+	if len(summary.HighlyImpactedServices) != 1 {
+		t.Errorf("got %v, expected docker once", summary)
+	}
+}
+
+func TestImpactJson(t *testing.T) {
+	for _, test := range []struct {
+		value    interface{}
+		expected string
+	}{
+		{impactSummary{}, `{}`},
+		{impactSummary{DoReboot: true}, `{"DoReboot":true}`},
+		{impactDetail{impactSummary{}, []*triggers.Trigger{}},
+			`{"Triggers":[]}`},
+		{impactDetail{
+			impactSummary{HighlyImpactedServices: []string{"docker"}},
+			[]*triggers.Trigger{{Service: "docker", HighImpact: true}}},
+			`{"HighlyImpactedServices":["docker"],` +
+				`"Triggers":[{"MatchLines":null,"Service":"docker",` +
+				`"HighImpact":true}]}`},
+	} {
+		data, err := json.Marshal(test.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != test.expected {
+			t.Errorf("got %s, expected %s", data, test.expected)
+		}
+	}
+}
+
+func TestGetSubAndImage(t *testing.T) {
+	img := &typedImage{image: &image.Image{}}
+	other := &typedImage{image: &image.Image{}}
+	sub := &typedImage{}
+	for _, test := range []struct {
+		name          string
+		left, right   *typedImage
+		expectedSub   *typedImage
+		expectedImage *typedImage
+	}{
+		{"two images", other, img, other, img},
+		{"image then sub", img, sub, sub, img},
+		{"sub then image", sub, img, sub, img},
+	} {
+		gotSub, gotImage := getSubAndImage(test.left, test.right)
+		if gotSub != test.expectedSub || gotImage != test.expectedImage {
+			t.Errorf("%s: wrong sub or image", test.name)
+		}
+	}
+}
