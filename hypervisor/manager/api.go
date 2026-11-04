@@ -626,6 +626,11 @@ func (m *Manager) StopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return m.stopVm(ipAddr, authInfo, accessToken)
 }
 
+func (m *Manager) TruncateVmVirtualiserLogFile(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, filename string) error {
+	return m.truncateVmVirtualiserLogFile(ipAddr, authInfo, filename)
+}
+
 func (m *Manager) UpdateSubnets(request proto.UpdateSubnetsRequest) error {
 	return m.updateSubnets(request)
 }

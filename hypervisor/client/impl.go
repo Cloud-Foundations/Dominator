@@ -1372,6 +1372,21 @@ func traceVmMetadata(client srpc.ClientI, ipAddress net.IP,
 	}
 }
 
+func truncateVmVirtualiserLogFile(client srpc.ClientI, ipAddress net.IP,
+	filename string) error {
+	request := proto.TruncateVmVirtualiserLogFileRequest{
+		Filename:  filename,
+		IpAddress: ipAddress,
+	}
+	var reply proto.TruncateVmVirtualiserLogFileResponse
+	err := client.RequestReply("Hypervisor.TruncateVmVirtualiserLogFile",
+		request, &reply)
+	if err != nil {
+		return err
+	}
+	return errors.New(reply.Error)
+}
+
 func watchDhcp(client srpc.ClientI, request proto.WatchDhcpRequest,
 	handlePacket func(ifName string, rawPacket []byte) error) error {
 	conn, err := client.Call("Hypervisor.WatchDhcp")

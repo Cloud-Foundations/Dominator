@@ -135,6 +135,7 @@ func Setup(config Config, params Params) (*htmlWriter, error) {
 		"StartVm",
 		"StopVm",
 		"TraceVmMetadata",
+		"TruncateVmVirtualiserLogFile",
 	}
 	var unauthenticatedMethods []string
 	if config.AllowUnauthenticatedReads {

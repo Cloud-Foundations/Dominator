@@ -4123,6 +4123,23 @@ func (m *Manager) stopVm(ipAddr net.IP, authInfo *srpc.AuthInformation,
 	return nil
 }
 
+func (m *Manager) truncateVmVirtualiserLogFile(ipAddr net.IP,
+	authInfo *srpc.AuthInformation, filename string) error {
+	if filename == "" ||
+		filename == "." ||
+		filename == "/" ||
+		filename != filepath.Base(filename) {
+		return fmt.Errorf("invalid filename")
+	}
+	vm, err := m.getVmLockAndAuth(ipAddr, true, authInfo, nil)
+	if err != nil {
+		return err
+	}
+	defer vm.mutex.Unlock()
+	pathname := filepath.Join(vm.getLogsDirectory(), filename)
+	return os.Truncate(pathname, 0)
+}
+
 func (m *Manager) unpackImage(imageName, rootDir string,
 	timeout time.Duration, logger log.DebugLogger) error {
 	client, img, imageName, err := m.getImage(imageName, timeout, logger)

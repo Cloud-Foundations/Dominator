@@ -399,6 +399,11 @@ func TraceVmMetadata(client srpc.ClientI, ipAddress net.IP,
 	return traceVmMetadata(client, ipAddress, pathHandler)
 }
 
+func TruncateVmVirtualiserLogFile(client srpc.ClientI, ipAddress net.IP,
+	filename string) error {
+	return truncateVmVirtualiserLogFile(client, ipAddress, filename)
+}
+
 func WatchDhcp(client srpc.ClientI, request proto.WatchDhcpRequest,
 	handlePacket func(ifName string, rawPacket []byte) error) error {
 	return watchDhcp(client, request, handlePacket)
