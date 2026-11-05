@@ -205,16 +205,18 @@ type PowerOnMachineResponse struct {
 
 // The Allocation RPC is experimental and subject to change without notice.
 type AllocateRequest struct {
-	Deadline time.Time
+	ClientRequestId ClientRequestId `json:",omitempty"`
+	Deadline        time.Time
 	// Placement
 	// Priority uint
 	VMs []VmAllocationSpecification
 }
 
 type AllocateResponse struct {
-	Error          string
-	RequestId      RequestId
-	UpdatePosition uint64
+	AlreadyRequested bool
+	Error            string
+	RequestId        RequestId
+	UpdatePosition   uint64
 }
 
 // The CancelAllocation RPC is experimental and subject to change without

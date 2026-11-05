@@ -35,6 +35,9 @@ type AllocationUpdateEntry struct {
 }
 
 // This type is experimental and subject to change without notice.
+type ClientRequestId string
+
+// This type is experimental and subject to change without notice.
 type DeletedAllocation struct {
 	Error  string                   `json:",omitempty"`
 	Reason AllocationDeletionReason `json:",omitempty"`
