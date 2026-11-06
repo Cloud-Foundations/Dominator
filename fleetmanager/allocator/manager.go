@@ -29,6 +29,7 @@ type manager struct {
 	allocateRequestChannel  <-chan allocateRequestType
 	allocations             map[fm_proto.RequestId]*allocationType
 	cancelAllocationChannel <-chan cancelAllocationType
+	clientIdToRequestId     map[fm_proto.ClientRequestId]fm_proto.RequestId
 	closeNotifierChannel    <-chan <-chan fm_proto.AllocationUpdate
 	deleted                 map[fm_proto.RequestId]*deletedType
 	getRequestChannel       <-chan getRequestType
@@ -43,6 +44,7 @@ type manager struct {
 	options                 Options
 	myIP                    net.IP
 	params                  Params
+	requestIdToClientId     map[fm_proto.RequestId]fm_proto.ClientRequestId
 	topology                *topology.Topology
 	topologyChannel         <-chan *topology.Topology
 	updateChannel           chan<- fm_proto.AllocationUpdateEntry
@@ -220,17 +222,21 @@ func newManager(options Options, params Params) (*Manager, error) {
 		allocateRequestChannel:  allocateRequestChannel,
 		allocations:             make(map[fm_proto.RequestId]*allocationType),
 		cancelAllocationChannel: cancelAllocationChannel,
-		closeNotifierChannel:    closeNotifierChannel,
-		deleted:                 make(map[fm_proto.RequestId]*deletedType),
-		getRequestChannel:       getRequestChannel,
-		heartbeatChannel:        heartbeatChannel,
-		listAllocationsChannel:  listAllocationsChannel,
-		listQueueChannel:        listQueueChannel,
+		clientIdToRequestId: make(
+			map[fm_proto.ClientRequestId]fm_proto.RequestId),
+		closeNotifierChannel:   closeNotifierChannel,
+		deleted:                make(map[fm_proto.RequestId]*deletedType),
+		getRequestChannel:      getRequestChannel,
+		heartbeatChannel:       heartbeatChannel,
+		listAllocationsChannel: listAllocationsChannel,
+		listQueueChannel:       listQueueChannel,
 		notifiers: make(
 			map[<-chan fm_proto.AllocationUpdate]chan<- fm_proto.AllocationUpdate),
-		options:         options,
-		myIP:            myIP,
-		params:          params,
+		options: options,
+		myIP:    myIP,
+		params:  params,
+		requestIdToClientId: make(
+			map[fm_proto.RequestId]fm_proto.ClientRequestId),
 		topologyChannel: topologyChannel,
 		updateChannel:   updateChannel,
 		updateQueue:     updateQueue,
@@ -513,6 +519,31 @@ func (m *manager) manage(nextExpiration time.Time,
 		var checkExpirations, recalculate bool
 		select {
 		case request := <-m.allocateRequestChannel:
+			if clientId := request.request.ClientRequestId; clientId != "" {
+				requestId := m.clientIdToRequestId[clientId]
+				if requestId != "" {
+					if del := m.deleted[requestId]; del != nil {
+						var errString string
+						reason := del.deleted.Reason
+						if reason == fm_proto.AllocationRequestError {
+							errString = del.deleted.Error
+						} else {
+							errString = fmt.Sprintf("allocation request: %s %s",
+								requestId, reason)
+						}
+						request.response <- fm_proto.AllocateResponse{
+							Error: errString,
+						}
+					} else {
+						request.response <- fm_proto.AllocateResponse{
+							AlreadyRequested: true,
+							RequestId:        requestId,
+							UpdatePosition:   m.updateQueue.Position(),
+						}
+					}
+					break
+				}
+			}
 			response, err := m.enqueue(request.request, request.username)
 			if err != nil {
 				request.response <- fm_proto.AllocateResponse{
@@ -572,6 +603,8 @@ func (m *manager) manage(nextExpiration time.Time,
 				m.params.Logger.Println(err)
 			}
 			delete(m.deleted, entry.Value.RequestId)
+			delete(m.clientIdToRequestId, entry.Value.Request.ClientRequestId)
+			delete(m.requestIdToClientId, entry.Value.RequestId)
 		case update, ok := <-updateChannel:
 			if !ok {
 				m.params.Logger.Println("update channel closed: remaking")
@@ -688,14 +721,12 @@ func (m *manager) processVmUpdate(vm *hyper_proto.VmInfo, vmIpAddr string,
 		if _, ok := allocation.indexToVmIp[vmIndex]; ok {
 			m.params.Logger.Debugf(0, "processVmUpdate(%s): already tracked\n",
 				vmId)
-
 			continue
 		}
 		if hypervisorHostname != allocation.vmHypervisors[vmIndex] {
 			m.params.Logger.Debugf(0,
 				"processVmUpdate(%s): on Hypervisor: %s, expected: %s\n",
 				vmId, hypervisorHostname, allocation.vmHypervisors[vmIndex])
-
 			continue
 		}
 		if !checkVmMatchesSpec(vm, vmId, &vmSpec, m.params.Logger) {

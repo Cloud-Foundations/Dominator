@@ -66,6 +66,10 @@ func (m *manager) enqueue(request proto.AllocateRequest,
 		AllocateRequest: &request,
 		username:        username,
 	}
+	if clientId := request.ClientRequestId; clientId != "" {
+		m.clientIdToRequestId[clientId] = requestId
+		m.requestIdToClientId[requestId] = request.ClientRequestId
+	}
 	userQueue.PushBack(requestId)
 	err := m.params.Storer.WriteUserRequest(username, requestId, request)
 	if err != nil {
@@ -112,6 +116,12 @@ func (m *manager) loadQueues(updates []proto.AllocationUpdateEntry) error {
 				username:      update.Username,
 			}
 		}
+		if request := update.Request; request != nil {
+			if clientId := request.ClientRequestId; clientId != "" {
+				m.clientIdToRequestId[clientId] = update.RequestId
+				m.requestIdToClientId[update.RequestId] = clientId
+			}
+		}
 		if deleted := update.Deleted; deleted != nil {
 			delType := &deletedType{
 				deleted:  deleted,
@@ -147,6 +157,10 @@ func (m *manager) loadQueues(updates []proto.AllocationUpdateEntry) error {
 				username:        username,
 			}
 			m.waitingRequestsById[requestId] = requestEntry
+			if clientId := request.ClientRequestId; clientId != "" {
+				m.clientIdToRequestId[clientId] = requestId
+				m.requestIdToClientId[requestId] = clientId
+			}
 			userQueue.PushBack(requestId)
 		}
 		m.userQueues[username] = userQueue
