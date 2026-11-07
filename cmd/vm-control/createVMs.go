@@ -50,6 +50,8 @@ func allocateAndCreateVMs(requests []hyper_proto.CreateVmRequest,
 			})
 	}
 	allocateRequest := fm_proto.AllocateRequest{
+		ClientRequestId: fm_proto.ClientRequestId(
+			requests[0].Tags["ClientRequestId"]),
 		VMs: vmSpecs,
 	}
 	if *allocateTimeout > 0 {
@@ -66,7 +68,14 @@ func allocateAndCreateVMs(requests []hyper_proto.CreateVmRequest,
 	if err != nil {
 		return err
 	}
-	logger.Printf("RequestId: %s\n", allocateResponse.RequestId)
+	if allocateResponse.AlreadyRequested {
+		logger.Printf("RequestId: %s already requested, position: %d\n",
+			allocateResponse.RequestId, allocateResponse.UpdatePosition)
+		allocateResponse.UpdatePosition = 0
+	} else {
+		logger.Printf("RequestId: %s, position: %d\n",
+			allocateResponse.RequestId, allocateResponse.UpdatePosition)
+	}
 	for _, request := range requests {
 		request.Tags["AllocationRequestId"] =
 			string(allocateResponse.RequestId)
@@ -172,7 +181,7 @@ func createVMs(logger log.DebugLogger) error {
 	if len(requests) < 1 {
 		return nil
 	}
-	if err := validateVmCreateRequest(&requests[0]); err != nil {
+	if err := validateVMsCreateRequest(requests); err != nil {
 		return err
 	}
 	tmpVmInfo, err := approximateVolumesForCreateRequest(requests[0].VmInfo)
@@ -219,4 +228,18 @@ func makeCreateVMsRequest(logger log.DebugLogger) (
 		requests = append(requests, request)
 	}
 	return requests, nil
+}
+
+func validateVMsCreateRequest(requests []hyper_proto.CreateVmRequest) error {
+	clientIDs := make(map[string]struct{})
+	for _, request := range requests {
+		if err := validateVmCreateRequest(&request); err != nil {
+			return err
+		}
+		clientIDs[request.Tags["ClientRequestId"]] = struct{}{}
+	}
+	if len(clientIDs) != 1 {
+		return fmt.Errorf("inconsistent ClientRequestId tags: %v", clientIDs)
+	}
+	return nil
 }
