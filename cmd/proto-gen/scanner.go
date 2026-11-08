@@ -97,6 +97,31 @@ func scanTypes(dir string, rootNames []string) ([]typeInfo, error) {
 	return result, nil
 }
 
+// scanNamedTypes returns the underlying type, as Go source, of each named
+// type in dir which is not a struct, such as "uint" for "type State uint".
+func scanNamedTypes(dir string) (map[string]string, error) {
+	files, err := parseDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	named := make(map[string]string)
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec := spec.(*ast.TypeSpec)
+				if _, ok := typeSpec.Type.(*ast.StructType); !ok {
+					named[typeSpec.Name.Name] = types.ExprString(typeSpec.Type)
+				}
+			}
+		}
+	}
+	return named, nil
+}
+
 // typeDoc returns the doc comment of a type declaration, which is attached to
 // the spec in a parenthesised group and to the declaration otherwise.
 func typeDoc(genDecl *ast.GenDecl, typeSpec *ast.TypeSpec) *ast.CommentGroup {
