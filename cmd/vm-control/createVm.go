@@ -62,6 +62,8 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 		})
 	}
 	allocateRequest := fm_proto.AllocateRequest{
+		ClientRequestId: fm_proto.ClientRequestId(
+			createRequest.Tags["ClientRequestId"]),
 		VMs: []fm_proto.VmAllocationSpecification{
 			{
 				HypervisorArchitecture: hypervisorArchitectureToMatch,
@@ -92,7 +94,14 @@ func allocateAndCreateVM(createRequest *createVmRequest,
 	if err != nil {
 		return err
 	}
-	logger.Printf("RequestId: %s\n", allocateResponse.RequestId)
+	if allocateResponse.AlreadyRequested {
+		logger.Printf("RequestId: %s already requested, position: %d\n",
+			allocateResponse.RequestId, allocateResponse.UpdatePosition)
+		allocateResponse.UpdatePosition = 0
+	} else {
+		logger.Printf("RequestId: %s, position: %d\n",
+			allocateResponse.RequestId, allocateResponse.UpdatePosition)
+	}
 	createRequest.Tags["AllocationRequestId"] =
 		string(allocateResponse.RequestId)
 	watchConn, err := allocatorClient.Call("FleetManager.GetAllocationUpdates")
