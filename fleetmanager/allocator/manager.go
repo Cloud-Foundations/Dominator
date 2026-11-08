@@ -45,6 +45,7 @@ type manager struct {
 	myIP                    net.IP
 	params                  Params
 	requestIdToClientId     map[fm_proto.RequestId]fm_proto.ClientRequestId
+	startTime               time.Time
 	topology                *topology.Topology
 	topologyChannel         <-chan *topology.Topology
 	updateChannel           chan<- fm_proto.AllocationUpdateEntry
@@ -237,6 +238,7 @@ func newManager(options Options, params Params) (*Manager, error) {
 		params:  params,
 		requestIdToClientId: make(
 			map[fm_proto.RequestId]fm_proto.ClientRequestId),
+		startTime:       time.Now(),
 		topologyChannel: topologyChannel,
 		updateChannel:   updateChannel,
 		updateQueue:     updateQueue,

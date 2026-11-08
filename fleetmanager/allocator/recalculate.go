@@ -156,7 +156,7 @@ func (m *manager) listMachinesInLocation(location string) (
 	machines := make([]*fm_proto.Machine, 0, len(topoMachines))
 	for _, tm := range topoMachines {
 		if machine, ok := m.machines[tm.Hostname]; !ok {
-			return nil, fmt.Errorf("unknown machine: %s", tm.Hostname)
+			m.params.Logger.Debugf(1, "no updates yet from: %s\n", tm.Hostname)
 		} else {
 			machines = append(machines, machine)
 		}
@@ -291,7 +291,9 @@ func (m *manager) tryToAllocateVm(vm fm_proto.VmAllocationSpecification,
 			machine.Hostname,
 			nil
 	}
-	if !matchedSome {
+	// TODO(rgooch): find a better way to wait for Hypervisor updates to arrive
+	// before declaring permanent failure.
+	if !matchedSome && time.Since(m.startTime) > time.Minute {
 		return nil, "", errorCannotFit
 	}
 	return nil, "", nil
