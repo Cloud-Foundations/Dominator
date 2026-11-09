@@ -45,6 +45,7 @@ type manager struct {
 	myIP                    net.IP
 	params                  Params
 	requestIdToClientId     map[fm_proto.RequestId]fm_proto.ClientRequestId
+	startTime               time.Time
 	topology                *topology.Topology
 	topologyChannel         <-chan *topology.Topology
 	updateChannel           chan<- fm_proto.AllocationUpdateEntry
@@ -237,6 +238,7 @@ func newManager(options Options, params Params) (*Manager, error) {
 		params:  params,
 		requestIdToClientId: make(
 			map[fm_proto.RequestId]fm_proto.ClientRequestId),
+		startTime:       time.Now(),
 		topologyChannel: topologyChannel,
 		updateChannel:   updateChannel,
 		updateQueue:     updateQueue,
@@ -252,11 +254,8 @@ func newManager(options Options, params Params) (*Manager, error) {
 	if len(updates) > 0 {
 		managerPublic.active = true
 	}
-	nextExpiration, err := managerInternal.expireRequests(true)
-	if err != nil {
-		return nil, err
-	}
-	go managerInternal.manage(nextExpiration, removeChannel)
+	loadedChannel := make(chan struct{})
+	go managerInternal.manage(loadedChannel, removeChannel)
 	go watchHeartbeat(params.heartbeatTimeout, heartbeatChannel,
 		&lastHeartbeatTime, &managerPublic.lostHeartbeat,
 		&managerPublic.lastLostHeartbeatTime, params.Logger)
@@ -270,7 +269,9 @@ func newManager(options Options, params Params) (*Manager, error) {
 		for _, update := range updates {
 			updateChannel <- update
 		}
+		updateQueue.Sync() // Ensure queue position is updated now.
 		params.Logger.Println("updates injected and ready for use")
+		loadedChannel <- struct{}{}
 		<-readyChannel
 	}()
 	return managerPublic, nil
@@ -470,7 +471,8 @@ func (m *manager) expireRequests(loading bool) (time.Time, error) {
 		err := m.sendDeleted(requestId, allocation.request, deletedEntry,
 			allocation.username)
 		if err != nil {
-			m.params.Logger.Println(err)
+			m.params.Logger.Printf("error sending delete for: %s: %s: \n",
+				requestId, err)
 			return nextExpiration, nil
 		}
 		m.deleted[requestId] = &deletedType{
@@ -504,7 +506,7 @@ func (m *manager) listAllocations() []allocationEntryType {
 	return allocations
 }
 
-func (m *manager) manage(nextExpiration time.Time,
+func (m *manager) manage(loadedChannel <-chan struct{},
 	removeChannel <-chan queue.BroadcastEntry[fm_proto.AllocationUpdateEntry]) {
 	latencyBucketer := tricorder.NewGeometricBucketer(1e-3, 10)
 	recalculateTimeDistribution := latencyBucketer.NewCumulativeDistribution()
@@ -513,10 +515,10 @@ func (m *manager) manage(nextExpiration time.Time,
 	updateChannel := m.params.UpdateChannelMaker.MakeUpdateChannel(
 		fm_proto.GetUpdatesRequest{IgnoreMissingLocalTags: true})
 	var resetResources bool
-	expireTimer := time.NewTimer(time.Until(nextExpiration))
+	expireTimer := time.NewTimer(time.Minute)
 	timer := time.NewTimer(m.params.managerInterval)
 	for {
-		var checkExpirations, recalculate bool
+		var checkExpirations, loaded, recalculate bool
 		select {
 		case request := <-m.allocateRequestChannel:
 			if clientId := request.request.ClientRequestId; clientId != "" {
@@ -598,6 +600,10 @@ func (m *manager) manage(nextExpiration time.Time,
 				m.params.Logger.Debugln(0, "received topology")
 				recalculate = true
 			} // nil case is for unittests.
+		case <-loadedChannel:
+			checkExpirations = true
+			loaded = true
+			recalculate = true
 		case entry := <-removeChannel:
 			if err := m.params.Storer.DeleteUpdate(entry.Position); err != nil {
 				m.params.Logger.Println(err)
@@ -637,8 +643,7 @@ func (m *manager) manage(nextExpiration time.Time,
 		}
 		if checkExpirations {
 			clearTimer(expireTimer)
-			var err error
-			nextExpiration, err = m.expireRequests(false)
+			nextExpiration, err := m.expireRequests(loaded)
 			if err != nil {
 				m.params.Logger.Println(err)
 			}
