@@ -159,6 +159,14 @@ func getQemuCpuModelFlags(qemuCommand string) (map[string]struct{}, error) {
 	cmd.Dir = "/tmp"
 	stdout, err := cmd.Output()
 	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return nil,
+				fmt.Errorf("error getting QEMU model flags: %s, stderr: %s",
+					err, string(ee.Stderr))
+		} else {
+			return nil,
+				fmt.Errorf("error getting QEMU model flags: %s", err)
+		}
 		return nil, err
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(stdout))
@@ -193,7 +201,14 @@ func getQemuVersion(qemuCommand string,
 	cmd.Dir = "/tmp"
 	stdout, err := cmd.Output()
 	if err != nil {
-		return qemuVersionType{}, err
+		if ee, ok := err.(*exec.ExitError); ok {
+			return qemuVersionType{},
+				fmt.Errorf("error getting QEMU version: %s, stderr: %s", err,
+					string(ee.Stderr))
+		} else {
+			return qemuVersionType{},
+				fmt.Errorf("error getting QEMU version: %s", err)
+		}
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(stdout))
 	for scanner.Scan() {
