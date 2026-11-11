@@ -55,6 +55,8 @@ var (
 		"Base URL of configuration server")
 	configurationLoader = flag.String("configurationLoader", "",
 		"Pathname of programme to run to load configuration data")
+	disableReboot = flag.Bool("disableReboot", false,
+		"If true, disable reboots until SIGCONT received")
 	driveSelector = flag.String("driveSelector", "",
 		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
@@ -234,6 +236,10 @@ func runDaemon() error {
 		sighupHandler(logger)
 	})
 	rebootSemaphore := make(chan struct{}, 1)
+	if *disableReboot {
+		logger.Println("reboot blocked until SIGCONT")
+		rebootSemaphore <- struct{}{}
+	}
 	runOnSignal(syscall.SIGTSTP, func() {
 		logger.Println("caught SIGTSTP: reboot blocked until SIGCONT")
 		select {
