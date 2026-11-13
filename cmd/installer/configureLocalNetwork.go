@@ -142,7 +142,10 @@ func dhcpRequestOnInterface(iface net.Interface, raise bool,
 				iface.Name, err)}
 		return
 	}
-	defer client.Close()
+	// Do not set up a deferred client.Close() because the packetSocket.Close()
+	// will close the underlying file descriptor. Doing it twice can lead to
+	// closing some other file that happens to re-use the file descriptor
+	// number.
 	for {
 		logger.Debugln(1, "DHCP attempt")
 		ok, packet, err := client.Request()
@@ -155,6 +158,7 @@ func dhcpRequestOnInterface(iface net.Interface, raise bool,
 				return
 			}
 			responseChannel <- dhcpResponse{name: iface.Name, packet: packet}
+			logger.Debugln(1, "received DHCP response, ending loop")
 			return
 		}
 		timer := time.NewTimer(100 * time.Millisecond)
@@ -342,7 +346,7 @@ func loadTftpFiles(tftpServer string, logger log.DebugLogger) error {
 }
 
 func loadUrl(baseUrl, filename, serialNumber string,
-	interfaces map[string]net.Interface) error {
+	interfaces map[string]net.Interface, logger log.DebugLogger) error {
 	fullUrl := &strings.Builder{}
 	fullUrl.WriteString(baseUrl)
 	fullUrl.WriteRune('/')
@@ -371,15 +375,16 @@ func loadUrl(baseUrl, filename, serialNumber string,
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("error getting %s: %s", partialUrl, resp.Status)
 	}
+	pathname := filepath.Join(*tftpDirectory, filename)
 	if data, err := io.ReadAll(resp.Body); err != nil {
 		return fmt.Errorf("error reading %s: %s", filename, err)
 	} else {
-		err := os.WriteFile(filepath.Join(*tftpDirectory, filename), data,
-			fsutil.PublicFilePerms)
+		err := os.WriteFile(pathname, data, fsutil.PublicFilePerms)
 		if err != nil {
-			return fmt.Errorf("error writing %s: %s", filename, err)
+			return fmt.Errorf("error writing %s: %s", pathname, err)
 		}
 	}
+	logger.Debugf(2, "wrote configuration file: %s\n", pathname)
 	return nil
 }
 
@@ -392,11 +397,12 @@ func loadUrls(baseUrl string, interfaces map[string]net.Interface,
 	} else {
 		logger.Printf("system serial number: \"%s\"\n", serialN)
 	}
-	if err := loadUrl(baseUrl, "config.json", serialN, interfaces); err != nil {
+	err := loadUrl(baseUrl, "config.json", serialN, interfaces, logger)
+	if err != nil {
 		return err
 	}
-	loadUrl(baseUrl, "imagename", serialN, interfaces)
-	loadUrl(baseUrl, "storage-layout.json", serialN, interfaces)
+	loadUrl(baseUrl, "imagename", serialN, interfaces, logger)
+	loadUrl(baseUrl, "storage-layout.json", serialN, interfaces, logger)
 	return nil
 }
 
@@ -482,11 +488,6 @@ func setupNetwork(ifName string, ipAddr net.IP, subnet *hyper_proto.Subnet,
 		if err := configurator.WriteResolvConf("", subnet); err != nil {
 			return err
 		}
-		// TODO(rgooch): a 200ms delay here usually avoids network heisenbugs.
-		//               Track down the root cause and hopefully come up with a
-		//               better solution.
-		logger.Println("waiting 200ms for network to stabilise")
-		time.Sleep(200 * time.Millisecond)
 	}
 	return nil
 }
