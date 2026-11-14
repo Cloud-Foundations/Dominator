@@ -219,7 +219,7 @@ func configureBootDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 			continue
 		}
 		device := partitionName(drive.devpath, index+1)
-		err := mount(remapDevice(device, partition.MountPoint, layout.Encrypt),
+		err := mount(remapDevice(device),
 			filepath.Join(*mountPoint, partition.MountPoint),
 			partition.FileSystemType.String(), logger)
 		if err != nil {
@@ -253,6 +253,9 @@ func configureDataDrive(cpuSharer cpusharer.CpuSharer, drive *driveType,
 func configureStorage(config fm_proto.GetMachineInfoResponse,
 	logger log.DebugLogger) (Rebooter, error) {
 	startTime := time.Now()
+	// Ensure that any auto-detected Device Mapper devices are removed, as they
+	// would block partitioning and creating file-systems on back-end devices.
+	run("dmsetup", "", logger, "remove_all")
 	var layout installer_proto.StorageLayout
 	err := json.ReadFromFile(filepath.Join(*tftpDirectory,
 		"storage-layout.json"),
@@ -919,11 +922,12 @@ func readInt(filename string) (uint64, error) {
 	}
 }
 
-func remapDevice(device, target string, encrypt bool) string {
-	if !encrypt || target == rootMountPoint || target == bootMountPoint {
+func remapDevice(device string) string {
+	remappedDevice := filepath.Join("/dev/mapper", filepath.Base(device))
+	if _, err := os.Stat(remappedDevice); err != nil {
 		return device
 	} else {
-		return filepath.Join("/dev/mapper", filepath.Base(device))
+		return remappedDevice
 	}
 }
 
@@ -1031,11 +1035,12 @@ func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 	cpuSharer.GrabCpu()
 	defer cpuSharer.ReleaseCpu()
 	startTime := time.Now()
-	err := run("cryptsetup", *tmpRoot, logger, "--verbose",
+	err := run("cryptsetup", *tmpRoot, logger, "luksFormat",
+		"--verbose",
 		"--key-file", keyFile,
 		"--cipher", "aes-xts-plain64", "--key-size", "512",
 		"--hash", "sha512", "--iter-time", "5000", "--use-urandom",
-		"luksFormat", device)
+		device)
 	if err != nil {
 		return err
 	}
@@ -1043,7 +1048,8 @@ func (drive driveType) cryptSetup(cpuSharer cpusharer.CpuSharer, device string,
 		device, time.Since(startTime))
 	startTime = time.Now()
 	if drive.discarded {
-		err = run("cryptsetup", *tmpRoot, logger, "open", "--type", "luks",
+		err = run("cryptsetup", *tmpRoot, logger, "open",
+			"--type", "luks",
 			"--allow-discards",
 			"--key-file", keyFile, device, filepath.Base(device))
 	} else {

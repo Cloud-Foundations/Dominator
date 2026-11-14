@@ -259,8 +259,8 @@ func runAlways(name, chroot string, logger log.DebugLogger,
 			return nil
 		}
 		return fmt.Errorf("error running: %s: %s, stdout: %s, stderr: %s",
-			name, strings.TrimSpace(stdout.String()),
-			strings.TrimSpace(stderr.String()), err)
+			name, err, strings.TrimSpace(stdout.String()),
+			strings.TrimSpace(stderr.String()))
 	} else if stdout.Len() > 0 || stderr.Len() > 0 {
 		logger.Debugf(3, "%s succeeded, stdout: %s, stderr: %s\n",
 			name, strings.TrimSpace(stdout.String()),
