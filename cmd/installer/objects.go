@@ -97,11 +97,8 @@ func createObjectsCache(requiredObjects map[hash.Hash]uint64,
 	logger.Debugf(0, "object cache already has %d/%d objects (%s/%s)\n",
 		len(cache.objects), len(requiredObjects),
 		format.FormatBytes(presentBytes), format.FormatBytes(requiredBytes))
-	err := cache.findAndScanUntrusted(missingObjects, rootDevice, logger)
-	if err != nil {
-		return nil, err
-	}
-	err = cache.downloadMissing(requiredObjects, objGetter, logger)
+	cache.findAndScanUntrusted(missingObjects, rootDevice, logger)
+	err := cache.downloadMissing(requiredObjects, objGetter, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +154,11 @@ func (cache *objectsCache) downloadMissing(requiredObjects map[hash.Hash]uint64,
 
 func (cache *objectsCache) findAndScanUntrusted(
 	requiredObjects map[hash.Hash]uint64, rootDevice string,
-	logger log.DebugLogger) error {
+	logger log.DebugLogger) {
 	if err := mount(rootDevice, *mountPoint, "ext4", logger); err != nil {
-		return nil
+		logger.Debugf(0, "error mounting: %s on %s: %s\n",
+			rootDevice, *mountPoint, err)
+		return
 	}
 	defer syscall.Unmount(*mountPoint, 0)
 	logger.Debugln(0, "scanning old root")
@@ -168,7 +167,10 @@ func (cache *objectsCache) findAndScanUntrusted(
 	foundObjects := make(map[hash.Hash]uint64)
 	err := cache.scanTree(*mountPoint, requiredObjects, foundObjects)
 	if err != nil {
-		return err
+		// Complain but carry on if there's a problem scanning. Maybe there's a
+		// corrupted file-system. We're going to blow it away anyway.
+		logger.Printf("error scanning: %s: %s\n", *mountPoint, err)
+		return
 	}
 	var requiredBytes, foundBytes uint64
 	for _, size := range requiredObjects {
@@ -187,9 +189,10 @@ func (cache *objectsCache) findAndScanUntrusted(
 		format.FormatBytes(foundBytes), format.FormatBytes(requiredBytes),
 		format.Duration(duration))
 	if err := saveOldEtc(logger); err != nil {
-		return err
+		// Comlain but carry on if there's a problem saving.
+		logger.Printf("error saving old /etc: %s\n", err)
+		return
 	}
-	return nil
 }
 
 func (cache *objectsCache) GetObjects(hashes []hash.Hash) (

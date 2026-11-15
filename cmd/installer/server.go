@@ -38,11 +38,11 @@ type sessionType struct {
 }
 
 type srpcType struct {
-	logDumper            dumper
-	logger               log.DebugLogger
-	remoteShellWaitGroup *sync.WaitGroup
-	mutex                sync.RWMutex
-	connections          map[*srpc.Conn]sessionType
+	logDumper   dumper
+	logger      log.DebugLogger
+	server      *serverType
+	mutex       sync.RWMutex
+	connections map[*srpc.Conn]sessionType
 }
 
 type state struct {
@@ -56,17 +56,17 @@ var (
 	carriageReturnNewline = []byte("\r\n")
 )
 
-func startServer(portNum uint, remoteShellWaitGroup *sync.WaitGroup,
+func startServer(portNum uint, server *serverType,
 	logBuffer dumper, logger log.DebugLogger) (log.DebugLogger, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
 	if err != nil {
 		return nil, err
 	}
 	srpcObj := &srpcType{
-		logDumper:            logBuffer,
-		logger:               logger,
-		remoteShellWaitGroup: remoteShellWaitGroup,
-		connections:          make(map[*srpc.Conn]sessionType),
+		logDumper:   logBuffer,
+		logger:      logger,
+		connections: make(map[*srpc.Conn]sessionType),
+		server:      server,
 	}
 	myState := state{logger, srpcObj}
 	html.HandleFunc("/", myState.statusHandler)
@@ -134,9 +134,30 @@ func (s state) writeDashboard(writer io.Writer) {
 	tw.Close()
 }
 
+func (t *srpcType) GrantMethod(serviceMethod string,
+	authInfo *srpc.AuthInformation) bool {
+	if authInfo == nil {
+		return false
+	}
+	if serviceMethod != "Installer.Shell" {
+		return false
+	}
+	t.server.mutex.Lock()
+	defer t.server.mutex.Unlock()
+	if _, ok := t.server.ownerUsers[authInfo.Username]; ok {
+		return true
+	}
+	for _, group := range t.server.ownerGroups {
+		if _, ok := authInfo.GroupList[group]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *srpcType) Shell(conn *srpc.Conn) error {
-	t.remoteShellWaitGroup.Add(1)
-	defer t.remoteShellWaitGroup.Done()
+	t.server.remoteShellWaitGroup.Add(1)
+	defer t.server.remoteShellWaitGroup.Done()
 	pty, tty, err := tserver.OpenPty()
 	if err != nil {
 		return err

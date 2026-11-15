@@ -27,6 +27,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/logbuf"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
+	"github.com/Cloud-Foundations/Dominator/lib/stringutil"
 	"github.com/Cloud-Foundations/tricorder/go/tricorder"
 )
 
@@ -48,6 +49,13 @@ type Rebooter interface {
 	String() string
 }
 
+type serverType struct {
+	remoteShellWaitGroup sync.WaitGroup
+	mutex                sync.Mutex // Protect everything below.
+	ownerGroups          []string
+	ownerUsers           map[string]struct{}
+}
+
 var (
 	completionNotifier = flag.String("completionNotifier", "",
 		"Pathname of programme to run when installation is complete and reboot is imminent")
@@ -55,6 +63,8 @@ var (
 		"Base URL of configuration server")
 	configurationLoader = flag.String("configurationLoader", "",
 		"Pathname of programme to run to load configuration data")
+	disableReboot = flag.Bool("disableReboot", false,
+		"If true, disable reboots until SIGCONT received")
 	driveSelector = flag.String("driveSelector", "",
 		"Pathname of programme to select drives to configure")
 	dryRun = flag.Bool("dryRun", ifUnprivileged(),
@@ -146,7 +156,7 @@ func ifUnprivileged() bool {
 	return false
 }
 
-func install(updateHwClock bool, logFlusher flusher,
+func install(server *serverType, updateHwClock bool, logFlusher flusher,
 	logger log.DebugLogger) (Rebooter, error) {
 	var rebooter Rebooter
 	machineInfo, interfaces, activeInterface, err := configureLocalNetwork(
@@ -154,6 +164,13 @@ func install(updateHwClock bool, logFlusher flusher,
 	if err != nil {
 		return nil, err
 	}
+	server.mutex.Lock()
+	server.ownerGroups = machineInfo.Machine.OwnerGroups
+	server.ownerUsers = stringutil.ConvertListToMap(
+		machineInfo.Machine.OwnerUsers, false)
+	server.mutex.Unlock()
+	logger.Debugf(1, "added shell access to: groups: %v, users: %v\n",
+		machineInfo.Machine.OwnerGroups, machineInfo.Machine.OwnerUsers)
 	if !*skipStorage {
 		rebooter, err = configureStorage(*machineInfo, logger)
 		if err != nil {
@@ -234,6 +251,10 @@ func runDaemon() error {
 		sighupHandler(logger)
 	})
 	rebootSemaphore := make(chan struct{}, 1)
+	if *disableReboot {
+		logger.Println("reboot blocked until SIGCONT")
+		rebootSemaphore <- struct{}{}
+	}
 	runOnSignal(syscall.SIGTSTP, func() {
 		logger.Println("caught SIGTSTP: reboot blocked until SIGCONT")
 		select {
@@ -281,13 +302,13 @@ func runDaemon() error {
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Println(err)
 	}
-	waitGroup := &sync.WaitGroup{}
-	if l, e := startServer(*portNum, waitGroup, logBuffer, logger); e != nil {
+	server := serverType{}
+	if l, e := startServer(*portNum, &server, logBuffer, logger); e != nil {
 		logger.Printf("cannot start server: %s\n", e)
 	} else {
 		logger = l
 	}
-	rebooter, err := install(updateHwClock, logBuffer, logger)
+	rebooter, err := install(&server, updateHwClock, logBuffer, logger)
 	if *dryRun {
 		if err != nil {
 			logger.Printf("error installing: %s\n", err)
@@ -301,9 +322,11 @@ func runDaemon() error {
 	}
 	if err != nil {
 		logger.Printf("error installing: %s\n", err)
-		printAndWait("5m", "1h", waitGroup, rebooterName, logger)
+		printAndWait("5m", "1h", &server.remoteShellWaitGroup, rebooterName,
+			logger)
 	} else {
-		printAndWait("5s", "5m", waitGroup, rebooterName, logger)
+		printAndWait("5s", "5m", &server.remoteShellWaitGroup, rebooterName,
+			logger)
 	}
 	select {
 	case rebootSemaphore <- struct{}{}:
