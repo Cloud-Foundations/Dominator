@@ -459,7 +459,7 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 	dirname, rootDir string, envGetter environmentGetter,
 	buildLog io.Writer) error {
 	scriptsDir := filepath.Join(manifestDir, dirname)
-	file, err := os.Open(scriptsDir)
+	names, err := fsutil.ReadDirnames(scriptsDir, false)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Fprintf(buildLog, "No %s directory\n", dirname)
@@ -467,16 +467,18 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		}
 		return err
 	}
-	names, err := file.Readdirnames(-1)
-	file.Close()
-	if err != nil {
-		return err
+	scriptsToRun := make([]string, 0, len(names))
+	for _, name := range names {
+		if len(name) > 0 && name[0] == '.' {
+			continue // Skip hidden paths.
+		}
+		scriptsToRun = append(scriptsToRun, name)
 	}
-	if len(names) < 1 {
+	if len(scriptsToRun) < 1 {
 		fmt.Fprintln(buildLog, "\nNo scripts to run")
 		return nil
 	}
-	verstr.Sort(names)
+	verstr.Sort(scriptsToRun)
 	fmt.Fprintf(buildLog, "\nRunning scripts in: %s\n", dirname)
 	scriptsStartTime := time.Now()
 	tmpDir := filepath.Join(rootDir, ".scripts")
@@ -484,23 +486,23 @@ func runScripts(ctx context.Context, g *goroutine.Goroutine, manifestDir,
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
-	scriptsToRun := make([]string, 0, len(names))
-	for _, name := range names {
-		if len(name) > 0 && name[0] == '.' {
-			continue // Skip hidden paths.
+	if g == nil { // Special case for post-cleanup-scripts.
+		g, err = newNamespaceTargetWithMounts(rootDir, nil)
+		if err != nil {
+			return err
 		}
+		defer g.Quit()
+	}
+	for _, name := range scriptsToRun {
 		err := fsutil.CopyFile(filepath.Join(tmpDir, name),
 			filepath.Join(scriptsDir, name),
 			dirPerms)
 		if err != nil {
 			return err
 		}
-		scriptsToRun = append(scriptsToRun, name)
-	}
-	for _, name := range scriptsToRun {
 		fmt.Fprintf(buildLog, "Running script: %s\n", name)
 		startTime := time.Now()
-		err := runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
+		err = runInTarget(ctx, g, nil, buildLog, buildLog, rootDir, envGetter,
 			packagerPathname, "run", filepath.Join("/.scripts", name))
 		timeTaken := time.Since(startTime)
 		if err != nil {
