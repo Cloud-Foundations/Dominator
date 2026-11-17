@@ -14,8 +14,10 @@ import (
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/logarchiver"
 	"github.com/Cloud-Foundations/Dominator/imagebuilder/rpcd"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
+	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/srpc/setupserver"
@@ -66,6 +68,11 @@ var (
 		"A JSON encoded file containing special variables (i.e. secrets)")
 )
 
+var subcommands = []commands.Command{
+	{"run-with-new-proc", "chroot programme [args...]", 2, -1,
+		runWithNewProcSubcommand},
+}
+
 func init() {
 	flag.Var(&buildLogQuota, "buildLogQuota",
 		"Build log quota. If exceeded, old logs are deleted")
@@ -76,7 +83,29 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	flag.Usage = printUsage
 	flag.Parse()
+	processCommand(flag.Args())
+}
+
+func printUsage() {
+	w := flag.CommandLine.Output()
+	fmt.Fprintln(w,
+		"Usage: imaginator [flags...] [command]")
+	fmt.Fprintln(w, "Common flags:")
+	flag.PrintDefaults()
+	fmt.Fprintln(w, "Commands:")
+	commands.PrintCommands(w, subcommands)
+}
+
+func processCommand(args []string) {
+	if len(args) < 1 {
+		runSubcommand(nil, nil)
+	}
+	os.Exit(commands.RunCommands(subcommands, printUsage, nil))
+}
+
+func run() {
 	tricorder.RegisterFlags()
 	if os.Geteuid() != 0 {
 		fmt.Fprintln(os.Stderr, "Must run the Image Builder as root")
@@ -166,4 +195,9 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Unable to create http server: %s\n", err)
 	}
+}
+
+func runSubcommand(args []string, logger log.DebugLogger) error {
+	run()
+	return fmt.Errorf("unexpected return from run()")
 }
