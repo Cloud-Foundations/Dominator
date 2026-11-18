@@ -67,7 +67,9 @@ func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
 	if envGetter != nil {
 		environmentToInject = envGetter.getenv()
 	}
-	cmd := exec.CommandContext(ctx, prog, args...)
+	wargs := []string{"run-with-new-proc", rootDir, prog}
+	wargs = append(wargs, args...)
+	cmd := exec.CommandContext(ctx, os.Args[0], wargs...)
 	cmd.Env = stripVariables(os.Environ(), environmentToCopy, environmentToSet,
 		environmentToInject)
 	cmd.Dir = "/"
@@ -75,7 +77,6 @@ func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Chroot:     rootDir,
 		Setsid:     true,
 		Cloneflags: syscall.CLONE_NEWPID,
 	}
@@ -89,11 +90,7 @@ func runInTarget(ctx context.Context, g *goroutine.Goroutine, stdin io.Reader,
 
 // setupMounts will mutate the current namespace.
 func setupMounts(rootDir string, bindMounts []bindMountType) error {
-	err := wsyscall.Mount("none", filepath.Join(rootDir, "proc"), "proc", 0, "")
-	if err != nil {
-		return fmt.Errorf("error mounting proc: %s", err)
-	}
-	err = wsyscall.Mount("none", filepath.Join(rootDir, "sys"), "sysfs", 0, "")
+	err := wsyscall.Mount("none", filepath.Join(rootDir, "sys"), "sysfs", 0, "")
 	if err != nil {
 		return fmt.Errorf("error mounting sysfs: %s", err)
 	}
