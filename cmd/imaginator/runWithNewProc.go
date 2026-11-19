@@ -25,7 +25,8 @@ func runWithNewProcSubcommand(args []string, logger log.DebugLogger) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Chroot: chroot,
+		Chroot:       chroot,
+		Unshareflags: syscall.CLONE_NEWNS,
 	}
 	return cmd.Run()
 }
