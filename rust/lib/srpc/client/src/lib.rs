@@ -1,18 +1,28 @@
-use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use async_trait::async_trait;
+use chunk_limiter::ChunkLimiter;
+use futures::StreamExt;
+use openssl::ssl::{Ssl, SslConnector, SslMethod, SslVerifyMode};
+use serde_json::Value;
+use std::borrow::BorrowMut;
 use std::error::Error;
 use std::fmt;
-use openssl::ssl::{SslMethod, SslConnector, SslVerifyMode, Ssl};
-use serde_json::Value;
-use tokio_openssl::SslStream;
-use tokio::time::{timeout, Duration};
-use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
 use std::pin::Pin;
+use std::sync::Arc;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
+use tokio::sync::{mpsc, Mutex, OwnedMutexGuard};
+use tokio::time::{timeout, Duration};
+use tokio_openssl::SslStream;
+use tokio_util::codec::{FramedRead, LinesCodec};
+use tracing::debug;
+
+mod chunk_limiter;
+#[cfg(test)]
+mod tests;
 
 // Custom error type
 #[derive(Debug)]
-struct CustomError(String);
+pub struct CustomError(pub String);
 
 impl fmt::Display for CustomError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -22,45 +32,213 @@ impl fmt::Display for CustomError {
 
 impl Error for CustomError {}
 
-pub struct Client {
+#[derive(Clone)]
+pub struct ClientConfig {
     host: String,
     port: u16,
     path: String,
     cert: String,
     key: String,
-    stream: Arc<Mutex<Option<SslStream<TcpStream>>>>,
 }
 
-impl Client {
+#[cfg_attr(feature = "python", derive(FromPyObject))]
+pub struct ReceiveOptions {
+    channel_buffer_size: usize,
+    max_chunk_size: usize,
+    read_next_line_duration: Duration,
+    should_continue_on_timeout: bool,
+}
+
+impl ReceiveOptions {
+    pub fn new(
+        channel_buffer_size: usize,
+        max_chunk_size: usize,
+        read_next_line_duration: Duration,
+        should_continue_on_timeout: bool,
+    ) -> Self {
+        ReceiveOptions {
+            channel_buffer_size,
+            max_chunk_size,
+            read_next_line_duration,
+            should_continue_on_timeout,
+        }
+    }
+}
+
+impl Default for ReceiveOptions {
+    fn default() -> Self {
+        ReceiveOptions {
+            channel_buffer_size: 100,
+            max_chunk_size: 16384,
+            read_next_line_duration: Duration::from_secs(10),
+            should_continue_on_timeout: true,
+        }
+    }
+}
+
+pub struct ConnectedClient<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    pub connection_params: ClientConfig,
+    stream: Arc<Mutex<T>>,
+}
+
+#[async_trait]
+pub trait RequestReply {
+    type Request;
+    type Reply;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static;
+}
+
+pub struct SimpleValue;
+
+#[async_trait]
+impl RequestReply for SimpleValue {
+    type Request = serde_json::Value;
+    type Reply = serde_json::Value;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        client.send_json_and_check(&payload).await?;
+
+        let mut rx = client
+            .receive_json(|_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let json_value = rx.recv().await.ok_or_else(|| {
+            Box::new(CustomError("Expected JSON value".to_string())) as Box<dyn Error + Send>
+        })??;
+        Ok(json_value)
+    }
+}
+
+pub struct StreamValue;
+
+#[async_trait]
+impl RequestReply for StreamValue {
+    type Request = serde_json::Value;
+    type Reply = mpsc::Receiver<Result<serde_json::Value, Box<dyn Error + Send>>>;
+
+    async fn request_reply<T>(
+        client: &ConnectedClient<T>,
+        payload: Self::Request,
+    ) -> Result<Self::Reply, Box<dyn Error + Send>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        client.send_json_and_check(&payload).await?;
+
+        let rx = client
+            .receive_json(|_| true, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        Ok(rx)
+    }
+}
+
+pub struct Conn<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    guard: Option<tokio::sync::OwnedMutexGuard<ConnectedClient<T>>>,
+    rx: mpsc::Receiver<Result<Value, Box<dyn Error + Send>>>,
+}
+
+impl<T> Conn<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    pub async fn new(
+        guard: tokio::sync::OwnedMutexGuard<ConnectedClient<T>>,
+    ) -> Result<Self, Box<dyn Error + Send>> {
+        let rx = guard
+            .receive_json(|_| true, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+
+        Ok(Conn {
+            guard: Some(guard),
+            rx,
+        })
+    }
+
+    pub async fn encode(&self, message: Value) -> Result<(), Box<dyn Error + Send>> {
+        self.guard
+            .as_ref()
+            .unwrap()
+            .send_json(&message)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)
+    }
+
+    pub async fn decode(&mut self) -> Result<Value, Box<dyn Error + Send>> {
+        let rx = self.rx.borrow_mut();
+        let json_value = rx.recv().await.ok_or_else(|| {
+            Box::new(CustomError("Expected JSON value".to_string())) as Box<dyn Error + Send>
+        })??;
+        Ok(json_value)
+    }
+
+    pub fn close(&mut self) -> OwnedMutexGuard<ConnectedClient<T>> {
+        self.guard.take().unwrap()
+    }
+}
+
+pub async fn call<T>(
+    client: OwnedMutexGuard<ConnectedClient<T>>,
+    method: &str,
+) -> Result<Conn<T>, Box<dyn Error + Send>>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    client.send_message_and_check(method).await?;
+    Conn::new(client).await
+}
+
+impl ClientConfig {
     pub fn new(host: &str, port: u16, path: &str, cert: &str, key: &str) -> Self {
-        Client {
+        ClientConfig {
             host: host.to_string(),
             port,
             path: path.to_string(),
             cert: cert.to_string(),
             key: key.to_string(),
-            stream: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn connect(&self) -> Result<(), Box<dyn Error>> {
-        // println!("Attempting to connect to {}:{}...", self.host, self.port);
-        
+    pub async fn connect(self) -> Result<ConnectedClient<SslStream<TcpStream>>, Box<dyn Error>> {
+        debug!("Attempting to connect to {}:{}...", self.host, self.port);
+
         let connect_timeout = Duration::from_secs(10);
-        let tcp_stream = match timeout(connect_timeout, 
-            TcpStream::connect(format!("{}:{}", self.host, self.port))
-        ).await {
+        let tcp_stream = match timeout(
+            connect_timeout,
+            TcpStream::connect(format!("{}:{}", self.host, self.port)),
+        )
+        .await
+        {
             Ok(Ok(stream)) => stream,
             Ok(Err(e)) => return Err(format!("Failed to connect: {}", e).into()),
             Err(_) => return Err("Connection attempt timed out".into()),
         };
-        // println!("TCP connection established");
-    
-        // println!("Performing HTTP CONNECT...");
+        debug!("TCP connection established");
+
+        debug!("Performing HTTP CONNECT...");
         self.do_http_connect(&tcp_stream).await?;
-        // println!("HTTP CONNECT successful");
-    
-        // println!("Starting TLS handshake...");
+        debug!("HTTP CONNECT successful");
+
+        debug!("Starting TLS handshake...");
         let mut connector = SslConnector::builder(SslMethod::tls())?;
         connector.set_verify(SslVerifyMode::NONE);
 
@@ -68,31 +246,29 @@ impl Client {
             connector.set_certificate_file(&self.cert, openssl::ssl::SslFiletype::PEM)?;
             connector.set_private_key_file(&self.key, openssl::ssl::SslFiletype::PEM)?;
         }
-    
+
         let ssl = Ssl::new(connector.build().context())?;
         let mut stream = SslStream::new(ssl, tcp_stream)?;
-    
-        // println!("Performing TLS handshake...");
+
+        debug!("Performing TLS handshake...");
         Pin::new(&mut stream).connect().await?;
-        // println!("TLS handshake completed");
-    
-        let mut lock = self.stream.lock().await;
-        *lock = Some(stream);
-        // println!("Connection fully established");
-    
-        Ok(())
+        debug!("TLS handshake completed");
+
+        debug!("Connection fully established");
+
+        Ok(ConnectedClient::new(self, stream))
     }
 
     async fn do_http_connect(&self, stream: &TcpStream) -> Result<(), Box<dyn Error>> {
         let connect_request = format!("CONNECT {} HTTP/1.0\r\n\r\n", self.path);
-        // println!("Sending HTTP CONNECT request: {:?}", connect_request);
+        debug!("Sending HTTP CONNECT request: {:?}", connect_request);
         stream.try_write(connect_request.as_bytes())?;
-        // println!("HTTP CONNECT request sent");
-    
+        debug!("HTTP CONNECT request sent");
+
         let read_timeout = Duration::from_secs(10);
         let start_time = std::time::Instant::now();
         let mut buffer = Vec::new();
-    
+
         while start_time.elapsed() < read_timeout {
             match stream.try_read_buf(&mut buffer) {
                 Ok(0) => {
@@ -112,79 +288,163 @@ impl Client {
                 Err(e) => return Err(format!("Error reading HTTP CONNECT response: {}", e).into()),
             }
         }
-    
+
         if buffer.is_empty() {
             return Err("Timeout while waiting for HTTP CONNECT response".into());
         }
-    
+
         let response = String::from_utf8_lossy(&buffer);
-        // println!("Received HTTP CONNECT response: {:?}", response);
+        debug!("Received HTTP CONNECT response: {:?}", response);
         if response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200") {
-            // println!("HTTP CONNECT completed successfully");
+            debug!("HTTP CONNECT completed successfully");
             Ok(())
         } else {
             Err(format!("Unexpected HTTP response: {}", response).into())
         }
     }
+}
 
-    pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
-        let mut lock = self.stream.lock().await;
-        if let Some(stream) = lock.as_mut() {
-            let mut pinned = Pin::new(stream);
-            pinned.as_mut().write_all(message.as_bytes()).await?;
-            pinned.as_mut().flush().await?;
-            Ok(())
-        } else {
-            Err("Not connected".into())
+impl<T> ConnectedClient<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    pub fn new(connection_params: ClientConfig, stream: T) -> Self {
+        ConnectedClient {
+            connection_params,
+            stream: Arc::new(Mutex::new(stream)),
         }
     }
 
-    pub async fn receive_message<F>(&self, expect_empty: bool, mut should_continue: F) -> Result<mpsc::Receiver<Result<String, Box<dyn Error + Send>>>, Box<dyn Error>>
+    pub async fn request_reply<R>(
+        &self,
+        method: &str,
+        payload: R::Request,
+    ) -> Result<R::Reply, Box<dyn Error + Send>>
+    where
+        R: RequestReply,
+    {
+        self.send_message(method)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        R::request_reply(self, payload).await
+    }
+
+    // pub async fn call(
+    //     self,
+    //     method: &str,
+    // ) -> Result<Conn<T>, Box<dyn Error + Send>>
+    // {
+    //     self.send_message_and_check(method).await?;
+    //     Conn::new(self.stream.lock_owned().await).await
+    // }
+
+    pub async fn send_message(&self, message: &str) -> Result<(), Box<dyn Error>> {
+        let stream = self.stream.lock().await;
+        let mut pinned = Pin::new(stream);
+        pinned.as_mut().write_all(message.as_bytes()).await?;
+        pinned.as_mut().flush().await?;
+        Ok(())
+    }
+
+    pub async fn send_message_and_check(&self, message: &str) -> Result<(), Box<dyn Error + Send>> {
+        self.send_message(message)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        Ok(())
+    }
+
+    pub async fn receive_message<F>(
+        &self,
+        expect_empty: bool,
+        mut should_continue: F,
+        opts: &ReceiveOptions,
+    ) -> Result<mpsc::Receiver<Result<String, Box<dyn Error + Send>>>, Box<dyn Error>>
     where
         F: FnMut(&str) -> bool + Send + 'static,
     {
-        let stream_clone = self.stream.clone();
-        let (tx, rx) = mpsc::channel(100);
+        let stream = Arc::clone(&self.stream);
+        let (tx, rx) = mpsc::channel(opts.channel_buffer_size);
+        let max_chunk_size = if expect_empty { 1 } else { opts.max_chunk_size };
+        let read_next_line_duration = opts.read_next_line_duration;
+        let should_continue_on_timeout = opts.should_continue_on_timeout;
 
         tokio::spawn(async move {
+            let mut guard = stream.lock().await;
+            let limited_reader = ChunkLimiter::new(&mut *guard, max_chunk_size);
+            let buf_reader = BufReader::new(limited_reader);
+            let mut framed = FramedRead::new(buf_reader, LinesCodec::new());
+
             loop {
-                let mut lock = stream_clone.lock().await;
-                if let Some(stream) = lock.as_mut() {
-                    let mut response = String::new();
-                    loop {
-                        let mut buf = [0; 1024];
-                        match stream.read(&mut buf).await {
-                            Ok(0) => {
-                                let _ = tx.send(Ok(String::new())).await;
-                                return;
-                            }
-                            Ok(n) => {
-                                response.push_str(&String::from_utf8_lossy(&buf[..n]));
-                                if response.ends_with('\n') {
+                let result = timeout(read_next_line_duration, framed.next()).await;
+                match result {
+                    Ok(Some(line_res)) => {
+                        let line_res = line_res.map_err(|e| Box::new(e) as Box<dyn Error + Send>);
+
+                        match line_res {
+                            Ok(line) => {
+                                if expect_empty && !line.is_empty() {
+                                    let _ = tx
+                                        .send(Err(Box::new(CustomError(format!(
+                                            "Expected empty line, got: {:?}",
+                                            line
+                                        )))
+                                            as Box<dyn Error + Send>))
+                                        .await;
+                                    break;
+                                }
+
+                                let _ = tx.send(Ok(line.clone())).await;
+
+                                if !should_continue(&line) {
                                     break;
                                 }
                             }
-                            Err(e) => {
-                                let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
-                                return;
+                            Err(err) => {
+                                let _ = tx.send(Err(err)).await;
+                                break;
                             }
                         }
                     }
-                    let response = response.trim().to_string();
-                    
-                    if expect_empty && !response.is_empty() {
-                        let _ = tx.send(Err(Box::new(CustomError(format!("Expected empty string, got: {:?}", response))) as Box<dyn Error + Send>)).await;
-                        return;
-                    }
-                    
-                    let _ = tx.send(Ok(response.clone())).await;
-                    
-                    if !should_continue(&response) {
+                    Ok(None) => {
                         break;
                     }
-                } else {
-                    let _ = tx.send(Err(Box::new(CustomError("Not connected".to_string())) as Box<dyn Error + Send>)).await;
-                    return;
+                    Err(_) => {
+                        if !should_continue_on_timeout {
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -197,26 +457,49 @@ impl Client {
         self.send_message(&json_string).await
     }
 
-    pub async fn receive_json<F>(&self, should_continue: F) -> Result<mpsc::Receiver<Result<Value, Box<dyn Error + Send>>>, Box<dyn Error>>
+    pub async fn send_json_and_check(&self, payload: &Value) -> Result<(), Box<dyn Error + Send>> {
+        self.send_json(payload)
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        let mut rx = self
+            .receive_message(true, |_| false, &ReceiveOptions::default())
+            .await
+            .map_err(|e| Box::new(CustomError(e.to_string())) as Box<dyn Error + Send>)?;
+        if rx
+            .recv()
+            .await
+            .ok_or_else(|| {
+                Box::new(CustomError("Expected response".to_string())) as Box<dyn Error + Send>
+            })??
+            .is_empty()
+        {
+        } else {
+            return Err(Box::new(CustomError("Expected empty line".to_string())));
+        }
+
+        Ok(())
+    }
+
+    pub async fn receive_json<F>(
+        &self,
+        should_continue: F,
+        opts: &ReceiveOptions,
+    ) -> Result<mpsc::Receiver<Result<Value, Box<dyn Error + Send>>>, Box<dyn Error>>
     where
         F: FnMut(&str) -> bool + Send + 'static,
     {
-        let mut rx = self.receive_message(false, should_continue).await?;
-        let (tx, new_rx) = mpsc::channel(100);
+        let mut rx = self.receive_message(false, should_continue, opts).await?;
+        let (tx, new_rx) = mpsc::channel(opts.channel_buffer_size);
 
         tokio::spawn(async move {
             while let Some(result) = rx.recv().await {
-                match result {
-                    Ok(json_str) => {
-                        match serde_json::from_str(&json_str) {
-                            Ok(json_value) => {
-                                if let Err(_) = tx.send(Ok(json_value)).await {
-                                    break;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(Box::new(e) as Box<dyn Error + Send>)).await;
-                            }
+                match result.and_then(|json_str| {
+                    serde_json::from_str(&json_str)
+                        .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+                }) {
+                    Ok(json_value) => {
+                        if let Err(_) = tx.send(Ok(json_value)).await {
+                            break;
                         }
                     }
                     Err(e) => {
@@ -228,7 +511,6 @@ impl Client {
 
         Ok(new_rx)
     }
-
 }
 
 #[cfg(feature = "python")]
@@ -239,7 +521,21 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 #[pymodule]
-fn srpc_client(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<python_bindings::SrpcClient>()?;
+fn srpc_client(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    use tracing::level_filters::LevelFilter;
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .with(tracing_subscriber::fmt::Layer::default().compact())
+        .init();
+
+    m.add_class::<python_bindings::SrpcClientConfig>()?;
+    m.add_class::<python_bindings::ConnectedSrpcClient>()?;
+    m.add_class::<python_bindings::SrpcMethodCallConn>()?;
     Ok(())
 }
