@@ -21,6 +21,7 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/flags/commands"
 	"github.com/Cloud-Foundations/Dominator/lib/flags/loadflags"
 	"github.com/Cloud-Foundations/Dominator/lib/flagutil"
+	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/log/serverlogger"
 	"github.com/Cloud-Foundations/Dominator/lib/net"
@@ -76,9 +77,11 @@ var (
 	stateDir = flag.String("stateDir", "/var/lib/hypervisor",
 		"Name of state directory")
 	testMemoryAvailable = flag.Uint64("testMemoryAvailable", 0,
-		"test if memory is allocatable and exit (units of MiB)")
+		"Test if memory is allocatable and exit (units of MiB)")
 	tftpbootImageStream = flag.String("tftpbootImageStream", "",
 		"Name of default image stream for network booting")
+	useMlock = flag.Bool("useMlock", false,
+		"Use mlock(2) when testing if memory is available")
 	username = flag.String("username", "nobody",
 		"Name of user to run VMs")
 	virtualiserExitTimeout = flag.Duration("virtualiserExitTimeout",
@@ -146,11 +149,24 @@ func handleSignals(flusher Flusher, logger flushLogger) {
 
 func run() {
 	if *testMemoryAvailable > 0 {
+		startTime := time.Now()
 		nBytes := *testMemoryAvailable << 20
 		mem := make([]byte, nBytes)
-		for pos := uint64(0); pos < nBytes; pos += 4096 {
-			mem[pos] = 0
+		var testType string
+		if *useMlock {
+			testType = "locked"
+			syscall.Mlock(mem)
+		} else {
+			testType = "write faulted"
+			for pos := uint64(0); pos < nBytes; pos += 4096 {
+				mem[pos] = 0
+			}
 		}
+		timeTaken := time.Since(startTime)
+		speed := uint64(float64(nBytes) / timeTaken.Seconds())
+		fmt.Fprintf(os.Stderr, "%s %s in %s (%s/s)\n",
+			testType, format.FormatBytes(nBytes), format.Duration(timeTaken),
+			format.FormatBytes(speed))
 		os.Exit(0)
 	}
 	tricorder.RegisterFlags()
