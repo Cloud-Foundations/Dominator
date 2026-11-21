@@ -609,7 +609,8 @@ func (m *manager) manage(loadedChannel <-chan struct{},
 				m.params.Logger.Println(err)
 			}
 			delete(m.deleted, entry.Value.RequestId)
-			delete(m.clientIdToRequestId, entry.Value.Request.ClientRequestId)
+			delete(m.clientIdToRequestId,
+				m.requestIdToClientId[entry.Value.RequestId])
 			delete(m.requestIdToClientId, entry.Value.RequestId)
 		case update, ok := <-updateChannel:
 			if !ok {
