@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,12 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cloud-Foundations/Dominator/lib/filesystem/util"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil"
 	"github.com/Cloud-Foundations/Dominator/lib/fsutil/mounts"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver/cachingreader"
+	"github.com/Cloud-Foundations/Dominator/lib/srpc"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
 	proto "github.com/Cloud-Foundations/Dominator/proto/hypervisor"
 )
@@ -361,6 +364,87 @@ func shrink2fs(volume string, size uint64, logger log.DebugLogger) error {
 	return partitionTable.Write(volume)
 }
 
+func (m *Manager) cacheVolume(request proto.CacheVolumeRequest) (
+	proto.CacheVolumeResponse, error) {
+	if request.StorageIndex >= uint(len(m.volumeDirectories)) {
+		return proto.CacheVolumeResponse{},
+			fmt.Errorf("storage index too large")
+	}
+	client, img, imageName, err := m.getImage(request.SearchName,
+		request.ImageTimeout, m.Logger)
+	if err != nil {
+		return proto.CacheVolumeResponse{}, err
+	}
+	defer client.Close()
+	alreadyCached, err := m.cacheVolumeInDir(
+		m.volumeDirectories[request.StorageIndex], imageName, nil, client, img,
+		request.MinimumFreeBytes, request.RoundupPower,
+		func(conn *srpc.Conn, message string) error { return nil },
+		m.Logger)
+	if err != nil {
+		return proto.CacheVolumeResponse{}, err
+	}
+	return proto.CacheVolumeResponse{
+		AlreadyCached: alreadyCached,
+		ImageName:     imageName,
+	}, nil
+}
+
+// cacheVolumeInDir will cache a RAW volume from the specified image. It may
+// replace an existing volume with a larger one.
+func (m *Manager) cacheVolumeInDir(volumesDir, imageName string,
+	conn *srpc.Conn, client srpc.ClientI, img *imageType,
+	minFreeBytes, roundupPower uint64,
+	sendUpdate func(conn *srpc.Conn, message string) error,
+	logger log.DebugLogger) (bool, error) {
+	m.volumeCacheMutex.Lock()
+	defer m.volumeCacheMutex.Unlock()
+	cacheDir := filepath.Join(volumesDir, "cache", imageName)
+	rootPathname := filepath.Join(cacheDir, "root")
+	fi, err := os.Stat(rootPathname)
+	if err == nil {
+		size := computeSize(minFreeBytes, roundupPower, img.usageEstimate)
+		if uint64(fi.Size()) >= size {
+			// What we have already is good enough.
+			return true, nil
+		}
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return false,
+			fmt.Errorf("error stating RAW file: %s: %s", rootPathname, err)
+	}
+	writeRawOptions := util.WriteRawOptions{
+		// ArchitectureType:   request.ArchitectureType,
+		// ExtraKernelOptions: request.ExtraKernelOptions,
+		InitialImageName: imageName,
+		MinimumFreeBytes: minFreeBytes,
+		RootLabel:        "rootfs@image",
+		RoundupPower:     roundupPower,
+	}
+	lv := proto.LocalVolume{
+		DirectoryToCleanup: cacheDir,
+		Filename:           rootPathname + "~",
+	}
+	if err := os.MkdirAll(cacheDir, fsutil.DirPerms); err != nil {
+		return false, err
+	}
+	defer os.Remove(cacheDir)
+	defer os.Remove(lv.Filename)
+	if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
+		return false, err
+	}
+	logger.Printf("Unpacking image: %s\n", imageName)
+	err = m.writeRaw(lv, "", client, img.image.FileSystem,
+		proto.FirmwareDefault, writeRawOptions, true, logger)
+	if err != nil {
+		return false, err
+	}
+	if err := os.Rename(lv.Filename, rootPathname); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 // calculateStorageAllocations returns a table of the VM volume allocations
 // (effective sizes) for each storage backend. This will grab the Manager read
 // lock, then grab and release each VM read lock and finally release the Manager
@@ -628,6 +712,21 @@ func (m *Manager) getVolumeDirectories(rootVolume proto.Volume,
 	return directoriesToUse, nil
 }
 
+func (m *Manager) loopPurgeVolumeCaches() {
+	time.Sleep(15 * time.Second)
+	authInfo := srpc.AuthInformation{Username: "purge loop"}
+	for {
+		m.Logger.Debugln(0, "Periodic purge of volume caches")
+		for storageIndex := range uint(len(m.volumeDirectories)) {
+			m.purgeVolumeCache(proto.PurgeVolumeCacheRequest{
+				MaximumUnreferencedAge: 96 * time.Hour,
+				StorageIndex:           storageIndex,
+			}, &authInfo)
+		}
+		time.Sleep(time.Hour)
+	}
+}
+
 // nameToIndex will return the storage index for the specified directory (which
 // may be a subdirectory of one of the volumeDirectories. It returns an error
 // if the name is not found.
@@ -638,6 +737,83 @@ func (m *Manager) nameToIndex(name string) (uint, error) {
 		}
 	}
 	return 0, fmt.Errorf("no volume directory for: %s", name)
+}
+
+func (m *Manager) purgeVolumeCache(request proto.PurgeVolumeCacheRequest,
+	authInfo *srpc.AuthInformation) (
+	proto.PurgeVolumeCacheResponse, error) {
+	if !authInfo.HaveMethodAccess {
+		if request.MaximumUnreferencedAge < 24*time.Hour {
+			return proto.PurgeVolumeCacheResponse{},
+				fmt.Errorf("not permitted to purge recent cached volumes")
+		}
+	}
+	if request.MaximumUnreferencedAge < time.Second {
+		request.MaximumUnreferencedAge = time.Second
+	}
+	if request.StorageIndex >= uint(len(m.volumeDirectories)) {
+		return proto.PurgeVolumeCacheResponse{},
+			fmt.Errorf("storage index too large")
+	}
+	cacheRoot := filepath.Join(m.volumeDirectories[request.StorageIndex],
+		"cache")
+	m.volumeCacheMutex.Lock()
+	defer m.volumeCacheMutex.Unlock()
+	type cacheEntry struct {
+		ctime    time.Time
+		dirname  string
+		rootSize uint64
+	}
+	var entries []cacheEntry
+	var totalPurgedBytes, totalRootSize uint64
+	err := filepath.WalkDir(cacheRoot,
+		func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.Name() != "root" {
+				return nil
+			}
+			var statbuf wsyscall.Stat_t
+			if err := wsyscall.Stat(path, &statbuf); err != nil {
+				return err
+			}
+			if statbuf.Nlink == 1 {
+				fileSize := uint64(statbuf.Size)
+				entries = append(entries, cacheEntry{
+					ctime:    time.Unix(statbuf.Ctim.Unix()),
+					dirname:  filepath.Dir(path),
+					rootSize: fileSize,
+				})
+				totalRootSize += fileSize
+			}
+			return nil
+		})
+	if err != nil {
+		return proto.PurgeVolumeCacheResponse{}, err
+	}
+	maxUnrefTime := time.Now().Add(-request.MaximumUnreferencedAge)
+	for _, entry := range entries {
+		if entry.ctime.After(maxUnrefTime) {
+			continue
+		}
+		if err := os.RemoveAll(entry.dirname); err != nil {
+			return proto.PurgeVolumeCacheResponse{}, err
+		}
+		m.Logger.Debugf(0, "Purged: %s\n", entry.dirname)
+		totalPurgedBytes += entry.rootSize
+		totalRootSize -= entry.rootSize
+	}
+	if totalPurgedBytes > 0 || totalRootSize > 0 {
+		m.Logger.Debugf(0, "%s(%s): purged %s, remaining: %s\n",
+			cacheRoot, authInfo.Username,
+			format.FormatBytes(totalPurgedBytes),
+			format.FormatBytes(totalRootSize))
+	}
+	return proto.PurgeVolumeCacheResponse{
+		BytesPurged:            totalPurgedBytes,
+		BytesStillUnreferenced: totalRootSize,
+	}, nil
 }
 
 func (m *Manager) setupObjectCache(mountTable *mounts.MountTable) error {

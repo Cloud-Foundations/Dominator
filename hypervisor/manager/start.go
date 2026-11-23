@@ -247,6 +247,7 @@ func newManager(startOptions StartOptions) (*Manager, error) {
 		manager.writeAddressPoolWithLock(manager.addressPool, false)
 	}
 	go manager.loopCheckHealthStatus()
+	go manager.loopPurgeVolumeCaches()
 	lockCheckInterval := startOptions.LockCheckInterval
 	if lockCheckInterval > time.Second {
 		// Leveraged for dashboard, so keep it fresh.
