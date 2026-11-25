@@ -52,6 +52,19 @@ func becomePrimaryVmOwner(client srpc.ClientI, ipAddress net.IP) error {
 	return errors.New(reply.Error)
 }
 
+func cacheVolume(client srpc.ClientI, request proto.CacheVolumeRequest) (
+	proto.CacheVolumeResponse, error) {
+	var reply proto.CacheVolumeResponse
+	err := client.RequestReply("Hypervisor.CacheVolume", request, &reply)
+	if err != nil {
+		return proto.CacheVolumeResponse{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.CacheVolumeResponse{}, err
+	}
+	return reply, nil
+}
+
 func changeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.ConsoleType) error {
 	request := proto.ChangeVmConsoleTypeRequest{
@@ -1086,6 +1099,20 @@ func processCreateVmResponses(conn *srpc.Conn,
 			return response, nil
 		}
 	}
+}
+
+func purgeVolumeCache(client srpc.ClientI,
+	request proto.PurgeVolumeCacheRequest) (
+	proto.PurgeVolumeCacheResponse, error) {
+	var reply proto.PurgeVolumeCacheResponse
+	err := client.RequestReply("Hypervisor.PurgeVolumeCache", request, &reply)
+	if err != nil {
+		return proto.PurgeVolumeCacheResponse{}, err
+	}
+	if err := errors.New(reply.Error); err != nil {
+		return proto.PurgeVolumeCacheResponse{}, err
+	}
+	return reply, nil
 }
 
 func rebootVm(client srpc.ClientI, ipAddress net.IP,
