@@ -104,14 +104,9 @@ var (
 	machineType      hyper_proto.MachineType
 	memory           flagutil.Size
 	milliCPUs        = flag.Uint("milliCPUs", 0, "milli CPUs (default 250)")
+	minFreeBytes     = flagutil.Size(256 << 20)
 	numNetworkQueues flagutil.UintList
-	placement        placementType
-	placementCommand = flag.String("placementCommand", "",
-		"Command to make placement decisions when creating/copying/moving VM")
-	preDelete = flag.Bool("preDelete", false,
-		"If true, delete old VM image before replacing")
-	minFreeBytes = flagutil.Size(256 << 20)
-	numVMs       = flag.Uint("numVMs", 0,
+	numVMs           = flag.Uint("numVMs", 0,
 		"Number of VMs to create VM request entries for")
 	overlayDirectory = flag.String("overlayDirectory", "",
 		"Directory tree of files to overlay on top of the image")
@@ -121,13 +116,21 @@ var (
 	ownerUsers       flagutil.StringList
 	patchLogFilename = flag.String("patchLogFilename", "",
 		"Name file to write VM patch log to")
+	placement        placementType
+	placementCommand = flag.String("placementCommand", "",
+		"Command to make placement decisions when creating/copying/moving VM")
+	preDelete = flag.Bool("preDelete", false,
+		"If true, delete old VM image before replacing")
 	probePortNum = flag.Uint("probePortNum", 0, "Port number on VM to probe")
 	probeTimeout = flag.Duration("probeTimeout", time.Minute*5,
 		"Time to wait before timing out on probing VM port")
 	requestFile = flag.String("requestFile", "",
 		"If specified, use the JSON-encoded request file when creating a VM")
-	retain = flag.Bool("retain", false,
+	requestIPs flagutil.StringList
+	retain     = flag.Bool("retain", false,
 		"If true, retain the old snapshot after restoring VM")
+	roundupPower = flag.Uint64("roundupPower", 28,
+		"power of 2 to round up root volume size")
 	secondarySubnetIDs         flagutil.StringList
 	secondaryVolumeSizes       flagutil.SizeList
 	secondaryVolumesInitParams = flag.String("secondaryVolumesInitParams", "",
@@ -147,9 +150,6 @@ var (
 		"Index of volume backing store to move volume to")
 	subnetId = flag.String("subnetId", "",
 		"Subnet ID to launch VM in")
-	requestIPs   flagutil.StringList
-	roundupPower = flag.Uint64("roundupPower", 28,
-		"power of 2 to round up root volume size")
 	scanFilename = flag.String("scanFilename", "",
 		"Name of file to write scanned VM root to")
 	snapshotName     = flag.String("snapshotName", "", "Optional snapshot name")
@@ -240,6 +240,7 @@ func printUsage() {
 var subcommands = []commands.Command{
 	{"add-vm-volumes", "IPaddr", 1, 1, addVmVolumesSubcommand},
 	{"become-primary-vm-owner", "IPaddr", 1, 1, becomePrimaryVmOwnerSubcommand},
+	{"cache-volume", "", 0, 0, cacheVolumeSubcommand},
 	{"change-vm-console-type", "IPaddr", 1, 1, changeVmConsoleTypeSubcommand},
 	{"change-vm-cpu-priority", "IPaddr", 1, 1, changeVmCpuPrioritySubcommand},
 	{"change-vm-cpus", "IPaddr", 1, 1, changeVmCPUsSubcommand},
@@ -305,6 +306,7 @@ var subcommands = []commands.Command{
 	{"parse-virsh-xml", "filename", 1, 1, parseVirshXmlSubcommand},
 	{"patch-vm-image", "IPaddr", 1, 1, patchVmImageSubcommand},
 	{"probe-vm-port", "IPaddr", 1, 1, probeVmPortSubcommand},
+	{"purge-volume-cache", "maxUnrefAge", 1, 1, purgeVolumeCacheSubcommand},
 	{"reboot-vm", "IPaddr", 1, 1, rebootVmSubcommand},
 	{"reorder-vm-volumes", "IPaddr", 1, 1, reorderVmVolumesSubcommand},
 	{"replace-vm-credentials", "IPaddr (deprecated)", 1, 1,
