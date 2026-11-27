@@ -65,6 +65,7 @@ type Manager struct {
 	shuttingDown      bool
 	summaryMutex      sync.RWMutex
 	summary           *summaryData
+	volumeCacheMutex  sync.Mutex
 	volumeDirectories []string
 	volumeInfos       map[string]VolumeInfo // Key: volumeDirectory.
 	mutex             sync.RWMutex          // Lock everything below (those can change).
@@ -166,6 +167,11 @@ func (m *Manager) AddVmVolumes(ipAddr net.IP,
 func (m *Manager) BecomePrimaryVmOwner(ipAddr net.IP,
 	authInfo *srpc.AuthInformation) error {
 	return m.becomePrimaryVmOwner(ipAddr, authInfo)
+}
+
+func (m *Manager) CacheVolume(request proto.CacheVolumeRequest) (
+	proto.CacheVolumeResponse, error) {
+	return m.cacheVolume(request)
 }
 
 func (m *Manager) ChangeOwners(ownerGroups, ownerUsers []string) error {
@@ -523,6 +529,12 @@ func (m *Manager) PowerOff(stopVMs bool) error {
 func (m *Manager) PrepareVmForMigration(ipAddr net.IP,
 	authInfo *srpc.AuthInformation, accessToken []byte, enable bool) error {
 	return m.prepareVmForMigration(ipAddr, authInfo, accessToken, enable)
+}
+
+func (m *Manager) PurgeVolumeCache(request proto.PurgeVolumeCacheRequest,
+	authInfo *srpc.AuthInformation) (
+	proto.PurgeVolumeCacheResponse, error) {
+	return m.purgeVolumeCache(request, authInfo)
 }
 
 func (m *Manager) RebootVm(ipAddr net.IP, authInfo *srpc.AuthInformation,

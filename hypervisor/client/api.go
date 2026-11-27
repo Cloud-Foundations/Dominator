@@ -37,6 +37,11 @@ func BecomePrimaryVmOwner(client srpc.ClientI, ipAddress net.IP) error {
 	return becomePrimaryVmOwner(client, ipAddress)
 }
 
+func CacheVolume(client srpc.ClientI, request proto.CacheVolumeRequest) (
+	proto.CacheVolumeResponse, error) {
+	return cacheVolume(client, request)
+}
+
 func ChangeVmConsoleType(client srpc.ClientI, ipAddress net.IP,
 	consoleType proto.ConsoleType) error {
 	return changeVmConsoleType(client, ipAddress, consoleType)
@@ -315,6 +320,12 @@ func ProbeVmPort(client srpc.ClientI, request proto.ProbeVmPortRequest) (
 func ProcessCreateVmResponses(conn *srpc.Conn,
 	logger log.DebugLogger) (proto.CreateVmResponse, error) {
 	return processCreateVmResponses(conn, logger)
+}
+
+func PurgeVolumeCache(client srpc.ClientI,
+	request proto.PurgeVolumeCacheRequest) (
+	proto.PurgeVolumeCacheResponse, error) {
+	return purgeVolumeCache(client, request)
 }
 
 func RebootVm(client srpc.ClientI, ipAddress net.IP,

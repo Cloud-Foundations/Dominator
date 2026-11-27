@@ -202,7 +202,7 @@ func deleteFilesNotInImage(imgFS, vmFS *filesystem.FileSystem,
 	return nil
 }
 
-func extractKernel(volume proto.LocalVolume, extension string,
+func extractKernel(volumeDirectory string, extension string,
 	objectsGetter objectserver.ObjectsGetter,
 	bootInfo *util.BootInfoType) error {
 	dirent := bootInfo.KernelImageDirent
@@ -214,8 +214,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 		return errors.New("kernel image is not a regular file")
 	}
 	inode.Size = 0
-	filename := filepath.Join(volume.DirectoryToCleanup,
-		kernelLeafFilename+extension)
+	filename := filepath.Join(volumeDirectory, kernelLeafFilename+extension)
 	_, err := objectserver.LinkObject(filename, objectsGetter, inode.Hash)
 	if err != nil {
 		return err
@@ -227,8 +226,7 @@ func extractKernel(volume proto.LocalVolume, extension string,
 			return errors.New("initrd image is not a regular file")
 		}
 		inode.Size = 0
-		filename := filepath.Join(volume.DirectoryToCleanup,
-			initrdLeafFilename+extension)
+		filename := filepath.Join(volumeDirectory, initrdLeafFilename+extension)
 		_, err = objectserver.LinkObject(filename, objectsGetter,
 			inode.Hash)
 		if err != nil {
@@ -1485,6 +1483,7 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 	}
 	var rootVolume proto.Volume
 	if len(request.Volumes) > 0 {
+		rootVolume.Format = request.Volumes[0].Format
 		rootVolume.Interface = request.Volumes[0].Interface
 		rootVolume.Type = request.Volumes[0].Type
 	}
@@ -1501,7 +1500,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			return sendError(conn, err)
 		}
 		defer client.Close()
-		fs := img.image.FileSystem
 		vm.ImageName = imageName
 		rootVolume.Size = computeSize(request.MinimumFreeBytes,
 			request.RoundupPower, img.usageEstimate)
@@ -1510,10 +1508,6 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 		if err != nil {
 			return sendError(conn, err)
 		}
-		if err := sendUpdate(conn, "unpacking image: "+imageName); err != nil {
-			return err
-		}
-		vm.logger.Printf("Unpacking image: %s\n", imageName)
 		writeRawOptions := util.WriteRawOptions{
 			ArchitectureType:   request.ArchitectureType,
 			ExtraKernelOptions: request.ExtraKernelOptions,
@@ -1524,21 +1518,10 @@ func (m *Manager) createVm(conn *srpc.Conn) error {
 			RootLabel:          vm.rootLabel(false),
 			RoundupPower:       request.RoundupPower,
 		}
-		err = m.writeRaw(vm.VolumeLocations[0], "", client, fs,
-			request.FirmwareType, writeRawOptions, request.SkipBootloader,
-			vm.logger)
+		err = vm.writeRootVolume(conn, client, request.FirmwareType, img,
+			request.SkipBootloader, writeRawOptions, sendUpdate)
 		if err != nil {
 			return sendError(conn, err)
-		}
-		if fi, err := os.Stat(vm.VolumeLocations[0].Filename); err != nil {
-			return sendError(conn, err)
-		} else if vm.Volumes[0].Size != uint64(fi.Size()) {
-			vm.logger.Printf("Changing root volume size from: %s to: %s\n",
-				format.FormatBytes(vm.Volumes[0].Size),
-				format.FormatBytes(uint64(fi.Size())))
-			vm.mutex.Lock()
-			vm.Volumes[0] = proto.Volume{Size: uint64(fi.Size())}
-			vm.mutex.Unlock()
 		}
 	} else if request.ImageDataSize > 0 {
 		err := vm.copyRootVolume(request, drainingReader, request.ImageDataSize,
@@ -3169,8 +3152,8 @@ func (m *Manager) patchVmImage(conn *srpc.Conn,
 	defer os.Remove(tmpKernelFilename)
 	writeBootloaderConfig := false
 	if skipBootloader {
-		err := extractKernel(vm.VolumeLocations[0], ".new", objectsGetter,
-			bootInfo)
+		err := extractKernel(vm.VolumeLocations[0].DirectoryToCleanup, ".new",
+			objectsGetter, bootInfo)
 		if err != nil {
 			return err
 		}
@@ -4197,7 +4180,8 @@ func (m *Manager) writeRaw(volume proto.LocalVolume, extension string,
 		if err != nil {
 			return err
 		}
-		err = extractKernel(volume, extension, objectsGetter, bootInfo)
+		err = extractKernel(volume.DirectoryToCleanup, extension, objectsGetter,
+			bootInfo)
 		if err != nil {
 			return err
 		}

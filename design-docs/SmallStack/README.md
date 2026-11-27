@@ -59,15 +59,15 @@ Core Components
 
 This system has three main components:
 
-- The Hypervisor
+- The [Hypervisor](../../cmd/hypervisor/README.md)
 
-- The Fleet Manager
+- The [Fleet Manager](../../cmd/fleet-manager/README.md)
 
-- The vm-control utility (or API)
+- The [vm-control](../../cmd/vm-control/README.md) utility (or API)
 
 All components are simple-to-deploy Go binaries, built from Open Source software.
 
-### The Hypervisor
+### The [Hypervisor](../../cmd/hypervisor/README.md)
 
 This is an agent that runs on each physical node. It has the following responsibilities and components:
 
@@ -86,7 +86,7 @@ This is an agent that runs on each physical node. It has the following responsib
 A diagram is shown below:
 ![Hypervisor image](../pictures/Hypervisor.svg)
 
-Configuration of the Hypervisor is minimal: the directory to store saved state and the location of an optional [imageserver](../../cmd/imageserver/README.md) from where images may be fetched from. Requests to launch VMs are made directly to the Hypervisor by the vm-control utility (or API); The Fleet Manager is not involved in this transaction, although it may (optionally) be used to easily find a Hypervisor with available capacity.
+Configuration of the Hypervisor is minimal: the directory to store saved state and the location of an optional [imageserver](../../cmd/imageserver/README.md) from where images may be fetched from. Requests to launch VMs are made directly to the Hypervisor by the [vm-control](../../cmd/vm-control/README.md) utility (or API); The Fleet Manager is not involved in this transaction, although it may (optionally) be used to easily find a Hypervisor with available capacity.
 
 The user requests the creation of a VM of a specified size and if the Hypervisor has sufficient capacity, the VM is created and the user is given the IP address of the new VM in the response, otherwise an error is returned.
 
@@ -94,7 +94,7 @@ The Hypervisor starts the QEMU process, which detaches and runs in the backgroun
 
 The Hypervisor probes the node at startup to determine the total machine capacity. When the Hypervisor is first created, it is initially unable to create VMs because it does not know which IP and MAC addresses are available to allocate to VMs. The Fleet Manager will provide a list (pool) of IP and MAC addresses to the Hypervisor. Once the Hypervisor has this list, it can create VMs until this pool is depleted. The pool is continuously replenished by the Fleet Manager. When a VM is destroyed, the IP and MAC addresses are returned to the pool, and are available for immediate reuse.
 
-### The Fleet Manager
+### The [Fleet Manager](../../cmd/fleet-manager/README.md)
 
 The Fleet Manager performs several functions:
 
@@ -102,7 +102,7 @@ The Fleet Manager performs several functions:
 
 - Poll Hypervisors to find VMs and monitor utilisation metrics
 
-- Provide a directory service for the vm-control utility or API
+- Provide a directory service for the [vm-control](../../cmd/vm-control/README.md) utility or API
 
 - Provide an optional Allocation Manager service (experimental)
 
@@ -146,7 +146,7 @@ In addition to replenishing the address pools for Hypervisors, the Fleet Manager
 
 #### Directory Service
 
-The Fleet Manager provides a directory service for the [vm-control](../../cmd/vm-control/README.md) utility or API, so that the utility knows where to find a Hypervisor with available capacity. This service is a (significant) convenience, but is not essential. If the DNS name or address of a Hypervisor with available capacity is known through some other means, the vm-control utility can be provided that information.
+The Fleet Manager provides a directory service for the [vm-control](../../cmd/vm-control/README.md) utility or API, so that the utility knows where to find a Hypervisor with available capacity. This service is a (significant) convenience, but is not essential. If the DNS name or address of a Hypervisor with available capacity is known through some other means, the [vm-control](../../cmd/vm-control/README.md) utility can be provided that information.
 
 #### Allocation Manager Service
 
@@ -172,12 +172,12 @@ When a VM is created, an optional automated snapshot (backup) schedule may be sp
 
 #### High Availability
 
-As discussed above, the Fleet Manager is not essential to either the health of VMs nor for management of VMs, but it is very convenient for the latter. A highly available service using round-robin DNS may be implemented by running multiple Fleet Manager instances, with only one configured to manage the Hypervisors (updating address pools and subnets) and the rest only providing directory services. For each Fleet Manager instance, the IP address is stored in a DNS A record for the Fleet Manager FQDN (i.e. fleet-manager.company.com). Clients such as the vm-control utility or a web browser will automatically connect to a working instance. No load balancer is required, instead the tool/web browser will time out a connection attempt to an unresponsive Fleet Manager instance and try another instance listed in the DNS record.
+As discussed above, the Fleet Manager is not essential to either the health of VMs nor for management of VMs, but it is very convenient for the latter. A highly available service using round-robin DNS may be implemented by running multiple Fleet Manager instances, with only one configured to manage the Hypervisors (updating address pools and subnets) and the rest only providing directory services. For each Fleet Manager instance, the IP address is stored in a DNS A record for the Fleet Manager FQDN (i.e. fleet-manager.company.com). Clients such as the [vm-control](../../cmd/vm-control/README.md) utility or a web browser will automatically connect to a working instance. No load balancer is required, instead the tool/web browser will time out a connection attempt to an unresponsive Fleet Manager instance and try another instance listed in the DNS record.
 
 A diagram is shown below:
 ![SmallStack Components image](../pictures/SmallStackComponents.svg)
 
-### The vm-control utility/API
+### The [vm-control](../../cmd/vm-control/README.md) utility/API
 
 The [vm-control](../../cmd/vm-control/README.md) utility orchestrates the creation, starting, stopping and destruction of VMs. It typically consults the Fleet Manager to obtain the global view of Hypervisors, their physical location (i.e. failure zones), available capacity and the placement of VMs. This global view is used to find the required Hypervisor. If the address of the Hypervisor is provided, then the Fleet Manager is not consulted. Typical VM creation options that are supported are:
 
@@ -197,7 +197,7 @@ The [vm-control](../../cmd/vm-control/README.md) utility orchestrates the creati
 
 - Migrate a VM to another Hypervisor
 
-Since all the intelligence of VM orchestration is the responsibility of the vm-control utility, more advanced features such as VM migration and rolling migrations can be added without risking the health of the fleet; neither the Hypervisor or the Fleet Manager require new code or extra complexity. They only perform some basic services and implement simple primitives. Different users can experiment with new orchestration features, independently, *without compromising the reliability or integrity of the platform*. Integration with other systems (such as updating a Machine DataBase or DNS records) can be added by the user, with the potential for different systems to be integrated by different users.
+Since all the intelligence of VM orchestration is the responsibility of the [vm-control](../../cmd/vm-control/README.md) utility, more advanced features such as VM migration and rolling migrations can be added without risking the health of the fleet; neither the Hypervisor or the Fleet Manager require new code or extra complexity. They only perform some basic services and implement simple primitives. Different users can experiment with new orchestration features, independently, *without compromising the reliability or integrity of the platform*. Integration with other systems (such as updating a Machine DataBase or DNS records) can be added by the user, with the potential for different systems to be integrated by different users.
 
 Other VM management operations include:
 
@@ -251,11 +251,11 @@ An example topology with two large regions (NYC and SJC) and one smaller region 
 VM Migration
 ------------
 
-As mentioned in the non-goals section earlier, live VM migration is not supported. However, migration with restart is supported. The vm-control utility will instruct the *target* Hypervisor to fetch the local storage of the VM from the *source* Hypervisor. This does not interfere with the running VM. Once fetched, the vm-control utility will instruct the *source* Hypervisor to stop the VM, and will then instruct the *target* Hypervisor to fetch any changes (diffs) since the first fetch. This second fetch should be quite fast, since only changes are fetched. Direct Hypervisor to Hypervisor transfer ensures the best performance. The VM is then started on the *target* Hypervisor and destroyed on the *source* Hypervisor. In most cases, the downtime for the VM is approximately the reboot time for the VM, even though the apparent *migration time* may be significantly longer if a significant amount of data need to be moved.
+As mentioned in the non-goals section earlier, live VM migration is not supported. However, migration with restart is supported. The [vm-control](../../cmd/vm-control/README.md) utility will instruct the *target* Hypervisor to fetch the local storage of the VM from the *source* Hypervisor. This does not interfere with the running VM. Once fetched, the [vm-control](../../cmd/vm-control/README.md) utility will instruct the *source* Hypervisor to stop the VM, and will then instruct the *target* Hypervisor to fetch any changes (diffs) since the first fetch. This second fetch should be quite fast, since only changes are fetched. Direct Hypervisor to Hypervisor transfer ensures the best performance. The VM is then started on the *target* Hypervisor and destroyed on the *source* Hypervisor. In most cases, the downtime for the VM is approximately the reboot time for the VM, even though the apparent *migration time* may be significantly longer if a significant amount of data need to be moved.
 
 A more disruptive migration or fleet rebuild may be performed by stopping and snapshotting groups of VMs and later starting VMs (restoring from snapshot) after the rebuild operation has completed.
 
-By default, VM migration is only possible between Hypervisors on the same subnet, so that the IP address can be preserved. The user can choose to migrate with IP address reassignment. If the vm-control utility is integrated with a DNS update system, a change of IP address may be safe for the service that the VM is running.
+By default, VM migration is only possible between Hypervisors on the same subnet, so that the IP address can be preserved. The user can choose to migrate with IP address reassignment. If the [vm-control](../../cmd/vm-control/README.md) utility is integrated with a DNS update system, a change of IP address may be safe for the service that the VM is running.
 
 Boot Images
 -----------
@@ -264,7 +264,7 @@ The first-class images supported are the [**Dominator**](../Dominator/README.md)
 
 If you have non-Linux images or do not want to use images from the [**Dominator**](../Dominator/README.md) ecosystem, there are two other supported options for specifying boot image content:
 
-- A local RAW image (a boot disc image). The vm-control utility will stream the image data to the Hypervisor. For good performance, this should be done close to the Hypervisor (another VM on the same Hypervisor is best)
+- A local RAW image (a boot disc image). The [vm-control](../../cmd/vm-control/README.md) utility will stream the image data to the Hypervisor. For good performance, this should be done close to the Hypervisor (another VM on the same Hypervisor is best)
 
 - A HTTP/HTTPS URL pointing to a RAW image. In effect, you are providing your own image server. Again, for good performance, the image server should have a fast network connection to the Hypervisor.
 
@@ -334,16 +334,16 @@ Credential Management
 
 As stated above, SmallStack integrates with a simple, yet very secure system to authenticate users when accessing resources (VMs). In many environments, credentials are required not only for *users* but also *services* (aka automation users). A service requires long-lived credentials in order to continue to function. Unfortunately, these long lived credentials are often poorly managed and are frequently stored in convenient but insecure locations (documents, source code repositories, web servers, S3 buckets, etc.). These unsecured credentials are routinely leaked, leading to system and data compromise.
 
-SmallStack leverages the cababilities of [Keymaster](https://github.com/Cloud-Foundations/keymaster) to generate short-term credentials for automation users (please see the section “Automation user support” in the [Keymaster](https://github.com/Cloud-Foundations/keymaster) design document for details). A user may create a VM and request to assign a *role* to the VM. The role is simply an automation user. The vm-control tool will request a long-term credential for the specified automation user. If granted, this credential is passed to the Hypervisor. The Hypervisor will periodically use this credential to request a short-term credential for the automation user. This credential is provided to the VM via the metadata service. Service code running on the VM thus has access to updated credentials which can be used to authenticate the service to other services. The burden of credential management is removed from users and their deployment tools; instead the SmallStack platform manages their credentials securely and conveniently. This is similar to the assignment of roles to instances (VMs) in AWS.
+SmallStack leverages the cababilities of [Keymaster](https://github.com/Cloud-Foundations/keymaster) to generate short-term credentials for automation users (please see the section “Automation user support” in the [Keymaster](https://github.com/Cloud-Foundations/keymaster) design document for details). A user may create a VM and request to assign a *role* to the VM. The role is simply an automation user. The [vm-control](../../cmd/vm-control/README.md) tool will request a long-term credential for the specified automation user. If granted, this credential is passed to the Hypervisor. The Hypervisor will periodically use this credential to request a short-term credential for the automation user. This credential is provided to the VM via the metadata service. Service code running on the VM thus has access to updated credentials which can be used to authenticate the service to other services. The burden of credential management is removed from users and their deployment tools; instead the SmallStack platform manages their credentials securely and conveniently. This is similar to the assignment of roles to instances (VMs) in AWS.
 
 ### Associating AWS Roles
 
-With the above capability to assign an internal ([Keymaster](https://github.com/Cloud-Foundations/keymaster)) role to a VM, this can be further extended by using the [CloudGate](https://github.com/Cloud-Foundations/Cloud-Gate) Federated Broker. The internal role is mapped to an AWS role. The Hypervisor can use the ephemeral [Keymaster](https://github.com/Cloud-Foundations/keymaster) credentials to request AWS API STS access tokens from [CloudGate](https://github.com/Cloud-Foundations/Cloud-Gate). These STS tokens are provided to the VM via the metadata service, at the same URL as the AWS metadata service. Code running on SmallStack VMs can thus make AWS API calls just as may be done on an AWS instances without any modification of the code required. This allows infrastructure running on-premise in a Private Cloud to integrate more seamlessly with Public Cloud infrastructure. The vm-control tool will request an AWS role to associate with the VM, and the SmallStack Platform will transparently provide and manage the credentials.
+With the above capability to assign an internal ([Keymaster](https://github.com/Cloud-Foundations/keymaster)) role to a VM, this can be further extended by using the [CloudGate](https://github.com/Cloud-Foundations/Cloud-Gate) Federated Broker. The internal role is mapped to an AWS role. The Hypervisor can use the ephemeral [Keymaster](https://github.com/Cloud-Foundations/keymaster) credentials to request AWS API STS access tokens from [CloudGate](https://github.com/Cloud-Foundations/Cloud-Gate). These STS tokens are provided to the VM via the metadata service, at the same URL as the AWS metadata service. Code running on SmallStack VMs can thus make AWS API calls just as may be done on an AWS instances without any modification of the code required. This allows infrastructure running on-premise in a Private Cloud to integrate more seamlessly with Public Cloud infrastructure. The [vm-control](../../cmd/vm-control/README.md) tool will request an AWS role to associate with the VM, and the SmallStack Platform will transparently provide and manage the credentials.
 
 Siloed Networks
 ---------------
 
-In some environments, networks may be siloed from each other for security or compliance reasons. This design allows for central visibility and resource management even in the presence of separated (firewalled) networks, provided that networks do not have overlapping IP addresses. If the Fleet Manager can connect to all the Hypervisors, then the single view of all resources can be preserved. This avoids duplication of resources. Since it is only the vm-control utility which can create or mutate VMs, a user can create or mutate VMs provided their connection to the relevant Hypervisor is not blocked by firewalls.
+In some environments, networks may be siloed from each other for security or compliance reasons. This design allows for central visibility and resource management even in the presence of separated (firewalled) networks, provided that networks do not have overlapping IP addresses. If the Fleet Manager can connect to all the Hypervisors, then the single view of all resources can be preserved. This avoids duplication of resources. Since it is only the [vm-control](../../cmd/vm-control/README.md) utility which can create or mutate VMs, a user can create or mutate VMs provided their connection to the relevant Hypervisor is not blocked by firewalls.
 
 It is recommended that Hypervisors in siloed networks can be reached from a common Fleet Manager and that these Hypervisors can connect to a common [imageserver](../../cmd/imageserver/README.md) from the [**Dominator**](../Dominator/README.md) ecosystem. This avoids any duplication of resources yet supports the strong network isolation that some may desire. If snapshots are required, the Hypervisors must be able to connect to the remote storage system(s).
 
@@ -409,7 +409,7 @@ A typical Debian v9 (Stretch) VM with a 1 GiB root volume takes approximately 10
 
 - 1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
 
-Below is an example log from vm-control creating such a VM with total time taken shown after:
+Below is an example log from [vm-control](../../cmd/vm-control/README.md) creating such a VM with total time taken shown after:
 
 ```
 2018/12/15 10:02:07 creating VM on hyper-567.sjc.prod.company.com:6976
@@ -447,7 +447,7 @@ The boot time breakdown is:
 
 - 1 second for cloud-init and other boot code in the VM to complete and SSH to be ready
 
-Below is an example log from vm-control creating such a VM with total time taken shown after:
+Below is an example log from [vm-control](../../cmd/vm-control/README.md) creating such a VM with total time taken shown after:
 
 ```
 2019/01/11 08:06:31 creating VM on hyper-567.sjc.prod.company.com:6976
@@ -464,12 +464,37 @@ user 0m0.020s
 sys 0m0.000s
 ```
 
+Cached Volume VM Boot
+---------------------
+
+If many VMs using the same image are to be created (such as bulk creation of many identical VMs on one or many Hypervisors), another optimisation is to unpack the image once per Hypervisor to cache the root volume. Below is an example log from [vm-control](../../cmd/vm-control/README.md) creating a VM using a cached volume. The image is a Debian v12 (Bookworm) image and the test was run on an Intel Core i3-10100TE @ 2.30GHz:
+
+```
+2026/11/27 11:21:33 creating VM on localhost:6976
+2026/11/27 11:21:33 getting image
+2026/11/27 11:21:33 starting VM a.b.c.d
+2026/11/27 11:21:36 Received DHCP ACK
+2026/11/27 11:21:37 Port 22 is open
+0.011u 0.005s 0:03.99 0.2%      0+0k 0+0io 0pf+0w
+```
+
+The vast majority of the time is spent inside the VM, waiting for the kernel to boot, discover devices, mount file-systems, bring up the network and start services. To demonstrate the speed of VM creation, it can be created without starting:
+
+```
+2026/11/27 11:23:14 creating VM on localhost:6976
+2026/11/27 11:23:14 made TCP/TLS connection to: 127.0.0.1:6976
+2026/11/27 11:23:14 getting image
+0.011u 0.003s 0:00.08 12.5%     0+0k 0+0io 0pf+0w
+```
+
+Creating 8 VMs concurrently on the same system took 329 milliseconds. Another test creating 80 Ubuntu-24 VMs concurrently on 16 Hypervisors with Intel Xeon 4516Y+ CPUs took 850 milliseconds, and 4.96 seconds if the VMs were started and waiting for the SSH port to open.
+
 Appliance (container) VM
 ------------------------
 
 A simple image with a stripped-down kernel (all drivers built into the kernel, virtio driver), no bootloader, no initrd and an init script which only runs the udhcpc DHCP client takes 1.2 seconds to boot. A future version of the Hypervisor may support [Firecracker](https://github.com/firecracker-microvm/firecracker) ([announced](https://aws.amazon.com/blogs/aws/firecracker-lightweight-virtualization-for-serverless-computing/) by AWS) to further reduce this time.
 
-Below is an example log from vm-control creating such a VM with total time taken shown after:
+Below is an example log from [vm-control](../../cmd/vm-control/README.md) creating such a VM with total time taken shown after:
 
 ```
 2019/01/12 00:24:43 creating VM on localhost:6976

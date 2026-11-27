@@ -30,6 +30,8 @@ Some of the sub-commands available are:
 
 - **add-vm-volumes**: add volumes to a VM
 - **become-primary-vm-owner**: become the primary owner of a VM
+- **cache-volume**: unpack the specified image for later **create-vm** on the
+                    specified Hypervisors
 - **change-vm-console-type**: change the console type for a VM
 - **change-vm-cpu-priority**: change the CPU priority for a VM
 - **change-vm-cpus**: change the number of CPUs for a VM
@@ -73,7 +75,7 @@ Some of the sub-commands available are:
 - **export-virsh-vm**: export VM to a local virsh VM. The specified FQDN will
                        be used to specify the new virsh domain name. The VM
                        must first be stopped. The exported virsh VM is started
-- **fetch-image**: fetch the specified image and objects from the specified
+- **fetch-image**: fetch the specified image and objects on the specified
                    Hypervisors
 - **get-hypervisors**: get details of healthy Hypervisors in the specified
                        location
@@ -111,6 +113,8 @@ Some of the sub-commands available are:
                       filter are not changed. The old root image is saved. The
                       VM must not be running
 - **probe-vm-port**: probe (from its *Hypervisor*) a TCP port for a VM
+- **purge-volume-cache**: purge cached volumes older than the specified time on
+                          the specified Hypervisors
 - **reboot-vm**: reboot a VM
 - **reorder-vm-volumes**: re-order the volumes for a VM
 - **replace-vm-credentials**: replace the credentials made available to a VM via

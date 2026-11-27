@@ -95,6 +95,20 @@ type BecomePrimaryVmOwnerResponse struct {
 	Error string
 }
 
+type CacheVolumeRequest struct {
+	ImageTimeout     time.Duration // Negative: wait forever.
+	MinimumFreeBytes uint64
+	RoundupPower     uint64
+	SearchName       string // Name of image or stream to search for.
+	StorageIndex     uint
+}
+
+type CacheVolumeResponse struct {
+	AlreadyCached bool
+	ImageName     string // Name of image used.
+	Error         string
+}
+
 type ChangeAddressPoolRequest struct {
 	AddressesToAdd       []Address       // Will be added to free pool.
 	AddressesToRemove    []Address       // Will be removed from free pool.
@@ -767,6 +781,17 @@ type ProbeVmPortRequest struct {
 type ProbeVmPortResponse struct {
 	PortIsOpen bool
 	Error      string
+}
+
+type PurgeVolumeCacheRequest struct {
+	MaximumUnreferencedAge time.Duration
+	StorageIndex           uint
+}
+
+type PurgeVolumeCacheResponse struct {
+	BytesPurged            uint64
+	BytesStillUnreferenced uint64
+	Error                  string
 }
 
 type RebootVmRequest struct {
