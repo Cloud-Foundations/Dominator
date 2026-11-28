@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 
 	"github.com/Cloud-Foundations/Dominator/hypervisor/manager"
 	"github.com/Cloud-Foundations/Dominator/lib/html"
+	"github.com/Cloud-Foundations/Dominator/lib/server"
 )
 
 type HtmlWriter interface {
@@ -41,11 +41,10 @@ func StartServer(portNum uint, managerObj *manager.Manager, daemon bool) error {
 	html.HandleFunc("/showVolumeDirectories",
 		myState.showVolumeDirectoriesHandler)
 	if daemon {
-		go http.Serve(listener, nil)
-	} else {
-		http.Serve(listener, nil)
+		go func() { _ = server.Serve(listener, server.Params{}) }()
+		return nil
 	}
-	return nil
+	return server.Serve(listener, server.Params{})
 }
 
 func AddHtmlWriter(htmlWriter HtmlWriter) {
